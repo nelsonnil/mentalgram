@@ -53,7 +53,10 @@ class ExploreManager: ObservableObject {
     
     private func loadExploreInternal() async {
         do {
+            print("🔍 [EXPLORE] Fetching from API...")
             let (items, maxId) = try await InstagramService.shared.getExploreFeed()
+            
+            print("🔍 [EXPLORE] Received \(items.count) items from API")
             
             await MainActor.run {
                 self.exploreMedia = items
@@ -62,7 +65,7 @@ class ExploreManager: ObservableObject {
                 // Save to cache
                 saveToCache()
                 
-                print("✅ [EXPLORE] Loaded \(items.count) items")
+                print("✅ [EXPLORE] Loaded \(items.count) items into UI")
             }
             
             // Download thumbnails in background
@@ -70,6 +73,12 @@ class ExploreManager: ObservableObject {
             
         } catch {
             print("❌ [EXPLORE] Error loading: \(error)")
+            await MainActor.run {
+                // Try loading from cache on error
+                if self.exploreMedia.isEmpty {
+                    print("🔍 [EXPLORE] Trying to load from cache after error...")
+                }
+            }
         }
     }
     

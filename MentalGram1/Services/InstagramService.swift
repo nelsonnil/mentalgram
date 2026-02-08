@@ -757,11 +757,19 @@ class InstagramService: ObservableObject {
             let likeCount = item["like_count"] as? Int
             let commentCount = item["comment_count"] as? Int
             
+            // Extract video URL if it's a video
+            var videoUrl: String?
+            if let videoVersions = item["video_versions"] as? [[String: Any]],
+               let firstVideo = videoVersions.first,
+               let url = firstVideo["url"] as? String {
+                videoUrl = url
+            }
+            
             // Determine media type
             let mediaType: InstagramMediaItem.MediaType
             if let carouselMedia = item["carousel_media"] as? [[String: Any]], !carouselMedia.isEmpty {
                 mediaType = .carousel
-            } else if let videoVersions = item["video_versions"] as? [[String: Any]], !videoVersions.isEmpty {
+            } else if videoUrl != nil {
                 mediaType = .video
             } else {
                 mediaType = .photo
@@ -771,6 +779,7 @@ class InstagramService: ObservableObject {
                 id: String(pk),
                 mediaId: String(pk),
                 imageURL: imageUrl,
+                videoURL: videoUrl,
                 caption: caption,
                 takenAt: takenAt,
                 likeCount: likeCount,
@@ -838,15 +847,24 @@ class InstagramService: ObservableObject {
                 imageUrl = url
             }
             
+            // Extract video URL if it's a video
+            var videoUrl: String?
+            if let videoVersions = item["video_versions"] as? [[String: Any]],
+               let firstVideo = videoVersions.first,
+               let url = firstVideo["url"] as? String {
+                videoUrl = url
+            }
+            
             let mediaItem = InstagramMediaItem(
                 id: String(pk),
                 mediaId: String(pk),
                 imageURL: imageUrl,
+                videoURL: videoUrl,
                 caption: caption,
                 takenAt: nil,
                 likeCount: nil,
                 commentCount: nil,
-                mediaType: .photo
+                mediaType: videoUrl != nil ? .video : .photo
             )
             mediaItems.append(mediaItem)
         }
@@ -860,7 +878,8 @@ class InstagramService: ObservableObject {
     func getExploreFeed(maxId: String? = nil) async throws -> ([InstagramMediaItem], String?) {
         print("🔍 [EXPLORE] Fetching explore feed...")
         
-        var path = "/discover/topical_explore/?is_prefetch=false&omit_cover_media=true&module=explore_popular&reels_configuration=hide_explore_media_reels_media&use_sectional_payload=false&timezone_offset=3600&session_id=\(UUID().uuidString)"
+        // Use cluster_id for more items (Instagram's internal explore pagination)
+        var path = "/discover/topical_explore/?is_prefetch=false&omit_cover_media=true&module=explore_popular&reels_configuration=hide_explore_media_reels_media&use_sectional_payload=true&timezone_offset=3600&session_id=\(UUID().uuidString)"
         
         if let maxId = maxId {
             path += "&max_id=\(maxId)"
@@ -869,7 +888,7 @@ class InstagramService: ObservableObject {
         let data = try await apiRequest(method: "GET", path: path)
         
         if let jsonString = String(data: data, encoding: .utf8) {
-            print("🔍 [EXPLORE] Response (first 300 chars): \(String(jsonString.prefix(300)))")
+            print("🔍 [EXPLORE] Response (first 500 chars): \(String(jsonString.prefix(500)))")
         }
         
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -883,15 +902,21 @@ class InstagramService: ObservableObject {
         var items: [[String: Any]] = []
         var nextMaxId: String?
         
-        // Structure 1: sectional_items -> items
+        // Structure 1: sectional_items -> layout_content -> medias
         if let sectionalItems = json["sectional_items"] as? [[String: Any]] {
-            print("🔍 [EXPLORE] Found sectional_items structure")
-            for section in sectionalItems {
-                if let layoutContent = section["layout_content"] as? [String: Any],
-                   let medias = layoutContent["medias"] as? [[String: Any]] {
-                    for mediaWrapper in medias {
-                        if let media = mediaWrapper["media"] as? [String: Any] {
-                            items.append(media)
+            print("🔍 [EXPLORE] Found sectional_items structure with \(sectionalItems.count) sections")
+            for (sectionIndex, section) in sectionalItems.enumerated() {
+                print("🔍 [EXPLORE] Section \(sectionIndex + 1) keys: \(section.keys.sorted().joined(separator: ", "))")
+                
+                if let layoutContent = section["layout_content"] as? [String: Any] {
+                    print("🔍 [EXPLORE]   layout_content keys: \(layoutContent.keys.sorted().joined(separator: ", "))")
+                    
+                    if let medias = layoutContent["medias"] as? [[String: Any]] {
+                        print("🔍 [EXPLORE]   Found \(medias.count) medias in section \(sectionIndex + 1)")
+                        for mediaWrapper in medias {
+                            if let media = mediaWrapper["media"] as? [String: Any] {
+                                items.append(media)
+                            }
                         }
                     }
                 }
@@ -900,12 +925,12 @@ class InstagramService: ObservableObject {
         }
         // Structure 2: items directly
         else if let directItems = json["items"] as? [[String: Any]] {
-            print("🔍 [EXPLORE] Found direct items structure")
+            print("🔍 [EXPLORE] Found direct items structure with \(directItems.count) items")
             items = directItems
             nextMaxId = json["next_max_id"] as? String
         }
         
-        print("🔍 [EXPLORE] Found \(items.count) explore items")
+        print("🔍 [EXPLORE] Total raw items extracted: \(items.count)")
         
         var mediaItems: [InstagramMediaItem] = []
         
@@ -927,7 +952,7 @@ class InstagramService: ObservableObject {
             }
             
             guard let pk = pkValue else {
-                print("⚠️ [EXPLORE] Item \(index + 1) has no valid pk")
+                print("⚠️ [EXPLORE] Item \(index + 1)/\(items.count) has no valid pk, keys: \(item.keys.sorted().joined(separator: ", "))")
                 continue
             }
             
@@ -941,6 +966,11 @@ class InstagramService: ObservableObject {
                 imageUrl = url
             }
             
+            guard !imageUrl.isEmpty else {
+                print("⚠️ [EXPLORE] Item \(index + 1)/\(items.count) has no image URL")
+                continue
+            }
+            
             let takenAt: Date?
             if let timestamp = item["taken_at"] as? TimeInterval {
                 takenAt = Date(timeIntervalSince1970: timestamp)
@@ -951,11 +981,19 @@ class InstagramService: ObservableObject {
             let likeCount = item["like_count"] as? Int
             let commentCount = item["comment_count"] as? Int
             
+            // Extract video URL if it's a video
+            var videoUrl: String?
+            if let videoVersions = item["video_versions"] as? [[String: Any]],
+               let firstVideo = videoVersions.first,
+               let url = firstVideo["url"] as? String {
+                videoUrl = url
+            }
+            
             // Determine media type
             let mediaType: InstagramMediaItem.MediaType
             if let carouselMedia = item["carousel_media"] as? [[String: Any]], !carouselMedia.isEmpty {
                 mediaType = .carousel
-            } else if let videoVersions = item["video_versions"] as? [[String: Any]], !videoVersions.isEmpty {
+            } else if videoUrl != nil {
                 mediaType = .video
             } else {
                 mediaType = .photo
@@ -965,6 +1003,7 @@ class InstagramService: ObservableObject {
                 id: String(pk),
                 mediaId: String(pk),
                 imageURL: imageUrl,
+                videoURL: videoUrl,
                 caption: caption,
                 takenAt: takenAt,
                 likeCount: likeCount,
@@ -974,7 +1013,7 @@ class InstagramService: ObservableObject {
             mediaItems.append(mediaItem)
         }
         
-        print("✅ [EXPLORE] Fetched \(mediaItems.count) explore items")
+        print("✅ [EXPLORE] Successfully parsed \(mediaItems.count) items with valid images")
         return (mediaItems, nextMaxId)
     }
     

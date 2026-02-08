@@ -60,6 +60,7 @@ struct InstagramMediaItem: Identifiable, Codable {
     let id: String
     let mediaId: String
     let imageURL: String
+    let videoURL: String? // NEW: Video URL for playback
     let caption: String?
     let takenAt: Date?
     let likeCount: Int?

@@ -10,50 +10,44 @@ struct HomeView: View {
     @State private var showingExplore = false
     
     var body: some View {
-        ZStack {
-            TabView(selection: $selectedTab) {
-                // Performance Tab (Instagram Replica)
-                PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
-                    .tabItem {
-                        Label("Performance", systemImage: "chart.bar.fill")
-                    }
-                    .tag(0)
-                
-                // Sets Tab
-                NavigationView {
-                    SetsListView()
-                }
+        TabView(selection: $selectedTab) {
+            // Performance Tab (Instagram Replica)
+            PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
                 .tabItem {
-                    Label("Sets", systemImage: "square.grid.2x2")
+                    Label("Performance", systemImage: "chart.bar.fill")
                 }
-                .tag(1)
-                
-                // Quick Reveal Tab
-                NavigationView {
-                    QuickRevealView()
-                }
-                .tabItem {
-                    Label("Reveal", systemImage: "wand.and.stars")
-                }
-                .tag(2)
-                
-                // Settings Tab
-                NavigationView {
-                    SettingsView()
-                }
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .tag(3)
-            }
-            .accentColor(.purple)
+                .tag(0)
             
-            // Full screen Explore overlay when showingExplore is true
-            if showingExplore {
-                ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
-                    .transition(.move(edge: .trailing))
-                    .zIndex(1)
+            // Sets Tab
+            NavigationView {
+                SetsListView()
             }
+            .tabItem {
+                Label("Sets", systemImage: "square.grid.2x2")
+            }
+            .tag(1)
+            
+            // Quick Reveal Tab
+            NavigationView {
+                QuickRevealView()
+            }
+            .tabItem {
+                Label("Reveal", systemImage: "wand.and.stars")
+            }
+            .tag(2)
+            
+            // Settings Tab
+            NavigationView {
+                SettingsView()
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .tag(3)
+        }
+        .accentColor(.purple)
+        .fullScreenCover(isPresented: $showingExplore) {
+            ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
         }
         .onAppear {
             // Preload explore feed in background when app launches

@@ -9,6 +9,9 @@ struct ExploreView: View {
     
     var body: some View {
         ZStack(alignment: .bottom) {
+            // White background covering everything
+            Color.white.ignoresSafeArea()
+            
             VStack(spacing: 0) {
                 // Search bar at top
                 HStack {
@@ -138,7 +141,12 @@ struct ExploreMediaCell: View {
     
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            if let image = cachedImage {
+            // Show video player if it's a video, otherwise show image
+            if media.mediaType == .video, let videoURL = media.videoURL {
+                GridVideoPlayer(videoURL: videoURL)
+                    .frame(width: UIScreen.main.bounds.width / 3 - 1.33, height: UIScreen.main.bounds.width / 3 - 1.33)
+                    .clipped()
+            } else if let image = cachedImage {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -152,17 +160,6 @@ struct ExploreMediaCell: View {
                         ProgressView()
                             .scaleEffect(0.8)
                     )
-            }
-            
-            // Video indicator (play icon)
-            if media.mediaType == .video {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .padding(4)
-                    .background(Color.black.opacity(0.5))
-                    .cornerRadius(4)
-                    .padding(6)
             }
             
             // Carousel indicator (multiple icon)
