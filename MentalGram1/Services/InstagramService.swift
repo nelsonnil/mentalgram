@@ -1,0 +1,1063 @@
+import Foundation
+import UIKit
+import Combine
+import CryptoKit
+
+/// Instagram Private API client - Pure Swift, no Python needed.
+/// Replicates what instagrapi does: HTTP requests to Instagram's private API.
+class InstagramService: ObservableObject {
+    static let shared = InstagramService()
+    
+    @Published var session: InstagramSession = .empty
+    @Published var isLoggedIn: Bool = false
+    
+    private let baseURL = "https://i.instagram.com/api/v1"
+    private let userAgent = "Instagram 320.0.0.34.98 (iPhone15,3; iOS 17_4_1; es_ES; es; scale=3.00; 1290x2796; 590791299)"
+    private let deviceId = UUID().uuidString // Persistent device ID for this install
+    private let clientUUID = UUID().uuidString // Client UUID (like _uuid in instagrapi)
+    private let sigKeyVersion = "4"
+    private let sigKey = "109513c04303341a7daf27bb329532b6a76c178d78911a750e0620efaffb2d0c" // Instagram's signature key
+    
+    private var urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.httpCookieAcceptPolicy = .always
+        config.httpShouldSetCookies = true
+        return URLSession(configuration: config)
+    }()
+    
+    private init() {
+        // Try to restore session from Keychain
+        if let saved = KeychainService.shared.loadSession(), saved.isLoggedIn {
+            self.session = saved
+            self.isLoggedIn = true
+            print("✅ Session restored for @\(saved.username)")
+        }
+    }
+    
+    // MARK: - Session from WebView Login
+    
+    /// Called after WebView login captures cookies
+    func setSessionFromCookies(cookies: [HTTPCookie]) {
+        var sessionId = ""
+        var csrfToken = ""
+        var userId = ""
+        
+        for cookie in cookies {
+            switch cookie.name {
+            case "sessionid":
+                sessionId = cookie.value
+            case "csrftoken":
+                csrfToken = cookie.value
+            case "ds_user_id":
+                userId = cookie.value
+            default:
+                break
+            }
+        }
+        
+        guard !sessionId.isEmpty, !userId.isEmpty else {
+            print("❌ Missing required cookies")
+            return
+        }
+        
+        // Store cookies in shared cookie storage for URLSession
+        let cookieStorage = HTTPCookieStorage.shared
+        for cookie in cookies {
+            cookieStorage.setCookie(cookie)
+        }
+        
+        self.session = InstagramSession(
+            sessionId: sessionId,
+            csrfToken: csrfToken,
+            userId: userId,
+            username: "",
+            isLoggedIn: true
+        )
+        
+        // Fetch username
+        Task {
+            if let username = await fetchUsername() {
+                await MainActor.run {
+                    self.session.username = username
+                    self.isLoggedIn = true
+                    KeychainService.shared.saveSession(self.session)
+                    print("✅ Logged in as @\(username)")
+                }
+            } else {
+                await MainActor.run {
+                    self.isLoggedIn = true
+                    KeychainService.shared.saveSession(self.session)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Logout
+    
+    func logout() {
+        session = .empty
+        isLoggedIn = false
+        KeychainService.shared.deleteSession()
+        
+        // Clear cookies
+        if let cookies = HTTPCookieStorage.shared.cookies {
+            for cookie in cookies {
+                HTTPCookieStorage.shared.deleteCookie(cookie)
+            }
+        }
+    }
+    
+    // MARK: - Common Headers
+    
+    private func buildHeaders() -> [String: String] {
+        return [
+            "User-Agent": userAgent,
+            "X-CSRFToken": session.csrfToken,
+            "X-IG-App-ID": "936619743392459",
+            "X-IG-Device-ID": deviceId,
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cookie": "sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)"
+        ]
+    }
+    
+    // MARK: - Generate Signature (HMAC-SHA256)
+    
+    private func generateSignature(data: String) -> String {
+        let key = SymmetricKey(data: Data(sigKey.utf8))
+        let signature = HMAC<SHA256>.authenticationCode(for: Data(data.utf8), using: key)
+        return signature.map { String(format: "%02x", $0) }.joined()
+    }
+    
+    // MARK: - API Request Helper
+    
+    private func apiRequest(
+        method: String,
+        path: String,
+        body: [String: String]? = nil
+    ) async throws -> Data {
+        guard let url = URL(string: "\(baseURL)\(path)") else {
+            throw InstagramError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        
+        let headers = buildHeaders()
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        
+        if let body = body {
+            let bodyString = body.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+            request.httpBody = bodyString.data(using: .utf8)
+        }
+        
+        let (data, response) = try await urlSession.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw InstagramError.invalidResponse
+        }
+        
+        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            throw InstagramError.sessionExpired
+        }
+        
+        if httpResponse.statusCode >= 400 {
+            throw InstagramError.apiError("HTTP \(httpResponse.statusCode)")
+        }
+        
+        return data
+    }
+    
+    // MARK: - Fetch Username
+    
+    func fetchUsername() async -> String? {
+        do {
+            let data = try await apiRequest(method: "GET", path: "/accounts/current_user/?edit=true")
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let user = json["user"] as? [String: Any],
+               let username = user["username"] as? String {
+                return username
+            }
+        } catch {
+            print("❌ Error fetching username: \(error)")
+        }
+        return nil
+    }
+    
+    // MARK: - Get User Media
+    
+    func getUserMedia(userId: String? = nil, maxId: String? = nil) async throws -> ([InstagramMedia], String?) {
+        let uid = userId ?? session.userId
+        var path = "/feed/user/\(uid)/"
+        if let maxId = maxId {
+            path += "?max_id=\(maxId)"
+        }
+        
+        let data = try await apiRequest(method: "GET", path: path)
+        
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [[String: Any]] else {
+            return ([], nil)
+        }
+        
+        let nextMaxId = json["next_max_id"] as? String
+        
+        var medias: [InstagramMedia] = []
+        
+        for item in items {
+            guard let pk = item["pk"] as? Int64 else { continue }
+            
+            let caption = (item["caption"] as? [String: Any])?["text"] as? String ?? ""
+            
+            var imageUrl = ""
+            if let imageVersions = item["image_versions2"] as? [String: Any],
+               let candidates = imageVersions["candidates"] as? [[String: Any]],
+               let firstCandidate = candidates.first,
+               let url = firstCandidate["url"] as? String {
+                imageUrl = url
+            }
+            
+            let takenAt: Date?
+            if let timestamp = item["taken_at"] as? TimeInterval {
+                takenAt = Date(timeIntervalSince1970: timestamp)
+            } else {
+                takenAt = nil
+            }
+            
+            let media = InstagramMedia(
+                id: String(pk),
+                mediaId: String(pk),
+                imageURL: imageUrl,
+                caption: caption,
+                takenAt: takenAt,
+                isArchived: false
+            )
+            medias.append(media)
+        }
+        
+        return (medias, nextMaxId)
+    }
+    
+    // MARK: - Archive Photo
+    
+    func archivePhoto(mediaId: String) async throws -> Bool {
+        print("📦 [ARCHIVE] Starting archive for media ID: \(mediaId)")
+        
+        // Simulate human delay
+        let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
+        print("   Waiting \(delay / 1_000_000_000)s before archive...")
+        try await Task.sleep(nanoseconds: delay)
+        
+        // Instagram expects media_id in format: pk_userid (e.g., 3827949643435346901_80533585162)
+        let fullMediaId: String
+        if mediaId.contains("_") {
+            fullMediaId = mediaId
+        } else {
+            fullMediaId = "\(mediaId)_\(session.userId)"
+        }
+        
+        print("   Full media ID: \(fullMediaId)")
+        
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/media/\(fullMediaId)/only_me/",
+            body: ["media_id": fullMediaId]
+        )
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("   Archive response: \(jsonString)")
+        }
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let status = json["status"] as? String {
+            if status == "ok" {
+                print("✅ [ARCHIVE] Photo archived successfully")
+                return true
+            } else {
+                print("❌ [ARCHIVE] Archive failed. Status: \(status)")
+                return false
+            }
+        }
+        
+        print("❌ [ARCHIVE] Failed to parse archive response")
+        return false
+    }
+    
+    // MARK: - Unarchive Photo
+    
+    func unarchivePhoto(mediaId: String) async throws -> Bool {
+        print("📤 [UNARCHIVE] Starting unarchive for media ID: \(mediaId)")
+        
+        // Simulate human delay
+        let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
+        print("   Waiting \(delay / 1_000_000_000)s before unarchive...")
+        try await Task.sleep(nanoseconds: delay)
+        
+        // Instagram expects media_id in format: pk_userid
+        let fullMediaId: String
+        if mediaId.contains("_") {
+            fullMediaId = mediaId
+        } else {
+            fullMediaId = "\(mediaId)_\(session.userId)"
+        }
+        
+        print("   Full media ID: \(fullMediaId)")
+        
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/media/\(fullMediaId)/undo_only_me/",
+            body: ["media_id": fullMediaId]
+        )
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("   Unarchive response: \(jsonString)")
+        }
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let status = json["status"] as? String {
+            if status == "ok" {
+                print("✅ [UNARCHIVE] Photo unarchived successfully")
+                return true
+            } else {
+                print("❌ [UNARCHIVE] Unarchive failed. Status: \(status)")
+                return false
+            }
+        }
+        
+        print("❌ [UNARCHIVE] Failed to parse unarchive response")
+        return false
+    }
+    
+    // MARK: - Comment on Photo
+    
+    func commentOnMedia(mediaId: String, text: String) async throws -> String? {
+        print("💬 [COMMENT] Posting comment on media ID: \(mediaId)")
+        print("   Text: \"\(text)\"")
+        
+        // Extract just the PK (without _userid) for comment endpoint
+        let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+        print("   Using PK for comment: \(pk)")
+        
+        // Simulate human delay
+        let delay = UInt64.random(in: 2_000_000_000...3_000_000_000)
+        print("   Waiting \(delay / 1_000_000_000)s before comment...")
+        try await Task.sleep(nanoseconds: delay)
+        
+        // Build signed data (like instagrapi's with_action_data)
+        let idempotenceToken = UUID().uuidString
+        
+        let bodyDict: [String: Any] = [
+            "comment_text": text,
+            "delivery_class": "organic",
+            "feed_position": "0",
+            "container_module": "self_comments_v2_feed_contextual_self_profile",
+            "idempotence_token": idempotenceToken,
+            "_uuid": clientUUID,
+            "_uid": session.userId,
+            "_csrftoken": session.csrfToken,
+            "radio_type": "wifi-none"
+        ]
+        
+        // Convert to JSON string (instagrapi uses dumps + signature)
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: bodyDict),
+              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            print("❌ [COMMENT] Failed to serialize body")
+            throw InstagramError.invalidURL
+        }
+        
+        // Build signed_body with REAL HMAC-SHA256 signature
+        let signature = generateSignature(data: jsonString)
+        let signedBody = "signed_body=\(signature).\(jsonString)&ig_sig_key_version=\(sigKeyVersion)"
+        
+        print("   JSON body: \(jsonString)")
+        print("   HMAC signature (first 32 chars): \(String(signature.prefix(32)))...")
+        print("   Signed body (first 200 chars): \(String(signedBody.prefix(200)))...")
+        
+        // Custom request for signed data
+        guard let url = URL(string: "\(baseURL)/media/\(pk)/comment/") else {
+            throw InstagramError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let headers = buildHeaders()
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        
+        request.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = signedBody.data(using: .utf8)
+        
+        let (data, response) = try await urlSession.data(for: request)
+        
+        if let httpResponse = response as? HTTPURLResponse {
+            print("   Comment HTTP status: \(httpResponse.statusCode)")
+        }
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("   Comment response: \(jsonString)")
+        }
+        
+        // Check for errors
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+            throw InstagramError.apiError("HTTP \(httpResponse.statusCode)")
+        }
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let comment = json["comment"] as? [String: Any] {
+            
+            // Try different pk formats
+            let commentId: String?
+            if let pkString = comment["pk"] as? String {
+                commentId = pkString
+            } else if let pkInt64 = comment["pk"] as? Int64 {
+                commentId = String(pkInt64)
+            } else if let pkInt = comment["pk"] as? Int {
+                commentId = String(pkInt)
+            } else {
+                commentId = nil
+            }
+            
+            if let commentId = commentId {
+                print("✅ [COMMENT] Comment posted! ID: \(commentId)")
+                return commentId
+            }
+        }
+        
+        print("❌ [COMMENT] Failed to get comment ID from response")
+        return nil
+    }
+    
+    // MARK: - Delete Comment
+    
+    func deleteComment(mediaId: String, commentId: String) async throws -> Bool {
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/media/\(mediaId)/comment/\(commentId)/delete/",
+            body: [:]
+        )
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let status = json["status"] as? String {
+            return status == "ok"
+        }
+        
+        return false
+    }
+    
+    // MARK: - Get Latest Follower
+    
+    func getLatestFollower() async throws -> InstagramFollower? {
+        print("👤 [FOLLOWER] Fetching latest follower...")
+        
+        let data = try await apiRequest(
+            method: "GET",
+            path: "/friendships/\(session.userId)/followers/?count=1"
+        )
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("   Follower response: \(jsonString)")
+        }
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let users = json["users"] as? [[String: Any]],
+           let first = users.first {
+            
+            print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("📊 DATOS COMPLETOS DEL ÚLTIMO FOLLOWER:")
+            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            
+            for (key, value) in first.sorted(by: { $0.key < $1.key }) {
+                print("   \(key): \(value)")
+            }
+            
+            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            
+            // Campos importantes - maneja pk como String o Int
+            let userId: String
+            if let pkString = first["pk"] as? String {
+                userId = pkString
+            } else if let pkInt64 = first["pk"] as? Int64 {
+                userId = String(pkInt64)
+            } else if let pkInt = first["pk"] as? Int {
+                userId = String(pkInt)
+            } else {
+                userId = "0"
+            }
+            
+            let username = first["username"] as? String ?? ""
+            let fullName = first["full_name"] as? String ?? ""
+            let isVerified = first["is_verified"] as? Bool ?? false
+            let isPrivate = first["is_private"] as? Bool ?? false
+            let profilePicURL = first["profile_pic_url"] as? String
+            let hasAnonymousProfilePicture = first["has_anonymous_profile_picture"] as? Bool ?? false
+            
+            print("✅ Follower extraído:")
+            print("   User ID: \(userId)")
+            print("   Username: @\(username)")
+            print("   Full Name: \(fullName)")
+            print("   Is Verified: \(isVerified ? "✓" : "✗")")
+            print("   Is Private: \(isPrivate ? "✓" : "✗")")
+            print("   Has Profile Pic: \(hasAnonymousProfilePicture ? "✗" : "✓")")
+            print("   Profile Pic URL: \(profilePicURL ?? "N/A")")
+            
+            let follower = InstagramFollower(
+                userId: userId,
+                username: username,
+                fullName: fullName,
+                profilePicURL: profilePicURL
+            )
+            
+            print("✅ [FOLLOWER] Found: @\(follower.username) (\(follower.fullName))")
+            return follower
+        }
+        
+        print("❌ [FOLLOWER] No followers found or failed to parse")
+        return nil
+    }
+    
+    // MARK: - Get User Full Info (with followers count, following, posts, etc.)
+    
+    func getUserFullInfo(userId: String) async throws -> [String: Any]? {
+        print("👤 [USER INFO] Fetching full info for user ID: \(userId)")
+        
+        let data = try await apiRequest(
+            method: "GET",
+            path: "/users/\(userId)/info/"
+        )
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("   User info response: \(jsonString)")
+        }
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let user = json["user"] as? [String: Any] {
+            
+            print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("📊 DATOS COMPLETOS DEL USUARIO:")
+            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            
+            for (key, value) in user.sorted(by: { $0.key < $1.key }) {
+                print("   \(key): \(value)")
+            }
+            
+            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            
+            // Datos importantes
+            let followerCount = user["follower_count"] as? Int ?? 0
+            let followingCount = user["following_count"] as? Int ?? 0
+            let mediaCount = user["media_count"] as? Int ?? 0
+            let biography = user["biography"] as? String ?? ""
+            
+            print("✅ User info extraído:")
+            print("   Followers: \(followerCount)")
+            print("   Following: \(followingCount)")
+            print("   Posts: \(mediaCount)")
+            print("   Bio: \(biography)")
+            
+            return user
+        }
+        
+        print("❌ [USER INFO] Failed to parse user info")
+        return nil
+    }
+    
+    // MARK: - Get Profile Info (Complete Profile Data)
+    
+    func getProfileInfo(userId: String? = nil) async throws -> InstagramProfile? {
+        let uid = userId ?? session.userId
+        print("📊 [PROFILE] Fetching complete profile for user ID: \(uid)")
+        
+        let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
+        
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let user = json["user"] as? [String: Any] else {
+            print("❌ [PROFILE] Failed to parse user data")
+            return nil
+        }
+        
+        // Debug: Print user data
+        print("📊 [PROFILE] User data keys: \(user.keys.sorted().joined(separator: ", "))")
+        if let profilePicUrl = user["profile_pic_url"] as? String {
+            print("📊 [PROFILE] Profile pic URL found: \(String(profilePicUrl.prefix(80)))...")
+        } else {
+            print("⚠️ [PROFILE] No profile_pic_url field found")
+        }
+        
+        // Get first 3 followers for "Followed by" section
+        let followedBy = try await getFollowedByUsers(userId: uid, count: 3)
+        
+        // Get media thumbnails (18 photos for grid)
+        let mediaItems = try await getUserMediaItems(userId: uid, amount: 18)
+        let mediaURLs = mediaItems.map { $0.imageURL }
+        
+        print("📊 [PROFILE] Media URLs count: \(mediaURLs.count)")
+        
+        let profile = InstagramProfile(
+            userId: String(user["pk"] as? Int64 ?? 0),
+            username: user["username"] as? String ?? "",
+            fullName: user["full_name"] as? String ?? "",
+            biography: user["biography"] as? String ?? "",
+            externalUrl: user["external_url"] as? String,
+            profilePicURL: user["profile_pic_url"] as? String ?? "",
+            isVerified: user["is_verified"] as? Bool ?? false,
+            isPrivate: user["is_private"] as? Bool ?? false,
+            followerCount: user["follower_count"] as? Int ?? 0,
+            followingCount: user["following_count"] as? Int ?? 0,
+            mediaCount: user["media_count"] as? Int ?? 0,
+            followedBy: followedBy,
+            cachedAt: Date(),
+            cachedMediaURLs: mediaURLs
+        )
+        
+        print("✅ [PROFILE] Profile loaded for @\(profile.username)")
+        print("📊 [PROFILE] Profile pic URL: \(profile.profilePicURL.isEmpty ? "EMPTY" : String(profile.profilePicURL.prefix(80)))")
+        return profile
+    }
+    
+    // MARK: - Get Followed By Users
+    
+    func getFollowedByUsers(userId: String, count: Int) async throws -> [InstagramFollower] {
+        print("👥 [FOLLOWERS] Fetching \(count) followers for user ID: \(userId)")
+        
+        let data = try await apiRequest(
+            method: "GET",
+            path: "/friendships/\(userId)/followers/?count=\(count)"
+        )
+        
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let users = json["users"] as? [[String: Any]] else {
+            print("❌ [FOLLOWERS] Failed to parse followers data")
+            return []
+        }
+        
+        print("👥 [FOLLOWERS] Found \(users.count) followers in response")
+        
+        var followers: [InstagramFollower] = []
+        for (index, user) in users.prefix(count).enumerated() {
+            print("👥 [FOLLOWERS] Processing follower \(index + 1)")
+            print("👥 [FOLLOWERS] Follower keys: \(user.keys.sorted().joined(separator: ", "))")
+            
+            let userId = String(user["pk"] as? Int64 ?? 0)
+            let username = user["username"] as? String ?? ""
+            let fullName = user["full_name"] as? String ?? ""
+            let profilePicURL = user["profile_pic_url"] as? String
+            
+            if let picURL = profilePicURL {
+                print("👥 [FOLLOWERS] Follower \(index + 1) pic URL: \(String(picURL.prefix(80)))...")
+            } else {
+                print("⚠️ [FOLLOWERS] Follower \(index + 1) has no profile pic URL")
+            }
+            
+            followers.append(InstagramFollower(
+                userId: userId,
+                username: username,
+                fullName: fullName,
+                profilePicURL: profilePicURL
+            ))
+        }
+        
+        print("✅ [FOLLOWERS] Processed \(followers.count) followers")
+        return followers
+    }
+    
+    // MARK: - Get User Media Items (Extended with metadata)
+    
+    func getUserMediaItems(userId: String? = nil, amount: Int = 18) async throws -> [InstagramMediaItem] {
+        let uid = userId ?? session.userId
+        print("📷 [MEDIA] Fetching \(amount) media items for user ID: \(uid)")
+        
+        let path = "/feed/user/\(uid)/"
+        let data = try await apiRequest(method: "GET", path: path)
+        
+        // Debug: Print raw response
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("📷 [MEDIA] Raw response (first 500 chars): \(String(jsonString.prefix(500)))")
+        }
+        
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [MEDIA] Failed to parse JSON")
+            return []
+        }
+        
+        // Debug: Print available keys
+        print("📷 [MEDIA] Response keys: \(json.keys.sorted())")
+        
+        guard let items = json["items"] as? [[String: Any]] else {
+            print("❌ [MEDIA] No 'items' key found or invalid format")
+            print("📷 [MEDIA] Available keys: \(json.keys.joined(separator: ", "))")
+            
+            // Try alternative: get from user info endpoint
+            return try await getUserMediaFromAlternativeEndpoint(userId: uid, amount: amount)
+        }
+        
+        print("📷 [MEDIA] Found \(items.count) items in response")
+        
+        var mediaItems: [InstagramMediaItem] = []
+        
+        for (index, item) in items.prefix(amount).enumerated() {
+            print("📷 [MEDIA] Processing item \(index + 1)/\(items.count)")
+            
+            // Try multiple ways to get the pk
+            var pkValue: Int64?
+            
+            // Method 1: Direct pk field
+            if let pk = item["pk"] as? Int64 {
+                pkValue = pk
+                print("📷 [MEDIA] Item \(index + 1): Found pk directly: \(pk)")
+            }
+            // Method 2: pk as String
+            else if let pkString = item["pk"] as? String, let pk = Int64(pkString) {
+                pkValue = pk
+                print("📷 [MEDIA] Item \(index + 1): Found pk as string: \(pk)")
+            }
+            // Method 3: Extract from strong_id__ (format: "mediaId_userId")
+            else if let strongId = item["strong_id__"] as? String {
+                let components = strongId.split(separator: "_")
+                if let firstPart = components.first, let pk = Int64(String(firstPart)) {
+                    pkValue = pk
+                    print("📷 [MEDIA] Item \(index + 1): Extracted pk from strong_id__: \(pk)")
+                }
+            }
+            // Method 4: Try id field
+            else if let id = item["id"] as? String, let pk = Int64(id) {
+                pkValue = pk
+                print("📷 [MEDIA] Item \(index + 1): Found pk in id field: \(pk)")
+            }
+            
+            guard let pk = pkValue else {
+                print("⚠️ [MEDIA] Item \(index + 1) has no valid pk in any field")
+                print("⚠️ [MEDIA] Available keys: \(item.keys.sorted().joined(separator: ", "))")
+                continue
+            }
+            
+            let caption = (item["caption"] as? [String: Any])?["text"] as? String
+            
+            var imageUrl = ""
+            if let imageVersions = item["image_versions2"] as? [String: Any],
+               let candidates = imageVersions["candidates"] as? [[String: Any]],
+               let firstCandidate = candidates.first,
+               let url = firstCandidate["url"] as? String {
+                imageUrl = url
+                print("📷 [MEDIA] Item \(index + 1): Found image URL")
+            } else {
+                print("⚠️ [MEDIA] Item \(index + 1): No image URL found")
+            }
+            
+            let takenAt: Date?
+            if let timestamp = item["taken_at"] as? TimeInterval {
+                takenAt = Date(timeIntervalSince1970: timestamp)
+            } else {
+                takenAt = nil
+            }
+            
+            let likeCount = item["like_count"] as? Int
+            let commentCount = item["comment_count"] as? Int
+            
+            // Determine media type
+            let mediaType: InstagramMediaItem.MediaType
+            if let carouselMedia = item["carousel_media"] as? [[String: Any]], !carouselMedia.isEmpty {
+                mediaType = .carousel
+            } else if let videoVersions = item["video_versions"] as? [[String: Any]], !videoVersions.isEmpty {
+                mediaType = .video
+            } else {
+                mediaType = .photo
+            }
+            
+            let mediaItem = InstagramMediaItem(
+                id: String(pk),
+                mediaId: String(pk),
+                imageURL: imageUrl,
+                caption: caption,
+                takenAt: takenAt,
+                likeCount: likeCount,
+                commentCount: commentCount,
+                mediaType: mediaType
+            )
+            mediaItems.append(mediaItem)
+        }
+        
+        print("✅ [MEDIA] Fetched \(mediaItems.count) media items")
+        return mediaItems
+    }
+    
+    // MARK: - Get User Media from Alternative Endpoint
+    
+    private func getUserMediaFromAlternativeEndpoint(userId: String, amount: Int) async throws -> [InstagramMediaItem] {
+        print("📷 [MEDIA ALT] Trying alternative endpoint for user ID: \(userId)")
+        
+        // Try using user_medias endpoint with rank_token
+        let rankToken = UUID().uuidString
+        let path = "/feed/user/\(userId)/?rank_token=\(rankToken)&max_id="
+        
+        let data = try await apiRequest(method: "GET", path: path)
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("📷 [MEDIA ALT] Response (first 500 chars): \(String(jsonString.prefix(500)))")
+        }
+        
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [[String: Any]] else {
+            print("❌ [MEDIA ALT] Failed to get items from alternative endpoint")
+            return []
+        }
+        
+        print("📷 [MEDIA ALT] Found \(items.count) items")
+        
+        var mediaItems: [InstagramMediaItem] = []
+        
+        for item in items.prefix(amount) {
+            // Try multiple ways to get the pk
+            var pkValue: Int64?
+            
+            if let pk = item["pk"] as? Int64 {
+                pkValue = pk
+            } else if let pkString = item["pk"] as? String, let pk = Int64(pkString) {
+                pkValue = pk
+            } else if let strongId = item["strong_id__"] as? String {
+                let components = strongId.split(separator: "_")
+                if let firstPart = components.first, let pk = Int64(String(firstPart)) {
+                    pkValue = pk
+                }
+            } else if let id = item["id"] as? String, let pk = Int64(id) {
+                pkValue = pk
+            }
+            
+            guard let pk = pkValue else { continue }
+            
+            let caption = (item["caption"] as? [String: Any])?["text"] as? String
+            
+            var imageUrl = ""
+            if let imageVersions = item["image_versions2"] as? [String: Any],
+               let candidates = imageVersions["candidates"] as? [[String: Any]],
+               let firstCandidate = candidates.first,
+               let url = firstCandidate["url"] as? String {
+                imageUrl = url
+            }
+            
+            let mediaItem = InstagramMediaItem(
+                id: String(pk),
+                mediaId: String(pk),
+                imageURL: imageUrl,
+                caption: caption,
+                takenAt: nil,
+                likeCount: nil,
+                commentCount: nil,
+                mediaType: .photo
+            )
+            mediaItems.append(mediaItem)
+        }
+        
+        print("✅ [MEDIA ALT] Fetched \(mediaItems.count) media items from alternative endpoint")
+        return mediaItems
+    }
+    
+    // MARK: - Upload Photo
+    
+    func uploadPhoto(imageData: Data, caption: String = "") async throws -> String? {
+        print("📤 [UPLOAD] Starting photo upload...")
+        print("   Image size: \(imageData.count) bytes (\(imageData.count / 1024)KB)")
+        
+        // Step 1: Generate upload ID and names (like instagrapi)
+        let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
+        let uploadName = "\(uploadId)_0_\(Int.random(in: 1000000000...9999999999))"
+        let waterfallId = UUID().uuidString
+        print("   Upload ID: \(uploadId)")
+        print("   Upload Name: \(uploadName)")
+        print("   Waterfall ID: \(waterfallId)")
+        
+        // Step 2: Build rupload_params JSON (exactly like instagrapi)
+        let ruploadParams: [String: Any] = [
+            "retry_context": "{\"num_step_auto_retry\":0,\"num_reupload\":0,\"num_step_manual_retry\":0}",
+            "media_type": "1",
+            "xsharing_user_ids": "[]",
+            "upload_id": uploadId,
+            "image_compression": "{\"lib_name\":\"moz\",\"lib_version\":\"3.1.m\",\"quality\":\"80\"}"
+        ]
+        
+        guard let ruploadParamsData = try? JSONSerialization.data(withJSONObject: ruploadParams),
+              let ruploadParamsString = String(data: ruploadParamsData, encoding: .utf8) else {
+            print("❌ [UPLOAD] Failed to serialize rupload params")
+            throw InstagramError.uploadFailed
+        }
+        
+        // Step 3: Upload image bytes (exactly like instagrapi)
+        guard let uploadURL = URL(string: "https://i.instagram.com/rupload_igphoto/\(uploadName)") else {
+            print("❌ [UPLOAD] Invalid URL")
+            throw InstagramError.invalidURL
+        }
+        
+        var uploadRequest = URLRequest(url: uploadURL)
+        uploadRequest.httpMethod = "POST"
+        
+        // Critical headers (matching instagrapi exactly)
+        uploadRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        uploadRequest.setValue("sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)", forHTTPHeaderField: "Cookie")
+        uploadRequest.setValue(session.csrfToken, forHTTPHeaderField: "X-CSRFToken")
+        uploadRequest.setValue("936619743392459", forHTTPHeaderField: "X-IG-App-ID")
+        uploadRequest.setValue(deviceId, forHTTPHeaderField: "X-IG-Device-ID")
+        uploadRequest.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+        
+        // Upload-specific headers (matching instagrapi exactly)
+        uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "Content-Length")
+        uploadRequest.setValue(ruploadParamsString, forHTTPHeaderField: "X-Instagram-Rupload-Params")
+        uploadRequest.setValue(waterfallId, forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
+        uploadRequest.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
+        uploadRequest.setValue(uploadName, forHTTPHeaderField: "X-Entity-Name")
+        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "X-Entity-Length")
+        uploadRequest.setValue("0", forHTTPHeaderField: "Offset")
+        
+        uploadRequest.httpBody = imageData
+        
+        print("   Sending image bytes to Instagram...")
+        let (uploadData, uploadResponse) = try await urlSession.data(for: uploadRequest)
+        
+        if let httpResponse = uploadResponse as? HTTPURLResponse {
+            print("   Upload response status: \(httpResponse.statusCode)")
+        }
+        
+        if let jsonString = String(data: uploadData, encoding: .utf8) {
+            print("   Upload response body: \(jsonString)")
+        }
+        
+        guard let uploadJson = try? JSONSerialization.jsonObject(with: uploadData) as? [String: Any],
+              let uploadIdResponse = uploadJson["upload_id"] as? String else {
+            print("❌ [UPLOAD] Failed to get upload_id from response")
+            if let uploadJson = try? JSONSerialization.jsonObject(with: uploadData) as? [String: Any] {
+                print("   Response JSON: \(uploadJson)")
+            }
+            throw InstagramError.uploadFailed
+        }
+        
+        print("✅ [UPLOAD] Image bytes uploaded. Upload ID: \(uploadIdResponse)")
+        
+        // Human delay before configure
+        let delay = UInt64.random(in: 3_000_000_000...4_000_000_000)
+        print("   Waiting \(delay / 1_000_000_000)s before configure...")
+        try await Task.sleep(nanoseconds: delay)
+        
+        // Step 4: Configure media (with more complete data like instagrapi)
+        let configBody: [String: String] = [
+            "upload_id": uploadIdResponse,
+            "caption": caption,
+            "source_type": "4",
+            "media_folder": "Camera",
+            "device_id": deviceId
+        ]
+        
+        print("   Configuring media...")
+        let configData = try await apiRequest(
+            method: "POST",
+            path: "/media/configure/",
+            body: configBody
+        )
+        
+        if let jsonString = String(data: configData, encoding: .utf8) {
+            print("   Configure response: \(jsonString)")
+        }
+        
+        if let configJson = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
+           let media = configJson["media"] as? [String: Any] {
+            
+            // Instagram puede devolver pk como String o Int64, manejamos ambos
+            let mediaId: String?
+            if let pkString = media["pk"] as? String {
+                mediaId = pkString
+            } else if let pkInt = media["pk"] as? Int64 {
+                mediaId = String(pkInt)
+            } else if let pkInt = media["pk"] as? Int {
+                mediaId = String(pkInt)
+            } else {
+                mediaId = nil
+            }
+            
+            if let mediaId = mediaId {
+                print("✅ [UPLOAD] Photo uploaded successfully! Media ID: \(mediaId)")
+                return mediaId
+            }
+        }
+        
+        print("❌ [UPLOAD] Failed to get media ID from configure response")
+        return nil
+    }
+    
+    // MARK: - Reveal (Unarchive + Comment with latest follower)
+    
+    func reveal(mediaId: String) async throws -> (success: Bool, follower: String?, commentId: String?) {
+        print("✨ [REVEAL] Starting reveal for media ID: \(mediaId)")
+        
+        // Step 1: Unarchive
+        print("   Step 1: Unarchiving...")
+        let unarchived = try await unarchivePhoto(mediaId: mediaId)
+        
+        guard unarchived else {
+            print("❌ [REVEAL] Unarchive failed")
+            return (false, nil, nil)
+        }
+        
+        print("✅ [REVEAL] Unarchived successfully")
+        
+        // IMPORTANT: Instagram needs time to process the unarchive before allowing comments
+        let delay = UInt64.random(in: 10_000_000_000...15_000_000_000) // 10-15 seconds
+        print("   Waiting \(delay / 1_000_000_000)s before commenting (Instagram needs time)...")
+        try await Task.sleep(nanoseconds: delay)
+        
+        // Step 2: Get latest follower
+        print("   Step 2: Fetching latest follower...")
+        let follower = try await getLatestFollower()
+        let followerName = follower?.fullName ?? follower?.username ?? "you"
+        print("   Follower name: \(followerName)")
+        
+        // Step 3: Comment
+        print("   Step 3: Posting comment...")
+        let commentText = "\(followerName), this was written for you"
+        let commentId = try await commentOnMedia(mediaId: mediaId, text: commentText)
+        
+        if let commentId = commentId {
+            print("✅ [REVEAL] Comment posted successfully! ID: \(commentId)")
+        } else {
+            print("⚠️ [REVEAL] Comment posting failed")
+        }
+        
+        return (true, followerName, commentId)
+    }
+    
+    // MARK: - Hide (Delete comment + Archive)
+    
+    func hide(mediaId: String, commentId: String?) async throws -> Bool {
+        // Step 1: Delete comment if exists
+        if let commentId = commentId {
+            _ = try await deleteComment(mediaId: mediaId, commentId: commentId)
+            try await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
+        }
+        
+        // Step 2: Archive
+        return try await archivePhoto(mediaId: mediaId)
+    }
+}
+
+// MARK: - Errors
+
+enum InstagramError: LocalizedError {
+    case invalidURL
+    case invalidResponse
+    case sessionExpired
+    case apiError(String)
+    case uploadFailed
+    case notLoggedIn
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL: return "Invalid URL"
+        case .invalidResponse: return "Invalid response"
+        case .sessionExpired: return "Session expired. Please login again."
+        case .apiError(let msg): return "API Error: \(msg)"
+        case .uploadFailed: return "Upload failed"
+        case .notLoggedIn: return "Not logged in"
+        }
+    }
+}

@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct MentalGram1App: App {
+    @ObservedObject var instagram = InstagramService.shared
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if instagram.isLoggedIn {
+                HomeView()
+            } else {
+                LoginView()
+            }
         }
     }
 }
