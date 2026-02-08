@@ -5,46 +5,60 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var instagram = InstagramService.shared
     @ObservedObject var dataManager = DataManager.shared
-    @State private var selectedTab = 0
+    @State private var selectedTab = 1 // Start on Sets tab
     @State private var showingCreateSet = false
+    @State private var showingExplore = false
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // Performance Tab
-            PerformanceView()
-                .tabItem {
-                    Label("Performance", systemImage: "chart.bar.fill")
+        ZStack {
+            TabView(selection: $selectedTab) {
+                // Performance Tab (Instagram Replica)
+                PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
+                    .tabItem {
+                        Label("Performance", systemImage: "chart.bar.fill")
+                    }
+                    .tag(0)
+                
+                // Sets Tab
+                NavigationView {
+                    SetsListView()
                 }
-                .tag(0)
+                .tabItem {
+                    Label("Sets", systemImage: "square.grid.2x2")
+                }
+                .tag(1)
+                
+                // Quick Reveal Tab
+                NavigationView {
+                    QuickRevealView()
+                }
+                .tabItem {
+                    Label("Reveal", systemImage: "wand.and.stars")
+                }
+                .tag(2)
+                
+                // Settings Tab
+                NavigationView {
+                    SettingsView()
+                }
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .tag(3)
+            }
+            .accentColor(.purple)
             
-            // Sets Tab
-            NavigationView {
-                SetsListView()
+            // Full screen Explore overlay when showingExplore is true
+            if showingExplore {
+                ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
             }
-            .tabItem {
-                Label("Sets", systemImage: "square.grid.2x2")
-            }
-            .tag(1)
-            
-            // Quick Reveal Tab
-            NavigationView {
-                QuickRevealView()
-            }
-            .tabItem {
-                Label("Reveal", systemImage: "wand.and.stars")
-            }
-            .tag(2)
-            
-            // Settings Tab
-            NavigationView {
-                SettingsView()
-            }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .tag(3)
         }
-        .accentColor(.purple)
+        .onAppear {
+            // Preload explore feed in background when app launches
+            ExploreManager.shared.preloadExploreInBackground()
+        }
     }
 }
 

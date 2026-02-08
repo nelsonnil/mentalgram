@@ -855,6 +855,129 @@ class InstagramService: ObservableObject {
         return mediaItems
     }
     
+    // MARK: - Get Explore Feed
+    
+    func getExploreFeed(maxId: String? = nil) async throws -> ([InstagramMediaItem], String?) {
+        print("🔍 [EXPLORE] Fetching explore feed...")
+        
+        var path = "/discover/topical_explore/?is_prefetch=false&omit_cover_media=true&module=explore_popular&reels_configuration=hide_explore_media_reels_media&use_sectional_payload=false&timezone_offset=3600&session_id=\(UUID().uuidString)"
+        
+        if let maxId = maxId {
+            path += "&max_id=\(maxId)"
+        }
+        
+        let data = try await apiRequest(method: "GET", path: path)
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("🔍 [EXPLORE] Response (first 300 chars): \(String(jsonString.prefix(300)))")
+        }
+        
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [EXPLORE] Failed to parse JSON")
+            return ([], nil)
+        }
+        
+        print("🔍 [EXPLORE] Response keys: \(json.keys.sorted().joined(separator: ", "))")
+        
+        // Try different response structures
+        var items: [[String: Any]] = []
+        var nextMaxId: String?
+        
+        // Structure 1: sectional_items -> items
+        if let sectionalItems = json["sectional_items"] as? [[String: Any]] {
+            print("🔍 [EXPLORE] Found sectional_items structure")
+            for section in sectionalItems {
+                if let layoutContent = section["layout_content"] as? [String: Any],
+                   let medias = layoutContent["medias"] as? [[String: Any]] {
+                    for mediaWrapper in medias {
+                        if let media = mediaWrapper["media"] as? [String: Any] {
+                            items.append(media)
+                        }
+                    }
+                }
+            }
+            nextMaxId = json["next_max_id"] as? String
+        }
+        // Structure 2: items directly
+        else if let directItems = json["items"] as? [[String: Any]] {
+            print("🔍 [EXPLORE] Found direct items structure")
+            items = directItems
+            nextMaxId = json["next_max_id"] as? String
+        }
+        
+        print("🔍 [EXPLORE] Found \(items.count) explore items")
+        
+        var mediaItems: [InstagramMediaItem] = []
+        
+        for (index, item) in items.enumerated() {
+            // Try multiple ways to get the pk
+            var pkValue: Int64?
+            
+            if let pk = item["pk"] as? Int64 {
+                pkValue = pk
+            } else if let pkString = item["pk"] as? String, let pk = Int64(pkString) {
+                pkValue = pk
+            } else if let strongId = item["strong_id__"] as? String {
+                let components = strongId.split(separator: "_")
+                if let firstPart = components.first, let pk = Int64(String(firstPart)) {
+                    pkValue = pk
+                }
+            } else if let id = item["id"] as? String, let pk = Int64(id) {
+                pkValue = pk
+            }
+            
+            guard let pk = pkValue else {
+                print("⚠️ [EXPLORE] Item \(index + 1) has no valid pk")
+                continue
+            }
+            
+            let caption = (item["caption"] as? [String: Any])?["text"] as? String
+            
+            var imageUrl = ""
+            if let imageVersions = item["image_versions2"] as? [String: Any],
+               let candidates = imageVersions["candidates"] as? [[String: Any]],
+               let firstCandidate = candidates.first,
+               let url = firstCandidate["url"] as? String {
+                imageUrl = url
+            }
+            
+            let takenAt: Date?
+            if let timestamp = item["taken_at"] as? TimeInterval {
+                takenAt = Date(timeIntervalSince1970: timestamp)
+            } else {
+                takenAt = nil
+            }
+            
+            let likeCount = item["like_count"] as? Int
+            let commentCount = item["comment_count"] as? Int
+            
+            // Determine media type
+            let mediaType: InstagramMediaItem.MediaType
+            if let carouselMedia = item["carousel_media"] as? [[String: Any]], !carouselMedia.isEmpty {
+                mediaType = .carousel
+            } else if let videoVersions = item["video_versions"] as? [[String: Any]], !videoVersions.isEmpty {
+                mediaType = .video
+            } else {
+                mediaType = .photo
+            }
+            
+            let mediaItem = InstagramMediaItem(
+                id: String(pk),
+                mediaId: String(pk),
+                imageURL: imageUrl,
+                caption: caption,
+                takenAt: takenAt,
+                likeCount: likeCount,
+                commentCount: commentCount,
+                mediaType: mediaType
+            )
+            mediaItems.append(mediaItem)
+        }
+        
+        print("✅ [EXPLORE] Fetched \(mediaItems.count) explore items")
+        return (mediaItems, nextMaxId)
+    }
+    
     // MARK: - Upload Photo
     
     func uploadPhoto(imageData: Data, caption: String = "") async throws -> String? {

@@ -7,34 +7,75 @@ struct PerformanceView: View {
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
+    @Binding var selectedTab: Int
+    @Binding var showingExplore: Bool
     
     var body: some View {
-        ZStack {
-            if let profile = profile {
-                InstagramProfileView(profile: profile, cachedImages: $cachedImages, onRefresh: loadProfile)
-            } else if isLoading {
-                VStack(spacing: 20) {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                    Text("Cargando perfil...")
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                VStack(spacing: 20) {
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 64))
-                        .foregroundColor(.secondary)
-                    
-                    Text("No hay datos de perfil")
-                        .font(.headline)
-                    
-                    Button("Cargar Perfil") {
-                        loadProfile()
+        ZStack(alignment: .bottom) {
+            // Main content (Instagram replica)
+            ZStack {
+                if let profile = profile {
+                    InstagramProfileView(
+                        profile: profile,
+                        cachedImages: $cachedImages,
+                        onRefresh: loadProfile,
+                        onPlusPress: {
+                            // Back to Sets tab
+                            selectedTab = 1
+                        }
+                    )
+                } else if isLoading {
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Cargando perfil...")
+                            .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
+                } else {
+                    VStack(spacing: 20) {
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 64))
+                            .foregroundColor(.secondary)
+                        
+                        Text("No hay datos de perfil")
+                            .font(.headline)
+                        
+                        Button("Cargar Perfil") {
+                            loadProfile()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
             }
+            .padding(.bottom, 65) // Space for Instagram bottom bar (matches bar height)
+            
+            // Instagram-style bottom bar (white bar with icons)
+            InstagramBottomBar(
+                profileImageURL: profile?.profilePicURL,
+                cachedImage: profile?.profilePicURL != nil ? cachedImages[profile!.profilePicURL] : nil,
+                isHome: false,
+                isSearch: false,
+                onHomePress: {
+                    // Go to Sets
+                    selectedTab = 1
+                },
+                onSearchPress: {
+                    // Open Explore view
+                    showingExplore = true
+                },
+                onReelsPress: {
+                    // Reels action (disabled for now)
+                },
+                onMessagesPress: {
+                    // Messages action (disabled for now)
+                },
+                onProfilePress: {
+                    // Already on profile, do nothing
+                }
+            )
         }
+        .toolbar(.hidden, for: .tabBar) // HIDE native TabBar in Performance
+        .edgesIgnoringSafeArea(.bottom)
         .navigationBarHidden(true)
         .onAppear {
             checkAndLoadProfile()
@@ -225,13 +266,14 @@ struct InstagramProfileView: View {
     let profile: InstagramProfile
     @Binding var cachedImages: [String: UIImage]
     let onRefresh: () -> Void
+    let onPlusPress: () -> Void
     @State private var selectedTab = 0
     
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 // Header
-                InstagramHeaderView(username: profile.username, isVerified: profile.isVerified, onRefresh: onRefresh)
+                InstagramHeaderView(username: profile.username, isVerified: profile.isVerified, onRefresh: onRefresh, onPlusPress: onPlusPress)
                 
                 // Profile Info
                 VStack(spacing: 16) {
@@ -435,10 +477,12 @@ struct InstagramHeaderView: View {
     let username: String
     let isVerified: Bool
     let onRefresh: () -> Void
+    let onPlusPress: () -> Void
     
     var body: some View {
         HStack {
-            Button(action: {}) {
+            // Plus button (closes Performance and goes to Sets)
+            Button(action: onPlusPress) {
                 Image(systemName: "plus.app")
                     .font(.system(size: 24))
                     .foregroundColor(.primary)
@@ -446,10 +490,12 @@ struct InstagramHeaderView: View {
             
             Spacer()
             
+            // Username with dropdown
             HStack(spacing: 4) {
                 if isVerified {
-                    Image(systemName: "lock.fill")
+                    Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 12))
+                        .foregroundColor(.blue)
                 }
                 Text(username)
                     .font(.system(size: 16, weight: .semibold))
@@ -459,23 +505,25 @@ struct InstagramHeaderView: View {
             
             Spacer()
             
-            HStack(spacing: 16) {
-                // Refresh button
+            HStack(spacing: 20) {
+                // At symbol button (refresh)
                 Button(action: onRefresh) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 20))
-                        .foregroundColor(.blue)
+                    Image(systemName: "at")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.primary)
                 }
                 
+                // Menu button
                 Button(action: {}) {
                     Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 24))
+                        .font(.system(size: 22))
                         .foregroundColor(.primary)
                 }
             }
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
+        .background(Color(uiColor: .systemBackground))
     }
 }
 
@@ -607,5 +655,98 @@ struct PhotosGridView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Instagram Bottom Bar
+
+struct InstagramBottomBar: View {
+    let profileImageURL: String?
+    let cachedImage: UIImage?
+    let isHome: Bool
+    let isSearch: Bool
+    let onHomePress: () -> Void
+    let onSearchPress: () -> Void
+    let onReelsPress: () -> Void
+    let onMessagesPress: () -> Void
+    let onProfilePress: () -> Void
+    
+    var body: some View {
+        ZStack(alignment: .top) {
+            // White background with top border
+            Rectangle()
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.15), radius: 0, x: 0, y: -0.33)
+            
+            // Icons aligned to top
+            HStack(spacing: 0) {
+                // Home button (house outline)
+                Button(action: onHomePress) {
+                    Image(systemName: isHome ? "house.fill" : "house")
+                        .font(.system(size: 24, weight: .regular))
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 8)
+                
+                // Search button (magnifying glass)
+                Button(action: onSearchPress) {
+                    Image(systemName: isSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                        .font(.system(size: 24, weight: .regular))
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 8)
+                
+                // Reels button (play in rounded rectangle)
+                Button(action: onReelsPress) {
+                    Image(systemName: "play.rectangle")
+                        .font(.system(size: 24, weight: .regular))
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 8)
+                
+                // Messages button (paper plane with red dot)
+                Button(action: onMessagesPress) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "paperplane")
+                            .font(.system(size: 24, weight: .regular))
+                            .foregroundColor(.black)
+                        
+                        // Red notification dot
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 7, height: 7)
+                            .offset(x: 6, y: -3)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 8)
+                
+                // Profile button (circular profile pic)
+                Button(action: onProfilePress) {
+                    if let image = cachedImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 26, height: 26)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black, lineWidth: 1.5)
+                            )
+                    } else {
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 26))
+                            .foregroundColor(.black)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+            }
+            .frame(height: 65) // Taller bar
+        }
+        .frame(height: 65)
     }
 }
