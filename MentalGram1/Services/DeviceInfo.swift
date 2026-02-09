@@ -52,6 +52,12 @@ struct DeviceInfo {
     /// Mapeo de identificadores de modelo a nombres legibles
     private static func getModelName(for identifier: String) -> String {
         switch identifier {
+        // iPhone 16 Series
+        case "iPhone17,3": return "iPhone 16"
+        case "iPhone17,4": return "iPhone 16 Plus"
+        case "iPhone17,1": return "iPhone 16 Pro"
+        case "iPhone17,2": return "iPhone 16 Pro Max"
+            
         // iPhone 15 Series
         case "iPhone15,4": return "iPhone 15"
         case "iPhone15,5": return "iPhone 15 Plus"

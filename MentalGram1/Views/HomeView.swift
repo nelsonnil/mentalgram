@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var selectedTab = 1 // Start on Sets tab
     @State private var showingCreateSet = false
     @State private var showingExplore = false
+    @State private var showingChallengeAlert = false
     
     var body: some View {
         TabView(selection: $selectedTab) {

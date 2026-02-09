@@ -195,11 +195,23 @@ class InstagramService: ObservableObject {
         
         if httpResponse.statusCode >= 400 {
             // Try to parse error message from response
-            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let message = errorJson["message"] as? String {
-                print("❌ [API] HTTP \(httpResponse.statusCode): \(message)")
-                throw InstagramError.apiError("HTTP \(httpResponse.statusCode): \(message)")
-            } else if let errorString = String(data: data, encoding: .utf8) {
+            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let message = errorJson["message"] as? String ?? ""
+                
+                // Check for challenge_required
+                if message.contains("challenge_required") {
+                    print("⚠️ [API] Instagram requires verification challenge")
+                    print("⚠️ [API] Go to Instagram app/website to complete verification")
+                    throw InstagramError.challengeRequired
+                }
+                
+                if !message.isEmpty {
+                    print("❌ [API] HTTP \(httpResponse.statusCode): \(message)")
+                    throw InstagramError.apiError("HTTP \(httpResponse.statusCode): \(message)")
+                }
+            }
+            
+            if let errorString = String(data: data, encoding: .utf8) {
                 print("❌ [API] HTTP \(httpResponse.statusCode)")
                 print("❌ [API] Response: \(String(errorString.prefix(200)))")
             }
@@ -1337,6 +1349,7 @@ enum InstagramError: LocalizedError {
     case invalidURL
     case invalidResponse
     case sessionExpired
+    case challengeRequired
     case apiError(String)
     case uploadFailed
     case notLoggedIn
@@ -1346,6 +1359,7 @@ enum InstagramError: LocalizedError {
         case .invalidURL: return "Invalid URL"
         case .invalidResponse: return "Invalid response"
         case .sessionExpired: return "Session expired. Please login again."
+        case .challengeRequired: return "Instagram requires verification. Please complete the challenge in the Instagram app or website."
         case .apiError(let msg): return "API Error: \(msg)"
         case .uploadFailed: return "Upload failed"
         case .notLoggedIn: return "Not logged in"
