@@ -376,38 +376,43 @@ struct ExploreMediaCell: View {
     let cachedImage: UIImage?
     
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // Show video player if it's a video, otherwise show image
-            if media.mediaType == .video, let videoURL = media.videoURL {
-                GridVideoPlayer(videoURL: videoURL)
-                    .frame(width: UIScreen.main.bounds.width / 3 - 1.33, height: UIScreen.main.bounds.width / 3 - 1.33)
-                    .clipped()
-            } else if let image = cachedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: UIScreen.main.bounds.width / 3 - 1.33, height: UIScreen.main.bounds.width / 3 - 1.33)
-                    .clipped()
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: UIScreen.main.bounds.width / 3 - 1.33, height: UIScreen.main.bounds.width / 3 - 1.33)
-                    .overlay(
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    )
-            }
+        GeometryReader { geometry in
+            let size = geometry.size.width
             
-            // Carousel indicator (multiple icon)
-            if media.mediaType == .carousel {
-                Image(systemName: "square.on.square")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .padding(4)
-                    .background(Color.black.opacity(0.5))
-                    .cornerRadius(4)
-                    .padding(6)
+            ZStack(alignment: .topTrailing) {
+                // Show video player if it's a video, otherwise show image
+                if media.mediaType == .video, let videoURL = media.videoURL {
+                    GridVideoPlayer(videoURL: videoURL)
+                        .frame(width: size, height: size)
+                        .clipped()
+                } else if let image = cachedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size, height: size)
+                        .clipped()
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: size, height: size)
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        )
+                }
+                
+                // Carousel indicator (multiple icon)
+                if media.mediaType == .carousel {
+                    Image(systemName: "square.on.square")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white)
+                        .padding(4)
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(4)
+                        .padding(6)
+                }
             }
         }
+        .aspectRatio(1, contentMode: .fit)
     }
 }

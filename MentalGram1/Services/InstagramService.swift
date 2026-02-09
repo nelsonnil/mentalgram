@@ -12,7 +12,7 @@ class InstagramService: ObservableObject {
     @Published var isLoggedIn: Bool = false
     
     private let baseURL = "https://i.instagram.com/api/v1"
-    private let userAgent = "Instagram 320.0.0.34.98 (iPhone15,3; iOS 17_4_1; es_ES; es; scale=3.00; 1290x2796; 590791299)"
+    private lazy var userAgent = DeviceInfo.shared.instagramUserAgent
     private let deviceId = UUID().uuidString // Persistent device ID for this install
     private let clientUUID = UUID().uuidString // Client UUID (like _uuid in instagrapi)
     private let sigKeyVersion = "4"

@@ -104,23 +104,31 @@ struct UserProfileView: View {
                     }
                     
                     // Photo grid
-                    LazyVStack(spacing: 2) {
-                        ForEach(0..<((profile.cachedMediaURLs.count + 2) / 3), id: \.self) { rowIndex in
-                            HStack(spacing: 2) {
-                                ForEach(0..<3, id: \.self) { colIndex in
-                                    let index = rowIndex * 3 + colIndex
-                                    if index < profile.cachedMediaURLs.count {
-                                        let imageURL = profile.cachedMediaURLs[index]
-                                        if let image = cachedImages[imageURL] {
-                                            Image(uiImage: image)
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                                .frame(width: UIScreen.main.bounds.width / 3 - 1.33, height: UIScreen.main.bounds.width / 3 - 1.33)
-                                                .clipped()
+                    GeometryReader { geometry in
+                        let cellSize = (geometry.size.width - 4) / 3 // 2px spacing between cells
+                        
+                        LazyVStack(spacing: 2) {
+                            ForEach(0..<((profile.cachedMediaURLs.count + 2) / 3), id: \.self) { rowIndex in
+                                HStack(spacing: 2) {
+                                    ForEach(0..<3, id: \.self) { colIndex in
+                                        let index = rowIndex * 3 + colIndex
+                                        if index < profile.cachedMediaURLs.count {
+                                            let imageURL = profile.cachedMediaURLs[index]
+                                            if let image = cachedImages[imageURL] {
+                                                Image(uiImage: image)
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                                    .frame(width: cellSize, height: cellSize)
+                                                    .clipped()
+                                            } else {
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.3))
+                                                    .frame(width: cellSize, height: cellSize)
+                                            }
                                         } else {
                                             Rectangle()
-                                                .fill(Color.gray.opacity(0.3))
-                                                .frame(width: UIScreen.main.bounds.width / 3 - 1.33, height: UIScreen.main.bounds.width / 3 - 1.33)
+                                                .fill(Color.clear)
+                                                .frame(width: cellSize, height: cellSize)
                                         }
                                     }
                                 }
