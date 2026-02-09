@@ -13,6 +13,8 @@ struct ExploreView: View {
     @State private var searchedProfile: InstagramProfile?
     @State private var searchTask: Task<Void, Never>?
     @FocusState private var isSearchFieldFocused: Bool
+    @State private var showingConnectionError = false
+    @State private var lastError: InstagramError?
     
     var body: some View {
         ZStack {
@@ -205,6 +207,7 @@ struct ExploreView: View {
                 .zIndex(1000)
             }
         }
+        .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
     }
     
     private func performSearch(query: String) {
@@ -232,10 +235,19 @@ struct ExploreView: View {
                     searchResults = results
                     isSearching = false
                 }
+            } catch let error as InstagramError {
+                print("❌ [SEARCH] Instagram error: \(error)")
+                await MainActor.run {
+                    isSearching = false
+                    lastError = error
+                    showingConnectionError = true
+                }
             } catch {
                 print("❌ [SEARCH] Error: \(error)")
                 await MainActor.run {
                     isSearching = false
+                    lastError = .apiError(error.localizedDescription)
+                    showingConnectionError = true
                 }
             }
         }
@@ -261,8 +273,18 @@ struct ExploreView: View {
                         print("❌ [UI] Profile is nil")
                     }
                 }
+            } catch let error as InstagramError {
+                print("❌ [PROFILE] Instagram error loading profile: \(error)")
+                await MainActor.run {
+                    lastError = error
+                    showingConnectionError = true
+                }
             } catch {
                 print("❌ [PROFILE] Error loading profile: \(error)")
+                await MainActor.run {
+                    lastError = .apiError(error.localizedDescription)
+                    showingConnectionError = true
+                }
             }
         }
     }
