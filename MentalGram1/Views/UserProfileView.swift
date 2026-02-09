@@ -310,14 +310,29 @@ struct UserProfileView: View {
         
         Task {
             do {
+                // IMPORTANTE: Verificar estado actual ANTES de hacer follow/unfollow
+                // Esto evita intentar seguir a alguien que ya seguimos (lo que activa challenge)
+                print("🔍 [UI] Verificando estado actual de seguimiento...")
+                let actualFollowingStatus = try await InstagramService.shared.checkFollowingStatus(userId: profile.userId)
+                print("📊 [UI] Estado real de Instagram: \(actualFollowingStatus ? "Already following" : "Not following")")
+                
+                // Si el estado local difiere del real, actualízalo
+                if actualFollowingStatus != isFollowing {
+                    print("⚠️ [UI] Estado local (\(isFollowing)) difiere del real (\(actualFollowingStatus))")
+                    await MainActor.run {
+                        isFollowing = actualFollowingStatus
+                        print("✅ [UI] Estado local actualizado a: \(isFollowing)")
+                    }
+                }
+                
                 let success: Bool
                 
-                if isFollowing {
-                    // Unfollow
+                if actualFollowingStatus {
+                    // Ya lo estamos siguiendo, hacer unfollow
                     print("➖ [UI] Unfollowing @\(profile.username) (ID: \(profile.userId))...")
                     success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
                 } else {
-                    // Follow
+                    // No lo estamos siguiendo, hacer follow
                     print("➕ [UI] Following @\(profile.username) (ID: \(profile.userId))...")
                     success = try await InstagramService.shared.followUser(userId: profile.userId)
                 }

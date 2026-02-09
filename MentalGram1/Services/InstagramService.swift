@@ -137,6 +137,26 @@ class InstagramService: ObservableObject {
         print("⚠️  Restart the app and login again with new device ID")
     }
     
+    // MARK: - Check Friendship Status
+    
+    func checkFollowingStatus(userId: String) async throws -> Bool {
+        print("🔍 [FRIENDSHIP] Checking if following user ID: \(userId)")
+        
+        let data = try await apiRequest(
+            method: "GET",
+            path: "/friendships/show/\(userId)/"
+        )
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let following = json["following"] as? Bool ?? false
+            print("✅ [FRIENDSHIP] Following status: \(following)")
+            return following
+        }
+        
+        print("⚠️ [FRIENDSHIP] Could not determine following status")
+        return false
+    }
+    
     // MARK: - Follow/Unfollow
     
     func followUser(userId: String) async throws -> Bool {
@@ -714,7 +734,9 @@ class InstagramService: ObservableObject {
     
     func getProfileInfo(userId: String? = nil) async throws -> InstagramProfile? {
         let uid = userId ?? session.userId
+        let isOwnProfile = (uid == session.userId)
         print("📊 [PROFILE] Fetching complete profile for user ID: \(uid)")
+        print("📊 [PROFILE] Is own profile: \(isOwnProfile)")
         
         let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
         
@@ -762,12 +784,34 @@ class InstagramService: ObservableObject {
         
         // Check if we're following this user
         var isFollowing = false
+        
+        // First, try to get friendship_status from the user object
         if let friendshipStatus = user["friendship_status"] as? [String: Any] {
             isFollowing = friendshipStatus["following"] as? Bool ?? false
-            print("📊 [PROFILE] Friendship status - Following: \(isFollowing)")
+            print("📊 [PROFILE] Friendship status from user object - Following: \(isFollowing)")
+        } else if !isOwnProfile {
+            // If not our own profile and no friendship_status in response, 
+            // fetch it separately using the friendships endpoint
+            print("📊 [PROFILE] No friendship_status in response, fetching separately...")
+            
+            do {
+                let friendshipData = try await apiRequest(
+                    method: "GET", 
+                    path: "/friendships/show/\(uid)/"
+                )
+                
+                if let friendshipJson = try? JSONSerialization.jsonObject(with: friendshipData) as? [String: Any],
+                   let following = friendshipJson["following"] as? Bool {
+                    isFollowing = following
+                    print("📊 [PROFILE] Friendship status from separate call - Following: \(isFollowing)")
+                } else {
+                    print("⚠️ [PROFILE] Could not parse friendship status from separate call")
+                }
+            } catch {
+                print("⚠️ [PROFILE] Error fetching friendship status: \(error)")
+            }
         } else {
-            isFollowing = false
-            print("📊 [PROFILE] No friendship_status (might be own profile)")
+            print("📊 [PROFILE] Own profile, isFollowing = false")
         }
         
         let profile = InstagramProfile(
