@@ -68,6 +68,7 @@ struct InstagramProfile: Codable {
     let followingCount: Int
     let mediaCount: Int
     let followedBy: [InstagramFollower]  // "Followed by X, Y and Z others"
+    var isFollowing: Bool  // Si el usuario autenticado sigue a este perfil
     
     // Cache info
     var cachedAt: Date

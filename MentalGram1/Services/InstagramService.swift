@@ -137,6 +137,74 @@ class InstagramService: ObservableObject {
         print("⚠️  Restart the app and login again with new device ID")
     }
     
+    // MARK: - Follow/Unfollow
+    
+    func followUser(userId: String) async throws -> Bool {
+        print("➕ [FOLLOW] Following user ID: \(userId)")
+        
+        // Simulate human delay
+        let delay = UInt64.random(in: 500_000_000...1_500_000_000)
+        try await Task.sleep(nanoseconds: delay)
+        
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/friendships/create/\(userId)/",
+            body: [
+                "user_id": userId,
+                "_uid": session.userId,
+                "_uuid": clientUUID,
+                "radio_type": "wifi-none"
+            ]
+        )
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("➕ [FOLLOW] Response: \(String(jsonString.prefix(200)))")
+        }
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let status = json["status"] as? String,
+           status == "ok" {
+            print("✅ [FOLLOW] Successfully followed user")
+            return true
+        }
+        
+        print("❌ [FOLLOW] Failed to follow user")
+        return false
+    }
+    
+    func unfollowUser(userId: String) async throws -> Bool {
+        print("➖ [UNFOLLOW] Unfollowing user ID: \(userId)")
+        
+        // Simulate human delay
+        let delay = UInt64.random(in: 500_000_000...1_500_000_000)
+        try await Task.sleep(nanoseconds: delay)
+        
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/friendships/destroy/\(userId)/",
+            body: [
+                "user_id": userId,
+                "_uid": session.userId,
+                "_uuid": clientUUID,
+                "radio_type": "wifi-none"
+            ]
+        )
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("➖ [UNFOLLOW] Response: \(String(jsonString.prefix(200)))")
+        }
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let status = json["status"] as? String,
+           status == "ok" {
+            print("✅ [UNFOLLOW] Successfully unfollowed user")
+            return true
+        }
+        
+        print("❌ [UNFOLLOW] Failed to unfollow user")
+        return false
+    }
+    
     // MARK: - Common Headers
     
     private func buildHeaders() -> [String: String] {
@@ -647,6 +715,18 @@ class InstagramService: ObservableObject {
         
         print("📊 [PROFILE] Media URLs count: \(mediaURLs.count)")
         
+        // Check if we're following this user
+        var isFollowing = false
+        if let friendshipStatus = user["friendship_status"] as? [String: Any] {
+            isFollowing = friendshipStatus["following"] as? Bool ?? false
+            print("📊 [PROFILE] Friendship status - Following: \(isFollowing)")
+        } else {
+            // If it's our own profile, we don't "follow" ourselves
+            let currentUserId = String(user["pk"] as? Int64 ?? 0)
+            isFollowing = false
+            print("📊 [PROFILE] No friendship_status (might be own profile)")
+        }
+        
         let profile = InstagramProfile(
             userId: String(user["pk"] as? Int64 ?? 0),
             username: user["username"] as? String ?? "",
@@ -660,6 +740,7 @@ class InstagramService: ObservableObject {
             followingCount: user["following_count"] as? Int ?? 0,
             mediaCount: user["media_count"] as? Int ?? 0,
             followedBy: followedBy,
+            isFollowing: isFollowing,
             cachedAt: Date(),
             cachedMediaURLs: mediaURLs
         )

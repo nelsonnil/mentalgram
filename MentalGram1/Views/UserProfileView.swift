@@ -7,6 +7,14 @@ struct UserProfileView: View {
     @State private var cachedImages: [String: UIImage] = [:]
     @State private var isLoadingImages = true
     @State private var selectedTab = 0
+    @State private var isFollowing: Bool
+    @State private var isFollowActionLoading = false
+    
+    init(profile: InstagramProfile, onClose: @escaping () -> Void) {
+        self.profile = profile
+        self.onClose = onClose
+        self._isFollowing = State(initialValue: profile.isFollowing)
+    }
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -143,21 +151,43 @@ struct UserProfileView: View {
                                 .responsiveHorizontalPadding()
                         }
                         
-                        // Following + Message buttons
+                        // Following/Follow + Message buttons
                         HStack(spacing: 8) {
-                            Button(action: {}) {
-                                HStack(spacing: 4) {
-                                    Text("Following")
+                            // Follow/Following button (FUNCIONAL)
+                            Button(action: toggleFollow) {
+                                if isFollowActionLoading {
+                                    HStack {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                            .tint(.primary)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 32)
+                                    .background(Color(uiColor: .systemGray5))
+                                    .cornerRadius(8)
+                                } else if isFollowing {
+                                    HStack(spacing: 4) {
+                                        Text("Following")
+                                            .font(.system(size: 14, weight: .semibold))
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 10, weight: .semibold))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 32)
+                                    .background(Color(uiColor: .systemGray5))
+                                    .foregroundColor(.primary)
+                                    .cornerRadius(8)
+                                } else {
+                                    Text("Follow")
                                         .font(.system(size: 14, weight: .semibold))
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 32)
+                                        .background(Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(8)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 32)
-                                .background(Color(uiColor: .systemGray5))
-                                .foregroundColor(.primary)
-                                .cornerRadius(8)
                             }
+                            .disabled(isFollowActionLoading)
                             
                             Button(action: {}) {
                                 Text("Message")
@@ -303,6 +333,43 @@ struct UserProfileView: View {
             
             await MainActor.run {
                 isLoadingImages = false
+            }
+        }
+    }
+    
+    private func toggleFollow() {
+        guard !isFollowActionLoading else { return }
+        
+        isFollowActionLoading = true
+        
+        Task {
+            do {
+                let success: Bool
+                
+                if isFollowing {
+                    // Unfollow
+                    print("➖ [UI] Unfollowing @\(profile.username)...")
+                    success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
+                } else {
+                    // Follow
+                    print("➕ [UI] Following @\(profile.username)...")
+                    success = try await InstagramService.shared.followUser(userId: profile.userId)
+                }
+                
+                await MainActor.run {
+                    if success {
+                        isFollowing.toggle()
+                        print("✅ [UI] Follow status updated: \(isFollowing ? "Following" : "Not following")")
+                    } else {
+                        print("❌ [UI] Follow action failed")
+                    }
+                    isFollowActionLoading = false
+                }
+            } catch {
+                print("❌ [UI] Error toggling follow: \(error)")
+                await MainActor.run {
+                    isFollowActionLoading = false
+                }
             }
         }
     }
