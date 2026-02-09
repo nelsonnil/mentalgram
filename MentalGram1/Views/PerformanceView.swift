@@ -53,11 +53,10 @@ struct PerformanceView: View {
             InstagramBottomBar(
                 profileImageURL: profile?.profilePicURL,
                 cachedImage: profile?.profilePicURL != nil ? cachedImages[profile!.profilePicURL] : nil,
-                isHome: false,
+                isHome: true,
                 isSearch: false,
                 onHomePress: {
-                    // Go to Sets
-                    selectedTab = 1
+                    // Already on home/profile, do nothing
                 },
                 onSearchPress: {
                     // Open Explore view

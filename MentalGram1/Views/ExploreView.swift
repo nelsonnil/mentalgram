@@ -150,7 +150,7 @@ struct ExploreView: View {
                 isSearch: true,
                 onHomePress: {
                     showingExplore = false
-                    selectedTab = 1 // Sets
+                    selectedTab = 0 // Performance (perfil del usuario)
                 },
                 onSearchPress: {
                     // Already on search
