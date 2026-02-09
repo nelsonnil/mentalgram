@@ -13,8 +13,8 @@ class InstagramService: ObservableObject {
     
     private let baseURL = "https://i.instagram.com/api/v1"
     private lazy var userAgent = DeviceInfo.shared.instagramUserAgent
-    private let deviceId = UUID().uuidString // Persistent device ID for this install
-    private let clientUUID = UUID().uuidString // Client UUID (like _uuid in instagrapi)
+    private let deviceId: String // Persistent device ID for this install
+    private let clientUUID: String // Client UUID (like _uuid in instagrapi)
     private let sigKeyVersion = "4"
     private let sigKey = "109513c04303341a7daf27bb329532b6a76c178d78911a750e0620efaffb2d0c" // Instagram's signature key
     
@@ -26,6 +26,25 @@ class InstagramService: ObservableObject {
     }()
     
     private init() {
+        // Initialize persistent device identifiers
+        if let savedDeviceId = UserDefaults.standard.string(forKey: "instagram_device_id") {
+            self.deviceId = savedDeviceId
+            print("📱 [DEVICE] Using saved device ID: \(String(savedDeviceId.prefix(8)))...")
+        } else {
+            let newDeviceId = UUID().uuidString
+            UserDefaults.standard.set(newDeviceId, forKey: "instagram_device_id")
+            self.deviceId = newDeviceId
+            print("📱 [DEVICE] Generated new device ID: \(String(newDeviceId.prefix(8)))...")
+        }
+        
+        if let savedClientUUID = UserDefaults.standard.string(forKey: "instagram_client_uuid") {
+            self.clientUUID = savedClientUUID
+        } else {
+            let newUUID = UUID().uuidString
+            UserDefaults.standard.set(newUUID, forKey: "instagram_client_uuid")
+            self.clientUUID = newUUID
+        }
+        
         // Try to restore session from Keychain
         if let saved = KeychainService.shared.loadSession(), saved.isLoggedIn {
             self.session = saved
@@ -105,6 +124,17 @@ class InstagramService: ObservableObject {
                 HTTPCookieStorage.shared.deleteCookie(cookie)
             }
         }
+        
+        print("✅ Logged out successfully")
+    }
+    
+    // MARK: - Reset Device ID (use with caution)
+    
+    func resetDeviceIdentifiers() {
+        UserDefaults.standard.removeObject(forKey: "instagram_device_id")
+        UserDefaults.standard.removeObject(forKey: "instagram_client_uuid")
+        print("🔄 Device identifiers reset")
+        print("⚠️  Restart the app and login again with new device ID")
     }
     
     // MARK: - Common Headers
@@ -164,6 +194,15 @@ class InstagramService: ObservableObject {
         }
         
         if httpResponse.statusCode >= 400 {
+            // Try to parse error message from response
+            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = errorJson["message"] as? String {
+                print("❌ [API] HTTP \(httpResponse.statusCode): \(message)")
+                throw InstagramError.apiError("HTTP \(httpResponse.statusCode): \(message)")
+            } else if let errorString = String(data: data, encoding: .utf8) {
+                print("❌ [API] HTTP \(httpResponse.statusCode)")
+                print("❌ [API] Response: \(String(errorString.prefix(200)))")
+            }
             throw InstagramError.apiError("HTTP \(httpResponse.statusCode)")
         }
         

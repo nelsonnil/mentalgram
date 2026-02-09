@@ -201,6 +201,7 @@ struct ActivityLogView: View {
 struct SettingsView: View {
     @ObservedObject var instagram = InstagramService.shared
     @State private var showingLogoutAlert = false
+    @State private var showingResetDeviceAlert = false
     @State private var showingFollowerData = false
     @State private var latestFollower: InstagramFollower?
     @State private var followerFullInfo: [String: Any]?
@@ -246,6 +247,15 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(isLoadingFollower)
+                    
+                    Button(role: .destructive, action: { showingResetDeviceAlert = true }) {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.red)
+                            Text("Reset Device ID (Emergency)")
+                            Spacer()
+                        }
+                    }
                 }
             }
             
@@ -273,6 +283,15 @@ struct SettingsView: View {
             }
         } message: {
             Text("Are you sure you want to logout?")
+        }
+        .alert("Reset Device ID", isPresented: $showingResetDeviceAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset & Logout", role: .destructive) {
+                instagram.resetDeviceIdentifiers()
+                instagram.logout()
+            }
+        } message: {
+            Text("Esto reseteará tu Device ID y cerrará sesión. Úsalo SOLO si Instagram te bloqueó por cambio de dispositivo. Tendrás que volver a hacer login.")
         }
         .sheet(isPresented: $showingFollowerData) {
             FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
