@@ -40,9 +40,8 @@ struct UserProfileView: View {
                     // Profile info
                     VStack(spacing: 16) {
                         // Profile picture
-                        if let profilePicURL = profile.profilePicURL,
-                           !profilePicURL.isEmpty,
-                           let image = cachedImages[profilePicURL] {
+                        if !profile.profilePicURL.isEmpty,
+                           let image = cachedImages[profile.profilePicURL] {
                             Image(uiImage: image)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
@@ -139,13 +138,12 @@ struct UserProfileView: View {
     private func loadImages() {
         Task {
             // Load profile pic
-            if let profilePicURL = profile.profilePicURL,
-               !profilePicURL.isEmpty,
-               let url = URL(string: profilePicURL),
+            if !profile.profilePicURL.isEmpty,
+               let url = URL(string: profile.profilePicURL),
                let (data, _) = try? await URLSession.shared.data(from: url),
                let image = UIImage(data: data) {
                 await MainActor.run {
-                    cachedImages[profilePicURL] = image
+                    cachedImages[profile.profilePicURL] = image
                 }
             }
             
