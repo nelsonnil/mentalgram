@@ -37,6 +37,24 @@ struct InstagramFollower: Codable {
 
 // MARK: - Instagram Profile Models
 
+struct UserSearchResult: Identifiable {
+    let id: String
+    let userId: String
+    let username: String
+    let fullName: String
+    let profilePicURL: String
+    let isVerified: Bool
+    
+    init(userId: String, username: String, fullName: String, profilePicURL: String, isVerified: Bool) {
+        self.id = userId
+        self.userId = userId
+        self.username = username
+        self.fullName = fullName
+        self.profilePicURL = profilePicURL
+        self.isVerified = isVerified
+    }
+}
+
 struct InstagramProfile: Codable {
     let userId: String
     let username: String

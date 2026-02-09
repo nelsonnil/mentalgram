@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Combine
 
 /// Video player for grid cells - auto-plays and loops silently
 struct GridVideoPlayer: View {

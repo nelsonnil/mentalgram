@@ -902,7 +902,7 @@ class InstagramService: ObservableObject {
         var items: [[String: Any]] = []
         var nextMaxId: String?
         
-        // Structure 1: sectional_items -> layout_content -> medias
+        // Structure 1: sectional_items -> layout_content -> medias/clips/fill_items
         if let sectionalItems = json["sectional_items"] as? [[String: Any]] {
             print("🔍 [EXPLORE] Found sectional_items structure with \(sectionalItems.count) sections")
             for (sectionIndex, section) in sectionalItems.enumerated() {
@@ -911,10 +911,33 @@ class InstagramService: ObservableObject {
                 if let layoutContent = section["layout_content"] as? [String: Any] {
                     print("🔍 [EXPLORE]   layout_content keys: \(layoutContent.keys.sorted().joined(separator: ", "))")
                     
+                    // Method 1: Check for medias array
                     if let medias = layoutContent["medias"] as? [[String: Any]] {
                         print("🔍 [EXPLORE]   Found \(medias.count) medias in section \(sectionIndex + 1)")
                         for mediaWrapper in medias {
                             if let media = mediaWrapper["media"] as? [String: Any] {
+                                items.append(media)
+                            }
+                        }
+                    }
+                    
+                    // Method 2: Check for one_by_two_item.clips.items
+                    if let oneByTwoItem = layoutContent["one_by_two_item"] as? [String: Any],
+                       let clips = oneByTwoItem["clips"] as? [String: Any],
+                       let clipsItems = clips["items"] as? [[String: Any]] {
+                        print("🔍 [EXPLORE]   Found \(clipsItems.count) clips in section \(sectionIndex + 1)")
+                        for clipItem in clipsItems {
+                            if let media = clipItem["media"] as? [String: Any] {
+                                items.append(media)
+                            }
+                        }
+                    }
+                    
+                    // Method 3: Check for fill_items
+                    if let fillItems = layoutContent["fill_items"] as? [[String: Any]] {
+                        print("🔍 [EXPLORE]   Found \(fillItems.count) fill_items in section \(sectionIndex + 1)")
+                        for fillItem in fillItems {
+                            if let media = fillItem["media"] as? [String: Any] {
                                 items.append(media)
                             }
                         }
@@ -1199,6 +1222,68 @@ class InstagramService: ObservableObject {
         
         // Step 2: Archive
         return try await archivePhoto(mediaId: mediaId)
+    }
+    
+    // MARK: - Search Users
+    
+    func searchUsers(query: String) async throws -> [UserSearchResult] {
+        guard !query.isEmpty else { return [] }
+        
+        print("🔍 [SEARCH] Searching for: \(query)")
+        
+        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        let path = "/users/search/?q=\(encodedQuery)&search_surface=user_search_page"
+        
+        let data = try await apiRequest(method: "GET", path: path)
+        
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let users = json["users"] as? [[String: Any]] else {
+            print("❌ [SEARCH] Failed to parse search results")
+            return []
+        }
+        
+        print("🔍 [SEARCH] Found \(users.count) users")
+        
+        var results: [UserSearchResult] = []
+        
+        for user in users.prefix(20) {
+            let pk = user["pk"] as? Int64
+            let pkString = user["pk"] as? String
+            let userId = pk != nil ? String(pk!) : (pkString ?? "")
+            
+            let username = user["username"] as? String ?? ""
+            let fullName = user["full_name"] as? String ?? ""
+            let profilePicUrl = user["profile_pic_url"] as? String ?? ""
+            let isVerified = user["is_verified"] as? Bool ?? false
+            
+            let result = UserSearchResult(
+                userId: userId,
+                username: username,
+                fullName: fullName,
+                profilePicURL: profilePicUrl,
+                isVerified: isVerified
+            )
+            results.append(result)
+        }
+        
+        return results
+    }
+    
+    func searchAndLoadUserProfile(username: String) async throws -> InstagramProfile {
+        print("🔍 [SEARCH] Loading profile for @\(username)")
+        
+        // First search to get user ID
+        let results = try await searchUsers(query: username)
+        
+        guard let exactMatch = results.first(where: { $0.username.lowercased() == username.lowercased() }) else {
+            print("❌ [SEARCH] User @\(username) not found")
+            throw InstagramError.apiError("Usuario no encontrado")
+        }
+        
+        print("✅ [SEARCH] Found user ID: \(exactMatch.userId)")
+        
+        // Load full profile
+        return try await getProfileInfo(userId: exactMatch.userId)
     }
 }
 

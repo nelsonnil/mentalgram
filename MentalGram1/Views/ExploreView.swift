@@ -6,6 +6,13 @@ struct ExploreView: View {
     @ObservedObject var exploreManager = ExploreManager.shared
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
+    @State private var searchText = ""
+    @State private var searchResults: [UserSearchResult] = []
+    @State private var isSearching = false
+    @State private var showingUserProfile = false
+    @State private var searchedProfile: InstagramProfile?
+    @State private var searchTask: Task<Void, Never>?
+    @FocusState private var isSearchFieldFocused: Bool
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -20,29 +27,85 @@ struct ExploreView: View {
                             .foregroundColor(.gray)
                             .font(.system(size: 16))
                         
-                        Text("Buscar")
-                            .foregroundColor(.gray)
+                        TextField("Buscar", text: $searchText)
                             .font(.system(size: 16))
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .focused($isSearchFieldFocused)
+                            .onChange(of: searchText) { newValue in
+                                performSearch(query: newValue)
+                            }
                         
-                        Spacer()
+                        if !searchText.isEmpty {
+                            Button(action: {
+                                searchText = ""
+                                searchResults = []
+                                isSearchFieldFocused = false
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                                    .font(.system(size: 16))
+                            }
+                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(Color(uiColor: .systemGray6))
                     .cornerRadius(10)
                     
-                    Button(action: {}) {
-                        Image(systemName: "line.3.horizontal.decrease")
-                            .foregroundColor(.primary)
-                            .font(.system(size: 20))
+                    if isSearchFieldFocused || !searchText.isEmpty {
+                        Button("Cancelar") {
+                            searchText = ""
+                            searchResults = []
+                            isSearchFieldFocused = false
+                        }
+                        .font(.system(size: 16))
+                        .foregroundColor(.primary)
+                    } else {
+                        Button(action: {}) {
+                            Image(systemName: "line.3.horizontal.decrease")
+                                .foregroundColor(.primary)
+                                .font(.system(size: 20))
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(Color(uiColor: .systemBackground))
                 
-                // Grid of explore content
-                if exploreManager.isLoading && exploreManager.exploreMedia.isEmpty {
+                // Show search results if searching
+                if !searchText.isEmpty {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            if isSearching {
+                                HStack {
+                                    ProgressView()
+                                    Text("Buscando...")
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding()
+                            } else if searchResults.isEmpty {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(.secondary)
+                                    Text("No se encontraron resultados")
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.top, 60)
+                            } else {
+                                ForEach(searchResults) { result in
+                                    SearchResultRow(result: result, onTap: {
+                                        loadUserProfile(userId: result.userId)
+                                    })
+                                }
+                            }
+                        }
+                    }
+                    .background(Color.white)
+                } else {
+                    // Grid of explore content
+                    if exploreManager.isLoading && exploreManager.exploreMedia.isEmpty {
                     VStack(spacing: 20) {
                         ProgressView()
                             .scaleEffect(1.5)
@@ -66,12 +129,13 @@ struct ExploreView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    ScrollView {
-                        ExploreGridView(
-                            mediaItems: exploreManager.exploreMedia,
-                            cachedImages: exploreManager.cachedImages
-                        )
-                        .padding(.bottom, 65)
+                        ScrollView {
+                            ExploreGridView(
+                                mediaItems: exploreManager.exploreMedia,
+                                cachedImages: exploreManager.cachedImages
+                            )
+                            .padding(.bottom, 65)
+                        }
                     }
                 }
             }
@@ -104,6 +168,87 @@ struct ExploreView: View {
         .toolbar(.hidden, for: .tabBar)
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarHidden(true)
+        .fullScreenCover(isPresented: $showingUserProfile) {
+            if let profile = searchedProfile {
+                UserProfileView(profile: profile, onClose: {
+                    showingUserProfile = false
+                })
+            }
+        }
+        .overlay(
+            Group {
+                if isSearching {
+                    ZStack {
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                        
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+                            
+                            Text("Buscando @\(searchText)...")
+                                .foregroundColor(.white)
+                                .font(.headline)
+                        }
+                        .padding(32)
+                        .background(Color(uiColor: .systemBackground))
+                        .cornerRadius(16)
+                    }
+                }
+            }
+        )
+    }
+    
+    private func performSearch(query: String) {
+        // Cancel previous search
+        searchTask?.cancel()
+        
+        guard !query.isEmpty else {
+            searchResults = []
+            return
+        }
+        
+        isSearching = true
+        
+        // Debounce: wait 300ms before searching
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            
+            guard !Task.isCancelled else { return }
+            
+            do {
+                let results = try await InstagramService.shared.searchUsers(query: query)
+                
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    searchResults = results
+                    isSearching = false
+                }
+            } catch {
+                print("❌ [SEARCH] Error: \(error)")
+                await MainActor.run {
+                    isSearching = false
+                }
+            }
+        }
+    }
+    
+    private func loadUserProfile(userId: String) {
+        isSearchFieldFocused = false
+        
+        Task {
+            do {
+                let profile = try await InstagramService.shared.getProfileInfo(userId: userId)
+                
+                await MainActor.run {
+                    searchedProfile = profile
+                    showingUserProfile = true
+                }
+            } catch {
+                print("❌ [PROFILE] Error loading profile: \(error)")
+            }
+        }
     }
 }
 
@@ -127,6 +272,81 @@ struct ExploreGridView: View {
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Search Result Row
+
+struct SearchResultRow: View {
+    let result: UserSearchResult
+    let onTap: () -> Void
+    @State private var profileImage: UIImage?
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                // Profile picture
+                if let image = profileImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .foregroundColor(.gray)
+                        )
+                }
+                
+                // User info
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(result.username)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        
+                        if result.isVerified {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    
+                    if !result.fullName.isEmpty {
+                        Text(result.fullName)
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color.white)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onAppear {
+            loadProfileImage()
+        }
+    }
+    
+    private func loadProfileImage() {
+        guard !result.profilePicURL.isEmpty,
+              let url = URL(string: result.profilePicURL) else { return }
+        
+        Task {
+            if let (data, _) = try? await URLSession.shared.data(from: url),
+               let image = UIImage(data: data) {
+                await MainActor.run {
+                    profileImage = image
                 }
             }
         }
