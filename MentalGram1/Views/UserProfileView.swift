@@ -1,143 +1,255 @@
 import SwiftUI
 
-/// Vista de perfil de usuario buscado (similar a PerformanceView pero con botón de cerrar)
+/// Vista de perfil de usuario buscado (réplica exacta de Instagram)
 struct UserProfileView: View {
     let profile: InstagramProfile
     let onClose: () -> Void
     @State private var cachedImages: [String: UIImage] = [:]
     @State private var isLoadingImages = true
+    @State private var selectedTab = 0
     
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            // White background
+        ZStack(alignment: .bottom) {
             Color.white.ignoresSafeArea()
             
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Header
-                    HStack {
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 20))
+            VStack(spacing: 0) {
+                // Header (igual que Instagram)
+                HStack {
+                    Button(action: onClose) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 24))
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Spacer()
+                    
+                    // Username con candado si es privado
+                    HStack(spacing: 4) {
+                        if profile.isPrivate {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 12))
+                        }
+                        Text(profile.username)
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 20) {
+                        Button(action: {}) {
+                            Image(systemName: "bell")
+                                .font(.system(size: 24))
                                 .foregroundColor(.primary)
                         }
                         
-                        Spacer()
-                        
-                        Text(profile.username)
-                            .font(.system(size: 16, weight: .semibold))
-                        
-                        Spacer()
-                        
-                        // Placeholder for symmetry
-                        Image(systemName: "xmark")
-                            .font(.system(size: 20))
-                            .foregroundColor(.clear)
-                    }
-                    .responsiveHorizontalPadding()
-                    .padding(.vertical, 12)
-                    
-                    // Profile info
-                    VStack(spacing: 16) {
-                        // Profile picture
-                        if !profile.profilePicURL.isEmpty,
-                           let image = cachedImages[profile.profilePicURL] {
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 86, height: 86)
-                                .clipShape(Circle())
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                                )
-                        } else {
-                            Circle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 86, height: 86)
-                        }
-                        
-                        // Name
-                        Text(profile.fullName)
-                            .font(.system(size: 14, weight: .semibold))
-                        
-                        // Stats
-                        HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
-                            UserStatView(number: profile.mediaCount, label: "publicaciones")
-                            UserStatView(number: profile.followerCount, label: "seguidores")
-                            UserStatView(number: profile.followingCount, label: "seguidos")
-                        }
-                        .padding(.horizontal, UIScreen.main.bounds.width * 0.08)
-                        
-                        // Bio
-                        if !profile.biography.isEmpty {
-                            Text(profile.biography)
-                                .font(.system(size: 14))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, UIScreen.main.bounds.width * 0.08)
-                        }
-                        
-                        // URL
-                        if let url = profile.externalUrl, !url.isEmpty {
-                            Text(url)
-                                .font(.system(size: 14))
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .padding(.vertical, 16)
-                    
-                    Divider()
-                    
-                    // Grid tabs
-                    HStack(spacing: 0) {
-                        Image(systemName: "square.grid.3x3")
-                            .font(.system(size: 24))
-                            .foregroundColor(.primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .overlay(
-                                Rectangle()
-                                    .fill(Color.primary)
-                                    .frame(height: 1),
-                                alignment: .bottom
-                            )
-                    }
-                    
-                    // Photo grid
-                    GeometryReader { geometry in
-                        let cellSize = (geometry.size.width - 4) / 3 // 2px spacing between cells
-                        
-                        LazyVStack(spacing: 2) {
-                            ForEach(0..<((profile.cachedMediaURLs.count + 2) / 3), id: \.self) { rowIndex in
-                                HStack(spacing: 2) {
-                                    ForEach(0..<3, id: \.self) { colIndex in
-                                        let index = rowIndex * 3 + colIndex
-                                        if index < profile.cachedMediaURLs.count {
-                                            let imageURL = profile.cachedMediaURLs[index]
-                                            if let image = cachedImages[imageURL] {
-                                                Image(uiImage: image)
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
-                                                    .frame(width: cellSize, height: cellSize)
-                                                    .clipped()
-                                            } else {
-                                                Rectangle()
-                                                    .fill(Color.gray.opacity(0.3))
-                                                    .frame(width: cellSize, height: cellSize)
-                                            }
-                                        } else {
-                                            Rectangle()
-                                                .fill(Color.clear)
-                                                .frame(width: cellSize, height: cellSize)
-                                        }
-                                    }
-                                }
-                            }
+                        Button(action: {}) {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 24))
+                                .foregroundColor(.primary)
                         }
                     }
                 }
+                .responsiveHorizontalPadding()
+                .padding(.vertical, 12)
+                .background(Color.white)
+                
+                // Main content
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // Profile Picture + Stats
+                        HStack(alignment: .center, spacing: 0) {
+                            // Profile Picture con círculo de historia
+                            ZStack(alignment: .bottomTrailing) {
+                                if !profile.profilePicURL.isEmpty,
+                                   let image = cachedImages[profile.profilePicURL] {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 86, height: 86)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(
+                                                    LinearGradient(
+                                                        colors: [.purple, .red, .orange],
+                                                        startPoint: .topLeading,
+                                                        endPoint: .bottomTrailing
+                                                    ),
+                                                    lineWidth: 2
+                                                )
+                                                .padding(-2)
+                                        )
+                                } else {
+                                    Circle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: 86, height: 86)
+                                }
+                                
+                                // Plus button azul
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 24, height: 24)
+                                    .overlay(
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(.white)
+                                    )
+                            }
+                            .padding(.leading, UIScreen.main.bounds.width * 0.04)
+                            
+                            Spacer(minLength: 8)
+                            
+                            // Stats
+                            HStack(spacing: 0) {
+                                UserStatView(number: profile.mediaCount, label: "posts")
+                                UserStatView(number: profile.followerCount, label: "followers")
+                                UserStatView(number: profile.followingCount, label: "following")
+                            }
+                            .padding(.trailing, UIScreen.main.bounds.width * 0.04)
+                        }
+                        
+                        // Name + Bio
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(profile.fullName)
+                                .font(.system(size: 14, weight: .semibold))
+                            
+                            if !profile.biography.isEmpty {
+                                Text(profile.biography)
+                                    .font(.system(size: 14))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            
+                            if let url = profile.externalUrl, !url.isEmpty {
+                                Link(url, destination: URL(string: "https://\(url)")!)
+                                    .font(.system(size: 14))
+                                    .lineLimit(1)
+                            }
+                            
+                            // "@" + Name badge
+                            HStack(spacing: 4) {
+                                Image(systemName: "at.circle.fill")
+                                    .font(.system(size: 12))
+                                Text(profile.fullName)
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .padding(.top, 4)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .responsiveHorizontalPadding()
+                        
+                        // Followed by
+                        if !profile.followedBy.isEmpty {
+                            FollowedByView(followers: profile.followedBy, cachedImages: cachedImages)
+                                .responsiveHorizontalPadding()
+                        }
+                        
+                        // Following + Message buttons
+                        HStack(spacing: 8) {
+                            Button(action: {}) {
+                                HStack(spacing: 4) {
+                                    Text("Following")
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 10, weight: .semibold))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 32)
+                                .background(Color(uiColor: .systemGray5))
+                                .foregroundColor(.primary)
+                                .cornerRadius(8)
+                            }
+                            
+                            Button(action: {}) {
+                                Text("Message")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 32)
+                                    .background(Color(uiColor: .systemGray5))
+                                    .foregroundColor(.primary)
+                                    .cornerRadius(8)
+                            }
+                            
+                            Button(action: {}) {
+                                Image(systemName: "person.badge.plus")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.primary)
+                                    .frame(width: 32, height: 32)
+                                    .background(Color(uiColor: .systemGray5))
+                                    .cornerRadius(8)
+                            }
+                        }
+                        .responsiveHorizontalPadding()
+                        
+                        // Story Highlights (placeholder)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 16) {
+                                // Placeholder circles para highlights
+                                ForEach(0..<3, id: \.self) { _ in
+                                    VStack(spacing: 4) {
+                                        Circle()
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                            .frame(width: 64, height: 64)
+                                        Text("")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.clear)
+                                    }
+                                }
+                            }
+                            .responsiveHorizontalPadding()
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.vertical, 12)
+                    
+                    // Tabs
+                    HStack(spacing: 0) {
+                        TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
+                            selectedTab = 0
+                        }
+                        TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
+                            selectedTab = 1
+                        }
+                        TabButton(icon: "person.crop.square", isSelected: selectedTab == 2) {
+                            selectedTab = 2
+                        }
+                    }
+                    .frame(height: 44)
+                    
+                    Divider()
+                    
+                    // Photo grid
+                    PhotosGridView(
+                        mediaURLs: profile.cachedMediaURLs,
+                        cachedImages: cachedImages
+                    )
+                    .padding(.bottom, 65) // Space for bottom bar
+                }
             }
+            
+            // Instagram bottom bar (igual que en Performance/Explore)
+            InstagramBottomBar(
+                profileImageURL: profile.profilePicURL,
+                cachedImage: cachedImages[profile.profilePicURL],
+                isHome: false,
+                isSearch: false,
+                onHomePress: {
+                    // No action - stay here
+                },
+                onSearchPress: {
+                    // No action - stay here
+                },
+                onReelsPress: {
+                    // No action
+                },
+                onMessagesPress: {
+                    // No action
+                },
+                onProfilePress: {
+                    // Already on a profile
+                }
+            )
         }
+        .navigationBarHidden(true)
         .onAppear {
             print("🎨 [UI] UserProfileView appeared for @\(profile.username)")
             print("🎨 [UI] Profile has \(profile.cachedMediaURLs.count) media URLs")
