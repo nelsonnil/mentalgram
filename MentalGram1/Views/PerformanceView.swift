@@ -7,7 +7,8 @@ struct PerformanceView: View {
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
-    @State private var showingChallengeAlert = false
+    @State private var showingConnectionError = false
+    @State private var lastError: InstagramError?
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     
@@ -77,7 +78,7 @@ struct PerformanceView: View {
         .toolbar(.hidden, for: .tabBar) // HIDE native TabBar in Performance
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarHidden(true)
-        .challengeRequiredAlert(isPresented: $showingChallengeAlert)
+        .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .onAppear {
             checkAndLoadProfile()
         }
@@ -117,16 +118,19 @@ struct PerformanceView: View {
                     }
                     isLoading = false
                 }
-            } catch InstagramError.challengeRequired {
-                print("⚠️ Challenge required detected")
+            } catch let error as InstagramError {
+                print("⚠️ Instagram error detected: \(error)")
                 await MainActor.run {
                     isLoading = false
-                    showingChallengeAlert = true
+                    lastError = error
+                    showingConnectionError = true
                 }
             } catch {
                 print("❌ Error loading profile: \(error)")
                 await MainActor.run {
                     isLoading = false
+                    lastError = .apiError(error.localizedDescription)
+                    showingConnectionError = true
                 }
             }
         }

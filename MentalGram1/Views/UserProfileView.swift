@@ -9,6 +9,8 @@ struct UserProfileView: View {
     @State private var selectedTab = 0
     @State private var isFollowing: Bool
     @State private var isFollowActionLoading = false
+    @State private var showingConnectionError = false
+    @State private var lastError: InstagramError?
     
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
@@ -237,6 +239,7 @@ struct UserProfileView: View {
             }
         }
         .navigationBarHidden(true)
+        .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .onAppear {
             print("🎨 [UI] UserProfileView appeared for @\(profile.username)")
             print("🎨 [UI] Profile has \(profile.cachedMediaURLs.count) media URLs")
@@ -349,12 +352,21 @@ struct UserProfileView: View {
                     isFollowActionLoading = false
                     print("🔄 [UI] Set loading to false")
                 }
+            } catch let error as InstagramError {
+                print("❌ [UI] Instagram error toggling follow: \(error)")
+                await MainActor.run {
+                    isFollowActionLoading = false
+                    lastError = error
+                    showingConnectionError = true
+                }
             } catch {
                 print("❌ [UI] Error toggling follow: \(error)")
                 print("❌ [UI] Error type: \(type(of: error))")
                 print("❌ [UI] Error description: \(error.localizedDescription)")
                 await MainActor.run {
                     isFollowActionLoading = false
+                    lastError = .apiError(error.localizedDescription)
+                    showingConnectionError = true
                 }
             }
         }
