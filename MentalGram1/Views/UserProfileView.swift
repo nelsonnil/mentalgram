@@ -295,9 +295,18 @@ struct UserProfileView: View {
     }
     
     private func toggleFollow() {
-        guard !isFollowActionLoading else { return }
+        print("🔘 [UI] toggleFollow() called")
+        print("🔘 [UI] Current isFollowing: \(isFollowing)")
+        print("🔘 [UI] Profile userId: \(profile.userId)")
+        print("🔘 [UI] Profile username: @\(profile.username)")
+        
+        guard !isFollowActionLoading else {
+            print("⚠️ [UI] Already loading, ignoring tap")
+            return
+        }
         
         isFollowActionLoading = true
+        print("🔄 [UI] Set loading to true")
         
         Task {
             do {
@@ -305,25 +314,30 @@ struct UserProfileView: View {
                 
                 if isFollowing {
                     // Unfollow
-                    print("➖ [UI] Unfollowing @\(profile.username)...")
+                    print("➖ [UI] Unfollowing @\(profile.username) (ID: \(profile.userId))...")
                     success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
                 } else {
                     // Follow
-                    print("➕ [UI] Following @\(profile.username)...")
+                    print("➕ [UI] Following @\(profile.username) (ID: \(profile.userId))...")
                     success = try await InstagramService.shared.followUser(userId: profile.userId)
                 }
+                
+                print("📊 [UI] API returned success: \(success)")
                 
                 await MainActor.run {
                     if success {
                         isFollowing.toggle()
                         print("✅ [UI] Follow status updated: \(isFollowing ? "Following" : "Not following")")
                     } else {
-                        print("❌ [UI] Follow action failed")
+                        print("❌ [UI] Follow action failed - API returned false")
                     }
                     isFollowActionLoading = false
+                    print("🔄 [UI] Set loading to false")
                 }
             } catch {
                 print("❌ [UI] Error toggling follow: \(error)")
+                print("❌ [UI] Error type: \(type(of: error))")
+                print("❌ [UI] Error description: \(error.localizedDescription)")
                 await MainActor.run {
                     isFollowActionLoading = false
                 }

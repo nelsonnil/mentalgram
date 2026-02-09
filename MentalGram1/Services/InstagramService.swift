@@ -140,10 +140,14 @@ class InstagramService: ObservableObject {
     // MARK: - Follow/Unfollow
     
     func followUser(userId: String) async throws -> Bool {
-        print("➕ [FOLLOW] Following user ID: \(userId)")
+        print("➕ [FOLLOW] Starting follow request")
+        print("➕ [FOLLOW] Target user ID: \(userId)")
+        print("➕ [FOLLOW] Current user ID: \(session.userId)")
+        print("➕ [FOLLOW] Client UUID: \(clientUUID)")
         
         // Simulate human delay
         let delay = UInt64.random(in: 500_000_000...1_500_000_000)
+        print("⏱️ [FOLLOW] Waiting \(Double(delay) / 1_000_000_000.0) seconds...")
         try await Task.sleep(nanoseconds: delay)
         
         let data = try await apiRequest(
@@ -158,25 +162,38 @@ class InstagramService: ObservableObject {
         )
         
         if let jsonString = String(data: data, encoding: .utf8) {
-            print("➕ [FOLLOW] Response: \(String(jsonString.prefix(200)))")
+            print("➕ [FOLLOW] Full response: \(jsonString)")
         }
         
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let status = json["status"] as? String,
-           status == "ok" {
-            print("✅ [FOLLOW] Successfully followed user")
-            return true
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            print("➕ [FOLLOW] Response keys: \(json.keys)")
+            
+            if let status = json["status"] as? String {
+                print("➕ [FOLLOW] Status: \(status)")
+                if status == "ok" {
+                    print("✅ [FOLLOW] Successfully followed user")
+                    return true
+                }
+            }
+            
+            if let message = json["message"] as? String {
+                print("⚠️ [FOLLOW] Message: \(message)")
+            }
         }
         
-        print("❌ [FOLLOW] Failed to follow user")
+        print("❌ [FOLLOW] Failed to follow user - response was not 'ok'")
         return false
     }
     
     func unfollowUser(userId: String) async throws -> Bool {
-        print("➖ [UNFOLLOW] Unfollowing user ID: \(userId)")
+        print("➖ [UNFOLLOW] Starting unfollow request")
+        print("➖ [UNFOLLOW] Target user ID: \(userId)")
+        print("➖ [UNFOLLOW] Current user ID: \(session.userId)")
+        print("➖ [UNFOLLOW] Client UUID: \(clientUUID)")
         
         // Simulate human delay
         let delay = UInt64.random(in: 500_000_000...1_500_000_000)
+        print("⏱️ [UNFOLLOW] Waiting \(Double(delay) / 1_000_000_000.0) seconds...")
         try await Task.sleep(nanoseconds: delay)
         
         let data = try await apiRequest(
@@ -191,17 +208,26 @@ class InstagramService: ObservableObject {
         )
         
         if let jsonString = String(data: data, encoding: .utf8) {
-            print("➖ [UNFOLLOW] Response: \(String(jsonString.prefix(200)))")
+            print("➖ [UNFOLLOW] Full response: \(jsonString)")
         }
         
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let status = json["status"] as? String,
-           status == "ok" {
-            print("✅ [UNFOLLOW] Successfully unfollowed user")
-            return true
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            print("➖ [UNFOLLOW] Response keys: \(json.keys)")
+            
+            if let status = json["status"] as? String {
+                print("➖ [UNFOLLOW] Status: \(status)")
+                if status == "ok" {
+                    print("✅ [UNFOLLOW] Successfully unfollowed user")
+                    return true
+                }
+            }
+            
+            if let message = json["message"] as? String {
+                print("⚠️ [UNFOLLOW] Message: \(message)")
+            }
         }
         
-        print("❌ [UNFOLLOW] Failed to unfollow user")
+        print("❌ [UNFOLLOW] Failed to unfollow user - response was not 'ok'")
         return false
     }
     
@@ -715,20 +741,37 @@ class InstagramService: ObservableObject {
         
         print("📊 [PROFILE] Media URLs count: \(mediaURLs.count)")
         
+        // Extract userId (handle different types)
+        let extractedUserId: String
+        if let pkInt64 = user["pk"] as? Int64 {
+            extractedUserId = String(pkInt64)
+            print("📊 [PROFILE] userId extracted as Int64: \(extractedUserId)")
+        } else if let pkString = user["pk"] as? String {
+            extractedUserId = pkString
+            print("📊 [PROFILE] userId extracted as String: \(extractedUserId)")
+        } else if let pkInt = user["pk"] as? Int {
+            extractedUserId = String(pkInt)
+            print("📊 [PROFILE] userId extracted as Int: \(extractedUserId)")
+        } else if let pkId = user["pk_id"] as? String {
+            extractedUserId = pkId
+            print("📊 [PROFILE] userId extracted from pk_id: \(extractedUserId)")
+        } else {
+            extractedUserId = "0"
+            print("⚠️ [PROFILE] Could not extract userId, defaulting to '0'")
+        }
+        
         // Check if we're following this user
         var isFollowing = false
         if let friendshipStatus = user["friendship_status"] as? [String: Any] {
             isFollowing = friendshipStatus["following"] as? Bool ?? false
             print("📊 [PROFILE] Friendship status - Following: \(isFollowing)")
         } else {
-            // If it's our own profile, we don't "follow" ourselves
-            let currentUserId = String(user["pk"] as? Int64 ?? 0)
             isFollowing = false
             print("📊 [PROFILE] No friendship_status (might be own profile)")
         }
         
         let profile = InstagramProfile(
-            userId: String(user["pk"] as? Int64 ?? 0),
+            userId: extractedUserId,
             username: user["username"] as? String ?? "",
             fullName: user["full_name"] as? String ?? "",
             biography: user["biography"] as? String ?? "",
