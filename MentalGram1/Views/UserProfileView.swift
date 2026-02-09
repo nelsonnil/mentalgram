@@ -64,9 +64,9 @@ struct UserProfileView: View {
                         
                         // Stats
                         HStack(spacing: 40) {
-                            StatView(count: profile.mediaCount, label: "publicaciones")
-                            StatView(count: profile.followerCount, label: "seguidores")
-                            StatView(count: profile.followingCount, label: "seguidos")
+                            UserStatView(number: profile.mediaCount, label: "publicaciones")
+                            UserStatView(number: profile.followerCount, label: "seguidores")
+                            UserStatView(number: profile.followingCount, label: "seguidos")
                         }
                         .padding(.horizontal, 32)
                         
@@ -106,12 +106,12 @@ struct UserProfileView: View {
                     
                     // Photo grid
                     LazyVStack(spacing: 2) {
-                        ForEach(0..<((profile.mediaURLs.count + 2) / 3), id: \.self) { rowIndex in
+                        ForEach(0..<((profile.cachedMediaURLs.count + 2) / 3), id: \.self) { rowIndex in
                             HStack(spacing: 2) {
                                 ForEach(0..<3, id: \.self) { colIndex in
                                     let index = rowIndex * 3 + colIndex
-                                    if index < profile.mediaURLs.count {
-                                        let imageURL = profile.mediaURLs[index]
+                                    if index < profile.cachedMediaURLs.count {
+                                        let imageURL = profile.cachedMediaURLs[index]
                                         if let image = cachedImages[imageURL] {
                                             Image(uiImage: image)
                                                 .resizable()
@@ -163,7 +163,7 @@ struct UserProfileView: View {
             }
             
             // Load media thumbnails
-            for mediaURL in profile.mediaURLs {
+            for mediaURL in profile.cachedMediaURLs {
                 guard !mediaURL.isEmpty,
                       let url = URL(string: mediaURL),
                       let (data, _) = try? await URLSession.shared.data(from: url),
@@ -181,13 +181,13 @@ struct UserProfileView: View {
     }
 }
 
-private struct StatView: View {
-    let count: Int
+private struct UserStatView: View {
+    let number: Int
     let label: String
     
     var body: some View {
         VStack(spacing: 2) {
-            Text("\(formatCount(count))")
+            Text("\(formatCount(number))")
                 .font(.system(size: 16, weight: .semibold))
             
             Text(label)
