@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Responsive Helpers
+
+extension View {
+    /// Padding horizontal adaptativo según tamaño de pantalla
+    func responsiveHorizontalPadding() -> some View {
+        let screenWidth = UIScreen.main.bounds.width
+        let padding: CGFloat = screenWidth < 400 ? 12 : 16
+        return self.padding(.horizontal, padding)
+    }
+}
+
 /// Vista de perfil de usuario buscado (similar a PerformanceView pero con botón de cerrar)
 struct UserProfileView: View {
     let profile: InstagramProfile
@@ -34,7 +45,7 @@ struct UserProfileView: View {
                             .font(.system(size: 20))
                             .foregroundColor(.clear)
                     }
-                    .padding(.horizontal, 16)
+                    .responsiveHorizontalPadding()
                     .padding(.vertical, 12)
                     
                     // Profile info
@@ -62,19 +73,19 @@ struct UserProfileView: View {
                             .font(.system(size: 14, weight: .semibold))
                         
                         // Stats
-                        HStack(spacing: 40) {
+                        HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
                             UserStatView(number: profile.mediaCount, label: "publicaciones")
                             UserStatView(number: profile.followerCount, label: "seguidores")
                             UserStatView(number: profile.followingCount, label: "seguidos")
                         }
-                        .padding(.horizontal, 32)
+                        .padding(.horizontal, UIScreen.main.bounds.width * 0.08)
                         
                         // Bio
                         if !profile.biography.isEmpty {
                             Text(profile.biography)
                                 .font(.system(size: 14))
                                 .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
+                                .padding(.horizontal, UIScreen.main.bounds.width * 0.08)
                         }
                         
                         // URL

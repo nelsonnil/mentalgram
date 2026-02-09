@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Responsive Helpers
+
+extension View {
+    /// Padding horizontal adaptativo según tamaño de pantalla
+    func responsiveHorizontalPadding() -> some View {
+        let screenWidth = UIScreen.main.bounds.width
+        let padding: CGFloat = screenWidth < 400 ? 12 : 16
+        return self.padding(.horizontal, padding)
+    }
+}
+
 // MARK: - Explore View (Instagram Explore Replica)
 
 struct ExploreView: View {
@@ -71,7 +82,7 @@ struct ExploreView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 16)
+                .responsiveHorizontalPadding()
                 .padding(.vertical, 8)
                 .background(Color(uiColor: .systemBackground))
                 
@@ -344,7 +355,7 @@ struct SearchResultRow: View {
                 
                 Spacer()
             }
-            .padding(.horizontal, 16)
+            .responsiveHorizontalPadding()
             .padding(.vertical, 8)
             .background(Color.white)
         }

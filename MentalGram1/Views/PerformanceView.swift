@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Responsive Helpers
+
+extension View {
+    /// Padding horizontal adaptativo según tamaño de pantalla
+    func responsiveHorizontalPadding() -> some View {
+        let screenWidth = UIScreen.main.bounds.width
+        let padding: CGFloat = screenWidth < 400 ? 12 : 16 // iPhone Pro: 12px, Pro Max: 16px
+        return self.padding(.horizontal, padding)
+    }
+}
+
 // MARK: - Performance View (Instagram Profile Replica)
 
 struct PerformanceView: View {
@@ -326,9 +337,9 @@ struct InstagramProfileView: View {
                                         .foregroundColor(.white)
                                 )
                         }
-                        .padding(.leading, 16)
+                        .padding(.leading, UIScreen.main.bounds.width * 0.04)
                         
-                        Spacer()
+                        Spacer(minLength: 8)
                         
                         // Stats
                         HStack(spacing: 0) {
@@ -336,7 +347,7 @@ struct InstagramProfileView: View {
                             StatView(number: profile.followerCount, label: "seguidores")
                             StatView(number: profile.followingCount, label: "seguidos")
                         }
-                        .padding(.trailing, 16)
+                        .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                     }
                     
                     // Name + Bio
@@ -357,12 +368,12 @@ struct InstagramProfileView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
+                    .responsiveHorizontalPadding()
                     
                     // Followed by
                     if !profile.followedBy.isEmpty {
                         FollowedByView(followers: profile.followedBy, cachedImages: cachedImages)
-                            .padding(.horizontal, 16)
+                            .responsiveHorizontalPadding()
                     }
                     
                     // Edit Profile + Share Profile buttons
@@ -396,7 +407,7 @@ struct InstagramProfileView: View {
                                 .cornerRadius(8)
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .responsiveHorizontalPadding()
                     
                     // Story Highlights (placeholder)
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -424,7 +435,7 @@ struct InstagramProfileView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 16)
+                        .responsiveHorizontalPadding()
                     }
                     .padding(.vertical, 8)
                 }
@@ -528,7 +539,7 @@ struct InstagramHeaderView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .responsiveHorizontalPadding()
         .frame(height: 44)
         .background(Color(uiColor: .systemBackground))
     }
