@@ -332,29 +332,46 @@ struct UserProfileView: View {
         
         Task {
             do {
-                // IMPORTANTE: Verificar estado actual ANTES de hacer follow/unfollow
-                // Esto evita intentar seguir a alguien que ya seguimos (lo que activa challenge)
-                print("🔍 [UI] Verificando estado actual de seguimiento...")
-                let actualFollowingStatus = try await InstagramService.shared.checkFollowingStatus(userId: profile.userId)
-                print("📊 [UI] Estado real de Instagram: \(actualFollowingStatus ? "Already following" : "Not following")")
+                // CRÍTICO: Verificar estado completo ANTES de hacer follow/unfollow
+                // Esto evita intentar seguir a alguien que ya seguimos O que ya tiene solicitud pendiente
+                print("🔍 [UI] Verificando estado completo de seguimiento...")
+                let (actualFollowing, actualRequested) = try await InstagramService.shared.checkFollowingStatus(userId: profile.userId)
+                print("📊 [UI] Estado real de Instagram - Following: \(actualFollowing), Requested: \(actualRequested)")
                 
                 // Si el estado local difiere del real, actualízalo
-                if actualFollowingStatus != isFollowing {
-                    print("⚠️ [UI] Estado local (\(isFollowing)) difiere del real (\(actualFollowingStatus))")
+                if actualFollowing != isFollowing || actualRequested != isFollowRequested {
+                    print("⚠️ [UI] Estado local difiere del real")
+                    print("   Local: Following=\(isFollowing), Requested=\(isFollowRequested)")
+                    print("   Real:  Following=\(actualFollowing), Requested=\(actualRequested)")
                     await MainActor.run {
-                        isFollowing = actualFollowingStatus
-                        print("✅ [UI] Estado local actualizado a: \(isFollowing)")
+                        isFollowing = actualFollowing
+                        isFollowRequested = actualRequested
+                        print("✅ [UI] Estado local sincronizado con Instagram")
                     }
+                }
+                
+                // PROTECCIÓN CRÍTICA: No hacer follow si ya hay solicitud pendiente
+                if actualRequested && !actualFollowing {
+                    print("⚠️ [UI] BLOCKED: Ya hay una solicitud pendiente, no enviar otra")
+                    print("💡 [UI] Esto previene detección de bot (múltiples solicitudes)")
+                    await MainActor.run {
+                        isFollowActionLoading = false
+                    }
+                    return
                 }
                 
                 let success: Bool
                 
-                if actualFollowingStatus {
+                if actualFollowing {
                     // Ya lo estamos siguiendo, hacer unfollow
                     print("➖ [UI] Unfollowing @\(profile.username) (ID: \(profile.userId))...")
                     success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
+                } else if actualRequested {
+                    // Tiene solicitud pendiente, cancelarla (unfollow)
+                    print("🚫 [UI] Canceling follow request for @\(profile.username)...")
+                    success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
                 } else {
-                    // No lo estamos siguiendo, hacer follow
+                    // No lo estamos siguiendo NI hay solicitud, hacer follow
                     print("➕ [UI] Following @\(profile.username) (ID: \(profile.userId))...")
                     success = try await InstagramService.shared.followUser(userId: profile.userId)
                 }
@@ -363,8 +380,18 @@ struct UserProfileView: View {
                 
                 await MainActor.run {
                     if success {
-                        if !actualFollowingStatus {
-                            // Enviamos un follow
+                        if actualFollowing {
+                            // Hicimos unfollow de un perfil que seguíamos
+                            isFollowing = false
+                            isFollowRequested = false
+                            print("✅ [UI] Unfollowed successfully")
+                        } else if actualRequested {
+                            // Cancelamos una solicitud pendiente
+                            isFollowing = false
+                            isFollowRequested = false
+                            print("✅ [UI] Follow request canceled")
+                        } else {
+                            // Enviamos un follow nuevo
                             if currentProfile.isPrivate {
                                 // Si es privado, el follow crea una solicitud pendiente
                                 isFollowRequested = true
@@ -376,11 +403,6 @@ struct UserProfileView: View {
                                 isFollowRequested = false
                                 print("✅ [UI] Now following (public profile)")
                             }
-                        } else {
-                            // Hicimos unfollow
-                            isFollowing = false
-                            isFollowRequested = false
-                            print("✅ [UI] Unfollowed")
                         }
                     } else {
                         print("❌ [UI] Follow action failed - API returned false")

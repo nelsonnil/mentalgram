@@ -139,8 +139,8 @@ class InstagramService: ObservableObject {
     
     // MARK: - Check Friendship Status
     
-    func checkFollowingStatus(userId: String) async throws -> Bool {
-        print("🔍 [FRIENDSHIP] Checking if following user ID: \(userId)")
+    func checkFollowingStatus(userId: String) async throws -> (isFollowing: Bool, isRequested: Bool) {
+        print("🔍 [FRIENDSHIP] Checking complete friendship status for user ID: \(userId)")
         
         let data = try await apiRequest(
             method: "GET",
@@ -149,12 +149,13 @@ class InstagramService: ObservableObject {
         
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             let following = json["following"] as? Bool ?? false
-            print("✅ [FRIENDSHIP] Following status: \(following)")
-            return following
+            let outgoingRequest = json["outgoing_request"] as? Bool ?? false
+            print("✅ [FRIENDSHIP] Following: \(following), Outgoing request: \(outgoingRequest)")
+            return (following, outgoingRequest)
         }
         
-        print("⚠️ [FRIENDSHIP] Could not determine following status")
-        return false
+        print("⚠️ [FRIENDSHIP] Could not determine friendship status")
+        return (false, false)
     }
     
     // MARK: - Follow/Unfollow
