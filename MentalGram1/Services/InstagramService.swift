@@ -754,15 +754,6 @@ class InstagramService: ObservableObject {
             print("⚠️ [PROFILE] No profile_pic_url field found")
         }
         
-        // Get first 3 followers for "Followed by" section
-        let followedBy = try await getFollowedByUsers(userId: uid, count: 3)
-        
-        // Get media thumbnails (18 photos for grid)
-        let mediaItems = try await getUserMediaItems(userId: uid, amount: 18)
-        let mediaURLs = mediaItems.map { $0.imageURL }
-        
-        print("📊 [PROFILE] Media URLs count: \(mediaURLs.count)")
-        
         // Extract userId (handle different types)
         let extractedUserId: String
         if let pkInt64 = user["pk"] as? Int64 {
@@ -812,6 +803,36 @@ class InstagramService: ObservableObject {
             }
         } else {
             print("📊 [PROFILE] Own profile, isFollowing = false")
+        }
+        
+        // Check if profile is private
+        let isPrivate = user["is_private"] as? Bool ?? false
+        print("📊 [PROFILE] Profile is private: \(isPrivate)")
+        print("📊 [PROFILE] We are following: \(isFollowing)")
+        
+        // Only fetch followers and media if:
+        // 1. It's our own profile, OR
+        // 2. Profile is public, OR
+        // 3. Profile is private BUT we follow them
+        let shouldFetchProtectedData = isOwnProfile || !isPrivate || isFollowing
+        print("📊 [PROFILE] Should fetch protected data: \(shouldFetchProtectedData)")
+        
+        var followedBy: [InstagramFollower] = []
+        var mediaURLs: [String] = []
+        
+        if shouldFetchProtectedData {
+            print("✅ [PROFILE] Fetching followers and media (profile is accessible)")
+            // Get first 3 followers for "Followed by" section
+            followedBy = try await getFollowedByUsers(userId: uid, count: 3)
+            
+            // Get media thumbnails (18 photos for grid)
+            let mediaItems = try await getUserMediaItems(userId: uid, amount: 18)
+            mediaURLs = mediaItems.map { $0.imageURL }
+            
+            print("📊 [PROFILE] Media URLs count: \(mediaURLs.count)")
+        } else {
+            print("⚠️ [PROFILE] Skipping followers/media fetch (private profile, not following)")
+            print("💡 [PROFILE] This prevents Instagram from flagging as bot behavior")
         }
         
         let profile = InstagramProfile(
