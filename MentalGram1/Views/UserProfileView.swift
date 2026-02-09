@@ -119,9 +119,9 @@ struct UserProfileView: View {
                             
                             // Stats (con más espacio entre números)
                             HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
-                                UserStatView(number: profile.mediaCount, label: "posts")
-                                UserStatView(number: profile.followerCount, label: "followers")
-                                UserStatView(number: profile.followingCount, label: "following")
+                                UserStatView(number: currentProfile.mediaCount, label: "posts")
+                                UserStatView(number: currentProfile.followerCount, label: "followers")
+                                UserStatView(number: currentProfile.followingCount, label: "following")
                             }
                             .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                         }
@@ -156,8 +156,8 @@ struct UserProfileView: View {
                         .responsiveHorizontalPadding()
                         
                         // Followed by
-                        if !profile.followedBy.isEmpty {
-                            FollowedByView(followers: profile.followedBy, cachedImages: cachedImages)
+                        if !currentProfile.followedBy.isEmpty {
+                            FollowedByView(followers: currentProfile.followedBy, cachedImages: cachedImages)
                                 .responsiveHorizontalPadding()
                         }
                         
@@ -251,7 +251,7 @@ struct UserProfileView: View {
                     
                     // Photo grid
                     PhotosGridView(
-                        mediaURLs: profile.cachedMediaURLs,
+                        mediaURLs: currentProfile.cachedMediaURLs,
                         cachedImages: cachedImages
                     )
                 }
@@ -267,18 +267,23 @@ struct UserProfileView: View {
         }
     }
     
-    private func loadImages() {
+    private func loadImages(from profileToLoad: InstagramProfile? = nil) {
+        let targetProfile = profileToLoad ?? currentProfile
+        
         print("🖼️ [UI] Starting to load images...")
+        print("🖼️ [UI] Loading from profile: @\(targetProfile.username)")
+        print("🖼️ [UI] Profile has \(targetProfile.cachedMediaURLs.count) media URLs")
+        print("🖼️ [UI] Profile has \(targetProfile.followedBy.count) followers")
         
         Task {
             // Load profile pic
-            print("🖼️ [UI] Loading profile pic: \(profile.profilePicURL)")
-            if !profile.profilePicURL.isEmpty,
-               let url = URL(string: profile.profilePicURL),
+            print("🖼️ [UI] Loading profile pic: \(targetProfile.profilePicURL)")
+            if !targetProfile.profilePicURL.isEmpty,
+               let url = URL(string: targetProfile.profilePicURL),
                let (data, _) = try? await URLSession.shared.data(from: url),
                let image = UIImage(data: data) {
                 await MainActor.run {
-                    cachedImages[profile.profilePicURL] = image
+                    cachedImages[targetProfile.profilePicURL] = image
                     print("✅ [UI] Profile pic loaded and cached")
                 }
             } else {
@@ -286,7 +291,8 @@ struct UserProfileView: View {
             }
             
             // Load follower pics
-            for follower in profile.followedBy {
+            print("🖼️ [UI] Loading \(targetProfile.followedBy.count) follower pics...")
+            for follower in targetProfile.followedBy {
                 if let picURL = follower.profilePicURL,
                    !picURL.isEmpty,
                    let url = URL(string: picURL),
@@ -297,9 +303,11 @@ struct UserProfileView: View {
                     }
                 }
             }
+            print("✅ [UI] Follower pics loaded")
             
             // Load media thumbnails
-            for mediaURL in profile.cachedMediaURLs {
+            print("🖼️ [UI] Loading \(targetProfile.cachedMediaURLs.count) media thumbnails...")
+            for mediaURL in targetProfile.cachedMediaURLs {
                 guard !mediaURL.isEmpty,
                       let url = URL(string: mediaURL),
                       let (data, _) = try? await URLSession.shared.data(from: url),
@@ -309,9 +317,11 @@ struct UserProfileView: View {
                     cachedImages[mediaURL] = image
                 }
             }
+            print("✅ [UI] Media thumbnails loaded")
             
             await MainActor.run {
                 isLoadingImages = false
+                print("✅ [UI] All images loaded successfully")
             }
         }
     }
@@ -430,6 +440,8 @@ struct UserProfileView: View {
                 await MainActor.run {
                     print("✅ [REFRESH] Profile refreshed successfully")
                     print("📊 [REFRESH] Following: \(updatedProfile.isFollowing), Requested: \(updatedProfile.isFollowRequested)")
+                    print("📊 [REFRESH] Updated profile has \(updatedProfile.cachedMediaURLs.count) media URLs")
+                    print("📊 [REFRESH] Updated profile has \(updatedProfile.followedBy.count) followers")
                     
                     // Actualizar estados
                     isFollowing = updatedProfile.isFollowing
@@ -439,11 +451,16 @@ struct UserProfileView: View {
                     // Actualizar imágenes solo si ahora tenemos acceso
                     if updatedProfile.isFollowing && !updatedProfile.isFollowRequested {
                         print("✅ [REFRESH] Access granted! Loading photos and followers...")
-                        // Recargar imágenes (fotos y followers)
+                        print("🔄 [REFRESH] Clearing cached images...")
+                        // Limpiar caché de imágenes antiguas
                         cachedImages = [:]
-                        loadImages()
+                        print("🔄 [REFRESH] Loading images from updated profile...")
+                        // Cargar imágenes del perfil actualizado
+                        loadImages(from: updatedProfile)
                     } else if updatedProfile.isFollowRequested {
                         print("⏳ [REFRESH] Still pending approval, not loading protected data")
+                    } else {
+                        print("ℹ️ [REFRESH] Not following and no request, maintaining current state")
                     }
                     
                     // Segundo haptic feedback para confirmar que terminó (discreto)
