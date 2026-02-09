@@ -657,12 +657,12 @@ struct PhotosGridView: View {
                 if let image = cachedImages[url] {
                     Image(uiImage: image)
                         .resizable()
-                        .aspectRatio(1, contentMode: .fill)
+                        .aspectRatio(4/5, contentMode: .fill) // Instagram aspect ratio (más alto que ancho)
                         .clipped()
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.3))
-                        .aspectRatio(1, contentMode: .fill)
+                        .aspectRatio(4/5, contentMode: .fill) // Instagram aspect ratio
                 }
             }
         }
