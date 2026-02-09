@@ -773,13 +773,15 @@ class InstagramService: ObservableObject {
             print("⚠️ [PROFILE] Could not extract userId, defaulting to '0'")
         }
         
-        // Check if we're following this user
+        // Check if we're following this user and if there's a pending request
         var isFollowing = false
+        var isFollowRequested = false
         
         // First, try to get friendship_status from the user object
         if let friendshipStatus = user["friendship_status"] as? [String: Any] {
             isFollowing = friendshipStatus["following"] as? Bool ?? false
-            print("📊 [PROFILE] Friendship status from user object - Following: \(isFollowing)")
+            isFollowRequested = friendshipStatus["outgoing_request"] as? Bool ?? false
+            print("📊 [PROFILE] Friendship status from user object - Following: \(isFollowing), Requested: \(isFollowRequested)")
         } else if !isOwnProfile {
             // If not our own profile and no friendship_status in response, 
             // fetch it separately using the friendships endpoint
@@ -791,10 +793,10 @@ class InstagramService: ObservableObject {
                     path: "/friendships/show/\(uid)/"
                 )
                 
-                if let friendshipJson = try? JSONSerialization.jsonObject(with: friendshipData) as? [String: Any],
-                   let following = friendshipJson["following"] as? Bool {
-                    isFollowing = following
-                    print("📊 [PROFILE] Friendship status from separate call - Following: \(isFollowing)")
+                if let friendshipJson = try? JSONSerialization.jsonObject(with: friendshipData) as? [String: Any] {
+                    isFollowing = friendshipJson["following"] as? Bool ?? false
+                    isFollowRequested = friendshipJson["outgoing_request"] as? Bool ?? false
+                    print("📊 [PROFILE] Friendship status from separate call - Following: \(isFollowing), Requested: \(isFollowRequested)")
                 } else {
                     print("⚠️ [PROFILE] Could not parse friendship status from separate call")
                 }
@@ -802,19 +804,21 @@ class InstagramService: ObservableObject {
                 print("⚠️ [PROFILE] Error fetching friendship status: \(error)")
             }
         } else {
-            print("📊 [PROFILE] Own profile, isFollowing = false")
+            print("📊 [PROFILE] Own profile, isFollowing = false, isFollowRequested = false")
         }
         
         // Check if profile is private
         let isPrivate = user["is_private"] as? Bool ?? false
         print("📊 [PROFILE] Profile is private: \(isPrivate)")
         print("📊 [PROFILE] We are following: \(isFollowing)")
+        print("📊 [PROFILE] Request pending: \(isFollowRequested)")
         
         // Only fetch followers and media if:
         // 1. It's our own profile, OR
         // 2. Profile is public, OR
-        // 3. Profile is private BUT we follow them
-        let shouldFetchProtectedData = isOwnProfile || !isPrivate || isFollowing
+        // 3. Profile is private BUT we follow them (NOT just requested)
+        // IMPORTANT: Do NOT fetch if only "requested" - this triggers bot detection
+        let shouldFetchProtectedData = isOwnProfile || !isPrivate || (isFollowing && !isFollowRequested)
         print("📊 [PROFILE] Should fetch protected data: \(shouldFetchProtectedData)")
         
         var followedBy: [InstagramFollower] = []
@@ -849,6 +853,7 @@ class InstagramService: ObservableObject {
             mediaCount: user["media_count"] as? Int ?? 0,
             followedBy: followedBy,
             isFollowing: isFollowing,
+            isFollowRequested: isFollowRequested,
             cachedAt: Date(),
             cachedMediaURLs: mediaURLs
         )

@@ -8,14 +8,18 @@ struct UserProfileView: View {
     @State private var isLoadingImages = true
     @State private var selectedTab = 0
     @State private var isFollowing: Bool
+    @State private var isFollowRequested: Bool
     @State private var isFollowActionLoading = false
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
+    @State private var currentProfile: InstagramProfile
     
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
         self.onClose = onClose
         self._isFollowing = State(initialValue: profile.isFollowing)
+        self._isFollowRequested = State(initialValue: profile.isFollowRequested)
+        self._currentProfile = State(initialValue: profile)
     }
     
     var body: some View {
@@ -69,6 +73,7 @@ struct UserProfileView: View {
                         // Profile Picture + Stats
                         HStack(alignment: .center, spacing: 0) {
                             // Profile Picture con círculo de historia
+                            // TAP AQUÍ = Refresh inteligente (discreto, solo haptic)
                             ZStack(alignment: .bottomTrailing) {
                                 if !profile.profilePicURL.isEmpty,
                                    let image = cachedImages[profile.profilePicURL] {
@@ -106,6 +111,9 @@ struct UserProfileView: View {
                                     )
                             }
                             .padding(.leading, UIScreen.main.bounds.width * 0.04)
+                            .onTapGesture {
+                                performIntelligentRefresh()
+                            }
                             
                             Spacer(minLength: 8)
                             
@@ -155,7 +163,7 @@ struct UserProfileView: View {
                         
                         // Following/Follow + Message buttons
                         HStack(spacing: 8) {
-                            // Follow/Following button (FUNCIONAL)
+                            // Follow/Following/Requested button (FUNCIONAL)
                             Button(action: toggleFollow) {
                                 if isFollowActionLoading {
                                     HStack {
@@ -168,6 +176,7 @@ struct UserProfileView: View {
                                     .background(Color(uiColor: .systemGray5))
                                     .cornerRadius(8)
                                 } else if isFollowing {
+                                    // Already following - show "Following" with dropdown
                                     HStack(spacing: 4) {
                                         Text("Following")
                                             .font(.system(size: 14, weight: .semibold))
@@ -179,7 +188,17 @@ struct UserProfileView: View {
                                     .background(Color(uiColor: .systemGray5))
                                     .foregroundColor(.primary)
                                     .cornerRadius(8)
+                                } else if isFollowRequested {
+                                    // Request pending - show "Requested" (NO dropdown)
+                                    Text("Requested")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 32)
+                                        .background(Color(uiColor: .systemGray5))
+                                        .foregroundColor(.primary)
+                                        .cornerRadius(8)
                                 } else {
+                                    // Not following - show "Follow" in blue
                                     Text("Follow")
                                         .font(.system(size: 14, weight: .semibold))
                                         .frame(maxWidth: .infinity)
@@ -344,8 +363,25 @@ struct UserProfileView: View {
                 
                 await MainActor.run {
                     if success {
-                        isFollowing.toggle()
-                        print("✅ [UI] Follow status updated: \(isFollowing ? "Following" : "Not following")")
+                        if !actualFollowingStatus {
+                            // Enviamos un follow
+                            if currentProfile.isPrivate {
+                                // Si es privado, el follow crea una solicitud pendiente
+                                isFollowRequested = true
+                                isFollowing = false
+                                print("✅ [UI] Follow request sent (private profile, pending approval)")
+                            } else {
+                                // Si es público, follow inmediato
+                                isFollowing = true
+                                isFollowRequested = false
+                                print("✅ [UI] Now following (public profile)")
+                            }
+                        } else {
+                            // Hicimos unfollow
+                            isFollowing = false
+                            isFollowRequested = false
+                            print("✅ [UI] Unfollowed")
+                        }
                     } else {
                         print("❌ [UI] Follow action failed - API returned false")
                     }
@@ -367,6 +403,60 @@ struct UserProfileView: View {
                     isFollowActionLoading = false
                     lastError = .apiError(error.localizedDescription)
                     showingConnectionError = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Refresh inteligente (discreto, solo haptic)
+    // Ejecutado al tocar el círculo de la foto de perfil
+    private func performIntelligentRefresh() {
+        print("🔄 [REFRESH] Intelligent refresh triggered by tap on profile photo")
+        
+        // Haptic feedback (discreto, solo para el mago)
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+        
+        Task {
+            do {
+                print("🔍 [REFRESH] Fetching updated profile...")
+                
+                // Solo obtener info básica del perfil para verificar estado
+                guard let updatedProfile = try await InstagramService.shared.getProfileInfo(userId: profile.userId) else {
+                    print("❌ [REFRESH] Failed to fetch updated profile")
+                    return
+                }
+                
+                await MainActor.run {
+                    print("✅ [REFRESH] Profile refreshed successfully")
+                    print("📊 [REFRESH] Following: \(updatedProfile.isFollowing), Requested: \(updatedProfile.isFollowRequested)")
+                    
+                    // Actualizar estados
+                    isFollowing = updatedProfile.isFollowing
+                    isFollowRequested = updatedProfile.isFollowRequested
+                    currentProfile = updatedProfile
+                    
+                    // Actualizar imágenes solo si ahora tenemos acceso
+                    if updatedProfile.isFollowing && !updatedProfile.isFollowRequested {
+                        print("✅ [REFRESH] Access granted! Loading photos and followers...")
+                        // Recargar imágenes (fotos y followers)
+                        cachedImages = [:]
+                        loadImages()
+                    } else if updatedProfile.isFollowRequested {
+                        print("⏳ [REFRESH] Still pending approval, not loading protected data")
+                    }
+                    
+                    // Segundo haptic feedback para confirmar que terminó (discreto)
+                    let confirmGenerator = UIImpactFeedbackGenerator(style: .rigid)
+                    confirmGenerator.impactOccurred()
+                }
+                
+            } catch {
+                print("❌ [REFRESH] Error: \(error)")
+                // Haptic de error (diferente vibración)
+                await MainActor.run {
+                    let errorGenerator = UINotificationFeedbackGenerator()
+                    errorGenerator.notificationOccurred(.error)
                 }
             }
         }
