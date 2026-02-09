@@ -1283,7 +1283,12 @@ class InstagramService: ObservableObject {
         print("✅ [SEARCH] Found user ID: \(exactMatch.userId)")
         
         // Load full profile
-        return try await getProfileInfo(userId: exactMatch.userId)
+        guard let profile = try await getProfileInfo(userId: exactMatch.userId) else {
+            print("❌ [SEARCH] Failed to load profile for user ID: \(exactMatch.userId)")
+            throw InstagramError.apiError("Error al cargar el perfil")
+        }
+        
+        return profile
     }
 }
 
