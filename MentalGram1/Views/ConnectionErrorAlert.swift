@@ -143,6 +143,36 @@ struct ConnectionErrorAlert: ViewModifier {
             Verifica tu conexión a Internet real
             y vuelve a intentar.
             """
+            
+        case .uploadFailed:
+            details = """
+            Tipo: Error de Subida
+            
+            No se pudo subir el contenido a Instagram.
+            
+            📋 Posibles causas:
+            • Archivo muy grande
+            • Formato no soportado
+            • Problema de conexión
+            
+            Intenta de nuevo o usa otro archivo.
+            """
+            
+        case .notLoggedIn:
+            details = """
+            Tipo: Sesión No Iniciada
+            
+            No has iniciado sesión en Instagram.
+            
+            📋 Pasos a seguir:
+            
+            1. Ve a la pantalla de inicio
+            2. Introduce tus credenciales
+            3. Inicia sesión
+            
+            Si ya iniciaste sesión, intenta cerrar
+            la app completamente y volver a abrirla.
+            """
         }
         
         return details
