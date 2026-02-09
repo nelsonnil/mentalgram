@@ -1,16 +1,5 @@
 import SwiftUI
 
-// MARK: - Responsive Helpers
-
-extension View {
-    /// Padding horizontal adaptativo según tamaño de pantalla
-    func responsiveHorizontalPadding() -> some View {
-        let screenWidth = UIScreen.main.bounds.width
-        let padding: CGFloat = screenWidth < 400 ? 12 : 16
-        return self.padding(.horizontal, padding)
-    }
-}
-
 /// Vista de perfil de usuario buscado (similar a PerformanceView pero con botón de cerrar)
 struct UserProfileView: View {
     let profile: InstagramProfile
