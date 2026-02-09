@@ -15,11 +15,13 @@ struct ExploreView: View {
     @FocusState private var isSearchFieldFocused: Bool
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // White background covering everything
-            Color.white.ignoresSafeArea()
-            
-            VStack(spacing: 0) {
+        ZStack {
+            // Main Explore view
+            ZStack(alignment: .bottom) {
+                // White background covering everything
+                Color.white.ignoresSafeArea()
+                
+                VStack(spacing: 0) {
                 // Search bar at top
                 HStack {
                     HStack(spacing: 8) {
@@ -164,40 +166,45 @@ struct ExploreView: View {
                     selectedTab = 0 // Performance
                 }
             )
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .edgesIgnoringSafeArea(.bottom)
-        .navigationBarHidden(true)
-        .fullScreenCover(isPresented: $showingUserProfile) {
-            if let profile = searchedProfile {
-                UserProfileView(profile: profile, onClose: {
-                    showingUserProfile = false
-                })
             }
-        }
-        .overlay(
-            Group {
-                if isSearching {
-                    ZStack {
-                        Color.black.opacity(0.3)
-                            .ignoresSafeArea()
-                        
-                        VStack(spacing: 16) {
-                            ProgressView()
-                                .scaleEffect(1.5)
-                                .tint(.white)
+            .toolbar(.hidden, for: .tabBar)
+            .edgesIgnoringSafeArea(.bottom)
+            .navigationBarHidden(true)
+            .overlay(
+                Group {
+                    if isSearching {
+                        ZStack {
+                            Color.black.opacity(0.3)
+                                .ignoresSafeArea()
                             
-                            Text("Buscando @\(searchText)...")
-                                .foregroundColor(.white)
-                                .font(.headline)
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .scaleEffect(1.5)
+                                    .tint(.white)
+                                
+                                Text("Buscando @\(searchText)...")
+                                    .foregroundColor(.white)
+                                    .font(.headline)
+                            }
+                            .padding(32)
+                            .background(Color(uiColor: .systemBackground))
+                            .cornerRadius(16)
                         }
-                        .padding(32)
-                        .background(Color(uiColor: .systemBackground))
-                        .cornerRadius(16)
                     }
                 }
+            )
+            
+            // User Profile overlay (full screen on top)
+            if showingUserProfile, let profile = searchedProfile {
+                UserProfileView(profile: profile, onClose: {
+                    withAnimation {
+                        showingUserProfile = false
+                    }
+                })
+                .transition(.move(edge: .trailing))
+                .zIndex(1000)
             }
-        )
+        }
     }
     
     private func performSearch(query: String) {
@@ -237,13 +244,22 @@ struct ExploreView: View {
     private func loadUserProfile(userId: String) {
         isSearchFieldFocused = false
         
+        print("🔍 [UI] Loading profile for user ID: \(userId)")
+        
         Task {
             do {
                 let profile = try await InstagramService.shared.getProfileInfo(userId: userId)
                 
                 await MainActor.run {
-                    searchedProfile = profile
-                    showingUserProfile = true
+                    if let profile = profile {
+                        print("✅ [UI] Profile loaded successfully: @\(profile.username)")
+                        print("✅ [UI] Profile has \(profile.cachedMediaURLs.count) media URLs")
+                        searchedProfile = profile
+                        showingUserProfile = true
+                        print("✅ [UI] showingUserProfile set to true")
+                    } else {
+                        print("❌ [UI] Profile is nil")
+                    }
                 }
             } catch {
                 print("❌ [PROFILE] Error loading profile: \(error)")

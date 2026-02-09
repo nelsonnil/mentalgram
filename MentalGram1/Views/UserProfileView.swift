@@ -131,20 +131,29 @@ struct UserProfileView: View {
             }
         }
         .onAppear {
+            print("🎨 [UI] UserProfileView appeared for @\(profile.username)")
+            print("🎨 [UI] Profile has \(profile.cachedMediaURLs.count) media URLs")
+            print("🎨 [UI] Profile pic URL: \(profile.profilePicURL)")
             loadImages()
         }
     }
     
     private func loadImages() {
+        print("🖼️ [UI] Starting to load images...")
+        
         Task {
             // Load profile pic
+            print("🖼️ [UI] Loading profile pic: \(profile.profilePicURL)")
             if !profile.profilePicURL.isEmpty,
                let url = URL(string: profile.profilePicURL),
                let (data, _) = try? await URLSession.shared.data(from: url),
                let image = UIImage(data: data) {
                 await MainActor.run {
                     cachedImages[profile.profilePicURL] = image
+                    print("✅ [UI] Profile pic loaded and cached")
                 }
+            } else {
+                print("❌ [UI] Failed to load profile pic")
             }
             
             // Load follower pics
