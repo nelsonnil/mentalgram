@@ -332,41 +332,19 @@ struct UserProfileView: View {
         
         Task {
             do {
-                // CRÍTICO: Verificar estado completo ANTES de hacer follow/unfollow
-                // Esto evita intentar seguir a alguien que ya seguimos O que ya tiene solicitud pendiente
-                print("🔍 [UI] Verificando estado completo de seguimiento...")
-                let (actualFollowing, actualRequested) = try await InstagramService.shared.checkFollowingStatus(userId: profile.userId)
-                print("📊 [UI] Estado real de Instagram - Following: \(actualFollowing), Requested: \(actualRequested)")
-                
-                // Si el estado local difiere del real, actualízalo
-                if actualFollowing != isFollowing || actualRequested != isFollowRequested {
-                    print("⚠️ [UI] Estado local difiere del real")
-                    print("   Local: Following=\(isFollowing), Requested=\(isFollowRequested)")
-                    print("   Real:  Following=\(actualFollowing), Requested=\(actualRequested)")
-                    await MainActor.run {
-                        isFollowing = actualFollowing
-                        isFollowRequested = actualRequested
-                        print("✅ [UI] Estado local sincronizado con Instagram")
-                    }
-                }
-                
-                // PROTECCIÓN CRÍTICA: No hacer follow si ya hay solicitud pendiente
-                if actualRequested && !actualFollowing {
-                    print("⚠️ [UI] BLOCKED: Ya hay una solicitud pendiente, no enviar otra")
-                    print("💡 [UI] Esto previene detección de bot (múltiples solicitudes)")
-                    await MainActor.run {
-                        isFollowActionLoading = false
-                    }
-                    return
-                }
+                // OPCIÓN 2: Confiar en estado local (más natural, menos detectable)
+                // Estado se verificó al cargar perfil (fresco y correcto)
+                // Si algo está mal, Instagram simplemente rechaza el request
+                print("🔘 [UI] Using local state for follow action")
+                print("📊 [UI] Local state - Following: \(isFollowing), Requested: \(isFollowRequested)")
                 
                 let success: Bool
                 
-                if actualFollowing {
+                if isFollowing {
                     // Ya lo estamos siguiendo, hacer unfollow
                     print("➖ [UI] Unfollowing @\(profile.username) (ID: \(profile.userId))...")
                     success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
-                } else if actualRequested {
+                } else if isFollowRequested {
                     // Tiene solicitud pendiente, cancelarla (unfollow)
                     print("🚫 [UI] Canceling follow request for @\(profile.username)...")
                     success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
@@ -380,12 +358,12 @@ struct UserProfileView: View {
                 
                 await MainActor.run {
                     if success {
-                        if actualFollowing {
+                        if isFollowing {
                             // Hicimos unfollow de un perfil que seguíamos
                             isFollowing = false
                             isFollowRequested = false
                             print("✅ [UI] Unfollowed successfully")
-                        } else if actualRequested {
+                        } else if isFollowRequested {
                             // Cancelamos una solicitud pendiente
                             isFollowing = false
                             isFollowRequested = false
