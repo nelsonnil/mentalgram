@@ -43,8 +43,8 @@ struct DeviceInfo {
     /// Genera User-Agent para Instagram basado en el dispositivo real
     var instagramUserAgent: String {
         let appVersion = "320.0.0.34.98" // Instagram app version
-        let locale = "es_ES"
-        let language = "es"
+        let locale = "en_US" // US English locale
+        let language = "en" // English language
         
         return "Instagram \(appVersion) (\(modelIdentifier); iOS \(iosVersion); \(locale); \(language); scale=\(String(format: "%.2f", scale)); \(screenWidth)x\(screenHeight); 590791299)"
     }
