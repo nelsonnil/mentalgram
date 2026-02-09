@@ -107,8 +107,8 @@ struct UserProfileView: View {
                             
                             Spacer(minLength: 8)
                             
-                            // Stats
-                            HStack(spacing: 0) {
+                            // Stats (con más espacio entre números)
+                            HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
                                 UserStatView(number: profile.mediaCount, label: "posts")
                                 UserStatView(number: profile.followerCount, label: "followers")
                                 UserStatView(number: profile.followingCount, label: "following")
@@ -209,25 +209,6 @@ struct UserProfileView: View {
                             }
                         }
                         .responsiveHorizontalPadding()
-                        
-                        // Story Highlights (placeholder)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 16) {
-                                // Placeholder circles para highlights
-                                ForEach(0..<3, id: \.self) { _ in
-                                    VStack(spacing: 4) {
-                                        Circle()
-                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                            .frame(width: 64, height: 64)
-                                        Text("")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.clear)
-                                    }
-                                }
-                            }
-                            .responsiveHorizontalPadding()
-                        }
-                        .padding(.vertical, 8)
                     }
                     .padding(.vertical, 12)
                     
@@ -252,32 +233,8 @@ struct UserProfileView: View {
                         mediaURLs: profile.cachedMediaURLs,
                         cachedImages: cachedImages
                     )
-                    .padding(.bottom, 65) // Space for bottom bar
                 }
             }
-            
-            // Instagram bottom bar (igual que en Performance/Explore)
-            InstagramBottomBar(
-                profileImageURL: profile.profilePicURL,
-                cachedImage: cachedImages[profile.profilePicURL],
-                isHome: false,
-                isSearch: false,
-                onHomePress: {
-                    // No action - stay here
-                },
-                onSearchPress: {
-                    // No action - stay here
-                },
-                onReelsPress: {
-                    // No action
-                },
-                onMessagesPress: {
-                    // No action
-                },
-                onProfilePress: {
-                    // Already on a profile
-                }
-            )
         }
         .navigationBarHidden(true)
         .onAppear {
