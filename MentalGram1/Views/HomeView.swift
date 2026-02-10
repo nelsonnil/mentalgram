@@ -204,6 +204,13 @@ struct SettingsView: View {
     @State private var followerFullInfo: [String: Any]?
     @State private var isLoadingFollower = false
     
+    // Profile Picture Change
+    @State private var showingImagePicker = false
+    @State private var selectedImageData: Data?
+    @State private var isUploadingProfilePic = false
+    @State private var uploadMessage: String?
+    @State private var showingUploadAlert = false
+    
     var body: some View {
         List {
             Section("Account") {
@@ -221,6 +228,108 @@ struct SettingsView: View {
                 } else {
                     Text("Not logged in")
                         .foregroundColor(.secondary)
+                }
+            }
+            
+            // Profile Picture Change
+            if instagram.isLoggedIn {
+                Section("Profile Picture") {
+                    VStack(spacing: 16) {
+                        // Preview
+                        if let imageData = selectedImageData, let uiImage = UIImage(data: imageData) {
+                            VStack(spacing: 12) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 120, height: 120)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.purple, lineWidth: 2))
+                                
+                                Text("Ready to upload")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        
+                        // Select Image Button
+                        Button(action: { showingImagePicker = true }) {
+                            HStack {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                    .foregroundColor(.purple)
+                                Text(selectedImageData == nil ? "Select from Gallery" : "Change Selection")
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .disabled(isUploadingProfilePic)
+                        
+                        // Upload Button (only show if image selected)
+                        if selectedImageData != nil {
+                            Button(action: uploadProfilePicture) {
+                                HStack {
+                                    if isUploadingProfilePic {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                        Text("Uploading...")
+                                    } else {
+                                        Image(systemName: "arrow.up.circle.fill")
+                                        Text("Upload to Instagram")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 12)
+                                .background(canUpload() ? Color.purple : Color.gray)
+                                .cornerRadius(10)
+                            }
+                            .disabled(!canUpload() || isUploadingProfilePic)
+                        }
+                        
+                        // Status messages
+                        if let cooldown = getCooldownMessage() {
+                            HStack {
+                                Image(systemName: "clock.fill")
+                                    .foregroundColor(.orange)
+                                Text(cooldown)
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                        
+                        if instagram.isLocked {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                Text("Lockdown active - cannot upload")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        
+                        if instagram.isNetworkStabilizing {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                Text("Network stabilizing...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingImagePicker) {
+                    ImagePicker(selectedImageData: $selectedImageData)
+                }
+                .alert(uploadMessage ?? "Upload Complete", isPresented: $showingUploadAlert) {
+                    Button("OK") {
+                        uploadMessage = nil
+                        if uploadMessage?.contains("success") == true {
+                            selectedImageData = nil // Clear selection on success
+                        }
+                    }
+                } message: {
+                    Text(uploadMessage ?? "")
                 }
             }
             
@@ -319,6 +428,74 @@ struct SettingsView: View {
                 print("❌ Error fetching follower: \(error)")
                 await MainActor.run {
                     isLoadingFollower = false
+                }
+            }
+        }
+    }
+    
+    // MARK: - Profile Picture Upload Helpers
+    
+    private func canUpload() -> Bool {
+        // Check all anti-bot conditions
+        guard selectedImageData != nil else { return false }
+        guard !instagram.isLocked else { return false }
+        guard !instagram.isNetworkStabilizing else { return false }
+        
+        let (onCooldown, _) = instagram.isProfilePicOnCooldown()
+        guard !onCooldown else { return false }
+        
+        return true
+    }
+    
+    private func getCooldownMessage() -> String? {
+        let (onCooldown, remaining) = instagram.isProfilePicOnCooldown()
+        if onCooldown {
+            let minutes = remaining / 60
+            let seconds = remaining % 60
+            return "Wait \(minutes)m \(seconds)s before next upload"
+        }
+        return nil
+    }
+    
+    private func uploadProfilePicture() {
+        guard let imageData = selectedImageData else { return }
+        
+        isUploadingProfilePic = true
+        
+        Task {
+            do {
+                print("🖼️ [UI] Starting profile picture upload...")
+                
+                // Upload with all anti-bot protections
+                let success = try await instagram.changeProfilePicture(imageData: imageData)
+                
+                await MainActor.run {
+                    isUploadingProfilePic = false
+                    
+                    if success {
+                        uploadMessage = "✅ Profile picture updated successfully!\n\nYour Instagram profile picture has been changed. Wait 5 minutes before changing again."
+                        showingUploadAlert = true
+                        selectedImageData = nil // Clear selection
+                    } else {
+                        uploadMessage = "❌ Upload failed. Please try again later."
+                        showingUploadAlert = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isUploadingProfilePic = false
+                    
+                    let errorMessage = error.localizedDescription
+                    if errorMessage.contains("already your profile picture") {
+                        uploadMessage = "⚠️ This is already your profile picture.\n\nPlease select a different image."
+                    } else if errorMessage.contains("Lockdown") {
+                        uploadMessage = "🚨 Lockdown active\n\nInstagram detected unusual activity. Wait for lockdown to clear before uploading."
+                    } else if errorMessage.contains("cooldown") || errorMessage.contains("Wait") {
+                        uploadMessage = "⏱️ Please wait\n\n\(errorMessage)"
+                    } else {
+                        uploadMessage = "❌ Upload failed\n\n\(errorMessage)"
+                    }
+                    showingUploadAlert = true
                 }
             }
         }

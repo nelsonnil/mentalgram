@@ -9,6 +9,7 @@ struct SetDetailView: View {
     
     @State private var selectedBankIndex = 0
     @State private var isUploading = false
+    @State private var isPaused = false
     @State private var uploadProgress: (current: Int, total: Int) = (0, 0)
     @State private var showingError: String?
     
@@ -78,12 +79,43 @@ struct SetDetailView: View {
                         .cornerRadius(12)
                 }
             } else if currentSet.status == .uploading {
-                VStack(spacing: 8) {
+                VStack(spacing: 12) {
                     ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
-                        .tint(.purple)
-                    Text("\(uploadProgress.current) / \(uploadProgress.total)")
+                        .tint(isPaused ? .orange : .purple)
+                    
+                    Text(isPaused ? "⏸️ Paused - \(uploadProgress.current) / \(uploadProgress.total)" : "📤 Uploading - \(uploadProgress.current) / \(uploadProgress.total)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(isPaused ? .orange : .secondary)
+                    
+                    // Pause/Resume Button
+                    Button(action: togglePause) {
+                        Label(isPaused ? "Resume Upload" : "Pause Upload", systemImage: isPaused ? "play.fill" : "pause.fill")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(isPaused ? Color.green : Color.orange)
+                            .cornerRadius(8)
+                    }
+                }
+            } else if currentSet.status == .paused {
+                VStack(spacing: 12) {
+                    ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
+                        .tint(.orange)
+                    
+                    Text("⏸️ Upload Paused - \(uploadProgress.current) / \(uploadProgress.total)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    
+                    Button(action: resumeUpload) {
+                        Label("Resume Upload", systemImage: "play.fill")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .cornerRadius(12)
+                    }
                 }
             } else if currentSet.status == .completed {
                 // Quick Actions para sets completados
@@ -183,9 +215,26 @@ struct SetDetailView: View {
         }
     }
     
-    // MARK: - Start Upload
+    // MARK: - Upload Controls
     
     private func startUpload() {
+        Task {
+            await uploadAllPhotos()
+        }
+    }
+    
+    private func togglePause() {
+        isPaused.toggle()
+        if isPaused {
+            print("⏸️ [UPLOAD] User paused upload")
+        } else {
+            print("▶️ [UPLOAD] User resumed upload")
+        }
+    }
+    
+    private func resumeUpload() {
+        isPaused = false
+        dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
         Task {
             await uploadAllPhotos()
         }
@@ -195,8 +244,30 @@ struct SetDetailView: View {
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
         
+        // CRITICAL: Check if lockdown is active before starting
+        if instagram.isLocked {
+            print("🚨 [UPLOAD] Cannot start - lockdown is active")
+            await MainActor.run {
+                showingError = "⚠️ Instagram lockdown active. Cannot upload. Wait for lockdown to clear."
+            }
+            return
+        }
+        
         isUploading = true
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
+        
+        // ANTI-BOT: Wait if network changed recently (before first upload)
+        do {
+            try await instagram.waitForNetworkStability()
+        } catch {
+            print("⚠️ [UPLOAD] Network stability check failed: \(error)")
+            await MainActor.run {
+                isUploading = false
+                dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                showingError = "Network error starting upload: \(error.localizedDescription)"
+            }
+            return
+        }
         
         let photosToUpload = currentSet.photos.filter { $0.mediaId == nil }
         uploadProgress = (0, photosToUpload.count)
@@ -204,6 +275,27 @@ struct SetDetailView: View {
         print("   Photos needing upload: \(photosToUpload.count)")
         
         for (index, photo) in photosToUpload.enumerated() {
+            // Check if paused
+            if isPaused {
+                print("⏸️ [UPLOAD] Paused by user")
+                await MainActor.run {
+                    dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                    isUploading = false
+                }
+                return
+            }
+            
+            // CRITICAL: Check if lockdown is active (bot detection)
+            if instagram.isLocked {
+                print("🚨 [UPLOAD] Lockdown is active - STOPPING upload")
+                await MainActor.run {
+                    dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                    isUploading = false
+                    showingError = "⚠️ Instagram lockdown active. Upload paused for safety. Wait for lockdown to clear before resuming."
+                }
+                return
+            }
+            
             print("\n--- Photo \(index + 1)/\(photosToUpload.count) ---")
             print("   Symbol: \(photo.symbol)")
             print("   Filename: \(photo.filename)")
@@ -214,6 +306,9 @@ struct SetDetailView: View {
                 continue
             }
             
+            // Update photo status: uploading
+            dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .uploading, errorMessage: nil)
+            
             do {
                 // Upload photo
                 print("   Starting upload for \(photo.symbol)...")
@@ -221,24 +316,47 @@ struct SetDetailView: View {
                 
                 if let mediaId = mediaId {
                     print("✅ [UPLOAD ALL] Photo uploaded. Media ID: \(mediaId)")
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId)
+                    // Update status: uploaded (waiting for archive)
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .uploaded, errorMessage: nil)
                     
                     // Wait before archiving
                     let waitSeconds = Double.random(in: 5...10)
                     print("   Waiting \(String(format: "%.1f", waitSeconds))s before archive...")
                     try await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
                     
-                    // Archive immediately
+                    // Check if paused during wait
+                    if isPaused {
+                        print("⏸️ [UPLOAD] Paused by user during wait")
+                        await MainActor.run {
+                            dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                            isUploading = false
+                        }
+                        return
+                    }
+                    
+                    // Update status: archiving
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .archiving, errorMessage: nil)
+                    
+                    // Archive
                     print("   Archiving...")
                     let archived = try await instagram.archivePhoto(mediaId: mediaId)
                     
                     if archived {
                         print("✅ [UPLOAD ALL] Photo archived successfully")
-                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true)
+                        // Update status: completed
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
                     } else {
-                        print("❌ [UPLOAD ALL] Archive failed, but continuing...")
-                        // Still mark as uploaded but not archived
-                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: false)
+                        print("❌ [UPLOAD ALL] Archive failed - STOPPING upload")
+                        // Update status: error
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: false, uploadStatus: .error, errorMessage: "Archive failed - Manual review needed")
+                        
+                        // CRITICAL: STOP upload, don't continue
+                        await MainActor.run {
+                            showingError = "Archive failed. Please check connection and Instagram status before retrying."
+                            dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                            isUploading = false
+                        }
+                        return
                     }
                     
                     uploadProgress.current = index + 1
@@ -247,16 +365,46 @@ struct SetDetailView: View {
                     if index < photosToUpload.count - 1 {
                         let delaySeconds = Double.random(in: 120...300)
                         print("   Waiting \(String(format: "%.0f", delaySeconds))s before next photo...")
-                        try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                        
+                        // Split sleep into 1-second chunks to check pause more frequently
+                        for _ in 0..<Int(delaySeconds) {
+                            if isPaused {
+                                print("⏸️ [UPLOAD] Paused by user during delay")
+                                await MainActor.run {
+                                    dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                                    isUploading = false
+                                }
+                                return
+                            }
+                            try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                        }
                     }
                 } else {
                     print("❌ [UPLOAD ALL] Upload returned nil media ID")
                 }
             } catch {
                 print("❌ [UPLOAD ALL] Error: \(error)")
-                showingError = "Upload failed: \(error.localizedDescription)"
-                dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                isUploading = false
+                
+                // Check if it's a bot detection error
+                let errorDescription = error.localizedDescription.lowercased()
+                let isBotError = errorDescription.contains("challenge") || 
+                                 errorDescription.contains("spam") || 
+                                 errorDescription.contains("login_required") ||
+                                 errorDescription.contains("checkpoint")
+                
+                // Mark photo as error
+                let errorMsg = isBotError ? "⚠️ Bot detection - STOP" : error.localizedDescription
+                dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
+                
+                await MainActor.run {
+                    if isBotError {
+                        showingError = "⚠️ Instagram flagged activity. WAIT at least 10 minutes before retrying. Do NOT open Instagram app during this time."
+                    } else {
+                        showingError = "Upload failed: \(error.localizedDescription)\n\nCheck connection and retry manually."
+                    }
+                    dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                    isUploading = false
+                }
                 return
             }
         }
@@ -378,26 +526,8 @@ struct PhotoItemView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Status
-                if photo.mediaId == nil {
-                    Text("Not uploaded")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                } else if photo.isArchived {
-                    HStack(spacing: 4) {
-                        Image(systemName: "archivebox.fill")
-                        Text("Archived")
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "eye.fill")
-                        Text("Visible")
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.green)
-                }
+                // Status - Detailed based on uploadStatus
+                statusBadge(for: photo)
                 
                 // Action Buttons - MÁS GRANDES Y VISIBLES
                 if let mediaId = photo.mediaId {
@@ -526,6 +656,85 @@ struct PhotoItemView: View {
                     alertMessage = "❌ Error: \(error.localizedDescription)"
                     showingAlert = true
                     isProcessing = false
+                }
+            }
+        }
+    }
+    
+    // MARK: - Status Badge
+    
+    @ViewBuilder
+    private func statusBadge(for photo: SetPhoto) -> some View {
+        switch photo.uploadStatus {
+        case .pending:
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                Text("Waiting to upload")
+            }
+            .font(.caption2)
+            .foregroundColor(.orange)
+            
+        case .uploading:
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 10, height: 10)
+                Text("Uploading...")
+            }
+            .font(.caption2)
+            .foregroundColor(.blue)
+            
+        case .uploaded:
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 10, height: 10)
+                Text("Waiting to archive...")
+            }
+            .font(.caption2)
+            .foregroundColor(.purple)
+            
+        case .archiving:
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 10, height: 10)
+                Text("Archiving...")
+            }
+            .font(.caption2)
+            .foregroundColor(.purple)
+            
+        case .completed:
+            if photo.isArchived {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Archived")
+                }
+                .font(.caption2)
+                .foregroundColor(.green)
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.fill")
+                    Text("Visible")
+                }
+                .font(.caption2)
+                .foregroundColor(.green)
+            }
+            
+        case .error:
+            VStack(spacing: 2) {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text("Failed")
+                }
+                .font(.caption2)
+                .foregroundColor(.red)
+                
+                if let errorMessage = photo.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption2)
+                        .foregroundColor(.red.opacity(0.8))
+                        .lineLimit(1)
                 }
             }
         }

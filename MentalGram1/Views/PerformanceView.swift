@@ -26,27 +26,10 @@ struct PerformanceView: View {
                             selectedTab = 1
                         }
                     )
-                } else if isLoading {
-                    VStack(spacing: 20) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                        Text("Cargando perfil...")
-                            .foregroundColor(.secondary)
-                    }
                 } else {
-                    VStack(spacing: 20) {
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 64))
-                            .foregroundColor(.secondary)
-                        
-                        Text("No hay datos de perfil")
-                            .font(.headline)
-                        
-                        Button("Cargar Perfil") {
-                            loadProfile()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
+                    // Show skeleton UI (like Instagram real)
+                    // Shown when: loading, network stabilizing, or no data
+                    InstagramProfileSkeleton()
                 }
             }
             .padding(.bottom, 65) // Space for Instagram bottom bar (matches bar height)
@@ -85,12 +68,14 @@ struct PerformanceView: View {
     }
     
     private func checkAndLoadProfile() {
-        // Try to load from cache first
+        // ALWAYS try to load from cache first (anti-bot: no automatic requests)
         if let cached = ProfileCacheService.shared.loadProfile() {
-            print("📦 [CACHE] Loading profile from cache")
+            print("📦 [CACHE] Loading profile from cache (no auto-request)")
             self.profile = cached
             loadCachedImages()
+            // DON'T make automatic request - user can pull-to-refresh if needed
         } else {
+            // Only if NO cache, load fresh (with network stability check)
             print("📦 [CACHE] No cached profile found, loading fresh")
             loadProfile()
         }
@@ -108,6 +93,9 @@ struct PerformanceView: View {
         
         Task {
             do {
+                // ANTI-BOT: Wait if network changed recently
+                try await instagram.waitForNetworkStability()
+                
                 let fetchedProfile = try await instagram.getProfileInfo()
                 
                 await MainActor.run {

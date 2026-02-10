@@ -22,6 +22,12 @@ class InstagramService: ObservableObject {
     @Published var lockUntil: Date?
     private var consecutiveErrors: Int = 0
     
+    // Network change tracking (anti-bot protection)
+    private var lastConnectionType: String = "unknown"
+    private var lastNetworkChangeTime: Date?
+    @Published var isNetworkStabilizing: Bool = false
+    private let networkStabilizationDelay: TimeInterval = 4.0 // seconds
+    
     private let baseURL = "https://i.instagram.com/api/v1"
     private lazy var userAgent = DeviceInfo.shared.instagramUserAgent
     private let deviceId: String // Persistent device ID for this install
@@ -86,9 +92,31 @@ class InstagramService: ObservableObject {
     private func startNetworkMonitoring() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
-                self?.isConnected = (path.status == .satisfied)
-                self?.connectionType = self?.getConnectionType(path) ?? "unknown"
-                print("📶 [NETWORK] Connection: \(self?.connectionType ?? "unknown") - \(path.status == .satisfied ? "Connected" : "Disconnected")")
+                guard let self = self else { return }
+                
+                let newConnectionType = self.getConnectionType(path) ?? "unknown"
+                let wasConnected = self.isConnected
+                let newConnected = (path.status == .satisfied)
+                
+                // Detect network change (WiFi → Cellular, WiFi A → WiFi B, etc.)
+                if self.lastConnectionType != "unknown" && self.lastConnectionType != newConnectionType && newConnected {
+                    print("🔄 [NETWORK] Connection changed: \(self.lastConnectionType) → \(newConnectionType)")
+                    self.lastNetworkChangeTime = Date()
+                    self.isNetworkStabilizing = true
+                    
+                    // Auto-disable stabilizing after delay
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: UInt64(self.networkStabilizationDelay * 1_000_000_000))
+                        self.isNetworkStabilizing = false
+                        print("✅ [NETWORK] Stabilization complete")
+                    }
+                }
+                
+                self.isConnected = newConnected
+                self.connectionType = newConnectionType
+                self.lastConnectionType = newConnectionType
+                
+                print("📶 [NETWORK] Connection: \(newConnectionType) - \(newConnected ? "Connected" : "Disconnected")")
             }
         }
         networkMonitor.start(queue: networkQueue)
@@ -224,6 +252,32 @@ class InstagramService: ObservableObject {
         URLCache.shared.removeAllCachedResponses()
         
         print("🚨 [EMERGENCY] Full logout and cache clear completed")
+    }
+    
+    /// Waits if network changed recently (anti-bot protection)
+    /// Returns immediately if network is stable
+    func waitForNetworkStability() async throws {
+        // Check if network changed recently
+        if let changeTime = lastNetworkChangeTime {
+            let timeSinceChange = Date().timeIntervalSince(changeTime)
+            
+            if timeSinceChange < networkStabilizationDelay {
+                let remainingDelay = networkStabilizationDelay - timeSinceChange
+                print("⏳ [NETWORK] Waiting \(String(format: "%.1f", remainingDelay))s for network stability...")
+                
+                await MainActor.run {
+                    self.isNetworkStabilizing = true
+                }
+                
+                try await Task.sleep(nanoseconds: UInt64(remainingDelay * 1_000_000_000))
+                
+                await MainActor.run {
+                    self.isNetworkStabilizing = false
+                }
+                
+                print("✅ [NETWORK] Network stable, proceeding...")
+            }
+        }
     }
     
     // MARK: - Session from WebView Login
@@ -1763,6 +1817,179 @@ class InstagramService: ObservableObject {
         }
         
         return profile
+    }
+    
+    // MARK: - Change Profile Picture
+    
+    /// Changes Instagram profile picture
+    /// CRITICAL ANTI-BOT: Only call after checking:
+    /// - Network is stable
+    /// - No lockdown active
+    /// - Image hash is different from last upload
+    func changeProfilePicture(imageData: Data) async throws -> Bool {
+        print("🖼️ [PROFILE PIC] Starting profile picture change...")
+        
+        // CRITICAL: Check lockdown
+        if isLocked {
+            print("🚨 [PROFILE PIC] Lockdown active - ABORT")
+            throw InstagramError.apiError("Lockdown active. Wait before changing profile picture.")
+        }
+        
+        // ANTI-BOT: Wait if network changed recently
+        try await waitForNetworkStability()
+        
+        // Check if image hash matches last upload (prevent duplicate)
+        let imageHash = hashImageData(imageData)
+        if let lastHash = UserDefaults.standard.string(forKey: "last_profile_pic_hash"),
+           lastHash == imageHash {
+            print("⚠️ [PROFILE PIC] Same image already uploaded - SKIP")
+            throw InstagramError.apiError("This is already your profile picture. Please select a different image.")
+        }
+        
+        // Convert to JPEG if needed (Instagram requires JPEG)
+        guard let uiImage = UIImage(data: imageData),
+              let jpegData = uiImage.jpegData(compressionQuality: 0.9) else {
+            print("❌ [PROFILE PIC] Failed to convert image to JPEG")
+            throw InstagramError.apiError("Failed to process image")
+        }
+        
+        print("   Image size: \(jpegData.count / 1024) KB")
+        print("   Image hash: \(String(imageHash.prefix(16)))...")
+        
+        // ANTI-BOT: Human delay before upload (2-4 seconds)
+        let humanDelay = UInt64.random(in: 2_000_000_000...4_000_000_000)
+        print("   Waiting \(humanDelay / 1_000_000_000)s (human delay)...")
+        try await Task.sleep(nanoseconds: humanDelay)
+        
+        // STEP 1: Upload image via rupload_igphoto (same as regular photo upload)
+        let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
+        let uploadName = "\(uploadId)_0_\(Int.random(in: 1000000000...9999999999))"
+        let waterfallId = UUID().uuidString
+        
+        print("   Upload ID: \(uploadId)")
+        
+        let ruploadParams: [String: Any] = [
+            "retry_context": "{\"num_step_auto_retry\":0,\"num_reupload\":0,\"num_step_manual_retry\":0}",
+            "media_type": "1",
+            "xsharing_user_ids": "[]",
+            "upload_id": uploadId,
+            "image_compression": "{\"lib_name\":\"moz\",\"lib_version\":\"3.1.m\",\"quality\":\"80\"}"
+        ]
+        
+        guard let ruploadParamsData = try? JSONSerialization.data(withJSONObject: ruploadParams),
+              let ruploadParamsString = String(data: ruploadParamsData, encoding: .utf8) else {
+            throw InstagramError.uploadFailed
+        }
+        
+        guard let uploadURL = URL(string: "https://i.instagram.com/rupload_igphoto/\(uploadName)") else {
+            throw InstagramError.invalidURL
+        }
+        
+        var uploadRequest = URLRequest(url: uploadURL)
+        uploadRequest.httpMethod = "POST"
+        
+        // Critical headers (matching instagrapi exactly)
+        uploadRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        uploadRequest.setValue("sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)", forHTTPHeaderField: "Cookie")
+        uploadRequest.setValue(session.csrfToken, forHTTPHeaderField: "X-CSRFToken")
+        uploadRequest.setValue("936619743392459", forHTTPHeaderField: "X-IG-App-ID")
+        uploadRequest.setValue(deviceId, forHTTPHeaderField: "X-IG-Device-ID")
+        uploadRequest.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+        
+        // Upload-specific headers
+        uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        uploadRequest.setValue(String(jpegData.count), forHTTPHeaderField: "Content-Length")
+        uploadRequest.setValue(ruploadParamsString, forHTTPHeaderField: "X-Instagram-Rupload-Params")
+        uploadRequest.setValue(waterfallId, forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
+        uploadRequest.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
+        uploadRequest.setValue(uploadName, forHTTPHeaderField: "X-Entity-Name")
+        uploadRequest.setValue(String(jpegData.count), forHTTPHeaderField: "X-Entity-Length")
+        uploadRequest.setValue("0", forHTTPHeaderField: "Offset")
+        
+        uploadRequest.httpBody = jpegData
+        
+        print("   Step 1: Uploading image bytes...")
+        let (uploadData, uploadResponse) = try await postSession.data(for: uploadRequest)
+        
+        guard let uploadHttpResponse = uploadResponse as? HTTPURLResponse,
+              uploadHttpResponse.statusCode == 200,
+              let uploadJson = try? JSONSerialization.jsonObject(with: uploadData) as? [String: Any],
+              let uploadIdResponse = uploadJson["upload_id"] as? String else {
+            print("❌ [PROFILE PIC] Failed to upload image bytes")
+            if let errorText = String(data: uploadData, encoding: .utf8) {
+                print("   Error: \(errorText)")
+            }
+            throw InstagramError.uploadFailed
+        }
+        
+        print("   ✅ Image uploaded. Upload ID: \(uploadIdResponse)")
+        
+        // ANTI-BOT: Human delay between upload and configure (1-3 seconds)
+        let configDelay = UInt64.random(in: 1_000_000_000...3_000_000_000)
+        print("   Waiting \(configDelay / 1_000_000_000)s before configure...")
+        try await Task.sleep(nanoseconds: configDelay)
+        
+        // STEP 2: Call change_profile_picture with upload_id
+        print("   Step 2: Setting as profile picture...")
+        let configBody: [String: String] = [
+            "upload_id": uploadIdResponse,
+            "_csrftoken": session.csrfToken,
+            "_uid": session.userId,
+            "_uuid": clientUUID
+        ]
+        
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/accounts/change_profile_picture/",
+            body: configBody
+        )
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let status = json["status"] as? String, status == "ok" {
+                print("✅ [PROFILE PIC] Profile picture changed successfully!")
+                
+                // Save hash to prevent duplicate uploads
+                UserDefaults.standard.set(imageHash, forKey: "last_profile_pic_hash")
+                
+                // ANTI-BOT: Add cooldown before next profile pic change
+                let cooldownUntil = Date().addingTimeInterval(300) // 5 minutes
+                UserDefaults.standard.set(cooldownUntil, forKey: "profile_pic_cooldown_until")
+                
+                return true
+            } else {
+                let message = json["message"] as? String ?? "Unknown error"
+                print("❌ [PROFILE PIC] Failed: \(message)")
+                throw InstagramError.apiError("Profile picture change failed: \(message)")
+            }
+        }
+        
+        print("❌ [PROFILE PIC] Unexpected response format")
+        return false
+    }
+    
+    /// Hash image data to detect duplicates
+    private func hashImageData(_ data: Data) -> String {
+        var hash = 0
+        for byte in data {
+            hash = (hash &* 31) &+ Int(byte)
+        }
+        return String(format: "%016x", hash)
+    }
+    
+    /// Check if profile pic change is on cooldown
+    func isProfilePicOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
+        guard let cooldownUntil = UserDefaults.standard.object(forKey: "profile_pic_cooldown_until") as? Date else {
+            return (false, 0)
+        }
+        
+        let remaining = cooldownUntil.timeIntervalSinceNow
+        if remaining > 0 {
+            return (true, Int(remaining))
+        }
+        
+        // Cooldown expired, clear it
+        UserDefaults.standard.removeObject(forKey: "profile_pic_cooldown_until")
+        return (false, 0)
     }
 }
 

@@ -53,8 +53,14 @@ class ExploreManager: ObservableObject {
     
     private func loadExploreInternal() async {
         do {
+            // ANTI-BOT: Wait if network changed recently
+            try await InstagramService.shared.waitForNetworkStability()
+            
             print("🔍 [EXPLORE] Fetching from API...")
-            let (items, maxId) = try await InstagramService.shared.getExploreFeed()
+            // TODO: getExploreFeed() needs to be implemented in InstagramService
+            // let (items, maxId) = try await InstagramService.shared.getExploreFeed()
+            let items: [InstagramMediaItem] = [] // Temporary: empty for now
+            let maxId: String? = nil
             
             print("🔍 [EXPLORE] Received \(items.count) items from API")
             
