@@ -1574,6 +1574,34 @@ class InstagramService: ObservableObject {
         print("📤 [UPLOAD] Starting photo upload...")
         print("   Image size: \(imageData.count) bytes (\(imageData.count / 1024)KB)")
         
+        // ANTI-BOT: Check lockdown
+        if isLocked {
+            print("🚨 [UPLOAD] Lockdown active - ABORT")
+            throw InstagramError.apiError("Lockdown active. Wait before uploading.")
+        }
+        
+        // ANTI-BOT: Check cooldown between uploads
+        let (onCooldown, remaining) = isPhotoUploadOnCooldown()
+        if onCooldown {
+            let minutes = remaining / 60
+            let seconds = remaining % 60
+            print("⏰ [UPLOAD] Still on cooldown: \(minutes)m \(seconds)s remaining")
+            throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before uploading another photo.")
+        }
+        
+        // ANTI-BOT: Detect duplicate image (prevent uploading same photo twice)
+        let imageHash = hashImageData(imageData)
+        if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
+           lastHash == imageHash {
+            print("⚠️ [UPLOAD] Same image already uploaded - SKIP")
+            throw InstagramError.apiError("This photo was already uploaded. Duplicate uploads may trigger bot detection.")
+        }
+        
+        // ANTI-BOT: Wait if network changed recently
+        try await waitForNetworkStability()
+        
+        print("   Image hash: \(String(imageHash.prefix(16)))...")
+        
         // Step 1: Generate upload ID and names (like instagrapi)
         let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
         let uploadName = "\(uploadId)_0_\(Int.random(in: 1000000000...9999999999))"
@@ -1690,12 +1718,38 @@ class InstagramService: ObservableObject {
             
             if let mediaId = mediaId {
                 print("✅ [UPLOAD] Photo uploaded successfully! Media ID: \(mediaId)")
+                
+                // ANTI-BOT: Save hash and cooldown after successful upload
+                let imageHash = hashImageData(imageData)
+                UserDefaults.standard.set(imageHash, forKey: "last_upload_photo_hash")
+                
+                // Cooldown: 2 minutes between photo uploads (realistic human behavior)
+                let cooldownUntil = Date().addingTimeInterval(120) // 2 min
+                UserDefaults.standard.set(cooldownUntil, forKey: "photo_upload_cooldown_until")
+                print("   Cooldown set: 2 minutes before next upload")
+                
                 return mediaId
             }
         }
         
         print("❌ [UPLOAD] Failed to get media ID from configure response")
         return nil
+    }
+    
+    /// Check if photo upload is on cooldown
+    private func isPhotoUploadOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
+        guard let cooldownUntil = UserDefaults.standard.object(forKey: "photo_upload_cooldown_until") as? Date else {
+            return (false, 0)
+        }
+        
+        let remaining = cooldownUntil.timeIntervalSinceNow
+        if remaining > 0 {
+            return (true, Int(remaining))
+        }
+        
+        // Cooldown expired
+        UserDefaults.standard.removeObject(forKey: "photo_upload_cooldown_until")
+        return (false, 0)
     }
     
     // MARK: - Reveal (Unarchive + Comment with latest follower)
@@ -1817,6 +1871,134 @@ class InstagramService: ObservableObject {
         }
         
         return profile
+    }
+    
+    // MARK: - Instagram Notes
+    
+    /// Create an Instagram Note (bubble above profile pic in DMs)
+    /// Max 60 characters, lasts 24 hours
+    func createNote(text: String, audience: Int = 0) async throws -> Bool {
+        print("📝 [NOTE] Creating note: \"\(text)\"")
+        
+        // Validate
+        guard !text.isEmpty else {
+            throw InstagramError.apiError("Note text cannot be empty")
+        }
+        guard text.count <= 60 else {
+            throw InstagramError.apiError("Note must be 60 characters or less (\(text.count) given)")
+        }
+        
+        // ANTI-BOT: Check lockdown
+        if isLocked {
+            throw InstagramError.apiError("Lockdown active. Wait before creating a note.")
+        }
+        
+        // ANTI-BOT: Check cooldown (prevent spam)
+        let (onCooldown, remaining) = isNoteOnCooldown()
+        if onCooldown {
+            let minutes = remaining / 60
+            let seconds = remaining % 60
+            throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before sending another note.")
+        }
+        
+        // ANTI-BOT: Detect duplicate text (prevent spam)
+        if let lastNote = UserDefaults.standard.string(forKey: "last_note_text"),
+           lastNote == text {
+            throw InstagramError.apiError("You already sent this note. Instagram may flag duplicate notes as spam.\n\nPlease write something different.")
+        }
+        
+        // ANTI-BOT: Wait if network changed recently
+        try await waitForNetworkStability()
+        
+        // ANTI-BOT: Human delay (1-3 seconds) - longer than before
+        let delay = UInt64.random(in: 1_000_000_000...3_000_000_000)
+        print("   Waiting \(delay / 1_000_000_000)s (human delay)...")
+        try await Task.sleep(nanoseconds: delay)
+        
+        let body: [String: String] = [
+            "audience": String(audience),
+            "text": text,
+            "_csrftoken": session.csrfToken,
+            "_uid": session.userId,
+            "_uuid": clientUUID,
+            "uuid": UUID().uuidString
+        ]
+        
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/notes/create_note/",
+            body: body
+        )
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let status = json["status"] as? String, status == "ok" {
+                print("✅ [NOTE] Note created successfully")
+                
+                // ANTI-BOT: Save text to prevent duplicates
+                UserDefaults.standard.set(text, forKey: "last_note_text")
+                
+                // ANTI-BOT: Set cooldown (60 seconds between notes)
+                let cooldownUntil = Date().addingTimeInterval(60)
+                UserDefaults.standard.set(cooldownUntil, forKey: "note_cooldown_until")
+                
+                return true
+            } else {
+                let message = json["message"] as? String ?? "Unknown error"
+                print("❌ [NOTE] Failed: \(message)")
+                throw InstagramError.apiError("Note failed: \(message)")
+            }
+        }
+        
+        return false
+    }
+    
+    /// Check if notes are on cooldown
+    private func isNoteOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
+        guard let cooldownUntil = UserDefaults.standard.object(forKey: "note_cooldown_until") as? Date else {
+            return (false, 0)
+        }
+        
+        let remaining = cooldownUntil.timeIntervalSinceNow
+        if remaining > 0 {
+            return (true, Int(remaining))
+        }
+        
+        // Cooldown expired
+        UserDefaults.standard.removeObject(forKey: "note_cooldown_until")
+        return (false, 0)
+    }
+    
+    /// Delete the current Instagram Note
+    func deleteNote(noteId: String) async throws -> Bool {
+        print("🗑️ [NOTE] Deleting note: \(noteId)")
+        
+        if isLocked {
+            throw InstagramError.apiError("Lockdown active.")
+        }
+        
+        try await waitForNetworkStability()
+        
+        let body: [String: String] = [
+            "id": noteId,
+            "_csrftoken": session.csrfToken,
+            "_uid": session.userId,
+            "_uuid": clientUUID,
+            "uuid": UUID().uuidString
+        ]
+        
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/notes/delete_note/",
+            body: body
+        )
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let status = json["status"] as? String, status == "ok" {
+            print("✅ [NOTE] Note deleted")
+            return true
+        }
+        
+        return false
     }
     
     // MARK: - Change Profile Picture

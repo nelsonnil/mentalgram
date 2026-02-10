@@ -211,6 +211,12 @@ struct SettingsView: View {
     @State private var uploadMessage: String?
     @State private var showingUploadAlert = false
     
+    // Instagram Notes
+    @State private var noteText: String = ""
+    @State private var isSendingNote = false
+    @State private var noteMessage: String?
+    @State private var showingNoteAlert = false
+    
     var body: some View {
         List {
             Section("Account") {
@@ -330,6 +336,93 @@ struct SettingsView: View {
                     }
                 } message: {
                     Text(uploadMessage ?? "")
+                }
+            }
+            
+            // Instagram Notes
+            if instagram.isLoggedIn {
+                Section("Note") {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "bubble.left.fill")
+                                .foregroundColor(.purple)
+                            Text("Appears above your profile pic in DMs")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        // Text field + character count
+                        VStack(alignment: .trailing, spacing: 4) {
+                            TextField("Write a note...", text: $noteText)
+                                .textFieldStyle(.roundedBorder)
+                                .disabled(isSendingNote)
+                                .onChange(of: noteText) { newValue in
+                                    if newValue.count > 60 {
+                                        noteText = String(newValue.prefix(60))
+                                    }
+                                }
+                            
+                            Text("\(noteText.count)/60")
+                                .font(.caption2)
+                                .foregroundColor(noteText.count > 50 ? .orange : .secondary)
+                        }
+                        
+                        // Send button
+                        Button(action: sendNote) {
+                            HStack {
+                                if isSendingNote {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("Sending...")
+                                } else {
+                                    Image(systemName: "paperplane.fill")
+                                    Text("Send Note")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .foregroundColor(.white)
+                            .padding(.vertical, 10)
+                            .background(noteText.isEmpty || isSendingNote || instagram.isLocked ? Color.gray : Color.purple)
+                            .cornerRadius(8)
+                        }
+                        .disabled(noteText.isEmpty || isSendingNote || instagram.isLocked || getNoteCooldownSeconds() > 0)
+                        
+                        // Status messages
+                        if let cooldownMsg = getNoteCooldownMessage() {
+                            HStack {
+                                Image(systemName: "clock.fill")
+                                    .foregroundColor(.orange)
+                                Text(cooldownMsg)
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                        
+                        if instagram.isLocked {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                Text("Lockdown active")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        
+                        if instagram.isNetworkStabilizing {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                Text("Network stabilizing...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                .alert(noteMessage ?? "", isPresented: $showingNoteAlert) {
+                    Button("OK") { noteMessage = nil }
+                } message: {
+                    Text(noteMessage ?? "")
                 }
             }
             
@@ -456,6 +549,54 @@ struct SettingsView: View {
         }
         return nil
     }
+    
+    // MARK: - Instagram Notes Helpers
+    
+    private func getNoteCooldownSeconds() -> Int {
+        guard let cooldownUntil = UserDefaults.standard.object(forKey: "note_cooldown_until") as? Date else {
+            return 0
+        }
+        let remaining = Int(cooldownUntil.timeIntervalSinceNow)
+        return max(0, remaining)
+    }
+    
+    private func getNoteCooldownMessage() -> String? {
+        let remaining = getNoteCooldownSeconds()
+        if remaining > 0 {
+            return "Wait \(remaining)s before next note"
+        }
+        return nil
+    }
+    
+    private func sendNote() {
+        guard !noteText.isEmpty else { return }
+        
+        isSendingNote = true
+        let textToSend = noteText
+        
+        Task {
+            do {
+                let success = try await instagram.createNote(text: textToSend)
+                
+                await MainActor.run {
+                    isSendingNote = false
+                    if success {
+                        noteMessage = "✅ Note sent!\n\nYour note \"\(textToSend)\" is now visible above your profile picture in DMs for 24 hours."
+                        showingNoteAlert = true
+                        noteText = "" // Clear field
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isSendingNote = false
+                    noteMessage = "❌ Failed to send note\n\n\(error.localizedDescription)"
+                    showingNoteAlert = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Profile Picture Upload
     
     private func uploadProfilePicture() {
         guard let imageData = selectedImageData else { return }
