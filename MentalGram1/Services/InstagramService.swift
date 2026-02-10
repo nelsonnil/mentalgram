@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Combine
 import CryptoKit
+import Network
 
 /// Instagram Private API client - Pure Swift, no Python needed.
 /// Replicates what instagrapi does: HTTP requests to Instagram's private API.
@@ -11,6 +12,16 @@ class InstagramService: ObservableObject {
     @Published var session: InstagramSession = .empty
     @Published var isLoggedIn: Bool = false
     
+    // Network monitoring
+    @Published var isConnected: Bool = true
+    @Published var connectionType: String = "unknown"
+    
+    // Anti-bot lockdown
+    @Published var isLocked: Bool = false
+    @Published var lockReason: String = ""
+    @Published var lockUntil: Date?
+    private var consecutiveErrors: Int = 0
+    
     private let baseURL = "https://i.instagram.com/api/v1"
     private lazy var userAgent = DeviceInfo.shared.instagramUserAgent
     private let deviceId: String // Persistent device ID for this install
@@ -18,12 +29,26 @@ class InstagramService: ObservableObject {
     private let sigKeyVersion = "4"
     private let sigKey = "109513c04303341a7daf27bb329532b6a76c178d78911a750e0620efaffb2d0c" // Instagram's signature key
     
-    private var urlSession: URLSession = {
+    // Separate sessions: GET can wait, POST cannot (anti-bot)
+    private lazy var getSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
+        config.waitsForConnectivity = true  // Safe for GET requests
         return URLSession(configuration: config)
     }()
+    
+    private lazy var postSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.httpCookieAcceptPolicy = .always
+        config.httpShouldSetCookies = true
+        config.waitsForConnectivity = false  // CRITICAL: Don't auto-retry POSTs
+        return URLSession(configuration: config)
+    }()
+    
+    // Network monitoring
+    private let networkMonitor = NWPathMonitor()
+    private let networkQueue = DispatchQueue(label: "com.vault.network")
     
     private init() {
         // Initialize persistent device identifiers
@@ -51,6 +76,154 @@ class InstagramService: ObservableObject {
             self.isLoggedIn = true
             print("✅ Session restored for @\(saved.username)")
         }
+        
+        // Start network monitoring
+        startNetworkMonitoring()
+    }
+    
+    // MARK: - Network Monitoring
+    
+    private func startNetworkMonitoring() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isConnected = (path.status == .satisfied)
+                self?.connectionType = self?.getConnectionType(path) ?? "unknown"
+                print("📶 [NETWORK] Connection: \(self?.connectionType ?? "unknown") - \(path.status == .satisfied ? "Connected" : "Disconnected")")
+            }
+        }
+        networkMonitor.start(queue: networkQueue)
+    }
+    
+    private func getConnectionType(_ path: NWPath) -> String {
+        if path.usesInterfaceType(.wifi) {
+            return "WiFi"
+        } else if path.usesInterfaceType(.cellular) {
+            return "Cellular"
+        } else if path.usesInterfaceType(.wiredEthernet) {
+            return "Ethernet"
+        } else {
+            return "Unknown"
+        }
+    }
+    
+    /// Wait for network connection to be restored (with timeout)
+    func waitForConnection(timeout: TimeInterval = 30) async throws {
+        let start = Date()
+        while !isConnected {
+            if Date().timeIntervalSince(start) > timeout {
+                throw InstagramError.networkError("Connection timeout after \(Int(timeout))s")
+            }
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+        }
+    }
+    
+    // MARK: - Bot Detection & Lockdown
+    
+    /// Analyze API response for bot detection signals
+    private func checkForBotSignals(data: Data) async throws {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return // Not JSON, skip check
+        }
+        
+        let status = json["status"] as? String ?? ""
+        let message = json["message"] as? String ?? ""
+        let messageLower = message.lowercased()
+        
+        // Level 3: Challenge required - Instagram wants verification
+        if json["challenge"] != nil || messageLower.contains("challenge_required") {
+            print("🚨 BOT DETECTED: Challenge required")
+            await triggerLockdown(
+                reason: "Instagram is asking for verification (challenge_required). Open Instagram app and complete the verification, then come back.",
+                duration: 600 // 10 minutes
+            )
+            throw InstagramError.botDetected("Challenge required - complete verification in Instagram app")
+        }
+        
+        // Level 4: Login required - session invalidated
+        if messageLower.contains("login_required") {
+            print("🚨 BOT DETECTED: Login required (session invalidated)")
+            await triggerLockdown(
+                reason: "Instagram invalidated your session. This may indicate suspicious activity was detected.",
+                duration: 1800 // 30 minutes
+            )
+            throw InstagramError.botDetected("Session invalidated by Instagram")
+        }
+        
+        // Level 2: Spam/rate limit detection
+        if let spam = json["spam"] as? Bool, spam == true {
+            print("🚨 BOT DETECTED: Spam flag")
+            await triggerLockdown(
+                reason: "Instagram flagged this as spam. Stop all activity and wait.",
+                duration: 600 // 10 minutes
+            )
+            throw InstagramError.botDetected("Flagged as spam")
+        }
+        
+        // Level 1: Action blocked
+        if messageLower.contains("action blocked") || messageLower.contains("temporarily blocked") {
+            print("🚨 BOT DETECTED: Action blocked")
+            await triggerLockdown(
+                reason: "Instagram has temporarily blocked actions. Do NOT retry. Wait at least 15 minutes.",
+                duration: 900 // 15 minutes
+            )
+            throw InstagramError.botDetected("Action blocked by Instagram")
+        }
+        
+        // Track consecutive "fail" statuses
+        if status == "fail" {
+            await MainActor.run { consecutiveErrors += 1 }
+            
+            // 3 consecutive fails → precautionary lockdown
+            if consecutiveErrors >= 3 {
+                print("🚨 PRECAUTIONARY LOCKDOWN: 3 consecutive API fails")
+                await triggerLockdown(
+                    reason: "Multiple consecutive errors detected. Pausing all activity as a precaution to avoid triggering bot detection.",
+                    duration: 300 // 5 minutes
+                )
+            }
+        }
+    }
+    
+    @MainActor
+    private func triggerLockdown(reason: String, duration: TimeInterval) {
+        isLocked = true
+        lockReason = reason
+        lockUntil = Date().addingTimeInterval(duration)
+        
+        print("🔒 [LOCKDOWN] Activated for \(Int(duration/60)) minutes")
+        print("🔒 [LOCKDOWN] Reason: \(reason)")
+    }
+    
+    @MainActor
+    func unlock() {
+        isLocked = false
+        lockReason = ""
+        lockUntil = nil
+        consecutiveErrors = 0
+        print("🔓 [LOCKDOWN] Deactivated")
+    }
+    
+    @MainActor
+    func emergencyLogout() {
+        // Clear session
+        session = .empty
+        isLoggedIn = false
+        KeychainService.shared.deleteSession()
+        
+        // Reset lockdown
+        unlock()
+        
+        // Clear cookies
+        if let cookies = HTTPCookieStorage.shared.cookies {
+            for cookie in cookies where cookie.domain.contains("instagram.com") {
+                HTTPCookieStorage.shared.deleteCookie(cookie)
+            }
+        }
+        
+        // Clear cached data
+        URLCache.shared.removeAllCachedResponses()
+        
+        print("🚨 [EMERGENCY] Full logout and cache clear completed")
     }
     
     // MARK: - Session from WebView Login
@@ -166,8 +339,8 @@ class InstagramService: ObservableObject {
         print("➕ [FOLLOW] Current user ID: \(session.userId)")
         print("➕ [FOLLOW] Client UUID: \(clientUUID)")
         
-        // Simulate human delay
-        let delay = UInt64.random(in: 500_000_000...1_500_000_000)
+        // Simulate human delay (2-5 seconds - a real person takes time to decide)
+        let delay = UInt64.random(in: 2_000_000_000...5_000_000_000)
         print("⏱️ [FOLLOW] Waiting \(Double(delay) / 1_000_000_000.0) seconds...")
         try await Task.sleep(nanoseconds: delay)
         
@@ -178,7 +351,7 @@ class InstagramService: ObservableObject {
                 "user_id": userId,
                 "_uid": session.userId,
                 "_uuid": clientUUID,
-                "radio_type": "wifi-none"
+                "radio_type": currentRadioType
             ]
         )
         
@@ -224,7 +397,7 @@ class InstagramService: ObservableObject {
                 "user_id": userId,
                 "_uid": session.userId,
                 "_uuid": clientUUID,
-                "radio_type": "wifi-none"
+                "radio_type": currentRadioType
             ]
         )
         
@@ -254,13 +427,29 @@ class InstagramService: ObservableObject {
     
     // MARK: - Common Headers
     
+    /// Returns the radio_type matching the real current connection
+    private var currentRadioType: String {
+        switch connectionType {
+        case "WiFi": return "wifi-none"
+        case "Cellular": return "cell-none"
+        default: return "wifi-none"
+        }
+    }
+    
     private func buildHeaders() -> [String: String] {
+        let device = DeviceInfo.shared
         return [
             "User-Agent": userAgent,
             "X-CSRFToken": session.csrfToken,
             "X-IG-App-ID": "936619743392459",
             "X-IG-Device-ID": deviceId,
+            "X-IG-Connection-Type": connectionType == "WiFi" ? "WIFI" : "4G",
+            "X-IG-Capabilities": "36r/F/8=",
+            "X-IG-App-Locale": device.deviceLocale,
+            "X-IG-Device-Locale": device.deviceLocale,
             "X-Requested-With": "XMLHttpRequest",
+            "Accept-Language": "\(device.deviceLanguage)-\(Locale.current.region?.identifier ?? "US"),\(device.deviceLanguage);q=0.9",
+            "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/x-www-form-urlencoded",
             "Cookie": "sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)"
         ]
@@ -281,12 +470,24 @@ class InstagramService: ObservableObject {
         path: String,
         body: [String: String]? = nil
     ) async throws -> Data {
+        // Check if we're locked down
+        if isLocked {
+            throw InstagramError.botDetected("App is in lockdown mode. Wait for countdown to finish.")
+        }
+        
+        // Check network connection
+        if !isConnected {
+            print("📶 [NETWORK] No connection detected, waiting...")
+            try await waitForConnection()
+        }
+        
         guard let url = URL(string: "\(baseURL)\(path)") else {
             throw InstagramError.invalidURL
         }
         
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.timeoutInterval = 30  // 30s timeout
         
         let headers = buildHeaders()
         for (key, value) in headers {
@@ -298,10 +499,27 @@ class InstagramService: ObservableObject {
             request.httpBody = bodyString.data(using: .utf8)
         }
         
-        let (data, response) = try await urlSession.data(for: request)
+        // Use different sessions: GET can wait, POST cannot (critical for bot detection)
+        let session = (method == "GET") ? getSession : postSession
+        
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            // Network error - safe to retry
+            print("🌐 [NETWORK] URLError: \(error.localizedDescription)")
+            throw InstagramError.networkError(error.localizedDescription)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw InstagramError.invalidResponse
+        }
+        
+        // Check for bot detection signals in HTTP status
+        if httpResponse.statusCode == 429 {
+            // Rate limited
+            await triggerLockdown(reason: "Rate limited by Instagram. Too many requests.", duration: 300)
+            throw InstagramError.botDetected("Rate limited (HTTP 429). Wait 5 minutes.")
         }
         
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
@@ -313,10 +531,14 @@ class InstagramService: ObservableObject {
             if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let message = errorJson["message"] as? String ?? ""
                 
-                // Check for challenge_required
+                // Check for challenge_required - MUST trigger lockdown
                 if message.contains("challenge_required") {
-                    print("⚠️ [API] Instagram requires verification challenge")
-                    print("⚠️ [API] Go to Instagram app/website to complete verification")
+                    print("🚨 [API] Instagram requires verification challenge")
+                    print("🚨 [API] Go to Instagram app/website to complete verification")
+                    await triggerLockdown(
+                        reason: "Instagram requires verification (challenge_required). Open Instagram app, complete the verification, then wait 10 minutes before using this app again.",
+                        duration: 600 // 10 minutes
+                    )
                     throw InstagramError.challengeRequired
                 }
                 
@@ -332,6 +554,12 @@ class InstagramService: ObservableObject {
             }
             throw InstagramError.apiError("HTTP \(httpResponse.statusCode)")
         }
+        
+        // Check for bot detection signals in response body
+        try await checkForBotSignals(data: data)
+        
+        // Success - reset consecutive error counter
+        await MainActor.run { consecutiveErrors = 0 }
         
         return data
     }
@@ -523,7 +751,7 @@ class InstagramService: ObservableObject {
             "_uuid": clientUUID,
             "_uid": session.userId,
             "_csrftoken": session.csrfToken,
-            "radio_type": "wifi-none"
+            "radio_type": currentRadioType
         ]
         
         // Convert to JSON string (instagrapi uses dumps + signature)
@@ -557,7 +785,7 @@ class InstagramService: ObservableObject {
         request.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
         request.httpBody = signedBody.data(using: .utf8)
         
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await postSession.data(for: request)
         
         if let httpResponse = response as? HTTPURLResponse {
             print("   Comment HTTP status: \(httpResponse.statusCode)")
@@ -1345,7 +1573,7 @@ class InstagramService: ObservableObject {
         uploadRequest.httpBody = imageData
         
         print("   Sending image bytes to Instagram...")
-        let (uploadData, uploadResponse) = try await urlSession.data(for: uploadRequest)
+        let (uploadData, uploadResponse) = try await postSession.data(for: uploadRequest)
         
         if let httpResponse = uploadResponse as? HTTPURLResponse {
             print("   Upload response status: \(httpResponse.statusCode)")
@@ -1548,6 +1776,8 @@ enum InstagramError: LocalizedError {
     case apiError(String)
     case uploadFailed
     case notLoggedIn
+    case networkError(String)    // Safe to retry - network issue, not Instagram rejection
+    case botDetected(String)     // STOP EVERYTHING - Instagram detected suspicious activity
     
     var errorDescription: String? {
         switch self {
@@ -1558,6 +1788,20 @@ enum InstagramError: LocalizedError {
         case .apiError(let msg): return "API Error: \(msg)"
         case .uploadFailed: return "Upload failed"
         case .notLoggedIn: return "Not logged in"
+        case .networkError(let msg): return "Network Error: \(msg)"
+        case .botDetected(let msg): return "⚠️ Safety Lock: \(msg)"
         }
+    }
+    
+    /// Whether this error is safe to retry (network issue, not Instagram rejection)
+    var isNetworkError: Bool {
+        if case .networkError = self { return true }
+        return false
+    }
+    
+    /// Whether Instagram detected bot behavior - STOP ALL ACTIVITY
+    var isBotDetection: Bool {
+        if case .botDetected = self { return true }
+        return false
     }
 }

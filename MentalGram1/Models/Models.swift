@@ -189,24 +189,42 @@ struct Bank: Identifiable, Codable {
     var name: String
 }
 
+enum PhotoUploadStatus: String, Codable {
+    case pending = "pending"           // Not uploaded yet
+    case uploading = "uploading"       // Uploading now
+    case uploaded = "uploaded"         // Upload OK, waiting archive
+    case archiving = "archiving"       // Archiving now
+    case completed = "completed"       // Upload + Archive complete
+    case error = "error"               // Failed (manual retry needed)
+}
+
 struct SetPhoto: Identifiable, Codable {
     let id: UUID
     var setId: UUID
     var bankId: UUID?
     var symbol: String
     var filename: String
-    var photoFilePath: String? // Path to photo on disk (not the full Data to save memory)
+    var imageData: Data?
     var mediaId: String?
     var isArchived: Bool
     var uploadDate: Date?
     var lastCommentId: String?
+    var uploadStatus: PhotoUploadStatus
+    var errorMessage: String?
     
-    // Computed - not stored
-    var imageData: Data? {
-        get {
-            guard let path = photoFilePath else { return nil }
-            return DataManager.shared.loadPhotoFromDisk(filename: path)
-        }
+    init(id: UUID, setId: UUID, bankId: UUID? = nil, symbol: String, filename: String, imageData: Data? = nil, mediaId: String? = nil, isArchived: Bool = false, uploadDate: Date? = nil, lastCommentId: String? = nil, uploadStatus: PhotoUploadStatus = .pending, errorMessage: String? = nil) {
+        self.id = id
+        self.setId = setId
+        self.bankId = bankId
+        self.symbol = symbol
+        self.filename = filename
+        self.imageData = imageData
+        self.mediaId = mediaId
+        self.isArchived = isArchived
+        self.uploadDate = uploadDate
+        self.lastCommentId = lastCommentId
+        self.uploadStatus = uploadStatus
+        self.errorMessage = errorMessage
     }
 }
 

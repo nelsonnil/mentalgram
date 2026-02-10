@@ -50,10 +50,6 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showingExplore) {
             ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
         }
-        .onAppear {
-            // Preload explore feed in background when app launches
-            ExploreManager.shared.preloadExploreInBackground()
-        }
     }
 }
 

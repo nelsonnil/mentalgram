@@ -40,13 +40,23 @@ struct DeviceInfo {
         print("📱 [DEVICE] iOS: \(version)")
     }
     
+    /// Instagram app version - should be updated periodically to stay current
+    let appVersion = "337.1.0.34.99"
+    let appVersionCode = "606284584"
+    
+    /// Device locale matching the real device settings
+    var deviceLocale: String {
+        Locale.current.identifier.replacingOccurrences(of: "-", with: "_")
+    }
+    
+    /// Device language
+    var deviceLanguage: String {
+        Locale.current.language.languageCode?.identifier ?? "en"
+    }
+    
     /// Genera User-Agent para Instagram basado en el dispositivo real
     var instagramUserAgent: String {
-        let appVersion = "320.0.0.34.98" // Instagram app version
-        let locale = "en_US" // US English locale
-        let language = "en" // English language
-        
-        return "Instagram \(appVersion) (\(modelIdentifier); iOS \(iosVersion); \(locale); \(language); scale=\(String(format: "%.2f", scale)); \(screenWidth)x\(screenHeight); 590791299)"
+        return "Instagram \(appVersion) (\(modelIdentifier); iOS \(iosVersion); \(deviceLocale); \(deviceLanguage); scale=\(String(format: "%.2f", scale)); \(screenWidth)x\(screenHeight); \(appVersionCode))"
     }
     
     /// Mapeo de identificadores de modelo a nombres legibles

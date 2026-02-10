@@ -8,46 +8,12 @@ class DataManager: ObservableObject {
     @Published var sets: [PhotoSet] = []
     @Published var logs: [LogEntry] = []
     
-    private let setsKey = "com.mindup.sets"
-    private let logsKey = "com.mindup.logs"
-    
-    // Photos stored in Documents directory (not in UserDefaults - too large)
-    private var photosDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("photos")
-    }
+    private let setsKey = "com.vault.sets"
+    private let logsKey = "com.vault.logs"
     
     private init() {
-        // Create photos directory
-        try? FileManager.default.createDirectory(at: photosDirectory, withIntermediateDirectories: true)
-        
         loadSets()
         loadLogs()
-    }
-    
-    // MARK: - Photo File Management
-    
-    private func savePhotoToDisk(_ imageData: Data, photoId: UUID) -> String? {
-        let filename = "\(photoId.uuidString).jpg"
-        let fileURL = photosDirectory.appendingPathComponent(filename)
-        
-        do {
-            try imageData.write(to: fileURL)
-            return filename
-        } catch {
-            print("❌ Error saving photo to disk: \(error)")
-            return nil
-        }
-    }
-    
-    func loadPhotoFromDisk(filename: String) -> Data? {
-        let fileURL = photosDirectory.appendingPathComponent(filename)
-        return try? Data(contentsOf: fileURL)
-    }
-    
-    private func deletePhotoFromDisk(filename: String) {
-        let fileURL = photosDirectory.appendingPathComponent(filename)
-        try? FileManager.default.removeItem(at: fileURL)
     }
     
     // MARK: - Sets CRUD
@@ -63,7 +29,7 @@ class DataManager: ObservableObject {
                 let bank = Bank(
                     id: UUID(),
                     position: i + 1,
-                    name: type == .word ? "Bank \(i + 1)" : "Digit \(i + 1)"
+                    name: "Bank \(i + 1)"
                 )
                 banks.append(bank)
             }
@@ -76,20 +42,19 @@ class DataManager: ObservableObject {
                 for bank in banks {
                     let photoId = UUID()
                     
-                    // Save photo to disk
-                    let photoPath = savePhotoToDisk(photo.imageData, photoId: photoId)
-                    
                     let setPhoto = SetPhoto(
                         id: photoId,
                         setId: setId,
                         bankId: bank.id,
                         symbol: photo.symbol,
                         filename: photo.filename,
-                        photoFilePath: photoPath,
+                        imageData: photo.imageData,
                         mediaId: nil,
                         isArchived: false,
                         uploadDate: nil,
-                        lastCommentId: nil
+                        lastCommentId: nil,
+                        uploadStatus: .pending,
+                        errorMessage: nil
                     )
                     setPhotos.append(setPhoto)
                 }
@@ -97,19 +62,18 @@ class DataManager: ObservableObject {
                 // Custom: one photo per symbol
                 let photoId = UUID()
                 
-                // Save photo to disk
-                let photoPath = savePhotoToDisk(photo.imageData, photoId: photoId)
-                
                 let setPhoto = SetPhoto(
                     id: photoId,
                     setId: setId,
                     symbol: photo.symbol,
                     filename: photo.filename,
-                    photoFilePath: photoPath,
+                    imageData: photo.imageData,
                     mediaId: nil,
                     isArchived: false,
                     uploadDate: nil,
-                    lastCommentId: nil
+                    lastCommentId: nil,
+                    uploadStatus: .pending,
+                    errorMessage: nil
                 )
                 setPhotos.append(setPhoto)
             }
@@ -122,30 +86,14 @@ class DataManager: ObservableObject {
             status: .ready,
             banks: banks,
             photos: setPhotos,
-            createdAt: Date(),
-            completedAt: nil
+            createdAt: Date()
         )
         
-        sets.insert(newSet, at: 0)
+        sets.append(newSet)
         saveSets()
-        addLog(action: "set_created", details: "Created set: \(name) (\(type.rawValue))")
+        addLog(action: "set_created", details: "Created set \(name) with \(setPhotos.count) photos")
         
         return newSet
-    }
-    
-    func deleteSet(id: UUID) {
-        // Delete photos from disk first
-        if let set = sets.first(where: { $0.id == id }) {
-            for photo in set.photos {
-                if let path = photo.photoFilePath {
-                    deletePhotoFromDisk(filename: path)
-                }
-            }
-        }
-        
-        sets.removeAll { $0.id == id }
-        saveSets()
-        addLog(action: "set_deleted", details: "Deleted set \(id)")
     }
     
     func updateSetStatus(id: UUID, status: SetStatus) {
@@ -158,7 +106,7 @@ class DataManager: ObservableObject {
         }
     }
     
-    func updatePhoto(photoId: UUID, mediaId: String?, isArchived: Bool? = nil, commentId: String? = nil, clearComment: Bool = false) {
+    func updatePhoto(photoId: UUID, mediaId: String? = nil, isArchived: Bool? = nil, commentId: String? = nil, clearComment: Bool = false, uploadStatus: PhotoUploadStatus? = nil, errorMessage: String? = nil) {
         for setIndex in sets.indices {
             if let photoIndex = sets[setIndex].photos.firstIndex(where: { $0.id == photoId }) {
                 if let mediaId = mediaId {
@@ -174,15 +122,47 @@ class DataManager: ObservableObject {
                 if clearComment {
                     sets[setIndex].photos[photoIndex].lastCommentId = nil
                 }
+                if let uploadStatus = uploadStatus {
+                    sets[setIndex].photos[photoIndex].uploadStatus = uploadStatus
+                }
+                if let errorMessage = errorMessage {
+                    sets[setIndex].photos[photoIndex].errorMessage = errorMessage
+                }
                 saveSets()
                 return
             }
         }
     }
     
+    func getUploadProgress(setId: UUID) -> (pending: Int, completed: Int, error: Int) {
+        guard let set = sets.first(where: { $0.id == setId }) else { return (0, 0, 0) }
+        let pending = set.photos.filter { $0.uploadStatus == .pending || $0.uploadStatus == .uploading || $0.uploadStatus == .uploaded || $0.uploadStatus == .archiving }.count
+        let completed = set.photos.filter { $0.uploadStatus == .completed }.count
+        let error = set.photos.filter { $0.uploadStatus == .error }.count
+        return (pending, completed, error)
+    }
+    
+    func getNextPendingPhoto(setId: UUID) -> SetPhoto? {
+        guard let set = sets.first(where: { $0.id == setId }) else { return nil }
+        return set.photos.first(where: { $0.uploadStatus == .pending || $0.uploadStatus == .error })
+    }
+    
+    func hasIncompleteUpload(setId: UUID) -> Bool {
+        guard let set = sets.first(where: { $0.id == setId }) else { return false }
+        let hasStarted = set.photos.contains(where: { $0.uploadStatus != .pending })
+        let hasIncomplete = set.photos.contains(where: { $0.uploadStatus != .completed })
+        return hasStarted && hasIncomplete
+    }
+    
     func getPhotosForBank(setId: UUID, bankId: UUID) -> [SetPhoto] {
         guard let set = sets.first(where: { $0.id == setId }) else { return [] }
         return set.photos.filter { $0.bankId == bankId }.sorted { ($0.filename) < ($1.filename) }
+    }
+    
+    func deleteSet(id: UUID) {
+        sets.removeAll { $0.id == id }
+        saveSets()
+        addLog(action: "set_deleted", details: "Deleted set \(id)")
     }
     
     // MARK: - Persistence
@@ -200,15 +180,15 @@ class DataManager: ObservableObject {
         }
     }
     
-    // MARK: - Logs
+    // MARK: - Activity Logs
     
     func addLog(action: String, details: String) {
-        let entry = LogEntry(action: action, details: details)
-        logs.insert(entry, at: 0)
+        let log = LogEntry(action: action, details: details)
+        logs.insert(log, at: 0)
         
-        // Keep max 100 logs
-        if logs.count > 100 {
-            logs = Array(logs.prefix(100))
+        // Keep only last 50 logs
+        if logs.count > 50 {
+            logs = Array(logs.prefix(50))
         }
         
         saveLogs()

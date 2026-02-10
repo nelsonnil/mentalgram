@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Alert de "Sin Conexión" para ocultar errores técnicos durante el show
+/// Disguised "No Connection" alert to hide technical errors during a magic show
 struct ConnectionErrorAlert: ViewModifier {
     @Binding var isPresented: Bool
     let error: InstagramError?
@@ -8,7 +8,7 @@ struct ConnectionErrorAlert: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-            .alert(getLocalizedTitle(), isPresented: $isPresented) {
+            .alert("No Connection", isPresented: $isPresented) {
                 Button("OK") {
                     isPresented = false
                 }
@@ -17,14 +17,14 @@ struct ConnectionErrorAlert: ViewModifier {
                     showingTechnicalDetails = true
                 }
             } message: {
-                Text(getLocalizedMessage())
+                Text("No Internet connection. Please try again later.")
             }
-            .alert("⚠️ Error de Instagram", isPresented: $showingTechnicalDetails) {
-                Button("Copiar Log") {
+            .alert("Error Details", isPresented: $showingTechnicalDetails) {
+                Button("Copy Log") {
                     copyErrorDetails()
                 }
                 
-                Button("Cerrar", role: .cancel) {
+                Button("Close", role: .cancel) {
                     showingTechnicalDetails = false
                 }
             } message: {
@@ -32,146 +32,140 @@ struct ConnectionErrorAlert: ViewModifier {
             }
     }
     
-    private func getLocalizedTitle() -> String {
-        let language = Locale.current.language.languageCode?.identifier ?? "en"
-        
-        switch language {
-        case "es":
-            return "📶 Sin Conexión"
-        case "fr":
-            return "📶 Pas de Connexion"
-        case "de":
-            return "📶 Keine Verbindung"
-        case "it":
-            return "📶 Nessuna Connessione"
-        case "pt":
-            return "📶 Sem Conexão"
-        default:
-            return "📶 No Connection"
-        }
-    }
-    
-    private func getLocalizedMessage() -> String {
-        let language = Locale.current.language.languageCode?.identifier ?? "en"
-        
-        switch language {
-        case "es":
-            return "No hay conexión a Internet. Inténtalo de nuevo más tarde."
-        case "fr":
-            return "Pas de connexion Internet. Réessayez plus tard."
-        case "de":
-            return "Keine Internetverbindung. Versuchen Sie es später erneut."
-        case "it":
-            return "Nessuna connessione Internet. Riprova più tardi."
-        case "pt":
-            return "Sem conexão com a Internet. Tente novamente mais tarde."
-        default:
-            return "No Internet connection. Please try again later."
-        }
-    }
-    
     private func getTechnicalDetails() -> String {
         guard let error = error else {
-            return "Error desconocido"
+            return "Unknown error"
         }
         
-        var details = ""
+        var details: String
         
         switch error {
         case .challengeRequired:
             details = """
-            Tipo: Challenge Required
+            Type: Challenge Required
             
-            Instagram requiere verificación de seguridad.
+            Instagram requires security verification.
             
-            📋 Pasos a seguir:
+            Steps to follow:
             
-            1. Abre la app oficial de Instagram
-            2. Completa la verificación que te solicite
-               (puede ser CAPTCHA, SMS, email, etc.)
-            3. Espera 10-15 minutos
-            4. Reinicia esta app
+            1. Open the official Instagram app
+            2. Complete the verification it asks for
+               (could be CAPTCHA, SMS, email, etc.)
+            3. Wait 10-15 minutes
+            4. Restart this app
             
-            ⚠️ Causa probable:
-            • Demasiadas acciones seguidas
-            • Follow/unfollow rápido
-            • Comportamiento detectado como bot
+            Probable cause:
+            - Too many actions in a row
+            - Fast follow/unfollow
+            - Behavior detected as bot
             
-            💡 Recomendación:
-            Espera más tiempo entre acciones de follow/unfollow
-            y simula comportamiento humano (scroll, esperas, etc.)
+            Recommendation:
+            Wait longer between follow/unfollow actions
+            and simulate human behavior (scroll, pauses, etc.)
             """
             
         case .sessionExpired:
             details = """
-            Tipo: Sesión Expirada
+            Type: Session Expired
             
-            La sesión de Instagram ha caducado.
+            The session has expired.
             
-            📋 Pasos a seguir:
+            Steps to follow:
             
-            1. Ve a Ajustes
-            2. Cierra sesión
-            3. Vuelve a iniciar sesión
+            1. Go to Settings
+            2. Log out
+            3. Log in again
             
-            Esto suele pasar después de:
-            • Cambiar contraseña en Instagram
-            • Mucho tiempo sin usar la app
-            • Instagram detectó actividad sospechosa
+            This usually happens after:
+            - Changing your password
+            - Long time without using the app
+            - Suspicious activity detected
             """
             
         case .apiError(let message):
             details = """
-            Tipo: Error de API
+            Type: API Error
             
-            Mensaje: \(message)
+            Message: \(message)
             
-            📋 Posibles causas:
-            • Rate limit excedido
-            • Acción no permitida
-            • Cuenta con restricciones
+            Possible causes:
+            - Rate limit exceeded
+            - Action not allowed
+            - Account restrictions
             
-            Espera unos minutos e intenta de nuevo.
+            Wait a few minutes and try again.
             """
             
         case .invalidResponse, .invalidURL:
             details = """
-            Tipo: Error Técnico
+            Type: Technical Error
             
-            Problema de comunicación con Instagram.
+            Communication problem with the server.
             
-            Verifica tu conexión a Internet real
-            y vuelve a intentar.
+            Check your real Internet connection
+            and try again.
             """
             
         case .uploadFailed:
             details = """
-            Tipo: Error de Subida
+            Type: Upload Error
             
-            No se pudo subir el contenido a Instagram.
+            Could not upload content.
             
-            📋 Posibles causas:
-            • Archivo muy grande
-            • Formato no soportado
-            • Problema de conexión
+            Possible causes:
+            - File too large
+            - Unsupported format
+            - Connection problem
             
-            Intenta de nuevo o usa otro archivo.
+            Try again or use a different file.
             """
             
         case .notLoggedIn:
             details = """
-            Tipo: Sesión No Iniciada
+            Type: Not Logged In
             
-            No has iniciado sesión en Instagram.
+            You are not logged in.
             
-            📋 Pasos a seguir:
+            Steps to follow:
             
-            1. Ve a la pantalla de inicio
-            2. Introduce tus credenciales
-            3. Inicia sesión
+            1. Go to Settings
+            2. Long press on version number
+            3. Connect your account
             
-            Si ya iniciaste sesión, intenta cerrar
-            la app completamente y volver a abrirla.
+            If you already logged in, try closing
+            the app completely and reopening it.
+            """
+            
+        case .networkError(let message):
+            details = """
+            Type: Network Error
+            
+            Connection problem: \(message)
+            
+            Steps to follow:
+            
+            1. Check your WiFi/Mobile Data
+            2. Try again in a few seconds
+            
+            This error is temporary and safe to retry.
+            """
+            
+        case .botDetected(let message):
+            details = """
+            Type: Security Detection
+            
+            Reason: \(message)
+            
+            IMPORTANT - Do NOT take any action:
+            
+            1. Do NOT open Instagram
+            2. Do NOT retry any action in this app
+            3. WAIT for the time shown on screen
+            4. After unlocking, wait 5-10 more minutes
+            
+            Unusual activity was detected.
+            Ignoring these instructions may result in
+            permanent account suspension.
             """
         }
         
