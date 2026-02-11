@@ -211,14 +211,23 @@ struct ExploreView: View {
         
         guard !query.isEmpty else {
             searchResults = []
+            isSearching = false
+            return
+        }
+        
+        // ANTI-BOT: Minimum 3 characters before searching (like Instagram real)
+        guard query.count >= 3 else {
+            searchResults = []
+            isSearching = false
             return
         }
         
         isSearching = true
         
-        // Debounce: wait 300ms before searching
+        // ANTI-BOT: Debounce 1 second (Instagram real waits ~1s after you stop typing)
+        // 300ms was too aggressive - generated 6+ API calls per search
         searchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
             
             guard !Task.isCancelled else { return }
             
@@ -230,33 +239,12 @@ struct ExploreView: View {
                     searchResults = results
                     isSearching = false
                 }
-            } catch let error as InstagramError {
-                // Ignore cancellation errors (normal when typing fast)
-                guard !Task.isCancelled else { return }
-                let errorDesc = "\(error)"
-                if errorDesc.contains("cancelled") || errorDesc.contains("cancel") {
-                    print("🔍 [SEARCH] Request cancelled (typing fast) - ignoring")
-                    return
-                }
-                print("❌ [SEARCH] Instagram error: \(error)")
-                await MainActor.run {
-                    isSearching = false
-                    lastError = error
-                    showingConnectionError = true
-                }
             } catch {
-                // Ignore cancellation errors
+                // Search errors should NEVER show popup (like Instagram real)
                 guard !Task.isCancelled else { return }
-                let errorDesc = error.localizedDescription
-                if errorDesc.contains("cancelled") || errorDesc.contains("cancel") {
-                    print("🔍 [SEARCH] Request cancelled (typing fast) - ignoring")
-                    return
-                }
-                print("❌ [SEARCH] Error: \(error)")
+                print("🔍 [SEARCH] Error (silent): \(error)")
                 await MainActor.run {
                     isSearching = false
-                    lastError = .apiError(error.localizedDescription)
-                    showingConnectionError = true
                 }
             }
         }

@@ -57,21 +57,39 @@ class InstagramService: ObservableObject {
     private let networkQueue = DispatchQueue(label: "com.vault.network")
     
     private init() {
-        // Initialize persistent device identifiers
-        if let savedDeviceId = UserDefaults.standard.string(forKey: "instagram_device_id") {
-            self.deviceId = savedDeviceId
-            print("📱 [DEVICE] Using saved device ID: \(String(savedDeviceId.prefix(8)))...")
+        // CRITICAL ANTI-BOT: Device IDs stored in KEYCHAIN (survives reinstalls)
+        // UserDefaults gets wiped on reinstall, causing "new device" each time = bot flag!
+        
+        // Migration: if ID exists in UserDefaults but not Keychain, migrate it
+        let keychainDeviceKey = "com.mindup.instagram.deviceId"
+        let keychainClientKey = "com.mindup.instagram.clientUUID"
+        
+        if let keychainDeviceId = KeychainService.shared.loadString(forKey: keychainDeviceKey) {
+            // Keychain has the ID - use it (persists across reinstalls)
+            self.deviceId = keychainDeviceId
+            print("📱 [DEVICE] Using Keychain device ID: \(String(keychainDeviceId.prefix(8)))... ✅")
+        } else if let oldDeviceId = UserDefaults.standard.string(forKey: "instagram_device_id") {
+            // Migrate from UserDefaults to Keychain
+            KeychainService.shared.saveString(oldDeviceId, forKey: keychainDeviceKey)
+            self.deviceId = oldDeviceId
+            print("📱 [DEVICE] Migrated device ID to Keychain: \(String(oldDeviceId.prefix(8)))... ✅")
         } else {
+            // First ever launch - generate and save to Keychain
             let newDeviceId = UUID().uuidString
-            UserDefaults.standard.set(newDeviceId, forKey: "instagram_device_id")
+            KeychainService.shared.saveString(newDeviceId, forKey: keychainDeviceKey)
+            UserDefaults.standard.set(newDeviceId, forKey: "instagram_device_id") // backup
             self.deviceId = newDeviceId
-            print("📱 [DEVICE] Generated new device ID: \(String(newDeviceId.prefix(8)))...")
+            print("📱 [DEVICE] Generated new device ID (Keychain): \(String(newDeviceId.prefix(8)))...")
         }
         
-        if let savedClientUUID = UserDefaults.standard.string(forKey: "instagram_client_uuid") {
-            self.clientUUID = savedClientUUID
+        if let keychainClientUUID = KeychainService.shared.loadString(forKey: keychainClientKey) {
+            self.clientUUID = keychainClientUUID
+        } else if let oldClientUUID = UserDefaults.standard.string(forKey: "instagram_client_uuid") {
+            KeychainService.shared.saveString(oldClientUUID, forKey: keychainClientKey)
+            self.clientUUID = oldClientUUID
         } else {
             let newUUID = UUID().uuidString
+            KeychainService.shared.saveString(newUUID, forKey: keychainClientKey)
             UserDefaults.standard.set(newUUID, forKey: "instagram_client_uuid")
             self.clientUUID = newUUID
         }
