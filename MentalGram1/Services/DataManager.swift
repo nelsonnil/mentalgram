@@ -36,10 +36,13 @@ class DataManager: ObservableObject {
         }
         
         // Create photos
-        for (index, photo) in photos.enumerated() {
-            if type == .word || type == .number {
-                // One photo per bank for each symbol
-                for bank in banks {
+        // ANTI-BOT: Group by bank to avoid consecutive duplicate uploads
+        // Safe order: All photos from bank 1, then bank 2, then bank 3...
+        // This separates duplicate images by ~10-50 minutes instead of 2-5 minutes
+        if type == .word || type == .number {
+            // Group by bank (NOT by symbol) to avoid consecutive duplicates
+            for bank in banks {
+                for (index, photo) in photos.enumerated() {
                     let photoId = UUID()
                     
                     let setPhoto = SetPhoto(
@@ -58,7 +61,10 @@ class DataManager: ObservableObject {
                     )
                     setPhotos.append(setPhoto)
                 }
-            } else {
+            }
+        } else {
+            // Custom type
+            for (index, photo) in photos.enumerated() {
                 // Custom: one photo per symbol
                 let photoId = UUID()
                 
