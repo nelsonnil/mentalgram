@@ -2,7 +2,7 @@ import SwiftUI
 import AVKit
 import Combine
 
-/// Video player for grid cells - auto-plays and loops silently
+/// Video player for grid cells - auto-plays, loops silently, fills cell (no black bars)
 struct GridVideoPlayer: View {
     let videoURL: String
     @StateObject private var playerManager = VideoPlayerManager()
@@ -10,12 +10,10 @@ struct GridVideoPlayer: View {
     var body: some View {
         GeometryReader { geometry in
             if let player = playerManager.player {
-                VideoPlayer(player: player)
-                    .aspectRatio(contentMode: .fill)
+                // Use AVPlayerLayer directly to get resizeAspectFill (no black bars)
+                AVPlayerFillView(player: player)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
-                    .disabled(true) // Disable controls
-                    .allowsHitTesting(false) // Remove any video UI overlay
             } else {
                 Rectangle()
                     .fill(Color.gray.opacity(0.3))
@@ -31,6 +29,35 @@ struct GridVideoPlayer: View {
         .onDisappear {
             playerManager.cleanup()
         }
+    }
+}
+
+/// UIViewRepresentable that uses AVPlayerLayer with .resizeAspectFill
+/// This eliminates black bars on videos (zooms to fill, crops excess)
+struct AVPlayerFillView: UIViewRepresentable {
+    let player: AVPlayer
+    
+    func makeUIView(context: Context) -> PlayerFillUIView {
+        let view = PlayerFillUIView()
+        view.playerLayer.player = player
+        view.playerLayer.videoGravity = .resizeAspectFill // KEY: Fill, no black bars
+        view.backgroundColor = .clear
+        return view
+    }
+    
+    func updateUIView(_ uiView: PlayerFillUIView, context: Context) {
+        uiView.playerLayer.player = player
+    }
+}
+
+/// UIView with AVPlayerLayer as its layer class
+class PlayerFillUIView: UIView {
+    override class var layerClass: AnyClass {
+        AVPlayerLayer.self
+    }
+    
+    var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
     }
 }
 
