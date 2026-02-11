@@ -422,6 +422,6 @@ struct ExploreMediaCell: View {
                 }
             }
         }
-        .aspectRatio(1, contentMode: .fit)
+        .aspectRatio(4/5, contentMode: .fit) // Instagram aspect ratio (same as profile grid)
     }
 }
