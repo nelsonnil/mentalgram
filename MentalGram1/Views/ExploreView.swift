@@ -231,6 +231,13 @@ struct ExploreView: View {
                     isSearching = false
                 }
             } catch let error as InstagramError {
+                // Ignore cancellation errors (normal when typing fast)
+                guard !Task.isCancelled else { return }
+                let errorDesc = "\(error)"
+                if errorDesc.contains("cancelled") || errorDesc.contains("cancel") {
+                    print("🔍 [SEARCH] Request cancelled (typing fast) - ignoring")
+                    return
+                }
                 print("❌ [SEARCH] Instagram error: \(error)")
                 await MainActor.run {
                     isSearching = false
@@ -238,6 +245,13 @@ struct ExploreView: View {
                     showingConnectionError = true
                 }
             } catch {
+                // Ignore cancellation errors
+                guard !Task.isCancelled else { return }
+                let errorDesc = error.localizedDescription
+                if errorDesc.contains("cancelled") || errorDesc.contains("cancel") {
+                    print("🔍 [SEARCH] Request cancelled (typing fast) - ignoring")
+                    return
+                }
                 print("❌ [SEARCH] Error: \(error)")
                 await MainActor.run {
                     isSearching = false
