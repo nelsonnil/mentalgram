@@ -57,10 +57,7 @@ class ExploreManager: ObservableObject {
             try await InstagramService.shared.waitForNetworkStability()
             
             print("🔍 [EXPLORE] Fetching from API...")
-            // TODO: getExploreFeed() needs to be implemented in InstagramService
-            // let (items, maxId) = try await InstagramService.shared.getExploreFeed()
-            let items: [InstagramMediaItem] = [] // Temporary: empty for now
-            let maxId: String? = nil
+            let (items, maxId) = try await InstagramService.shared.getExploreFeed()
             
             print("🔍 [EXPLORE] Received \(items.count) items from API")
             

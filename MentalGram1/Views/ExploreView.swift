@@ -109,30 +109,11 @@ struct ExploreView: View {
                     .background(Color.white)
                 } else {
                     // Grid of explore content
-                    if exploreManager.isLoading && exploreManager.exploreMedia.isEmpty {
-                    VStack(spacing: 20) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                        Text("Cargando explore...")
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if exploreManager.exploreMedia.isEmpty {
-                    VStack(spacing: 20) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 64))
-                            .foregroundColor(.secondary)
-                        
-                        Text("No hay contenido")
-                            .font(.headline)
-                        
-                        Button("Cargar Explore") {
-                            exploreManager.loadExplore()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
+                    if exploreManager.isLoading || exploreManager.exploreMedia.isEmpty {
+                        // Show skeleton UI (like Instagram real)
+                        ExploreGridSkeleton()
+                            .padding(.bottom, 65)
+                    } else {
                         ScrollView {
                             ExploreGridView(
                                 mediaItems: exploreManager.exploreMedia,
@@ -208,6 +189,12 @@ struct ExploreView: View {
             }
         }
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
+        .onAppear {
+            // Auto-load Explore feed on appear (like Instagram real)
+            if exploreManager.exploreMedia.isEmpty {
+                exploreManager.loadExplore()
+            }
+        }
     }
     
     private func performSearch(query: String) {
