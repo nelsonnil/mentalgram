@@ -14,12 +14,23 @@ struct UserProfileView: View {
     @State private var lastError: InstagramError?
     @State private var currentProfile: InstagramProfile
     
+    // MARK: - Infinite Scroll State
+    @State private var allMediaURLs: [String] = []
+    @State private var nextMaxId: String? = nil
+    @State private var isLoadingMore = false
+    @State private var hasMorePages = true
+    private let maxPhotosOtherProfile = 50 // Anti-bot limit for other profiles
+    
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
         self.onClose = onClose
         self._isFollowing = State(initialValue: profile.isFollowing)
         self._isFollowRequested = State(initialValue: profile.isFollowRequested)
         self._currentProfile = State(initialValue: profile)
+        self._allMediaURLs = State(initialValue: profile.cachedMediaURLs)
+        self._hasMorePages = State(initialValue: profile.cachedMediaURLs.count >= 18)
+        self._allMediaURLs = State(initialValue: profile.cachedMediaURLs)
+        self._hasMorePages = State(initialValue: profile.cachedMediaURLs.count >= 18)
     }
     
     var body: some View {
@@ -249,10 +260,11 @@ struct UserProfileView: View {
                     
                     Divider()
                     
-                    // Photo grid
+                    // Photo grid (with infinite scroll)
                     PhotosGridView(
-                        mediaURLs: currentProfile.cachedMediaURLs,
-                        cachedImages: cachedImages
+                        mediaURLs: allMediaURLs,
+                        cachedImages: cachedImages,
+                        onMediaAppear: loadMoreIfNeeded
                     )
                 }
             }
@@ -322,6 +334,79 @@ struct UserProfileView: View {
             await MainActor.run {
                 isLoadingImages = false
                 print("✅ [UI] All images loaded successfully")
+            }
+        }
+    }
+    
+    // MARK: - Infinite Scroll
+    
+    private func loadMoreMedia() {
+        guard !isLoadingMore, hasMorePages, allMediaURLs.count < maxPhotosOtherProfile else {
+            print("📜 [USER] Cannot load more - loading: \(isLoadingMore), hasMore: \(hasMorePages), count: \(allMediaURLs.count)")
+            return
+        }
+        
+        isLoadingMore = true
+        print("📜 [USER] Loading more media for @\(profile.username) (current count: \(allMediaURLs.count))...")
+        
+        Task {
+            do {
+                // Fetch next batch
+                let (mediaItems, newMaxId) = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 21, maxId: nextMaxId)
+                
+                await MainActor.run {
+                    // Calculate how many we can add without exceeding limit
+                    let remainingSlots = maxPhotosOtherProfile - allMediaURLs.count
+                    let itemsToAdd = min(mediaItems.count, remainingSlots)
+                    
+                    let newURLs = mediaItems.prefix(itemsToAdd).map { $0.imageURL }
+                    
+                    // Filter to multiples of 3 to avoid UI gaps
+                    let totalAfterAdd = allMediaURLs.count + newURLs.count
+                    let remainder = totalAfterAdd % 3
+                    let urlsToDisplay = remainder == 0 ? newURLs : Array(newURLs.dropLast(remainder))
+                    
+                    allMediaURLs.append(contentsOf: urlsToDisplay)
+                    nextMaxId = newMaxId
+                    hasMorePages = (newMaxId != nil) && (allMediaURLs.count < maxPhotosOtherProfile)
+                    isLoadingMore = false
+                    
+                    print("📜 [USER] Loaded \(urlsToDisplay.count) more, total now: \(allMediaURLs.count), hasMore: \(hasMorePages)")
+                    
+                    // Download images for new URLs
+                    downloadImagesForURLs(urlsToDisplay)
+                }
+            } catch {
+                print("❌ [USER] Error loading more: \(error)")
+                await MainActor.run {
+                    isLoadingMore = false
+                }
+            }
+        }
+    }
+    
+    private func loadMoreIfNeeded(currentURL: String) {
+        // Trigger load when user reaches 80% of loaded items
+        guard let index = allMediaURLs.firstIndex(of: currentURL) else { return }
+        let threshold = max(1, Int(Double(allMediaURLs.count) * 0.8))
+        
+        if index >= threshold {
+            print("📜 [USER] User reached 80% (\(index)/\(allMediaURLs.count)) - loading more...")
+            loadMoreMedia()
+        }
+    }
+    
+    private func downloadImagesForURLs(_ urls: [String]) {
+        Task {
+            for url in urls {
+                guard !url.isEmpty,
+                      let urlObj = URL(string: url),
+                      let (data, _) = try? await URLSession.shared.data(from: urlObj),
+                      let image = UIImage(data: data) else { continue }
+                
+                await MainActor.run {
+                    cachedImages[url] = image
+                }
             }
         }
     }

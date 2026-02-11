@@ -12,6 +12,13 @@ struct PerformanceView: View {
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     
+    // MARK: - Infinite Scroll State
+    @State private var allMediaURLs: [String] = [] // All loaded media URLs
+    @State private var nextMaxId: String? = nil
+    @State private var isLoadingMore = false
+    @State private var hasMorePages = true
+    private let maxPhotosOwnProfile = 100 // Anti-bot limit for own profile
+    
     var body: some View {
         ZStack(alignment: .bottom) {
             // Main content (Instagram replica)
@@ -24,7 +31,9 @@ struct PerformanceView: View {
                         onPlusPress: {
                             // Back to Sets tab
                             selectedTab = 1
-                        }
+                        },
+                        mediaURLs: allMediaURLs,
+                        onMediaAppear: loadMoreIfNeeded
                     )
                 } else {
                     // Show skeleton UI (like Instagram real)
@@ -75,6 +84,9 @@ struct PerformanceView: View {
         if let cached = ProfileCacheService.shared.loadProfile() {
             print("📦 [CACHE] Loading profile from cache (no auto-request)")
             self.profile = cached
+            // Initialize allMediaURLs with cached media
+            self.allMediaURLs = cached.cachedMediaURLs
+            self.hasMorePages = cached.cachedMediaURLs.count >= 18 // Assume more if exactly 18
             loadCachedImages()
             // DON'T make automatic request - user can pull-to-refresh if needed
         } else {
@@ -104,6 +116,9 @@ struct PerformanceView: View {
                 await MainActor.run {
                     if let fetchedProfile = fetchedProfile {
                         self.profile = fetchedProfile
+                        // Initialize allMediaURLs with first batch
+                        self.allMediaURLs = fetchedProfile.cachedMediaURLs
+                        self.hasMorePages = fetchedProfile.cachedMediaURLs.count >= 18
                         ProfileCacheService.shared.saveProfile(fetchedProfile)
                         downloadAndCacheImages(profile: fetchedProfile)
                     }
@@ -265,6 +280,77 @@ struct PerformanceView: View {
         }
     }
     
+    // MARK: - Infinite Scroll
+    
+    private func loadMoreMedia() {
+        guard !isLoadingMore, hasMorePages, allMediaURLs.count < maxPhotosOwnProfile else {
+            print("📜 [PROFILE] Cannot load more - loading: \(isLoadingMore), hasMore: \(hasMorePages), count: \(allMediaURLs.count)")
+            return
+        }
+        
+        isLoadingMore = true
+        print("📜 [PROFILE] Loading more media (current count: \(allMediaURLs.count))...")
+        
+        Task {
+            do {
+                // Fetch next batch
+                let (mediaItems, newMaxId) = try await instagram.getUserMediaItems(userId: profile?.userId, amount: 21, maxId: nextMaxId)
+                
+                await MainActor.run {
+                    // Calculate how many we can add without exceeding limit
+                    let remainingSlots = maxPhotosOwnProfile - allMediaURLs.count
+                    let itemsToAdd = min(mediaItems.count, remainingSlots)
+                    
+                    let newURLs = mediaItems.prefix(itemsToAdd).map { $0.imageURL }
+                    
+                    // Filter to multiples of 3 to avoid UI gaps
+                    let totalAfterAdd = allMediaURLs.count + newURLs.count
+                    let remainder = totalAfterAdd % 3
+                    let urlsToDisplay = remainder == 0 ? newURLs : Array(newURLs.dropLast(remainder))
+                    
+                    allMediaURLs.append(contentsOf: urlsToDisplay)
+                    nextMaxId = newMaxId
+                    hasMorePages = (newMaxId != nil) && (allMediaURLs.count < maxPhotosOwnProfile)
+                    isLoadingMore = false
+                    
+                    print("📜 [PROFILE] Loaded \(urlsToDisplay.count) more, total now: \(allMediaURLs.count), hasMore: \(hasMorePages)")
+                    
+                    // Download images for new URLs
+                    downloadImagesForURLs(urlsToDisplay)
+                }
+            } catch {
+                print("❌ [PROFILE] Error loading more: \(error)")
+                await MainActor.run {
+                    isLoadingMore = false
+                }
+            }
+        }
+    }
+    
+    private func loadMoreIfNeeded(currentURL: String) {
+        // Trigger load when user reaches 80% of loaded items
+        guard let index = allMediaURLs.firstIndex(of: currentURL) else { return }
+        let threshold = max(1, Int(Double(allMediaURLs.count) * 0.8))
+        
+        if index >= threshold {
+            print("📜 [PROFILE] User reached 80% (\(index)/\(allMediaURLs.count)) - loading more...")
+            loadMoreMedia()
+        }
+    }
+    
+    private func downloadImagesForURLs(_ urls: [String]) {
+        Task {
+            for url in urls {
+                if cachedImages[url] == nil, let image = await downloadImage(from: url) {
+                    await MainActor.run {
+                        cachedImages[url] = image
+                        ProfileCacheService.shared.saveImage(image, forURL: url)
+                    }
+                }
+            }
+        }
+    }
+    
     private func downloadImage(from urlString: String) async -> UIImage? {
         guard !urlString.isEmpty else {
             print("⚠️ [DOWNLOAD] Empty URL string")
@@ -309,6 +395,10 @@ struct InstagramProfileView: View {
     let onRefresh: () -> Void
     let onPlusPress: () -> Void
     @State private var selectedTab = 0
+    
+    // Infinite scroll support
+    var mediaURLs: [String]? = nil // If provided, use instead of profile.cachedMediaURLs
+    var onMediaAppear: ((String) -> Void)? = nil // Called when a media cell appears
     
     var body: some View {
         ScrollView {
@@ -477,7 +567,8 @@ struct InstagramProfileView: View {
                 
                 // Photos Grid
                 if selectedTab == 0 {
-                    if profile.cachedMediaURLs.isEmpty {
+                    let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+                    if urlsToShow.isEmpty {
                         VStack(spacing: 20) {
                             Image(systemName: "photo.on.rectangle.angled")
                                 .font(.system(size: 64))
@@ -498,7 +589,7 @@ struct InstagramProfileView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                     } else {
-                        PhotosGridView(mediaURLs: profile.cachedMediaURLs, cachedImages: cachedImages)
+                        PhotosGridView(mediaURLs: urlsToShow, cachedImages: cachedImages, onMediaAppear: onMediaAppear)
                     }
                 }
             }
@@ -669,6 +760,7 @@ struct TabButton: View {
 struct PhotosGridView: View {
     let mediaURLs: [String]
     let cachedImages: [String: UIImage]
+    var onMediaAppear: ((String) -> Void)? = nil
     
     let columns = [
         GridItem(.flexible(), spacing: 1),
@@ -684,10 +776,16 @@ struct PhotosGridView: View {
                         .resizable()
                         .aspectRatio(4/5, contentMode: .fill) // Instagram aspect ratio (más alto que ancho)
                         .clipped()
+                        .onAppear {
+                            onMediaAppear?(url)
+                        }
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.3))
                         .aspectRatio(4/5, contentMode: .fill) // Instagram aspect ratio
+                        .onAppear {
+                            onMediaAppear?(url)
+                        }
                 }
             }
         }

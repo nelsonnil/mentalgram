@@ -1131,7 +1131,7 @@ class InstagramService: ObservableObject {
             followedBy = try await getFollowedByUsers(userId: uid, count: 3)
             
             // Get media thumbnails (18 photos for grid)
-            let mediaItems = try await getUserMediaItems(userId: uid, amount: 18)
+            let (mediaItems, _) = try await getUserMediaItems(userId: uid, amount: 18)
             mediaURLs = mediaItems.map { $0.imageURL }
             
             print("📊 [PROFILE] Media URLs count: \(mediaURLs.count)")
@@ -1212,11 +1212,14 @@ class InstagramService: ObservableObject {
     
     // MARK: - Get User Media Items (Extended with metadata)
     
-    func getUserMediaItems(userId: String? = nil, amount: Int = 18) async throws -> [InstagramMediaItem] {
+    func getUserMediaItems(userId: String? = nil, amount: Int = 18, maxId: String? = nil) async throws -> ([InstagramMediaItem], String?) {
         let uid = userId ?? session.userId
-        print("📷 [MEDIA] Fetching \(amount) media items for user ID: \(uid)")
+        print("📷 [MEDIA] Fetching \(amount) media items for user ID: \(uid), maxId: \(maxId ?? "none")")
         
-        let path = "/feed/user/\(uid)/"
+        var path = "/feed/user/\(uid)/"
+        if let maxId = maxId {
+            path += "?max_id=\(maxId)"
+        }
         let data = try await apiRequest(method: "GET", path: path)
         
         // Debug: Print raw response
@@ -1237,7 +1240,7 @@ class InstagramService: ObservableObject {
             print("📷 [MEDIA] Available keys: \(json.keys.joined(separator: ", "))")
             
             // Try alternative: get from user info endpoint
-            return try await getUserMediaFromAlternativeEndpoint(userId: uid, amount: amount)
+            return try await getUserMediaFromAlternativeEndpoint(userId: uid, amount: amount, maxId: maxId)
         }
         
         print("📷 [MEDIA] Found \(items.count) items in response")
@@ -1335,18 +1338,24 @@ class InstagramService: ObservableObject {
             mediaItems.append(mediaItem)
         }
         
-        print("✅ [MEDIA] Fetched \(mediaItems.count) media items")
-        return mediaItems
+        // Get next_max_id for pagination
+        let nextMaxId = json["next_max_id"] as? String
+        
+        print("✅ [MEDIA] Fetched \(mediaItems.count) media items, next_max_id: \(nextMaxId ?? "none")")
+        return (mediaItems, nextMaxId)
     }
     
     // MARK: - Get User Media from Alternative Endpoint
     
-    private func getUserMediaFromAlternativeEndpoint(userId: String, amount: Int) async throws -> [InstagramMediaItem] {
-        print("📷 [MEDIA ALT] Trying alternative endpoint for user ID: \(userId)")
+    private func getUserMediaFromAlternativeEndpoint(userId: String, amount: Int, maxId: String?) async throws -> ([InstagramMediaItem], String?) {
+        print("📷 [MEDIA ALT] Trying alternative endpoint for user ID: \(userId), maxId: \(maxId ?? "none")")
         
         // Try using user_medias endpoint with rank_token
         let rankToken = UUID().uuidString
-        let path = "/feed/user/\(userId)/?rank_token=\(rankToken)&max_id="
+        var path = "/feed/user/\(userId)/?rank_token=\(rankToken)"
+        if let maxId = maxId {
+            path += "&max_id=\(maxId)"
+        }
         
         let data = try await apiRequest(method: "GET", path: path)
         
@@ -1357,7 +1366,7 @@ class InstagramService: ObservableObject {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let items = json["items"] as? [[String: Any]] else {
             print("❌ [MEDIA ALT] Failed to get items from alternative endpoint")
-            return []
+            return ([], nil)
         }
         
         print("📷 [MEDIA ALT] Found \(items.count) items")
@@ -1415,8 +1424,10 @@ class InstagramService: ObservableObject {
             mediaItems.append(mediaItem)
         }
         
-        print("✅ [MEDIA ALT] Fetched \(mediaItems.count) media items from alternative endpoint")
-        return mediaItems
+        let nextMaxId = json["next_max_id"] as? String
+        
+        print("✅ [MEDIA ALT] Fetched \(mediaItems.count) media items from alternative endpoint, next_max_id: \(nextMaxId ?? "none")")
+        return (mediaItems, nextMaxId)
     }
     
     // MARK: - Get Explore Feed
