@@ -312,7 +312,15 @@ struct SetDetailView: View {
             do {
                 // Upload photo
                 print("   Starting upload for \(photo.symbol)...")
-                let mediaId = try await instagram.uploadPhoto(imageData: imageData, caption: "")
+                
+                // ANTI-BOT: Allow duplicates for Word/Number Reveal sets (letters/numbers repeat)
+                let allowDuplicates = (currentSet.type == .word || currentSet.type == .number)
+                let mediaId = try await instagram.uploadPhoto(
+                    imageData: imageData,
+                    caption: "",
+                    allowDuplicates: allowDuplicates,
+                    photoIndex: index
+                )
                 
                 if let mediaId = mediaId {
                     print("✅ [UPLOAD ALL] Photo uploaded. Media ID: \(mediaId)")
@@ -385,6 +393,9 @@ struct SetDetailView: View {
             } catch {
                 print("❌ [UPLOAD ALL] Error: \(error)")
                 
+                // Build detailed error info about which photo failed
+                let photoInfo = "Photo #\(index + 1) (\(photo.symbol))"
+                
                 // Check if it's a bot detection error
                 let errorDescription = error.localizedDescription.lowercased()
                 let isBotError = errorDescription.contains("challenge") || 
@@ -392,15 +403,16 @@ struct SetDetailView: View {
                                  errorDescription.contains("login_required") ||
                                  errorDescription.contains("checkpoint")
                 
-                // Mark photo as error
+                // Mark photo as error with detailed message
                 let errorMsg = isBotError ? "⚠️ Bot detection - STOP" : error.localizedDescription
                 dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
                 
                 await MainActor.run {
                     if isBotError {
-                        showingError = "⚠️ Instagram flagged activity. WAIT at least 10 minutes before retrying. Do NOT open Instagram app during this time."
+                        showingError = "⚠️ Instagram flagged activity at \(photoInfo).\n\nWAIT at least 10 minutes before retrying. Do NOT open Instagram app during this time."
                     } else {
-                        showingError = "Upload failed: \(error.localizedDescription)\n\nCheck connection and retry manually."
+                        // Show which specific photo failed
+                        showingError = "❌ Upload failed at \(photoInfo)\n\nError: \(error.localizedDescription)\n\nCheck connection and retry manually."
                     }
                     dataManager.updateSetStatus(id: currentSet.id, status: .error)
                     isUploading = false

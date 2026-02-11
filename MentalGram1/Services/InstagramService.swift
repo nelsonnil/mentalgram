@@ -1599,9 +1599,13 @@ class InstagramService: ObservableObject {
     
     // MARK: - Upload Photo
     
-    func uploadPhoto(imageData: Data, caption: String = "") async throws -> String? {
+    func uploadPhoto(imageData: Data, caption: String = "", allowDuplicates: Bool = false, photoIndex: Int? = nil) async throws -> String? {
         print("📤 [UPLOAD] Starting photo upload...")
+        if let index = photoIndex {
+            print("   Photo index: \(index)")
+        }
         print("   Image size: \(imageData.count) bytes (\(imageData.count / 1024)KB)")
+        print("   Allow duplicates: \(allowDuplicates)")
         
         // ANTI-BOT: Check lockdown
         if isLocked {
@@ -1615,15 +1619,22 @@ class InstagramService: ObservableObject {
             let minutes = remaining / 60
             let seconds = remaining % 60
             print("⏰ [UPLOAD] Still on cooldown: \(minutes)m \(seconds)s remaining")
-            throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before uploading another photo.")
+            let photoInfo = photoIndex != nil ? " (Photo #\(photoIndex! + 1))" : ""
+            throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before uploading another photo.\(photoInfo)")
         }
         
         // ANTI-BOT: Detect duplicate image (prevent uploading same photo twice)
+        // EXCEPTION: Word Reveal and Number Reveal sets need to upload duplicate letters/numbers
         let imageHash = hashImageData(imageData)
-        if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
-           lastHash == imageHash {
-            print("⚠️ [UPLOAD] Same image already uploaded - SKIP")
-            throw InstagramError.apiError("This photo was already uploaded. Duplicate uploads may trigger bot detection.")
+        if !allowDuplicates {
+            if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
+               lastHash == imageHash {
+                print("⚠️ [UPLOAD] Same image already uploaded - SKIP")
+                let photoInfo = photoIndex != nil ? " Photo #\(photoIndex! + 1)" : " This photo"
+                throw InstagramError.apiError("\(photoInfo) was already uploaded. Duplicate uploads may trigger bot detection.")
+            }
+        } else {
+            print("✅ [UPLOAD] Duplicates allowed for this set type (Word/Number Reveal)")
         }
         
         // ANTI-BOT: Wait if network changed recently
