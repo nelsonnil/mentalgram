@@ -1229,7 +1229,7 @@ class InstagramService: ObservableObject {
         
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             print("❌ [MEDIA] Failed to parse JSON")
-            return []
+            return ([], nil)
         }
         
         // Debug: Print available keys
