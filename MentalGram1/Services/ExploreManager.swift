@@ -169,10 +169,22 @@ class ExploreManager: ObservableObject {
             self.exploreMedia = items
             print("✅ [EXPLORE] Loaded \(items.count) items from cache")
             
-            // Load cached images
+            // Load cached images + detect missing ones
+            var missingItems: [InstagramMediaItem] = []
             for item in items {
                 if let image = ProfileCacheService.shared.loadImage(forURL: item.imageURL) {
                     cachedImages[item.imageURL] = image
+                } else if !item.imageURL.isEmpty {
+                    missingItems.append(item)
+                }
+            }
+            
+            print("📦 [EXPLORE] Loaded \(cachedImages.count) images from cache, \(missingItems.count) missing")
+            
+            // Download missing thumbnails in background
+            if !missingItems.isEmpty {
+                Task {
+                    await downloadThumbnails(items: missingItems)
                 }
             }
         }
