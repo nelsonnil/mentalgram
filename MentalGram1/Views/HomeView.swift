@@ -217,6 +217,10 @@ struct SettingsView: View {
     @State private var noteMessage: String?
     @State private var showingNoteAlert = false
     
+    // Hidden Login (easter egg)
+    @State private var showingLogin = false
+    @State private var developerMode = false
+    
     var body: some View {
         List {
             Section("Account") {
@@ -464,6 +468,10 @@ struct SettingsView: View {
                     Spacer()
                     Text("1.0.0")
                         .foregroundColor(.secondary)
+                        .onLongPressGesture(minimumDuration: 2.0) {
+                            // Easter egg: long press 2 seconds to reveal developer mode
+                            developerMode = true
+                        }
                 }
                 
                 HStack {
@@ -471,6 +479,17 @@ struct SettingsView: View {
                     Spacer()
                     Text("1")
                         .foregroundColor(.secondary)
+                }
+                
+                // Hidden login button (only visible after long press on version)
+                if developerMode && !instagram.isLoggedIn {
+                    Button(action: { showingLogin = true }) {
+                        HStack {
+                            Image(systemName: "link.badge.plus")
+                                .foregroundColor(.purple)
+                            Text("Connect Account")
+                        }
+                    }
                 }
             }
         }
@@ -494,6 +513,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingFollowerData) {
             FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
+        }
+        .sheet(isPresented: $showingLogin) {
+            LoginView()
         }
     }
     

@@ -29,7 +29,10 @@ struct PerformanceView: View {
                 } else {
                     // Show skeleton UI (like Instagram real)
                     // Shown when: loading, network stabilizing, or no data
-                    InstagramProfileSkeleton()
+                    // Includes back button so user can navigate away
+                    InstagramProfileSkeleton(onPlusPress: {
+                        selectedTab = 1
+                    })
                 }
             }
             .padding(.bottom, 65) // Space for Instagram bottom bar (matches bar height)
@@ -328,18 +331,13 @@ struct InstagramProfileView: View {
                                     .onAppear {
                                         print("✅ [UI] Profile pic image displayed")
                                     }
-                            } else {
+                            }                             else {
                                 Circle()
-                                    .fill(Color.gray.opacity(0.3))
+                                    .fill(Color.gray.opacity(0.2))
                                     .frame(width: 86, height: 86)
                                     .overlay(
-                                        VStack {
-                                            ProgressView()
-                                                .scaleEffect(0.8)
-                                            Text("Cargando...")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
+                                        ProgressView()
+                                            .scaleEffect(0.8)
                                     )
                                     .onAppear {
                                         print("⚠️ [UI] Profile pic not in cache")
