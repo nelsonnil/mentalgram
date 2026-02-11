@@ -412,37 +412,39 @@ struct ExploreMediaCell: View {
     let cachedImage: UIImage?
     
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // Show video player if it's a video, otherwise show image
-            if media.mediaType == .video, let videoURL = media.videoURL {
-                GridVideoPlayer(videoURL: videoURL)
-                    .aspectRatio(4/5, contentMode: .fill)
-                    .clipped()
-            } else if let image = cachedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    )
-            }
-            
-            // Carousel indicator (multiple icon)
-            if media.mediaType == .carousel {
-                Image(systemName: "square.on.square")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .padding(4)
-                    .background(Color.black.opacity(0.5))
-                    .cornerRadius(4)
-                    .padding(6)
-            }
-        }
-        .aspectRatio(4/5, contentMode: .fill)
-        .clipped()
+        // Fixed 4:5 container - all content fills this uniformly
+        Color.clear
+            .aspectRatio(4/5, contentMode: .fit)
+            .overlay(
+                ZStack(alignment: .topTrailing) {
+                    // Content fills the entire 4:5 cell
+                    if media.mediaType == .video, let videoURL = media.videoURL {
+                        GridVideoPlayer(videoURL: videoURL)
+                    } else if let image = cachedImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            )
+                    }
+                    
+                    // Carousel indicator
+                    if media.mediaType == .carousel {
+                        Image(systemName: "square.on.square")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                            .padding(4)
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(4)
+                            .padding(6)
+                    }
+                }
+            )
+            .clipped()
     }
 }

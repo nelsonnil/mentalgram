@@ -15,12 +15,13 @@ struct GridVideoPlayer: View {
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
                     .disabled(true) // Disable controls
+                    .allowsHitTesting(false) // Remove any video UI overlay
             } else {
                 Rectangle()
-                    .fill(Color.black.opacity(0.3))
+                    .fill(Color.gray.opacity(0.3))
                     .overlay(
                         ProgressView()
-                            .tint(.white)
+                            .scaleEffect(0.8)
                     )
             }
         }
