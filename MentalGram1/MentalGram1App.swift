@@ -19,12 +19,8 @@ struct MentalGram1App: App {
     
     var body: some Scene {
         WindowGroup {
-            // ALWAYS show HomeView - never show LoginView directly
-            // Login is hidden in Settings (long press on version number)
-            // This is for App Store review safety
             HomeView()
                 .overlay {
-                    // LOCKDOWN OVERLAY: Disguised as "No Internet Connection"
                     if instagram.isLocked {
                         LockdownView()
                             .transition(.opacity)
@@ -44,8 +40,6 @@ struct MentalGram1App: App {
 }
 
 // MARK: - Lockdown View (Disguised as "No Internet Connection")
-// This view appears when Instagram detects bot behavior.
-// It looks like a generic network error to spectators during a magic show.
 
 struct LockdownView: View {
     @ObservedObject var instagram = InstagramService.shared
@@ -55,14 +49,12 @@ struct LockdownView: View {
     
     var body: some View {
         ZStack {
-            // Full screen background
             Color(.systemBackground)
                 .ignoresSafeArea()
             
             VStack(spacing: 30) {
                 Spacer()
                 
-                // Generic "no connection" icon
                 Image(systemName: "wifi.slash")
                     .font(.system(size: 70))
                     .foregroundColor(.gray)
@@ -77,10 +69,7 @@ struct LockdownView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                 
-                // Decoy "Try Again" button (does nothing, just looks real)
-                Button(action: {
-                    // Shake animation to look like it tried
-                }) {
+                Button(action: {}) {
                     Text("Try Again")
                         .font(.headline)
                         .foregroundColor(.white)
@@ -92,7 +81,6 @@ struct LockdownView: View {
                 
                 Spacer()
                 
-                // Subtle info button - only the magician knows about this
                 HStack {
                     Spacer()
                     Button(action: { showDetails = true }) {
@@ -110,7 +98,6 @@ struct LockdownView: View {
         }
         .onReceive(timer) { _ in
             updateTimeRemaining()
-            // Auto-unlock when countdown expires
             if let lockUntil = instagram.lockUntil, Date() >= lockUntil {
                 instagram.unlock()
             }
@@ -133,7 +120,7 @@ struct LockdownView: View {
     }
 }
 
-// MARK: - Lockdown Details Sheet (Hidden - only for the magician)
+// MARK: - Lockdown Details Sheet
 
 struct LockdownDetailsSheet: View {
     @ObservedObject var instagram = InstagramService.shared
@@ -144,7 +131,6 @@ struct LockdownDetailsSheet: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                // Real reason
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.shield.fill")
                         .font(.system(size: 50))
@@ -160,7 +146,6 @@ struct LockdownDetailsSheet: View {
                         .padding(.horizontal)
                 }
                 
-                // Countdown
                 VStack(spacing: 8) {
                     Text("Auto-unlock in:")
                         .font(.caption)
@@ -174,7 +159,6 @@ struct LockdownDetailsSheet: View {
                 .background(Color.orange.opacity(0.1))
                 .cornerRadius(16)
                 
-                // Instructions
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Do NOT open Instagram", systemImage: "xmark.circle")
                     Label("Do NOT retry any action", systemImage: "xmark.circle")
@@ -189,7 +173,6 @@ struct LockdownDetailsSheet: View {
                 
                 Spacer()
                 
-                // Emergency actions
                 VStack(spacing: 12) {
                     Button("Force Unlock (Risky)") {
                         instagram.unlock()

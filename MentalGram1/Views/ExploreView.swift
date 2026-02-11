@@ -117,7 +117,8 @@ struct ExploreView: View {
                         ScrollView {
                             ExploreGridView(
                                 mediaItems: exploreManager.exploreMedia,
-                                cachedImages: exploreManager.cachedImages
+                                cachedImages: exploreManager.cachedImages,
+                                exploreManager: exploreManager
                             )
                             .padding(.bottom, 65)
                         }
@@ -191,6 +192,13 @@ struct ExploreView: View {
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .onAppear {
             // Auto-load Explore feed on appear (like Instagram real)
+            // If cache has old count (not multiple of 3), clear and reload
+            let currentCount = exploreManager.exploreMedia.count
+            if currentCount > 0 && currentCount % 3 != 0 {
+                print("🗑️ [EXPLORE] Cache has \(currentCount) items (not multiple of 3), clearing...")
+                exploreManager.clearCache()
+            }
+            
             if exploreManager.exploreMedia.isEmpty {
                 exploreManager.loadExplore()
             }
@@ -282,6 +290,7 @@ struct ExploreView: View {
 struct ExploreGridView: View {
     let mediaItems: [InstagramMediaItem]
     let cachedImages: [String: UIImage]
+    @ObservedObject var exploreManager = ExploreManager.shared
     
     var body: some View {
         LazyVStack(spacing: 2) {
@@ -295,8 +304,26 @@ struct ExploreGridView: View {
                                 media: mediaItems[index],
                                 cachedImage: cachedImages[mediaItems[index].imageURL]
                             )
+                            .onAppear {
+                                // Trigger load more when this item appears
+                                exploreManager.loadMoreIfNeeded(currentItem: mediaItems[index])
+                            }
+                        } else {
+                            // Invisible placeholder to keep grid aligned
+                            Color.clear
+                                .aspectRatio(4/5, contentMode: .fit)
                         }
                     }
+                }
+            }
+            
+            // Loading indicator at bottom when loading more
+            if exploreManager.isLoadingMore {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .padding()
+                    Spacer()
                 }
             }
         }

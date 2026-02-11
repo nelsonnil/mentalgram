@@ -150,24 +150,63 @@ struct PerformanceView: View {
         
         // Load media thumbnails
         var loadedCount = 0
+        var missingMediaURLs: [String] = []
         for url in profile.cachedMediaURLs {
             if let image = ProfileCacheService.shared.loadImage(forURL: url) {
                 cachedImages[url] = image
                 loadedCount += 1
+            } else {
+                missingMediaURLs.append(url)
             }
         }
         print("📦 [CACHE] Loaded \(loadedCount)/\(profile.cachedMediaURLs.count) media thumbnails from cache")
         
+        // If some media thumbnails are missing, download them
+        if !missingMediaURLs.isEmpty {
+            print("🖼️ [CACHE] Downloading \(missingMediaURLs.count) missing media thumbnails...")
+            Task {
+                for url in missingMediaURLs {
+                    if let image = await downloadImage(from: url) {
+                        await MainActor.run {
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                    }
+                }
+                print("✅ [CACHE] Finished downloading missing media thumbnails")
+            }
+        }
+        
         // Load followed by profile pics
         var followerPicsLoaded = 0
+        var missingFollowerURLs: [String] = []
         for follower in profile.followedBy {
-            if let picURL = follower.profilePicURL,
-               let image = ProfileCacheService.shared.loadImage(forURL: picURL) {
-                cachedImages[picURL] = image
-                followerPicsLoaded += 1
+            if let picURL = follower.profilePicURL {
+                if let image = ProfileCacheService.shared.loadImage(forURL: picURL) {
+                    cachedImages[picURL] = image
+                    followerPicsLoaded += 1
+                } else {
+                    missingFollowerURLs.append(picURL)
+                }
             }
         }
         print("📦 [CACHE] Loaded \(followerPicsLoaded)/\(profile.followedBy.count) follower pics from cache")
+        
+        // If some follower pics are missing, download them
+        if !missingFollowerURLs.isEmpty {
+            print("🖼️ [CACHE] Downloading \(missingFollowerURLs.count) missing follower pics...")
+            Task {
+                for url in missingFollowerURLs {
+                    if let image = await downloadImage(from: url) {
+                        await MainActor.run {
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                    }
+                }
+                print("✅ [CACHE] Finished downloading missing follower pics")
+            }
+        }
         
         print("📦 [CACHE] Total cached images loaded: \(cachedImages.count)")
     }
