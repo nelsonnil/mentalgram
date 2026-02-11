@@ -1,23 +1,18 @@
 import SwiftUI
 
 /// Instagram Explore skeleton loading UI
-/// Shows gray animated placeholders in grid format
+/// Shows gray animated placeholders in grid format (4:5 aspect ratio)
 struct ExploreGridSkeleton: View {
-    @State private var isAnimating = false
-    
     var body: some View {
         ScrollView {
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 2),
-                    GridItem(.flexible(), spacing: 2),
-                    GridItem(.flexible(), spacing: 2)
-                ],
-                spacing: 2
-            ) {
-                ForEach(0..<30) { index in
-                    SkeletonGridItem()
-                        .transition(.opacity)
+            LazyVStack(spacing: 2) {
+                // 10 rows of 3 = 30 skeleton items
+                ForEach(0..<10, id: \.self) { rowIndex in
+                    HStack(spacing: 2) {
+                        ForEach(0..<3, id: \.self) { colIndex in
+                            SkeletonGridItem()
+                        }
+                    }
                 }
             }
         }
@@ -27,7 +22,6 @@ struct ExploreGridSkeleton: View {
 
 struct SkeletonGridItem: View {
     @State private var isAnimating = false
-    let width = (UIScreen.main.bounds.width - 4) / 3
     
     var body: some View {
         Rectangle()
@@ -42,7 +36,8 @@ struct SkeletonGridItem: View {
                     endPoint: isAnimating ? .bottomTrailing : .topLeading
                 )
             )
-            .frame(width: width, height: width)
+            .aspectRatio(4/5, contentMode: .fill)
+            .clipped()
             .onAppear {
                 withAnimation(
                     Animation.linear(duration: 1.5)
