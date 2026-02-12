@@ -164,8 +164,7 @@ struct ConnectionErrorAlert: ViewModifier {
             4. After unlocking, wait 5-10 more minutes
             
             Unusual activity was detected.
-            Ignoring these instructions may result in
-            permanent account suspension.
+            Please follow these instructions carefully.
             
             ⚠️ IF YOU ARE PERFORMING A TRICK:
             STOP IMMEDIATELY. Do not reveal/hide more photos.
