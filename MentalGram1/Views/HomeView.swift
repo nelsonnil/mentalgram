@@ -12,14 +12,20 @@ struct HomeView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Performance Tab (Instagram Replica)
-            PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
-                .tabItem {
-                    Label("Performance", systemImage: "chart.bar.fill")
+            // Performance Tab - empty placeholder until logged in
+            Group {
+                if instagram.isLoggedIn {
+                    PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
+                } else {
+                    Color(.systemBackground)
                 }
-                .tag(0)
+            }
+            .tabItem {
+                Label("Performance", systemImage: "chart.bar.fill")
+            }
+            .tag(0)
             
-            // Sets Tab
+            // Sets Tab - always available
             NavigationView {
                 SetsListView()
             }
@@ -28,15 +34,6 @@ struct HomeView: View {
             }
             .tag(1)
             
-            // Quick Reveal Tab
-            NavigationView {
-                QuickRevealView()
-            }
-            .tabItem {
-                Label("Reveal", systemImage: "wand.and.stars")
-            }
-            .tag(2)
-            
             // Settings Tab
             NavigationView {
                 SettingsView()
@@ -44,7 +41,7 @@ struct HomeView: View {
             .tabItem {
                 Label("Settings", systemImage: "gearshape")
             }
-            .tag(3)
+            .tag(2)
         }
         .accentColor(.purple)
         .fullScreenCover(isPresented: $showingExplore) {
@@ -242,8 +239,44 @@ struct SettingsView: View {
     
     var body: some View {
         List {
-            Section("Account") {
-                if instagram.isLoggedIn {
+            // MARK: About - Always visible at top
+            Section("About") {
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text("1.0.0")
+                        .foregroundColor(.secondary)
+                        .onLongPressGesture(minimumDuration: 2.0) {
+                            // Easter egg: long press 2 seconds to reveal developer mode
+                            withAnimation { developerMode = true }
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                        }
+                }
+                
+                HStack {
+                    Text("Build")
+                    Spacer()
+                    Text("1")
+                        .foregroundColor(.secondary)
+                }
+                
+                // Hidden login button (only visible after long press on version)
+                if developerMode && !instagram.isLoggedIn {
+                    Button(action: { showingLogin = true }) {
+                        HStack {
+                            Image(systemName: "link.badge.plus")
+                                .foregroundColor(.purple)
+                            Text("Connect Account")
+                        }
+                    }
+                }
+            }
+            
+            // MARK: - Everything below only visible when logged in
+            
+            if instagram.isLoggedIn {
+                Section("Account") {
                     HStack {
                         Text("Logged in as")
                         Spacer()
@@ -254,14 +287,9 @@ struct SettingsView: View {
                     Button(role: .destructive, action: { showingLogoutAlert = true }) {
                         Text("Logout")
                     }
-                } else {
-                    Text("Not logged in")
-                        .foregroundColor(.secondary)
                 }
-            }
-            
-            // Profile Picture Change
-            if instagram.isLoggedIn {
+                
+                // Profile Picture Change
                 Section("Profile Picture") {
                     VStack(spacing: 16) {
                         // Preview
@@ -303,7 +331,7 @@ struct SettingsView: View {
                                         Text("Uploading...")
                                     } else {
                                         Image(systemName: "arrow.up.circle.fill")
-                                        Text("Upload to Instagram")
+                                        Text("Upload Profile Picture")
                                     }
                                 }
                                 .frame(maxWidth: .infinity)
@@ -360,10 +388,8 @@ struct SettingsView: View {
                 } message: {
                     Text(uploadMessage ?? "")
                 }
-            }
-            
-            // Instagram Notes
-            if instagram.isLoggedIn {
+                
+                // Instagram Notes
                 Section("Note") {
                     VStack(spacing: 12) {
                         HStack {
@@ -447,10 +473,8 @@ struct SettingsView: View {
                 } message: {
                     Text(noteMessage ?? "")
                 }
-            }
-            
-            // Nueva sección Debug
-            if instagram.isLoggedIn {
+                
+                // Debug section
                 Section("Debug & Testing") {
                     Button(action: fetchLatestFollower) {
                         HStack {
@@ -480,37 +504,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            
-            Section("About") {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text("1.0.0")
-                        .foregroundColor(.secondary)
-                        .onLongPressGesture(minimumDuration: 2.0) {
-                            // Easter egg: long press 2 seconds to reveal developer mode
-                            developerMode = true
-                        }
-                }
-                
-                HStack {
-                    Text("Build")
-                    Spacer()
-                    Text("1")
-                        .foregroundColor(.secondary)
-                }
-                
-                // Hidden login button (only visible after long press on version)
-                if developerMode && !instagram.isLoggedIn {
-                    Button(action: { showingLogin = true }) {
-                        HStack {
-                            Image(systemName: "link.badge.plus")
-                                .foregroundColor(.purple)
-                            Text("Connect Account")
-                        }
-                    }
-                }
-            }
         }
         .navigationTitle("Settings")
         .alert("Logout", isPresented: $showingLogoutAlert) {
@@ -528,7 +521,7 @@ struct SettingsView: View {
                 instagram.logout()
             }
         } message: {
-            Text("Esto reseteará tu Device ID y cerrará sesión. Úsalo SOLO si Instagram te bloqueó por cambio de dispositivo. Tendrás que volver a hacer login.")
+            Text("Esto reseteará tu Device ID y cerrará sesión. Úsalo SOLO si tu cuenta fue bloqueada por cambio de dispositivo. Tendrás que volver a hacer login.")
         }
         .sheet(isPresented: $showingFollowerData) {
             FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)

@@ -38,40 +38,17 @@ struct SetDetailView: View {
                     banksTabsSection
                 }
                 
+                // Reorder / Done button (below banks)
+                reorderToggleButton
+                
                 // Photos Grid
                 photosGridSection
             }
             .padding()
         }
-        .navigationTitle(isReorderMode ? "Reorder Photos" : currentSet.name)
+        .navigationTitle(currentSet.name)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if isReorderMode {
-                    Button("Done") {
-                        withAnimation {
-                            isReorderMode = false
-                            selectedReorderIndex = nil
-                        }
-                    }
-                    .fontWeight(.semibold)
-                    .foregroundColor(.purple)
-                    .disabled(!consecutiveDuplicates.isEmpty)
-                } else {
-                    // Show reorder button if there are pending photos
-                    let hasPending = currentSet.photos.contains(where: { $0.uploadStatus == .pending || $0.uploadStatus == .error })
-                    if hasPending {
-                        Button(action: {
-                            withAnimation { isReorderMode = true }
-                            checkConsecutiveDuplicates()
-                        }) {
-                            Image(systemName: "arrow.up.arrow.down")
-                                .foregroundColor(.purple)
-                        }
-                    }
-                }
-            }
-        }
+        .toolbar { }
         .alert("Error", isPresented: .constant(showingError != nil), presenting: showingError) { _ in
             if isNetworkError {
                 Button("Retry Upload", role: .none) {
@@ -245,6 +222,56 @@ struct SetDetailView: View {
                             .cornerRadius(8)
                     }
                 }
+            }
+        }
+    }
+    
+    // MARK: - Reorder Toggle Button
+    
+    @ViewBuilder
+    private var reorderToggleButton: some View {
+        if isReorderMode {
+            Button(action: {
+                withAnimation {
+                    isReorderMode = false
+                    selectedReorderIndex = nil
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Done Reordering")
+                }
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.green)
+                .cornerRadius(8)
+            }
+            .disabled(!consecutiveDuplicates.isEmpty)
+            .opacity(consecutiveDuplicates.isEmpty ? 1.0 : 0.5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            let hasPending = currentSet.photos.contains(where: { $0.uploadStatus == .pending || $0.uploadStatus == .error })
+            if hasPending {
+                Button(action: {
+                    withAnimation { isReorderMode = true }
+                    checkConsecutiveDuplicates()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.arrow.down")
+                        Text("Reorder Photos")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.purple)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.purple.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

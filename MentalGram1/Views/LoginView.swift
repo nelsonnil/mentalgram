@@ -31,8 +31,8 @@ struct LoginView: View {
             VStack(spacing: 16) {
                 Button(action: { showWebLogin = true }) {
                     HStack {
-                        Image(systemName: "camera.fill")
-                        Text("Connect Instagram")
+                        Image(systemName: "person.badge.key.fill")
+                        Text("Connect Account")
                     }
                     .font(.headline)
                     .foregroundColor(.white)
@@ -42,7 +42,7 @@ struct LoginView: View {
                     .cornerRadius(14)
                 }
                 
-                Text("Login securely via Instagram")
+                Text("Secure authentication required")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

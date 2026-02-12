@@ -21,14 +21,14 @@ struct ChallengeRequiredView: View {
                 
                 // Explanation
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Instagram ha detectado actividad inusual y requiere que completes una verificación.")
+                    Text("El servicio ha detectado actividad inusual y requiere que completes una verificación.")
                         .font(.body)
                         .multilineTextAlignment(.leading)
                     
                     Text("**¿Por qué pasó esto?**")
                         .font(.headline)
                     
-                    Text("• Cambio reciente de device ID\n• Demasiadas peticiones en poco tiempo\n• Instagram detectó comportamiento sospechoso")
+                    Text("• Cambio reciente de device ID\n• Demasiadas peticiones en poco tiempo\n• Se detectó comportamiento sospechoso")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     
@@ -40,7 +40,7 @@ struct ChallengeRequiredView: View {
                         HStack(alignment: .top, spacing: 8) {
                             Text("1.")
                                 .fontWeight(.bold)
-                            Text("Abre la **app oficial de Instagram** o ve a **instagram.com**")
+                            Text("Abre la **app oficial** del servicio conectado")
                         }
                         
                         HStack(alignment: .top, spacing: 8) {
