@@ -162,7 +162,50 @@ class DataManager: ObservableObject {
     
     func getPhotosForBank(setId: UUID, bankId: UUID) -> [SetPhoto] {
         guard let set = sets.first(where: { $0.id == setId }) else { return [] }
-        return set.photos.filter { $0.bankId == bankId }.sorted { ($0.filename) < ($1.filename) }
+        return set.photos.filter { $0.bankId == bankId }
+    }
+    
+    // MARK: - Reorder Photos
+    
+    func reorderPhotos(setId: UUID, bankId: UUID?, fromIndex: Int, toIndex: Int) {
+        guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return }
+        
+        if let bankId = bankId {
+            // Get indices of photos in this bank within the global photos array
+            let bankPhotoIndices = sets[setIndex].photos.enumerated()
+                .filter { $0.element.bankId == bankId }
+                .map { $0.offset }
+            
+            guard fromIndex < bankPhotoIndices.count, toIndex < bankPhotoIndices.count else { return }
+            
+            let globalFrom = bankPhotoIndices[fromIndex]
+            let photo = sets[setIndex].photos.remove(at: globalFrom)
+            
+            // Recalculate target index after removal
+            let updatedBankIndices = sets[setIndex].photos.enumerated()
+                .filter { $0.element.bankId == bankId }
+                .map { $0.offset }
+            
+            if toIndex < updatedBankIndices.count {
+                let globalTo = updatedBankIndices[toIndex]
+                sets[setIndex].photos.insert(photo, at: globalTo)
+            } else {
+                // Insert at end of bank photos
+                if let lastBankIndex = updatedBankIndices.last {
+                    sets[setIndex].photos.insert(photo, at: lastBankIndex + 1)
+                } else {
+                    sets[setIndex].photos.append(photo)
+                }
+            }
+        } else {
+            // Custom set: reorder directly
+            guard fromIndex < sets[setIndex].photos.count, toIndex < sets[setIndex].photos.count else { return }
+            let photo = sets[setIndex].photos.remove(at: fromIndex)
+            sets[setIndex].photos.insert(photo, at: min(toIndex, sets[setIndex].photos.count))
+        }
+        
+        saveSets()
+        print("✅ [REORDER] Moved photo from position \(fromIndex + 1) to \(toIndex + 1)")
     }
     
     func deleteSet(id: UUID) {

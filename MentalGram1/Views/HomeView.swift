@@ -58,9 +58,22 @@ struct HomeView: View {
 struct SetsListView: View {
     @ObservedObject var dataManager = DataManager.shared
     @State private var showingCreateSet = false
+    @State private var newlyCreatedSet: PhotoSet? = nil
+    @State private var navigateToNewSet = false
     
     var body: some View {
         ZStack {
+            // Hidden NavigationLink for programmatic navigation to newly created set
+            if let newSet = newlyCreatedSet {
+                NavigationLink(
+                    destination: SetDetailView(set: newSet),
+                    isActive: $navigateToNewSet
+                ) {
+                    EmptyView()
+                }
+                .hidden()
+            }
+            
             if dataManager.sets.isEmpty {
                 VStack(spacing: 20) {
                     Image(systemName: "square.stack.3d.up.slash")
@@ -104,7 +117,13 @@ struct SetsListView: View {
             }
         }
         .sheet(isPresented: $showingCreateSet) {
-            CreateSetView(isPresented: $showingCreateSet)
+            CreateSetView(isPresented: $showingCreateSet) { createdSet in
+                // Callback when set is created: navigate to it automatically
+                newlyCreatedSet = createdSet
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    navigateToNewSet = true
+                }
+            }
         }
     }
     

@@ -1,4 +1,7 @@
 import SwiftUI
+import CryptoKit
+import UniformTypeIdentifiers
+import UniformTypeIdentifiers
 
 // MARK: - Set Detail View
 
@@ -12,8 +15,10 @@ struct SetDetailView: View {
     @State private var isPaused = false
     @State private var uploadProgress: (current: Int, total: Int) = (0, 0)
     @State private var showingError: String?
-    @State private var failedPhotoIndex: Int? = nil  // Track which photo failed for retry
-    @State private var isNetworkError = false         // Track if it's a network error (retryable)
+    @State private var failedPhotoIndex: Int? = nil
+    @State private var isNetworkError = false
+    @State private var isReorderMode = false
+    @State private var consecutiveDuplicates: Set<Int> = []
     
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
@@ -38,8 +43,32 @@ struct SetDetailView: View {
             }
             .padding()
         }
-        .navigationTitle(currentSet.name)
+        .navigationTitle(isReorderMode ? "Reorder Photos" : currentSet.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if isReorderMode {
+                    Button("Done") {
+                        withAnimation { isReorderMode = false }
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(.purple)
+                    .disabled(!consecutiveDuplicates.isEmpty)
+                } else {
+                    // Show reorder button if there are pending photos
+                    let hasPending = currentSet.photos.contains(where: { $0.uploadStatus == .pending || $0.uploadStatus == .error })
+                    if hasPending {
+                        Button(action: {
+                            withAnimation { isReorderMode = true }
+                            checkConsecutiveDuplicates()
+                        }) {
+                            Image(systemName: "arrow.up.arrow.down")
+                                .foregroundColor(.purple)
+                        }
+                    }
+                }
+            }
+        }
         .alert("Error", isPresented: .constant(showingError != nil), presenting: showingError) { _ in
             if isNetworkError {
                 Button("Retry Upload", role: .none) {
@@ -224,13 +253,91 @@ struct SetDetailView: View {
             ? currentSet.photos 
             : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[selectedBankIndex].id)
         
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 12) {
-            ForEach(Array(photosToShow.enumerated()), id: \.element.id) { index, photo in
+        if isReorderMode {
+            return AnyView(reorderableGrid(photos: photosToShow))
+        } else {
+            return AnyView(normalGrid(photos: photosToShow))
+        }
+    }
+    
+    private func normalGrid(photos: [SetPhoto]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 12) {
+            ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                 PhotoItemView(
                     photo: photo,
                     setId: currentSet.id,
-                    position: index + 1  // Posición relativa dentro del bank (1, 2, 3...)
+                    position: index + 1
                 )
+            }
+        }
+    }
+    
+    private func reorderableGrid(photos: [SetPhoto]) -> some View {
+        VStack(spacing: 12) {
+            // Warning for consecutive duplicates
+            if !consecutiveDuplicates.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text("Identical photos next to each other will trigger bot detection. Reorder to fix.")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12)
+                ],
+                spacing: 12
+            ) {
+                ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
+                    let isUploaded = photo.uploadStatus == .completed || photo.uploadStatus == .uploaded || photo.uploadStatus == .archiving
+                    let isDup = consecutiveDuplicates.contains(index)
+                    
+                    ReorderablePhotoCell(
+                        photo: photo,
+                        position: index + 1,
+                        isDuplicate: isDup,
+                        isLocked: isUploaded,
+                        onMove: { from, to in
+                            let bankId = currentSet.banks.isEmpty ? nil : currentSet.banks[selectedBankIndex].id
+                            dataManager.reorderPhotos(setId: currentSet.id, bankId: bankId, fromIndex: from, toIndex: to)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                checkConsecutiveDuplicates()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+    
+    // MARK: - Duplicate Detection
+    
+    private func checkConsecutiveDuplicates() {
+        let photosToCheck = currentSet.banks.isEmpty
+            ? currentSet.photos
+            : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[selectedBankIndex].id)
+        
+        consecutiveDuplicates.removeAll()
+        guard photosToCheck.count >= 2 else { return }
+        
+        for i in 0..<(photosToCheck.count - 1) {
+            guard let data1 = photosToCheck[i].imageData,
+                  let data2 = photosToCheck[i + 1].imageData else { continue }
+            
+            let hash1 = SHA256.hash(data: data1).compactMap { String(format: "%02x", $0) }.joined()
+            let hash2 = SHA256.hash(data: data2).compactMap { String(format: "%02x", $0) }.joined()
+            
+            if hash1 == hash2 {
+                consecutiveDuplicates.insert(i)
+                consecutiveDuplicates.insert(i + 1)
             }
         }
     }
@@ -917,6 +1024,145 @@ struct PhotoItemView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Reorderable Photo Cell (for drag & drop mode)
+
+struct ReorderablePhotoCell: View {
+    let photo: SetPhoto
+    let position: Int
+    let isDuplicate: Bool
+    let isLocked: Bool  // Already uploaded - can't move
+    let onMove: (Int, Int) -> Void
+    
+    @State private var isDragging = false
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                if let imageData = photo.imageData, let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 110, height: 110)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isDuplicate ? Color.red : (isLocked ? Color.gray.opacity(0.5) : Color.purple.opacity(0.3)), lineWidth: isDuplicate ? 3 : 2)
+                        )
+                        .opacity(isLocked ? 0.4 : 1.0)
+                        .overlay(
+                            isLocked ?
+                                Color.black.opacity(0.3).cornerRadius(12)
+                                : nil
+                        )
+                        .shadow(color: isDragging ? Color.purple.opacity(0.5) : Color.clear, radius: 10)
+                }
+                
+                // Grip icon (only for movable photos)
+                if !isLocked {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.title3)
+                        .foregroundColor(.white.opacity(0.7))
+                        .shadow(color: .black.opacity(0.5), radius: 2)
+                }
+                
+                // Lock icon for uploaded photos
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.title3)
+                        .foregroundColor(.white.opacity(0.8))
+                        .shadow(color: .black.opacity(0.5), radius: 2)
+                }
+                
+                // Position badge
+                ZStack {
+                    Circle()
+                        .fill(isDuplicate ? Color.red : (isLocked ? Color.gray : Color.purple))
+                        .frame(width: 34, height: 34)
+                    
+                    Text("\(position)")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .offset(x: -5, y: -5)
+                
+                // Warning icon for duplicates
+                if isDuplicate {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                        .shadow(color: .red, radius: 2)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .offset(x: -5, y: 32)
+                }
+            }
+            .frame(width: 110, height: 110)
+            .contentShape(Rectangle())
+            .onDrag {
+                guard !isLocked else { return NSItemProvider() }
+                isDragging = true
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                return NSItemProvider(object: String(position - 1) as NSString)
+            }
+            .onDrop(of: [.text], delegate: SetPhotoDropDelegate(
+                position: position - 1,
+                isLocked: isLocked,
+                onMove: { from, to in
+                    onMove(from, to)
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                },
+                isDragging: $isDragging
+            ))
+            
+            // Symbol label below photo
+            Text(String(photo.symbol.prefix(3)))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+// MARK: - Drop Delegate for SetDetailView
+
+struct SetPhotoDropDelegate: DropDelegate {
+    let position: Int
+    let isLocked: Bool
+    let onMove: (Int, Int) -> Void
+    @Binding var isDragging: Bool
+    
+    func performDrop(info: DropInfo) -> Bool {
+        isDragging = false
+        return true
+    }
+    
+    func dropEntered(info: DropInfo) {
+        guard !isLocked else { return }
+        guard let itemProvider = info.itemProviders(for: [.text]).first else { return }
+        
+        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
+            guard let data = data as? Data,
+                  let fromString = String(data: data, encoding: .utf8),
+                  let from = Int(fromString),
+                  from != position else { return }
+            
+            DispatchQueue.main.async {
+                onMove(from, position)
+            }
+        }
+    }
+    
+    func dropExited(info: DropInfo) {
+        isDragging = false
+    }
+    
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: isLocked ? .forbidden : .move)
     }
 }
 

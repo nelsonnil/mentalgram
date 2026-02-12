@@ -1,28 +1,26 @@
 import SwiftUI
 import PhotosUI
-import CryptoKit
 
 // MARK: - Create Set View
 
 struct CreateSetView: View {
     @Binding var isPresented: Bool
     @ObservedObject var dataManager = DataManager.shared
+    var onSetCreated: ((PhotoSet) -> Void)? = nil  // Callback when set is created
     
     @State private var currentStep = 1
     @State private var setName = ""
     @State private var selectedType: SetType = .custom
     @State private var bankCount = 5
     @State private var selectedItems: [PhotosPickerItem] = []
-    @State private var loadedPhotos: [(symbol: String, filename: String, imageData: Data)] = []
     @State private var isLoadingPhotos = false
-    @State private var consecutiveDuplicates: Set<Int> = [] // Indices of photos that have consecutive duplicates
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Progress indicator
+                // Progress indicator (2 steps now)
                 HStack(spacing: 8) {
-                    ForEach(1...3, id: \.self) { step in
+                    ForEach(1...2, id: \.self) { step in
                         Circle()
                             .fill(step <= currentStep ? Color.purple : Color.gray.opacity(0.3))
                             .frame(width: 8, height: 8)
@@ -31,35 +29,25 @@ struct CreateSetView: View {
                 .padding()
                 
                 TabView(selection: $currentStep) {
-                    // Step 1: Type Selection
-                    step1TypeSelection
-                        .tag(1)
-                    
-                    // Step 2: Configuration
-                    step2Configuration
-                        .tag(2)
-                    
-                    // Step 3: Photo Selection & Reorder
-                    step3PhotoSelection
-                        .tag(3)
+                    step1TypeSelection.tag(1)
+                    step2ConfigurationWithPicker.tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
             .navigationTitle("Create Set")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(currentStep == 3 && !loadedPhotos.isEmpty)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    // Show Cancel only when not in Step 3 with photos (toolbar handles Back then)
-                    if !(currentStep == 3 && !loadedPhotos.isEmpty) {
-                        Button("Cancel") {
-                            isPresented = false
-                        }
+                    Button("Cancel") {
+                        isPresented = false
                     }
                 }
             }
         }
         .navigationViewStyle(.stack)
+        .onChange(of: selectedItems) { newItems in
+            loadPhotosFromPicker(items: newItems)
+        }
     }
     
     // MARK: - Step 1: Type Selection
@@ -123,16 +111,15 @@ struct CreateSetView: View {
         }
     }
     
-    // MARK: - Step 2: Configuration
+    // MARK: - Step 2: Configuration + Photo Picker (Combined)
     
-    private var step2Configuration: some View {
+    private var step2ConfigurationWithPicker: some View {
         VStack(spacing: 24) {
-            Text("Configure Set")
+            Text("Configure & Select")
                 .font(.title2.bold())
                 .padding(.top)
             
             VStack(alignment: .leading, spacing: 20) {
-                // Set Name
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Set Name")
                         .font(.headline)
@@ -140,7 +127,6 @@ struct CreateSetView: View {
                         .textFieldStyle(.roundedBorder)
                 }
                 
-                // Bank Count (for word/number types)
                 if selectedType != .custom {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Number of Banks")
@@ -156,102 +142,63 @@ struct CreateSetView: View {
                             .foregroundColor(.secondary)
                     }
                 }
-            }
-            .padding()
-            
-            Spacer()
-            
-            HStack(spacing: 12) {
-                Button(action: { withAnimation { currentStep = 1 } }) {
-                    Text("Back")
-                        .font(.headline)
-                        .foregroundColor(.purple)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(12)
-                }
                 
-                Button(action: { withAnimation { currentStep = 3 } }) {
-                    Text("Continue")
+                Divider()
+                    .padding(.vertical, 8)
+                
+                // Photo Picker (integrated)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Select Photos")
                         .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
+                    
+                    PhotosPicker(
+                        selection: $selectedItems,
+                        maxSelectionCount: 100,
+                        matching: .images
+                    ) {
+                        HStack {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.title2)
+                                .foregroundColor(.purple)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Tap to select photos")
+                                    .font(.subheadline.bold())
+                                Text(photoPickerPrompt)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                        }
                         .padding()
-                        .background(setName.isEmpty ? Color.gray : Color.purple)
+                        .background(Color.purple.opacity(0.1))
                         .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.purple, lineWidth: 1)
+                        )
+                    }
                 }
-                .disabled(setName.isEmpty)
             }
             .padding()
-        }
-    }
-    
-    // MARK: - Step 3: Photo Selection & Reorder
-    
-    private var step3PhotoSelection: some View {
-        Group {
-            if loadedPhotos.isEmpty {
-                step3EmptyState
-            } else {
-                step3PhotoGrid
-            }
-        }
-        .toolbar {
-            step3ToolbarContent
-        }
-        .onChange(of: selectedItems) { newItems in
-            loadPhotosFromPicker(items: newItems)
-        }
-        .onChange(of: loadedPhotos.count) { count in
-            if count > 0 {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
-        }
-        .simultaneousGesture(
-            // Block swipe-back gesture when photos are loaded
-            loadedPhotos.isEmpty ? nil : DragGesture().onChanged { _ in }
-        )
-    }
-    
-    private var step3EmptyState: some View {
-        VStack(spacing: 20) {
-            Text("Select Photos")
-                .font(.title2.bold())
-                .padding(.top)
-            
-            PhotosPicker(
-                selection: $selectedItems,
-                maxSelectionCount: 100,
-                matching: .images
-            ) {
-                VStack(spacing: 12) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 48))
-                        .foregroundColor(.purple)
-                    
-                    Text("Tap to select photos")
-                        .font(.headline)
-                    
-                    Text(photoPickerPrompt)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 200)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(12)
-            }
-            .padding(.horizontal)
             
             if isLoadingPhotos {
-                ProgressView("Loading photos...")
-                    .padding()
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text("Creating set and loading photos...")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
             }
             
             Spacer()
             
-            Button(action: { withAnimation { currentStep = 2 } }) {
+            Button(action: { withAnimation { currentStep = 1 } }) {
                 Text("Back")
                     .font(.headline)
                     .foregroundColor(.purple)
@@ -261,6 +208,7 @@ struct CreateSetView: View {
                     .cornerRadius(12)
             }
             .padding()
+            .disabled(isLoadingPhotos)
         }
     }
     
@@ -272,363 +220,51 @@ struct CreateSetView: View {
         }
     }
     
-    private var step3PhotoGrid: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 12) {
-                    HStack {
-                        Text("Drag to reorder (\(loadedPhotos.count) photos)")
-                            .font(.headline)
-                        
-                        Spacer()
-                        
-                        PhotosPicker(
-                            selection: $selectedItems,
-                            maxSelectionCount: 100,
-                            matching: .images
-                        ) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.purple)
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // Upload order info
-                    if selectedType != .custom {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Upload Order:")
-                                .font(.caption.bold())
-                                .foregroundColor(.secondary)
-                            Text("Bank 1: Photos 1-\(loadedPhotos.count)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            ForEach(2...bankCount, id: \.self) { bank in
-                                let startIndex = (bank - 1) * loadedPhotos.count + 1
-                                let endIndex = bank * loadedPhotos.count
-                                Text("Bank \(bank): Photos \(startIndex)-\(endIndex)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(8)
-                        .padding(.horizontal)
-                    }
-                    
-                    // Reorderable grid
-                    ScrollView {
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.flexible(), spacing: 12),
-                                GridItem(.flexible(), spacing: 12),
-                                GridItem(.flexible(), spacing: 12)
-                            ],
-                            spacing: 12
-                        ) {
-                            ForEach(loadedPhotos.indices, id: \.self) { index in
-                                DraggablePhotoCell(
-                                    photo: loadedPhotos[index],
-                                    position: index + 1,
-                                    isDuplicate: consecutiveDuplicates.contains(index),
-                                    onMove: { from, to in
-                                        movePhoto(from: from, to: to)
-                                    },
-                                    onDelete: {
-                                        deletePhoto(at: index)
-                                    }
-                                )
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                    .gesture(
-                        DragGesture()
-                            .onChanged { _ in }
-                    )
-                    
-                    // Warning for consecutive duplicates
-                    if !consecutiveDuplicates.isEmpty {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                            Text("Identical photos next to each other will trigger bot detection. Reorder or remove duplicates.")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                        .padding()
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(8)
-                        .padding(.horizontal)
-                        .padding(.bottom, 8)
-                }
-            }
-        }
-    }
-    
-    @ToolbarContentBuilder
-    private var step3ToolbarContent: some ToolbarContent {
-        if currentStep == 3 && !loadedPhotos.isEmpty {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { withAnimation { currentStep = 2 } }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .foregroundColor(.purple)
-                }
-            }
-            
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Create") {
-                    createSet()
-                }
-                .fontWeight(.semibold)
-                .foregroundColor(consecutiveDuplicates.isEmpty ? .green : .gray)
-                .disabled(!consecutiveDuplicates.isEmpty)
-            }
-        }
-    }
-    
-    // MARK: - Photo Reordering
-    
-    private func movePhoto(from: Int, to: Int) {
-        withAnimation {
-            loadedPhotos.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
-            checkConsecutiveDuplicates()
-        }
-    }
-    
-    private func deletePhoto(at index: Int) {
-        withAnimation {
-            loadedPhotos.remove(at: index)
-            if loadedPhotos.isEmpty {
-                selectedItems = []
-            }
-            checkConsecutiveDuplicates()
-        }
-    }
-    
-    // MARK: - Duplicate Detection
-    
-    private func hashImageData(_ data: Data) -> String {
-        let hash = SHA256.hash(data: data)
-        return hash.compactMap { String(format: "%02x", $0) }.joined()
-    }
-    
-    private func checkConsecutiveDuplicates() {
-        consecutiveDuplicates.removeAll()
-        
-        guard loadedPhotos.count >= 2 else { return }
-        
-        for i in 0..<(loadedPhotos.count - 1) {
-            let currentHash = hashImageData(loadedPhotos[i].imageData)
-            let nextHash = hashImageData(loadedPhotos[i + 1].imageData)
-            
-            if currentHash == nextHash {
-                consecutiveDuplicates.insert(i)
-                consecutiveDuplicates.insert(i + 1)
-                print("⚠️ [DUPLICATE] Photos at positions \(i + 1) and \(i + 2) are identical")
-            }
-        }
-    }
-    
-    // MARK: - Load Photos from Picker
+    // MARK: - Load Photos from Picker & Auto-Create Set
     
     private func loadPhotosFromPicker(items: [PhotosPickerItem]) {
+        guard !items.isEmpty, !setName.isEmpty else { return }
+        
         isLoadingPhotos = true
         
         Task {
-            var newPhotos: [(symbol: String, filename: String, imageData: Data)] = []
+            var loadedPhotos: [(symbol: String, filename: String, imageData: Data)] = []
             
             for item in items {
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data),
                    let jpegData = image.jpegData(compressionQuality: 0.8) {
                     
-                    // Extract filename (symbol) - remove extension
                     let filename = item.itemIdentifier ?? "photo_\(UUID().uuidString)"
                     let symbol = filename.replacingOccurrences(of: ".jpg", with: "")
                         .replacingOccurrences(of: ".jpeg", with: "")
                         .replacingOccurrences(of: ".png", with: "")
                         .replacingOccurrences(of: ".heic", with: "")
                     
-                    newPhotos.append((symbol: symbol, filename: filename, imageData: jpegData))
+                    loadedPhotos.append((symbol: symbol, filename: filename, imageData: jpegData))
                 }
             }
             
-            await MainActor.run {
-                // Append new photos (don't replace if user is adding more)
-                if loadedPhotos.isEmpty {
-                    loadedPhotos = newPhotos
-                } else {
-                    loadedPhotos.append(contentsOf: newPhotos)
+            // AUTO-CREATE SET when photos are loaded
+            if !loadedPhotos.isEmpty {
+                let newSet = dataManager.createSet(
+                    name: setName,
+                    type: selectedType,
+                    bankCount: selectedType == .custom ? 1 : bankCount,
+                    photos: loadedPhotos
+                )
+                
+                await MainActor.run {
+                    isLoadingPhotos = false
+                    // Notify parent and close
+                    onSetCreated?(newSet)
+                    isPresented = false
                 }
-                isLoadingPhotos = false
-                checkConsecutiveDuplicates()
+            } else {
+                await MainActor.run {
+                    isLoadingPhotos = false
+                }
             }
         }
-    }
-    
-    // MARK: - Create Set
-    
-    private func createSet() {
-        let newSet = dataManager.createSet(
-            name: setName,
-            type: selectedType,
-            bankCount: selectedType == .custom ? 1 : bankCount,
-            photos: loadedPhotos
-        )
-        
-        isPresented = false
-    }
-}
-
-// MARK: - Draggable Photo Cell
-
-struct DraggablePhotoCell: View {
-    let photo: (symbol: String, filename: String, imageData: Data)
-    let position: Int
-    let isDuplicate: Bool
-    let onMove: (Int, Int) -> Void
-    let onDelete: () -> Void
-    
-    @State private var isDragging = false
-    
-    var body: some View {
-        VStack(spacing: 4) {
-            // Photo with overlays
-            ZStack {
-                // Photo - limpia y más grande
-                if let uiImage = UIImage(data: photo.imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 110, height: 110)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(isDuplicate ? Color.red : Color.purple.opacity(0.3), lineWidth: isDuplicate ? 3 : 2)
-                        )
-                        .shadow(color: isDragging ? Color.purple.opacity(0.5) : Color.clear, radius: 10)
-                }
-                
-                // Grip icon (centro, sutil) - indica que es draggable
-                Image(systemName: "line.3.horizontal")
-                    .font(.title3)
-                    .foregroundColor(.white.opacity(0.6))
-                    .shadow(color: .black.opacity(0.3), radius: 2)
-                
-                // Position badge (grande, top-left) - RED si duplicate
-                ZStack {
-                    Circle()
-                        .fill(isDuplicate ? Color.red : Color.purple)
-                        .frame(width: 34, height: 34)
-                    
-                    Text("\(position)")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .offset(x: -5, y: -5)
-                
-                // Warning icon para duplicates (debajo del número)
-                if isDuplicate {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .offset(x: -5, y: 32)
-                }
-                
-                // Delete button (bottom-right)
-                Button(action: onDelete) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.red)
-                        .background(Circle().fill(Color.white).frame(width: 18, height: 18))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .offset(x: 6, y: 6)
-            }
-            .frame(width: 110, height: 110)
-            .contentShape(Rectangle())
-            .onDrag {
-                isDragging = true
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
-                return NSItemProvider(object: String(position - 1) as NSString)
-            }
-            .onDrop(of: [.text], delegate: PhotoDropDelegate(
-                position: position - 1,
-                onMove: { from, to in
-                    onMove(from, to)
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                },
-                isDragging: $isDragging
-            ))
-            
-            // Symbol label DEBAJO de la foto (primeras 3 letras)
-            Text(String(photo.symbol.prefix(3)))
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-        }
-    }
-}
-
-// MARK: - Drop Delegate
-
-struct PhotoDropDelegate: DropDelegate {
-    let position: Int
-    let onMove: (Int, Int) -> Void
-    @Binding var isDragging: Bool
-    
-    func performDrop(info: DropInfo) -> Bool {
-        isDragging = false
-        return true
-    }
-    
-    func dropEntered(info: DropInfo) {
-        guard let itemProvider = info.itemProviders(for: [.text]).first else {
-            print("⚠️ [DROP] No item provider found")
-            return
-        }
-        
-        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
-            if let error = error {
-                print("❌ [DROP] Error loading item: \(error)")
-                return
-            }
-            
-            guard let data = data as? Data,
-                  let fromString = String(data: data, encoding: .utf8),
-                  let from = Int(fromString) else {
-                print("⚠️ [DROP] Could not parse position")
-                return
-            }
-            
-            guard from != position else {
-                print("⚠️ [DROP] Same position, ignoring")
-                return
-            }
-            
-            print("✅ [DROP] Moving from \(from) to \(position)")
-            
-            DispatchQueue.main.async {
-                onMove(from, position)
-            }
-        }
-    }
-    
-    func dropExited(info: DropInfo) {
-        isDragging = false
-    }
-    
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        return DropProposal(operation: .move)
     }
 }
