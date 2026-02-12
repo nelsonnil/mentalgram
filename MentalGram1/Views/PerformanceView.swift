@@ -75,7 +75,15 @@ struct PerformanceView: View {
         .navigationBarHidden(true)
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .onAppear {
+            // CRITICAL: Keep screen on during performance (magic trick needs screen always on)
+            UIApplication.shared.isIdleTimerDisabled = true
+            print("🔆 [SCREEN] Screen sleep DISABLED (Performance mode)")
             checkAndLoadProfile()
+        }
+        .onDisappear {
+            // Re-enable sleep when leaving Performance
+            UIApplication.shared.isIdleTimerDisabled = false
+            print("🌙 [SCREEN] Screen sleep RE-ENABLED")
         }
     }
     

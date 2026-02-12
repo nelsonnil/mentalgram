@@ -244,10 +244,18 @@ struct SetDetailView: View {
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
         
+        // CRITICAL: Keep screen awake during upload (prevent interruptions)
+        await MainActor.run {
+            UIApplication.shared.isIdleTimerDisabled = true
+            print("🔆 [SCREEN] Screen sleep DISABLED (Upload mode)")
+        }
+        
         // CRITICAL: Check if lockdown is active before starting
         if instagram.isLocked {
             print("🚨 [UPLOAD] Cannot start - lockdown is active")
             await MainActor.run {
+                UIApplication.shared.isIdleTimerDisabled = false
+                print("🌙 [SCREEN] Screen sleep RE-ENABLED")
                 showingError = "⚠️ Instagram lockdown active. Cannot upload. Wait for lockdown to clear."
             }
             return
@@ -262,6 +270,8 @@ struct SetDetailView: View {
         } catch {
             print("⚠️ [UPLOAD] Network stability check failed: \(error)")
             await MainActor.run {
+                UIApplication.shared.isIdleTimerDisabled = false
+                print("🌙 [SCREEN] Screen sleep RE-ENABLED")
                 isUploading = false
                 dataManager.updateSetStatus(id: currentSet.id, status: .error)
                 showingError = "Network error starting upload: \(error.localizedDescription)"
@@ -279,6 +289,8 @@ struct SetDetailView: View {
             if isPaused {
                 print("⏸️ [UPLOAD] Paused by user")
                 await MainActor.run {
+                    UIApplication.shared.isIdleTimerDisabled = false
+                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (paused)")
                     dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                     isUploading = false
                 }
@@ -289,6 +301,8 @@ struct SetDetailView: View {
             if instagram.isLocked {
                 print("🚨 [UPLOAD] Lockdown is active - STOPPING upload")
                 await MainActor.run {
+                    UIApplication.shared.isIdleTimerDisabled = false
+                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (lockdown)")
                     dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                     isUploading = false
                     showingError = "⚠️ Instagram lockdown active. Upload paused for safety. Wait for lockdown to clear before resuming."
@@ -336,6 +350,8 @@ struct SetDetailView: View {
                     if isPaused {
                         print("⏸️ [UPLOAD] Paused by user during wait")
                         await MainActor.run {
+                            UIApplication.shared.isIdleTimerDisabled = false
+                            print("🌙 [SCREEN] Screen sleep RE-ENABLED (paused)")
                             dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                             isUploading = false
                         }
@@ -382,6 +398,8 @@ struct SetDetailView: View {
                             if isPaused {
                                 print("⏸️ [UPLOAD] Paused by user during delay")
                                 await MainActor.run {
+                                    UIApplication.shared.isIdleTimerDisabled = false
+                                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (paused)")
                                     dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                                     isUploading = false
                                 }
@@ -411,6 +429,8 @@ struct SetDetailView: View {
                 dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
                 
                 await MainActor.run {
+                    UIApplication.shared.isIdleTimerDisabled = false
+                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (upload error)")
                     if isBotError {
                         showingError = "⚠️ Instagram flagged activity at \(photoInfo).\n\nWAIT at least 10 minutes before retrying. Do NOT open Instagram app during this time."
                     } else {
@@ -425,6 +445,10 @@ struct SetDetailView: View {
         }
         
         print("\n✅ [UPLOAD ALL] All photos uploaded and archived!")
+        await MainActor.run {
+            UIApplication.shared.isIdleTimerDisabled = false
+            print("🌙 [SCREEN] Screen sleep RE-ENABLED (upload complete)")
+        }
         dataManager.updateSetStatus(id: currentSet.id, status: .completed)
         isUploading = false
     }
