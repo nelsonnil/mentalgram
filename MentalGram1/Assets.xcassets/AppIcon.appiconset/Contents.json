@@ -1,19 +1,19 @@
 {
   "images" : [
     {
-      "filename" : "icon_120x120.png",
+      "filename" : "vault120.png",
       "idiom" : "iphone",
       "scale" : "2x",
       "size" : "60x60"
     },
     {
-      "filename" : "icon_180x180.png",
+      "filename" : "vault180.png",
       "idiom" : "iphone",
       "scale" : "3x",
       "size" : "60x60"
     },
     {
-      "filename" : "icon_1024x1024.png",
+      "filename" : "vault1024.png",
       "idiom" : "ios-marketing",
       "scale" : "1x",
       "size" : "1024x1024"
