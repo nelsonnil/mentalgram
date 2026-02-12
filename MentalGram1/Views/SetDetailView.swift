@@ -461,11 +461,11 @@ struct SetDetailView: View {
                     uploadProgress.current = index + 1
                     
                     // ANTI-BOT: Delay before next photo
-                    // Current: 2-4 min (moderate risk, faster uploads)
+                    // Current: 1.5-3 min (aggressive, faster uploads)
                     // Conservative: 3-6 min (lower risk, safer for new accounts)
-                    // Aggressive: 1.5-3 min (higher risk, only for established accounts)
+                    // Moderate: 2-4 min (balance between speed and safety)
                     if relativeIndex < photosToUpload.count - 1 {
-                        let delaySeconds = Double.random(in: 120...240) // 2-4 min (moderate)
+                        let delaySeconds = Double.random(in: 90...180) // 1.5-3 min (aggressive)
                         print("   Waiting \(String(format: "%.0f", delaySeconds))s before next photo...")
                         
                         // Split sleep into 1-second chunks to check pause more frequently
