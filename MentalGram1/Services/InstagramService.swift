@@ -26,6 +26,7 @@ class InstagramService: ObservableObject {
     private var lastConnectionType: String = "unknown"
     private var lastNetworkChangeTime: Date?
     @Published var isNetworkStabilizing: Bool = false
+    @Published var networkChangedDuringUpload: Bool = false // Alert for active uploads
     private let networkStabilizationDelay: TimeInterval = 4.0 // seconds
     
     private let baseURL = "https://i.instagram.com/api/v1"
@@ -119,9 +120,10 @@ class InstagramService: ObservableObject {
                 // Detect network change (WiFi → Cellular, WiFi A → WiFi B, etc.)
                 if self.lastConnectionType != "unknown" && self.lastConnectionType != newConnectionType && newConnected {
                     print("🔄 [NETWORK] Connection changed: \(self.lastConnectionType) → \(newConnectionType)")
-                    LogManager.shared.network("Connection changed: \(self.lastConnectionType) → \(newConnectionType)")
+                    LogManager.shared.warning("Network changed during session: \(self.lastConnectionType) → \(newConnectionType)", category: .network)
                     self.lastNetworkChangeTime = Date()
                     self.isNetworkStabilizing = true
+                    self.networkChangedDuringUpload = true  // Alert active uploads
                     
                     // Auto-disable stabilizing after delay
                     Task { @MainActor in
@@ -1645,9 +1647,13 @@ class InstagramService: ObservableObject {
         let validImageData = adjustImageAspectRatio(imageData: imageData)
         print("✅ [UPLOAD] Image aspect ratio validated/adjusted")
         
+        // COMPRESSION: Compress if > 500KB for fast upload
+        let compressedImageData = compressImageIfNeeded(imageData: validImageData, photoIndex: photoIndex)
+        print("✅ [UPLOAD] Image optimized for upload")
+        
         // ANTI-BOT: Detect duplicate image (prevent uploading same photo twice)
         // EXCEPTION: Word Reveal and Number Reveal sets need to upload duplicate letters/numbers
-        let finalHash = hashImageData(validImageData)
+        let finalHash = hashImageData(compressedImageData)
         if !allowDuplicates {
             if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
                lastHash == finalHash {
@@ -1706,15 +1712,15 @@ class InstagramService: ObservableObject {
         
         // Upload-specific headers (matching instagrapi exactly)
         uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        uploadRequest.setValue(String(validImageData.count), forHTTPHeaderField: "Content-Length")
+        uploadRequest.setValue(String(compressedImageData.count), forHTTPHeaderField: "Content-Length")
         uploadRequest.setValue(ruploadParamsString, forHTTPHeaderField: "X-Instagram-Rupload-Params")
         uploadRequest.setValue(waterfallId, forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
         uploadRequest.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
         uploadRequest.setValue(uploadName, forHTTPHeaderField: "X-Entity-Name")
-        uploadRequest.setValue(String(validImageData.count), forHTTPHeaderField: "X-Entity-Length")
+        uploadRequest.setValue(String(compressedImageData.count), forHTTPHeaderField: "X-Entity-Length")
         uploadRequest.setValue("0", forHTTPHeaderField: "Offset")
         
-        uploadRequest.httpBody = validImageData
+        uploadRequest.httpBody = compressedImageData
         
         print("   Sending image bytes to Instagram...")
         let (uploadData, uploadResponse) = try await postSession.data(for: uploadRequest)
@@ -1801,8 +1807,8 @@ class InstagramService: ObservableObject {
         return nil
     }
     
-    /// Check if photo upload is on cooldown
-    private func isPhotoUploadOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
+    /// Check if photo upload is on cooldown (PUBLIC for SetDetailView)
+    func isPhotoUploadOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
         guard let cooldownUntil = UserDefaults.standard.object(forKey: "photo_upload_cooldown_until") as? Date else {
             return (false, 0)
         }
@@ -2334,6 +2340,94 @@ class InstagramService: ObservableObject {
         
         print("✅ [ASPECT] Final size: \(adjustedData.count / 1024)KB")
         return adjustedData
+    }
+    
+    // MARK: - Image Compression
+    
+    /// Compress image if needed for fast upload
+    /// Target: MAX 500KB, Quality 0.82 (82%)
+    /// Instagram compresses to 1080px anyway, so we optimize before upload
+    private func compressImageIfNeeded(imageData: Data, photoIndex: Int?) -> Data {
+        let sizeKB = imageData.count / 1024
+        let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
+        
+        print("📦 [COMPRESS] \(photoDesc) original size: \(sizeKB)KB")
+        
+        // Already small enough
+        if imageData.count <= 500_000 { // 500KB
+            print("✅ [COMPRESS] Already optimized (<500KB), no compression needed")
+            LogManager.shared.info("\(photoDesc): \(sizeKB)KB (no compression needed)", category: .upload)
+            return imageData
+        }
+        
+        guard let image = UIImage(data: imageData) else {
+            print("❌ [COMPRESS] Failed to create UIImage")
+            return imageData
+        }
+        
+        let originalSize = image.size
+        print("📐 [COMPRESS] Original dimensions: \(Int(originalSize.width))x\(Int(originalSize.height))")
+        
+        // Strategy 1: If > 2MB, resize to max 1080px (Instagram's limit) + compress
+        if imageData.count > 2_000_000 { // 2MB
+            print("🔧 [COMPRESS] Large image (>2MB), resizing to 1080px + compressing...")
+            
+            let maxDimension: CGFloat = 1080
+            var newSize = originalSize
+            
+            if originalSize.width > maxDimension || originalSize.height > maxDimension {
+                let ratio = min(maxDimension / originalSize.width, maxDimension / originalSize.height)
+                newSize = CGSize(width: originalSize.width * ratio, height: originalSize.height * ratio)
+            }
+            
+            // Resize
+            UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+            guard let resizedImage = UIGraphicsGetImageFromCurrentImageContext() else {
+                UIGraphicsEndImageContext()
+                print("❌ [COMPRESS] Resize failed, trying compression only")
+                // Fall through to compression-only strategy
+                guard let compressed = image.jpegData(compressionQuality: 0.82) else {
+                    return imageData
+                }
+                let finalSizeKB = compressed.count / 1024
+                print("✅ [COMPRESS] Compressed to \(finalSizeKB)KB (quality 0.82)")
+                LogManager.shared.info("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (compressed)", category: .upload)
+                return compressed
+            }
+            UIGraphicsEndImageContext()
+            
+            // Compress resized image
+            guard let finalData = resizedImage.jpegData(compressionQuality: 0.82) else {
+                print("❌ [COMPRESS] Failed to compress resized image")
+                return imageData
+            }
+            
+            let finalSizeKB = finalData.count / 1024
+            print("✅ [COMPRESS] Resized to \(Int(newSize.width))x\(Int(newSize.height)) + compressed")
+            print("✅ [COMPRESS] Final size: \(finalSizeKB)KB (from \(sizeKB)KB, saved \(sizeKB - finalSizeKB)KB)")
+            LogManager.shared.success("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (resized + compressed, -\((100 - (finalSizeKB * 100 / sizeKB)))%)", category: .upload)
+            return finalData
+        }
+        
+        // Strategy 2: 500KB-2MB → Just compress with 0.82 quality
+        print("🔧 [COMPRESS] Compressing with quality 0.82...")
+        guard let compressedData = image.jpegData(compressionQuality: 0.82) else {
+            print("❌ [COMPRESS] Compression failed, using original")
+            return imageData
+        }
+        
+        let finalSizeKB = compressedData.count / 1024
+        
+        // If compression didn't help much, use original
+        if compressedData.count >= imageData.count {
+            print("⚠️ [COMPRESS] Compression didn't reduce size, using original")
+            return imageData
+        }
+        
+        print("✅ [COMPRESS] Compressed to \(finalSizeKB)KB (from \(sizeKB)KB, saved \(sizeKB - finalSizeKB)KB)")
+        LogManager.shared.success("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (compressed, -\((100 - (finalSizeKB * 100 / sizeKB)))%)", category: .upload)
+        return compressedData
     }
 }
 

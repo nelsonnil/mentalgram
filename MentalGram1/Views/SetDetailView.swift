@@ -24,6 +24,8 @@ struct SetDetailView: View {
     @State private var isReorderMode = false
     @State private var consecutiveDuplicates: Set<Int> = []
     @State private var selectedReorderIndex: Int? = nil  // Tap-to-swap: first selected photo
+    @State private var cooldownRetryDisabledUntil: Date? = nil  // Disable retry until cooldown expires
+    @State private var cooldownTimer: Timer? = nil  // Update UI every second
     
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
@@ -113,9 +115,25 @@ struct SetDetailView: View {
             Text(error)
         }
         .onDisappear {
-            // Cleanup timer if view disappears
+            // Cleanup timers if view disappears
             botCountdownTimer?.invalidate()
             botCountdownTimer = nil
+            cooldownTimer?.invalidate()
+            cooldownTimer = nil
+        }
+        .onChange(of: instagram.networkChangedDuringUpload) { changed in
+            // Network changed during active upload → pause and warn
+            if changed && isUploading {
+                print("⚠️ [UPLOAD] Network changed during upload - PAUSING")
+                LogManager.shared.warning("Network changed during active upload - pausing for safety", category: .network)
+                isPaused = true
+                isUploading = false
+                dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                UIApplication.shared.isIdleTimerDisabled = false
+                showingError = "⚠️ Network Changed\n\nYour connection changed (e.g., WiFi → Cellular).\n\nThis may cause session errors. Check your connection and tap 'Resume Upload' to continue."
+                // Reset flag
+                instagram.networkChangedDuringUpload = false
+            }
         }
     }
     
@@ -401,17 +419,34 @@ struct SetDetailView: View {
                     .foregroundColor(.secondary)
             }
             
+            // Check if cooldown is active
+            let isCooldownActive = cooldownRetryDisabledUntil != nil && Date() < cooldownRetryDisabledUntil!
+            let cooldownRemaining = isCooldownActive ? Int(cooldownRetryDisabledUntil!.timeIntervalSinceNow) : 0
+            let cooldownMins = cooldownRemaining / 60
+            let cooldownSecs = cooldownRemaining % 60
+            
             Button(action: {
                 Task { await retryFromFailedPhoto() }
             }) {
-                Label("Retry Upload", systemImage: "arrow.clockwise")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(12)
+                if isCooldownActive {
+                    Label("Wait \(cooldownMins):\(String(format: "%02d", cooldownSecs))", systemImage: "clock")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray)
+                        .cornerRadius(12)
+                } else {
+                    Label("Retry Upload", systemImage: "arrow.clockwise")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(12)
+                }
             }
+            .disabled(isCooldownActive)
         }
         .padding()
         .background(Color(uiColor: .systemGray6))
@@ -740,6 +775,20 @@ struct SetDetailView: View {
             return
         }
         
+        // CRITICAL: Check GLOBAL cooldown before starting (prevent switching sets to bypass cooldown)
+        let (onCooldown, remainingSeconds) = instagram.isPhotoUploadOnCooldown()
+        if onCooldown {
+            let minutes = remainingSeconds / 60
+            let seconds = remainingSeconds % 60
+            print("⏰ [UPLOAD] Global cooldown active: \(minutes)m \(seconds)s remaining")
+            await MainActor.run {
+                UIApplication.shared.isIdleTimerDisabled = false
+                print("🌙 [SCREEN] Screen sleep RE-ENABLED")
+                showingError = "⏰ Please wait \(minutes)m \(seconds)s before uploading.\n\nYou recently uploaded a photo. Instagram requires waiting between uploads to avoid bot detection."
+            }
+            return
+        }
+        
         isUploading = true
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
         
@@ -909,6 +958,11 @@ struct SetDetailView: View {
                 // Classify error type for proper handling
                 let errorDescription = error.localizedDescription.lowercased()
                 
+                // 0. SESSION EXPIRED (most critical - requires re-login)
+                let isSessionExpired = errorDescription.contains("session expired") ||
+                                       errorDescription.contains("session invalid") ||
+                                       errorDescription.contains("please login again")
+                
                 // 1. BOT DETECTION (most critical)
                 let isBotError = errorDescription.contains("challenge") || 
                                  errorDescription.contains("spam") || 
@@ -923,9 +977,26 @@ struct SetDetailView: View {
                                    errorDescription.contains("file format")
                 
                 // 3. NETWORK ERROR
-                let isNetworkErr = isNetworkRelatedError(error) && !isBotError
+                let isNetworkErr = isNetworkRelatedError(error) && !isBotError && !isSessionExpired
                 
-                if isBotError {
+                if isSessionExpired {
+                    // 🔒 SESSION EXPIRED: Critical - requires re-login
+                    print("🔒 [UPLOAD] Session expired - RE-LOGIN REQUIRED")
+                    LogManager.shared.error("Session expired at \(photoInfo) - re-login required", category: .auth)
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Session expired")
+                    
+                    await MainActor.run {
+                        UIApplication.shared.isIdleTimerDisabled = false
+                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (session expired)")
+                        
+                        showingError = "🔒 Session Expired\n\nYour Instagram session is no longer valid.\n\nPossible causes:\n• Network changed (WiFi ↔ Cellular)\n• Too much time passed\n• Session invalidated by Instagram\n\nPlease go to Settings and re-login to continue."
+                        
+                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                        isUploading = false
+                    }
+                    return
+                    
+                } else if isBotError {
                     // 🚨 BOT DETECTION: Activate 15-min lockdown
                     print("🚨 [UPLOAD] Bot detection - ACTIVATING LOCKDOWN")
                     LogManager.shared.bot("Bot detection triggered at \(photoInfo): \(error.localizedDescription)")
@@ -1006,6 +1077,44 @@ struct SetDetailView: View {
                     
                 } else {
                     // ⚠️ OTHER ERROR: Treat as retryable
+                    // Check if it's a cooldown error
+                    let isCooldownError = errorDescription.contains("please wait") && 
+                                         (errorDescription.contains("before uploading") || errorDescription.contains("before upload"))
+                    
+                    if isCooldownError {
+                        // Extract time from error message (e.g., "Please wait 1m 30s")
+                        let components = errorDescription.components(separatedBy: " ")
+                        var totalSeconds = 0
+                        for (index, component) in components.enumerated() {
+                            if component.hasSuffix("m") {
+                                if let mins = Int(component.dropLast()) {
+                                    totalSeconds += mins * 60
+                                }
+                            } else if component.hasSuffix("s") {
+                                if let secs = Int(component.dropLast()) {
+                                    totalSeconds += secs
+                                }
+                            }
+                        }
+                        
+                        if totalSeconds > 0 {
+                            print("⏰ [UPLOAD] Cooldown error detected: \(totalSeconds)s")
+                            LogManager.shared.warning("Cooldown error at \(photoInfo): wait \(totalSeconds)s", category: .upload)
+                            
+                            await MainActor.run {
+                                cooldownRetryDisabledUntil = Date().addingTimeInterval(TimeInterval(totalSeconds))
+                                // Start timer to update UI
+                                cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                                    if let until = cooldownRetryDisabledUntil, Date() >= until {
+                                        cooldownTimer?.invalidate()
+                                        cooldownTimer = nil
+                                        cooldownRetryDisabledUntil = nil
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                     print("⚠️ [UPLOAD] Unknown error - treating as retryable")
                     LogManager.shared.error("Unknown upload error at \(photoInfo): \(error.localizedDescription)", category: .upload)
                     dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .pending, errorMessage: error.localizedDescription)
