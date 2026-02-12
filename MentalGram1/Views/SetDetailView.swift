@@ -652,6 +652,14 @@ struct PhotoItemView: View {
                         .frame(width: 110, height: 110)
                         .clipped()
                         .cornerRadius(12)
+                        .opacity(photo.isArchived ? 0.5 : 1.0) // Más opaco si está archivado
+                        .overlay(
+                            // Overlay oscuro cuando está archivado
+                            photo.isArchived ? 
+                                Color.black.opacity(0.3)
+                                    .cornerRadius(12)
+                                : nil
+                        )
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
@@ -676,16 +684,16 @@ struct PhotoItemView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .offset(x: -4, y: -4)
                 
-                // Symbol badge (top-right) - pequeño
-                Text(photo.symbol)
-                    .font(.caption2.bold())
-                    .foregroundColor(.white)
+                // Symbol badge debajo de la foto (primeras 3 letras) - MOVIDO
+                Text(String(photo.symbol.prefix(3)))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Color.black.opacity(0.75))
+                    .background(Color.white.opacity(0.9))
                     .cornerRadius(5)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 4)
             }
             
             // Info

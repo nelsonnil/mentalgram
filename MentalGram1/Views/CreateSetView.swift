@@ -498,87 +498,85 @@ struct DraggablePhotoCell: View {
     @State private var isDragging = false
     
     var body: some View {
-        ZStack {
-            // Photo - limpia y más grande
-            if let uiImage = UIImage(data: photo.imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 110, height: 110)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(isDuplicate ? Color.red : Color.purple.opacity(0.3), lineWidth: isDuplicate ? 3 : 2)
-                    )
-                    .shadow(color: isDragging ? Color.purple.opacity(0.5) : Color.clear, radius: 10)
-            }
-            
-            // Grip icon (centro, sutil) - indica que es draggable
-            Image(systemName: "line.3.horizontal")
-                .font(.title3)
-                .foregroundColor(.white.opacity(0.6))
-                .shadow(color: .black.opacity(0.3), radius: 2)
-            
-            // Position badge (grande, top-left) - RED si duplicate
+        VStack(spacing: 4) {
+            // Photo with overlays
             ZStack {
-                Circle()
-                    .fill(isDuplicate ? Color.red : Color.purple)
-                    .frame(width: 34, height: 34)
+                // Photo - limpia y más grande
+                if let uiImage = UIImage(data: photo.imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 110, height: 110)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isDuplicate ? Color.red : Color.purple.opacity(0.3), lineWidth: isDuplicate ? 3 : 2)
+                        )
+                        .shadow(color: isDragging ? Color.purple.opacity(0.5) : Color.clear, radius: 10)
+                }
                 
-                Text("\(position)")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.white)
+                // Grip icon (centro, sutil) - indica que es draggable
+                Image(systemName: "line.3.horizontal")
+                    .font(.title3)
+                    .foregroundColor(.white.opacity(0.6))
+                    .shadow(color: .black.opacity(0.3), radius: 2)
+                
+                // Position badge (grande, top-left) - RED si duplicate
+                ZStack {
+                    Circle()
+                        .fill(isDuplicate ? Color.red : Color.purple)
+                        .frame(width: 34, height: 34)
+                    
+                    Text("\(position)")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .offset(x: -5, y: -5)
+                
+                // Warning icon para duplicates (debajo del número)
+                if isDuplicate {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .offset(x: -5, y: 32)
+                }
+                
+                // Delete button (bottom-right)
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.red)
+                        .background(Circle().fill(Color.white).frame(width: 18, height: 18))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .offset(x: 6, y: 6)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .offset(x: -5, y: -5)
-            
-            // Warning icon para duplicates (debajo del número)
-            if isDuplicate {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .offset(x: -5, y: 32)
-            }
-            
-            // Symbol badge (pequeño, top-right)
-            Text(photo.symbol)
-                .font(.caption2.bold())
-                .foregroundColor(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color.black.opacity(0.75))
-                .cornerRadius(5)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(6)
-            
-            // Delete button (bottom-right)
-            Button(action: onDelete) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 22))
-                    .foregroundColor(.red)
-                    .background(Circle().fill(Color.white).frame(width: 18, height: 18))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .offset(x: 6, y: 6)
-        }
-        .frame(width: 110, height: 110)
-        .contentShape(Rectangle())
-        .onDrag {
-            isDragging = true
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
-            return NSItemProvider(object: String(position - 1) as NSString)
-        }
-        .onDrop(of: [.text], delegate: PhotoDropDelegate(
-            position: position - 1,
-            onMove: { from, to in
-                onMove(from, to)
-                let generator = UIImpactFeedbackGenerator(style: .medium)
+            .frame(width: 110, height: 110)
+            .contentShape(Rectangle())
+            .onDrag {
+                isDragging = true
+                let generator = UIImpactFeedbackGenerator(style: .light)
                 generator.impactOccurred()
-            },
-            isDragging: $isDragging
-        ))
+                return NSItemProvider(object: String(position - 1) as NSString)
+            }
+            .onDrop(of: [.text], delegate: PhotoDropDelegate(
+                position: position - 1,
+                onMove: { from, to in
+                    onMove(from, to)
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                },
+                isDragging: $isDragging
+            ))
+            
+            // Symbol label DEBAJO de la foto (primeras 3 letras)
+            Text(String(photo.symbol.prefix(3)))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
     }
 }
 
