@@ -340,6 +340,10 @@ struct CreateSetView: View {
                         }
                         .padding(.horizontal)
                     }
+                    .gesture(
+                        DragGesture()
+                            .onChanged { _ in }
+                    )
                     
                     // Warning for consecutive duplicates
                     if !consecutiveDuplicates.isEmpty {
@@ -587,13 +591,30 @@ struct PhotoDropDelegate: DropDelegate {
     }
     
     func dropEntered(info: DropInfo) {
-        guard let itemProviders = info.itemProviders(for: [.text]).first else { return }
+        guard let itemProvider = info.itemProviders(for: [.text]).first else {
+            print("⚠️ [DROP] No item provider found")
+            return
+        }
         
-        itemProviders.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
+        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
+            if let error = error {
+                print("❌ [DROP] Error loading item: \(error)")
+                return
+            }
+            
             guard let data = data as? Data,
                   let fromString = String(data: data, encoding: .utf8),
-                  let from = Int(fromString),
-                  from != position else { return }
+                  let from = Int(fromString) else {
+                print("⚠️ [DROP] Could not parse position")
+                return
+            }
+            
+            guard from != position else {
+                print("⚠️ [DROP] Same position, ignoring")
+                return
+            }
+            
+            print("✅ [DROP] Moving from \(from) to \(position)")
             
             DispatchQueue.main.async {
                 onMove(from, position)
@@ -603,5 +624,9 @@ struct PhotoDropDelegate: DropDelegate {
     
     func dropExited(info: DropInfo) {
         isDragging = false
+    }
+    
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: .move)
     }
 }
