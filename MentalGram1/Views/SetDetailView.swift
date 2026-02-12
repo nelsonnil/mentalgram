@@ -16,6 +16,11 @@ struct SetDetailView: View {
     @State private var showingError: String?
     @State private var failedPhotoIndex: Int? = nil
     @State private var isNetworkError = false
+    @State private var isBotDetection = false
+    @State private var isPhotoRejected = false
+    @State private var botDetectionTime: Date? = nil
+    @State private var botCountdownSeconds: Int = 0
+    @State private var botCountdownTimer: Timer? = nil
     @State private var isReorderMode = false
     @State private var consecutiveDuplicates: Set<Int> = []
     @State private var selectedReorderIndex: Int? = nil  // Tap-to-swap: first selected photo
@@ -32,6 +37,15 @@ struct SetDetailView: View {
                 
                 // Status & Actions
                 statusSection
+                
+                // ERROR RECOVERY SECTION
+                if isBotDetection {
+                    botDetectionRecoverySection
+                } else if isPhotoRejected {
+                    photoRejectedRecoverySection
+                } else if isNetworkError {
+                    networkErrorRecoverySection
+                }
                 
                 // Banks Tabs (for word/number)
                 if !currentSet.banks.isEmpty {
@@ -50,23 +64,58 @@ struct SetDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { }
         .alert("Error", isPresented: .constant(showingError != nil), presenting: showingError) { _ in
-            if isNetworkError {
-                Button("Retry Upload", role: .none) {
-                    showingError = nil
-                    Task { await retryFromFailedPhoto() }
+            if isBotDetection {
+                // Bot detection: Show countdown, only allow after 15 min
+                if botCountdownSeconds > 0 {
+                    let mins = botCountdownSeconds / 60
+                    let secs = botCountdownSeconds % 60
+                    Button("Wait \(mins):\(String(format: "%02d", secs))", role: .none) { }
+                        .disabled(true)
+                } else {
+                    Button("Retry Upload") {
+                        botCountdownTimer?.invalidate()
+                        botCountdownTimer = nil
+                        resetErrorState()
+                        Task { await retryFromFailedPhoto() }
+                    }
                 }
                 Button("Cancel", role: .cancel) {
-                    showingError = nil
-                    failedPhotoIndex = nil
-                    isNetworkError = false
+                    botCountdownTimer?.invalidate()
+                    botCountdownTimer = nil
+                    resetErrorState()
                 }
+                
+            } else if isPhotoRejected {
+                // Photo rejected: Offer skip or replace
+                Button("Skip This Photo") {
+                    resetErrorState()
+                    Task { await skipFailedPhotoAndContinue() }
+                }
+                Button("Replace Photo") {
+                    resetErrorState()
+                    // TODO: Open gallery to replace
+                }
+                Button("Cancel Upload", role: .cancel) { resetErrorState() }
+                
+            } else if isNetworkError {
+                // Network error: Simple retry
+                Button("Retry Upload", role: .none) {
+                    resetErrorState()
+                    Task { await retryFromFailedPhoto() }
+                }
+                Button("Cancel", role: .cancel) { resetErrorState() }
+                
             } else {
-                Button("OK") {
-                    showingError = nil
-                }
+                // Generic error
+                Button("OK") { resetErrorState() }
             }
         } message: { error in
             Text(error)
+        }
+        .onDisappear {
+            // Cleanup timer if view disappears
+            botCountdownTimer?.invalidate()
+            botCountdownTimer = nil
         }
     }
     
@@ -224,6 +273,138 @@ struct SetDetailView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Error Recovery Sections
+    
+    private var botDetectionRecoverySection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.red)
+                Text("Bot Detection - Account Flagged")
+                    .font(.headline)
+                    .foregroundColor(.red)
+            }
+            
+            if botCountdownSeconds > 0 {
+                VStack(spacing: 8) {
+                    Text("Wait Time Remaining")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(botCountdownSeconds / 60):\(String(format: "%02d", botCountdownSeconds % 60))")
+                        .font(.system(size: 36, weight: .bold, design: .monospaced))
+                        .foregroundColor(.red)
+                    
+                    Text("Do NOT open Instagram or retry during this time")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(12)
+            } else {
+                Button(action: {
+                    botCountdownTimer?.invalidate()
+                    botCountdownTimer = nil
+                    Task { await retryFromFailedPhoto() }
+                }) {
+                    Label("Retry Upload Now", systemImage: "arrow.clockwise")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.green)
+                        .cornerRadius(12)
+                }
+            }
+        }
+        .padding()
+        .background(Color(uiColor: .systemGray6))
+        .cornerRadius(12)
+    }
+    
+    private var photoRejectedRecoverySection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "photo.badge.exclamationmark")
+                    .foregroundColor(.orange)
+                Text("Photo Rejected")
+                    .font(.headline)
+                    .foregroundColor(.orange)
+            }
+            
+            if let failedIndex = failedPhotoIndex {
+                Text("Photo #\(failedIndex + 1) was rejected by Instagram")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            HStack(spacing: 12) {
+                Button(action: {
+                    Task { await skipFailedPhotoAndContinue() }
+                }) {
+                    Label("Skip Photo", systemImage: "forward.fill")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.orange)
+                        .cornerRadius(8)
+                }
+                
+                Button(action: {
+                    // TODO: Implement photo replacement
+                    resetErrorState()
+                }) {
+                    Label("Replace", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.purple)
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .padding()
+        .background(Color(uiColor: .systemGray6))
+        .cornerRadius(12)
+    }
+    
+    private var networkErrorRecoverySection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "wifi.exclamationmark")
+                    .foregroundColor(.blue)
+                Text("Connection Lost")
+                    .font(.headline)
+                    .foregroundColor(.blue)
+            }
+            
+            if let failedIndex = failedPhotoIndex {
+                Text("Upload paused at Photo #\(failedIndex + 1)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            Button(action: {
+                Task { await retryFromFailedPhoto() }
+            }) {
+                Label("Retry Upload", systemImage: "arrow.clockwise")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(12)
+            }
+        }
+        .padding()
+        .background(Color(uiColor: .systemGray6))
+        .cornerRadius(12)
     }
     
     // MARK: - Reorder Toggle Button
@@ -460,10 +641,37 @@ struct SetDetailView: View {
         }
         
         print("🔄 [RETRY] Retrying from photo #\(startIndex + 1)")
+        resetErrorState()
+        await uploadAllPhotos(startFrom: startIndex)
+    }
+    
+    private func skipFailedPhotoAndContinue() async {
+        guard let skipIndex = failedPhotoIndex else {
+            print("⚠️ [SKIP] No failed photo index found")
+            return
+        }
+        
+        print("⏭️ [SKIP] Skipping photo #\(skipIndex + 1), continuing with next")
+        
+        // Mark skipped photo as permanently skipped
+        let skippedPhoto = currentSet.photos[skipIndex]
+        dataManager.updatePhoto(photoId: skippedPhoto.id, mediaId: nil, uploadStatus: .error, errorMessage: "Skipped by user")
+        
+        resetErrorState()
+        
+        // Continue from next photo
+        await uploadAllPhotos(startFrom: skipIndex + 1)
+    }
+    
+    private func resetErrorState() {
+        showingError = nil
         failedPhotoIndex = nil
         isNetworkError = false
-        
-        await uploadAllPhotos(startFrom: startIndex)
+        isPhotoRejected = false
+        isBotDetection = false
+        botCountdownSeconds = 0
+        botCountdownTimer?.invalidate()
+        botCountdownTimer = nil
     }
     
     // Helper: Check if error is network-related (retryable)
@@ -501,11 +709,13 @@ struct SetDetailView: View {
     private func uploadAllPhotos(startFrom: Int = 0) async {
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
+        LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
         
         // CRITICAL: Keep screen awake during upload (prevent interruptions)
         await MainActor.run {
             UIApplication.shared.isIdleTimerDisabled = true
             print("🔆 [SCREEN] Screen sleep DISABLED (Upload mode)")
+            LogManager.shared.info("Screen sleep disabled for upload", category: .device)
         }
         
         // CRITICAL: Check if lockdown is active before starting
@@ -685,17 +895,86 @@ struct SetDetailView: View {
                 // Build detailed error info about which photo failed
                 let photoInfo = "Photo #\(index + 1) (\(photo.symbol))"
                 
-                // Check error type
+                // Classify error type for proper handling
                 let errorDescription = error.localizedDescription.lowercased()
+                
+                // 1. BOT DETECTION (most critical)
                 let isBotError = errorDescription.contains("challenge") || 
                                  errorDescription.contains("spam") || 
                                  errorDescription.contains("login_required") ||
-                                 errorDescription.contains("checkpoint")
-                let isNetworkErr = isNetworkRelatedError(error)
+                                 errorDescription.contains("checkpoint") ||
+                                 errorDescription.contains("bot")
                 
-                if isNetworkErr && !isBotError {
-                    // NETWORK ERROR: Pause and allow retry (don't mark as permanent error)
-                    print("🌐 [UPLOAD] Network error detected - pausing for retry")
+                // 2. PHOTO REJECTED (aspect ratio, file format, etc.)
+                let isPhotoError = errorDescription.contains("aspect ratio") ||
+                                   errorDescription.contains("400") ||
+                                   errorDescription.contains("invalid image") ||
+                                   errorDescription.contains("file format")
+                
+                // 3. NETWORK ERROR
+                let isNetworkErr = isNetworkRelatedError(error) && !isBotError
+                
+                if isBotError {
+                    // 🚨 BOT DETECTION: Activate 15-min lockdown
+                    print("🚨 [UPLOAD] Bot detection - ACTIVATING LOCKDOWN")
+                    LogManager.shared.bot("Bot detection triggered at \(photoInfo): \(error.localizedDescription)")
+                    let errorMsg = "⚠️ Bot detected"
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
+                    
+                    await MainActor.run {
+                        UIApplication.shared.isIdleTimerDisabled = false
+                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (bot detection)")
+                        
+                        failedPhotoIndex = index
+                        isBotDetection = true
+                        isNetworkError = false
+                        isPhotoRejected = false
+                        botDetectionTime = Date()
+                        botCountdownSeconds = 900  // 15 min
+                        
+                        // Start countdown timer
+                        botCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                            if botCountdownSeconds > 0 {
+                                botCountdownSeconds -= 1
+                            } else {
+                                botCountdownTimer?.invalidate()
+                                botCountdownTimer = nil
+                            }
+                        }
+                        
+                        showingError = "🚨 Account Flagged at \(photoInfo)\n\nWAIT 15 MINUTES before trying again.\nDo NOT open Instagram during this time."
+                        
+                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                        isUploading = false
+                    }
+                    return
+                    
+                } else if isPhotoError {
+                    // 📸 PHOTO REJECTED: Offer skip or replace
+                    print("📸 [UPLOAD] Photo rejected - offering skip/replace")
+                    LogManager.shared.error("Photo rejected at \(photoInfo): \(error.localizedDescription)", category: .upload)
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Photo rejected")
+                    
+                    await MainActor.run {
+                        UIApplication.shared.isIdleTimerDisabled = false
+                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (photo rejected)")
+                        
+                        failedPhotoIndex = index
+                        isPhotoRejected = true
+                        isNetworkError = false
+                        isBotDetection = false
+                        
+                        showingError = "📸 \(photoInfo) was rejected\n\nReason: \(error.localizedDescription)\n\nYou can skip this photo or replace it with another from your gallery."
+                        
+                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                        isUploading = false
+                    }
+                    return
+                    
+                } else if isNetworkErr {
+                    // 🌐 NETWORK ERROR: Pause and allow retry
+                    print("🌐 [UPLOAD] Network error - pausing for retry")
+                    LogManager.shared.network("Network error during upload at \(photoInfo): \(error.localizedDescription)")
                     dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .pending, errorMessage: "Network error")
                     
                     await MainActor.run {
@@ -704,38 +983,33 @@ struct SetDetailView: View {
                         
                         failedPhotoIndex = index
                         isNetworkError = true
-                        showingError = "🌐 Connection lost at \(photoInfo)\n\nCheck your internet connection and tap 'Retry Upload' to continue from where you left off."
+                        isPhotoRejected = false
+                        isBotDetection = false
+                        
+                        showingError = "🌐 Connection lost at \(photoInfo)\n\nCheck your internet and tap 'Retry Upload' to continue."
                         
                         dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                         isUploading = false
                     }
                     return
                     
-                } else if isBotError {
-                    // BOT DETECTION: Stop completely (critical error)
-                    print("🚨 [UPLOAD] Bot detection - STOPPING")
-                    let errorMsg = "⚠️ Bot detection - STOP"
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
-                    
-                    await MainActor.run {
-                        UIApplication.shared.isIdleTimerDisabled = false
-                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (bot error)")
-                        showingError = "⚠️ Instagram flagged activity at \(photoInfo).\n\nWAIT at least 10 minutes before retrying. Do NOT open Instagram app during this time."
-                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                        isUploading = false
-                    }
-                    return
-                    
                 } else {
-                    // OTHER ERROR: Mark as error but could retry manually
-                    print("⚠️ [UPLOAD] Unknown error - marking as error")
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: error.localizedDescription)
+                    // ⚠️ OTHER ERROR: Treat as retryable
+                    print("⚠️ [UPLOAD] Unknown error - treating as retryable")
+                    LogManager.shared.error("Unknown upload error at \(photoInfo): \(error.localizedDescription)", category: .upload)
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .pending, errorMessage: error.localizedDescription)
                     
                     await MainActor.run {
                         UIApplication.shared.isIdleTimerDisabled = false
                         print("🌙 [SCREEN] Screen sleep RE-ENABLED (unknown error)")
-                        showingError = "❌ Upload failed at \(photoInfo)\n\nError: \(error.localizedDescription)\n\nCheck connection and retry manually."
-                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                        
+                        failedPhotoIndex = index
+                        isNetworkError = true  // Treat as network error (retryable)
+                        isPhotoRejected = false
+                        isBotDetection = false
+                        
+                        showingError = "❌ Upload failed at \(photoInfo)\n\nError: \(error.localizedDescription)\n\nTap 'Retry Upload' to continue."
+                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                         isUploading = false
                     }
                     return
@@ -744,9 +1018,11 @@ struct SetDetailView: View {
         }
         
         print("\n✅ [UPLOAD ALL] All photos uploaded and archived!")
+        LogManager.shared.success("Upload completed successfully for set '\(currentSet.name)' - All \(currentSet.photos.count) photos uploaded", category: .upload)
         await MainActor.run {
             UIApplication.shared.isIdleTimerDisabled = false
             print("🌙 [SCREEN] Screen sleep RE-ENABLED (upload complete)")
+            LogManager.shared.info("Screen sleep re-enabled after upload completion", category: .device)
         }
         dataManager.updateSetStatus(id: currentSet.id, status: .completed)
         isUploading = false

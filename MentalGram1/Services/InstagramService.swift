@@ -119,6 +119,7 @@ class InstagramService: ObservableObject {
                 // Detect network change (WiFi → Cellular, WiFi A → WiFi B, etc.)
                 if self.lastConnectionType != "unknown" && self.lastConnectionType != newConnectionType && newConnected {
                     print("🔄 [NETWORK] Connection changed: \(self.lastConnectionType) → \(newConnectionType)")
+                    LogManager.shared.network("Connection changed: \(self.lastConnectionType) → \(newConnectionType)")
                     self.lastNetworkChangeTime = Date()
                     self.isNetworkStabilizing = true
                     
@@ -127,6 +128,7 @@ class InstagramService: ObservableObject {
                         try? await Task.sleep(nanoseconds: UInt64(self.networkStabilizationDelay * 1_000_000_000))
                         self.isNetworkStabilizing = false
                         print("✅ [NETWORK] Stabilization complete")
+                        LogManager.shared.network("Network stabilization complete")
                     }
                 }
                 
@@ -134,7 +136,9 @@ class InstagramService: ObservableObject {
                 self.connectionType = newConnectionType
                 self.lastConnectionType = newConnectionType
                 
-                print("📶 [NETWORK] Connection: \(newConnectionType) - \(newConnected ? "Connected" : "Disconnected")")
+                let statusText = newConnected ? "Connected" : "Disconnected"
+                print("📶 [NETWORK] Connection: \(newConnectionType) - \(statusText)")
+                LogManager.shared.network("\(newConnectionType) - \(statusText)")
             }
         }
         networkMonitor.start(queue: networkQueue)
@@ -178,6 +182,7 @@ class InstagramService: ObservableObject {
         // Level 3: Challenge required - Instagram wants verification
         if json["challenge"] != nil || messageLower.contains("challenge_required") {
             print("🚨 BOT DETECTED: Challenge required")
+            LogManager.shared.bot("Challenge required - Instagram wants verification")
             await triggerLockdown(
                 reason: "Instagram is asking for verification (challenge_required). Open Instagram app and complete the verification, then come back.",
                 duration: 600 // 10 minutes
@@ -188,6 +193,7 @@ class InstagramService: ObservableObject {
         // Level 4: Login required - session invalidated
         if messageLower.contains("login_required") {
             print("🚨 BOT DETECTED: Login required (session invalidated)")
+            LogManager.shared.bot("Login required - Session invalidated by Instagram")
             await triggerLockdown(
                 reason: "Instagram invalidated your session. This may indicate suspicious activity was detected.",
                 duration: 1800 // 30 minutes
@@ -198,6 +204,7 @@ class InstagramService: ObservableObject {
         // Level 2: Spam/rate limit detection
         if let spam = json["spam"] as? Bool, spam == true {
             print("🚨 BOT DETECTED: Spam flag")
+            LogManager.shared.bot("Spam flag detected by Instagram")
             await triggerLockdown(
                 reason: "Instagram flagged this as spam. Stop all activity and wait.",
                 duration: 600 // 10 minutes
@@ -208,6 +215,7 @@ class InstagramService: ObservableObject {
         // Level 1: Action blocked
         if messageLower.contains("action blocked") || messageLower.contains("temporarily blocked") {
             print("🚨 BOT DETECTED: Action blocked")
+            LogManager.shared.bot("Action blocked by Instagram - temporary ban")
             await triggerLockdown(
                 reason: "Instagram has temporarily blocked actions. Do NOT retry. Wait at least 15 minutes.",
                 duration: 900 // 15 minutes
@@ -222,6 +230,7 @@ class InstagramService: ObservableObject {
             // 3 consecutive fails → precautionary lockdown
             if consecutiveErrors >= 3 {
                 print("🚨 PRECAUTIONARY LOCKDOWN: 3 consecutive API fails")
+                LogManager.shared.bot("Precautionary lockdown - 3 consecutive API failures")
                 await triggerLockdown(
                     reason: "Multiple consecutive errors detected. Pausing all activity as a precaution to avoid triggering bot detection.",
                     duration: 300 // 5 minutes
@@ -740,14 +749,17 @@ class InstagramService: ObservableObject {
            let status = json["status"] as? String {
             if status == "ok" {
                 print("✅ [ARCHIVE] Photo archived successfully")
+                LogManager.shared.success("Photo archived (ID: \(mediaId))", category: .api)
                 return true
             } else {
                 print("❌ [ARCHIVE] Archive failed. Status: \(status)")
+                LogManager.shared.error("Archive failed (ID: \(mediaId)) - Status: \(status)", category: .api)
                 return false
             }
         }
         
         print("❌ [ARCHIVE] Failed to parse archive response")
+        LogManager.shared.error("Archive failed (ID: \(mediaId)) - Parse error", category: .api)
         return false
     }
     
@@ -785,14 +797,17 @@ class InstagramService: ObservableObject {
            let status = json["status"] as? String {
             if status == "ok" {
                 print("✅ [UNARCHIVE] Photo unarchived successfully")
+                LogManager.shared.success("Photo revealed/unarchived (ID: \(mediaId))", category: .api)
                 return true
             } else {
                 print("❌ [UNARCHIVE] Unarchive failed. Status: \(status)")
+                LogManager.shared.error("Reveal/unarchive failed (ID: \(mediaId)) - Status: \(status)", category: .api)
                 return false
             }
         }
         
         print("❌ [UNARCHIVE] Failed to parse unarchive response")
+        LogManager.shared.error("Reveal/unarchive failed (ID: \(mediaId)) - Parse error", category: .api)
         return false
     }
     
@@ -1601,6 +1616,9 @@ class InstagramService: ObservableObject {
     
     func uploadPhoto(imageData: Data, caption: String = "", allowDuplicates: Bool = false, photoIndex: Int? = nil) async throws -> String? {
         print("📤 [UPLOAD] Starting photo upload...")
+        let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
+        LogManager.shared.upload("Starting upload: \(photoDesc) (\(imageData.count / 1024)KB)")
+        
         if let index = photoIndex {
             print("   Photo index: \(index)")
         }
@@ -1623,12 +1641,16 @@ class InstagramService: ObservableObject {
             throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before uploading another photo.\(photoInfo)")
         }
         
+        // ASPECT RATIO FIX: Auto-crop to Instagram-compatible ratio BEFORE duplicate check
+        let validImageData = adjustImageAspectRatio(imageData: imageData)
+        print("✅ [UPLOAD] Image aspect ratio validated/adjusted")
+        
         // ANTI-BOT: Detect duplicate image (prevent uploading same photo twice)
         // EXCEPTION: Word Reveal and Number Reveal sets need to upload duplicate letters/numbers
-        let imageHash = hashImageData(imageData)
+        let finalHash = hashImageData(validImageData)
         if !allowDuplicates {
             if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
-               lastHash == imageHash {
+               lastHash == finalHash {
                 print("⚠️ [UPLOAD] Same image already uploaded - SKIP")
                 let photoInfo = photoIndex != nil ? " Photo #\(photoIndex! + 1)" : " This photo"
                 throw InstagramError.apiError("\(photoInfo) was already uploaded. Duplicate uploads may trigger bot detection.")
@@ -1640,7 +1662,7 @@ class InstagramService: ObservableObject {
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
         
-        print("   Image hash: \(String(imageHash.prefix(16)))...")
+        print("   Image hash: \(String(finalHash.prefix(16)))...")
         
         // Step 1: Generate upload ID and names (like instagrapi)
         let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
@@ -1684,15 +1706,15 @@ class InstagramService: ObservableObject {
         
         // Upload-specific headers (matching instagrapi exactly)
         uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "Content-Length")
+        uploadRequest.setValue(String(validImageData.count), forHTTPHeaderField: "Content-Length")
         uploadRequest.setValue(ruploadParamsString, forHTTPHeaderField: "X-Instagram-Rupload-Params")
         uploadRequest.setValue(waterfallId, forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
         uploadRequest.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
         uploadRequest.setValue(uploadName, forHTTPHeaderField: "X-Entity-Name")
-        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "X-Entity-Length")
+        uploadRequest.setValue(String(validImageData.count), forHTTPHeaderField: "X-Entity-Length")
         uploadRequest.setValue("0", forHTTPHeaderField: "Offset")
         
-        uploadRequest.httpBody = imageData
+        uploadRequest.httpBody = validImageData
         
         print("   Sending image bytes to Instagram...")
         let (uploadData, uploadResponse) = try await postSession.data(for: uploadRequest)
@@ -1758,6 +1780,8 @@ class InstagramService: ObservableObject {
             
             if let mediaId = mediaId {
                 print("✅ [UPLOAD] Photo uploaded successfully! Media ID: \(mediaId)")
+                let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
+                LogManager.shared.success("\(photoDesc) uploaded successfully (ID: \(mediaId))", category: .upload)
                 
                 // ANTI-BOT: Save hash and cooldown after successful upload
                 let imageHash = hashImageData(imageData)
@@ -1773,6 +1797,7 @@ class InstagramService: ObservableObject {
         }
         
         print("❌ [UPLOAD] Failed to get media ID from configure response")
+        LogManager.shared.error("Upload failed - no media ID received", category: .upload)
         return nil
     }
     
@@ -2215,6 +2240,100 @@ class InstagramService: ObservableObject {
         // Cooldown expired, clear it
         UserDefaults.standard.removeObject(forKey: "profile_pic_cooldown_until")
         return (false, 0)
+    }
+    
+    // MARK: - Image Aspect Ratio Adjustment
+    
+    /// Adjusts image to Instagram-compatible aspect ratio (1:1, 4:5, or 1.91:1)
+    /// Returns adjusted image data or original if already valid
+    private func adjustImageAspectRatio(imageData: Data) -> Data {
+        guard let image = UIImage(data: imageData) else {
+            print("⚠️ [ASPECT] Cannot create UIImage, using original")
+            return imageData
+        }
+        
+        let width = image.size.width
+        let height = image.size.height
+        let aspectRatio = width / height
+        
+        print("📐 [ASPECT] Original: \(Int(width))x\(Int(height)), ratio: \(String(format: "%.2f", aspectRatio))")
+        
+        // Instagram allowed ratios
+        let squareRatio: CGFloat = 1.0        // 1:1
+        let verticalRatio: CGFloat = 0.8      // 4:5
+        let horizontalRatio: CGFloat = 1.91   // 1.91:1
+        
+        // Check if already valid (5% tolerance)
+        let tolerance: CGFloat = 0.05
+        if abs(aspectRatio - squareRatio) < tolerance ||
+           abs(aspectRatio - verticalRatio) < tolerance ||
+           abs(aspectRatio - horizontalRatio) < tolerance {
+            print("✅ [ASPECT] Already valid, no adjustment needed")
+            return imageData
+        }
+        
+        // Determine target ratio
+        let targetRatio: CGFloat
+        if aspectRatio < 0.75 {
+            // Very vertical → 4:5
+            targetRatio = verticalRatio
+            print("🔧 [ASPECT] Adjusting to 4:5 (vertical)")
+        } else if aspectRatio > 2.0 {
+            // Very horizontal → 1.91:1
+            targetRatio = horizontalRatio
+            print("🔧 [ASPECT] Adjusting to 1.91:1 (horizontal)")
+        } else if aspectRatio < 0.9 {
+            // Close to vertical → 4:5
+            targetRatio = verticalRatio
+            print("🔧 [ASPECT] Adjusting to 4:5 (vertical)")
+        } else if aspectRatio > 1.5 {
+            // Close to horizontal → 1.91:1
+            targetRatio = horizontalRatio
+            print("🔧 [ASPECT] Adjusting to 1.91:1 (horizontal)")
+        } else {
+            // Everything else → square
+            targetRatio = squareRatio
+            print("🔧 [ASPECT] Adjusting to 1:1 (square)")
+        }
+        
+        // Calculate crop dimensions (center crop)
+        let newWidth: CGFloat
+        let newHeight: CGFloat
+        
+        if aspectRatio > targetRatio {
+            // Too wide → crop width
+            newHeight = height
+            newWidth = height * targetRatio
+        } else {
+            // Too tall → crop height
+            newWidth = width
+            newHeight = width / targetRatio
+        }
+        
+        let cropRect = CGRect(
+            x: (width - newWidth) / 2,
+            y: (height - newHeight) / 2,
+            width: newWidth,
+            height: newHeight
+        )
+        
+        // Crop image
+        guard let cgImage = image.cgImage?.cropping(to: cropRect) else {
+            print("❌ [ASPECT] Failed to crop, using original")
+            return imageData
+        }
+        
+        let croppedImage = UIImage(cgImage: cgImage)
+        print("✅ [ASPECT] Cropped to \(Int(newWidth))x\(Int(newHeight))")
+        
+        // Convert back to JPEG
+        guard let adjustedData = croppedImage.jpegData(compressionQuality: 0.9) else {
+            print("❌ [ASPECT] Failed to convert to JPEG, using original")
+            return imageData
+        }
+        
+        print("✅ [ASPECT] Final size: \(adjustedData.count / 1024)KB")
+        return adjustedData
     }
 }
 

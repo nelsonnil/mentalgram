@@ -273,6 +273,25 @@ struct SettingsView: View {
                 }
             }
             
+            // MARK: - Developer Tools (always visible)
+            
+            Section("Developer") {
+                NavigationLink(destination: LogsView()) {
+                    HStack {
+                        Image(systemName: "doc.text.fill")
+                            .foregroundColor(.purple)
+                        Text("View App Logs")
+                        Spacer()
+                        Text("\(LogManager.shared.logs.count)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                }
+            }
+            
             // MARK: - Everything below only visible when logged in
             
             if instagram.isLoggedIn {
