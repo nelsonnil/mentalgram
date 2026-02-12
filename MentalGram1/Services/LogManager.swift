@@ -1,9 +1,9 @@
 import Foundation
 import SwiftUI
 
-// MARK: - Log Entry
+// MARK: - App Log Entry
 
-struct LogEntry: Identifiable, Codable {
+struct AppLogEntry: Identifiable, Codable {
     let id: UUID
     let timestamp: Date
     let level: LogLevel
@@ -85,7 +85,7 @@ enum LogCategory: String, Codable, CaseIterable {
 class LogManager: ObservableObject {
     static let shared = LogManager()
     
-    @Published var logs: [LogEntry] = []
+    @Published var logs: [AppLogEntry] = []
     
     private let maxLogs = 1000
     private let logRetentionDays = 7
@@ -102,7 +102,7 @@ class LogManager: ObservableObject {
     // MARK: - Logging
     
     func log(_ message: String, level: LogLevel = .info, category: LogCategory = .general) {
-        let entry = LogEntry(level: level, category: category, message: message)
+        let entry = AppLogEntry(level: level, category: category, message: message)
         
         DispatchQueue.main.async {
             self.logs.append(entry)
@@ -161,7 +161,7 @@ class LogManager: ObservableObject {
     
     private func loadLogs() {
         guard let data = UserDefaults.standard.data(forKey: logsKey),
-              let decoded = try? JSONDecoder().decode([LogEntry].self, from: data) else {
+              let decoded = try? JSONDecoder().decode([AppLogEntry].self, from: data) else {
             return
         }
         logs = decoded
@@ -193,7 +193,7 @@ class LogManager: ObservableObject {
     
     // MARK: - Filtering
     
-    func filteredLogs(level: LogLevel? = nil, category: LogCategory? = nil, searchText: String = "") -> [LogEntry] {
+    func filteredLogs(level: LogLevel? = nil, category: LogCategory? = nil, searchText: String = "") -> [AppLogEntry] {
         var filtered = logs
         
         if let level = level {

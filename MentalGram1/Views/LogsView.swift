@@ -9,7 +9,7 @@ struct LogsView: View {
     @State private var showingShareSheet = false
     @State private var autoScroll = true
     
-    private var filteredLogs: [LogEntry] {
+    private var filteredLogs: [AppLogEntry] {
         logManager.filteredLogs(level: selectedLevel, category: selectedCategory, searchText: searchText)
     }
     
@@ -157,7 +157,7 @@ struct FilterButton: View {
 // MARK: - Log Row View
 
 struct LogRowView: View {
-    let entry: LogEntry
+    let entry: AppLogEntry
     @State private var isExpanded = false
     
     var body: some View {
