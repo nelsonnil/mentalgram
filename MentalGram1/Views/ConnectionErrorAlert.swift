@@ -166,7 +166,24 @@ struct ConnectionErrorAlert: ViewModifier {
             Unusual activity was detected.
             Ignoring these instructions may result in
             permanent account suspension.
+            
+            ⚠️ IF YOU ARE PERFORMING A TRICK:
+            STOP IMMEDIATELY. Do not reveal/hide more photos.
+            End the trick naturally without continuing.
             """
+        }
+        
+        // Add additional context if message contains specific keywords
+        if let error = error {
+            let errorDesc = error.errorDescription ?? ""
+            if errorDesc.lowercased().contains("please wait") {
+                details += """
+                
+                
+                💡 This is a cooldown error, not a connection issue.
+                Wait the specified time before retrying.
+                """
+            }
         }
         
         return details

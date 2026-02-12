@@ -65,7 +65,7 @@ struct SetDetailView: View {
         .navigationTitle(currentSet.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { }
-        .alert("Error", isPresented: .constant(showingError != nil), presenting: showingError) { _ in
+        .alert("Error", isPresented: .constant(showingError != nil && cooldownRetryDisabledUntil == nil), presenting: showingError) { _ in
             if isBotDetection {
                 // Bot detection: Show countdown, only allow after 15 min
                 if botCountdownSeconds > 0 {
@@ -405,25 +405,32 @@ struct SetDetailView: View {
     
     private var networkErrorRecoverySection: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "wifi.exclamationmark")
-                    .foregroundColor(.blue)
-                Text("Connection Lost")
-                    .font(.headline)
-                    .foregroundColor(.blue)
-            }
-            
-            if let failedIndex = failedPhotoIndex {
-                Text("Upload paused at Photo #\(failedIndex + 1)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            
-            // Check if cooldown is active
+            // Check if cooldown is active to show appropriate title
             let isCooldownActive = cooldownRetryDisabledUntil != nil && Date() < cooldownRetryDisabledUntil!
             let cooldownRemaining = isCooldownActive ? Int(cooldownRetryDisabledUntil!.timeIntervalSinceNow) : 0
             let cooldownMins = cooldownRemaining / 60
             let cooldownSecs = cooldownRemaining % 60
+            
+            HStack(spacing: 8) {
+                Image(systemName: isCooldownActive ? "clock.badge.exclamationmark" : "wifi.exclamationmark")
+                    .foregroundColor(isCooldownActive ? .orange : .blue)
+                Text(isCooldownActive ? "Cooldown Active" : "Network Error")
+                    .font(.headline)
+                    .foregroundColor(isCooldownActive ? .orange : .blue)
+            }
+            
+            if let failedIndex = failedPhotoIndex {
+                if isCooldownActive {
+                    Text("Instagram requires waiting between uploads.\nPhoto #\(failedIndex + 1) paused.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Connection error at Photo #\(failedIndex + 1)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
             
             Button(action: {
                 Task { await retryFromFailedPhoto() }
@@ -924,11 +931,11 @@ struct SetDetailView: View {
                     uploadProgress.current = index + 1
                     
                     // ANTI-BOT: Delay before next photo
-                    // Current: 1.5-3 min (aggressive, faster uploads)
+                    // Current: 2m5s-3min (safe minimum to avoid Instagram cooldown)
                     // Conservative: 3-6 min (lower risk, safer for new accounts)
-                    // Moderate: 2-4 min (balance between speed and safety)
+                    // Instagram minimum: 120s (2 min) + 5s safety margin
                     if relativeIndex < photosToUpload.count - 1 {
-                        let delaySeconds = Double.random(in: 90...180) // 1.5-3 min (aggressive)
+                        let delaySeconds = Double.random(in: 125...180) // 2m5s-3min (safe)
                         print("   Waiting \(String(format: "%.0f", delaySeconds))s before next photo...")
                         
                         // Split sleep into 1-second chunks to check pause more frequently

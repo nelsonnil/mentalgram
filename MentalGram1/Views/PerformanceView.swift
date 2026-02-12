@@ -9,6 +9,7 @@ struct PerformanceView: View {
     @State private var cachedImages: [String: UIImage] = [:]
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
+    @State private var showingMagicianDebug = false  // For long-press debug info
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     
@@ -42,6 +43,11 @@ struct PerformanceView: View {
                     InstagramProfileSkeleton(onPlusPress: {
                         selectedTab = 1
                     })
+                }
+                
+                // PERFORMANCE MODE LOCKDOWN: Hide technical errors from spectators
+                if instagram.isLocked {
+                    performanceLockdownOverlay
                 }
             }
             .padding(.bottom, 65) // Space for Instagram bottom bar (matches bar height)
@@ -392,6 +398,83 @@ struct PerformanceView: View {
             print("❌ [DOWNLOAD] Error: \(error.localizedDescription)")
             return nil
         }
+    }
+    
+    // MARK: - Performance Lockdown Overlay (Hide errors from spectators)
+    
+    private var performanceLockdownOverlay: some View {
+        ZStack {
+            // Full-screen semi-transparent backdrop
+            Color.black.opacity(0.8)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 24) {
+                // Generic "No Internet" icon (hide technical details)
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: 72))
+                    .foregroundColor(.white)
+                
+                VStack(spacing: 8) {
+                    Text("No Internet Connection")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                    
+                    Text("Check your connection and try again")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+                
+                // Hidden "Info" button for magician (long-press to reveal)
+                Text("⚠️")
+                    .font(.title)
+                    .foregroundColor(.white.opacity(0.3))
+                    .onLongPressGesture(minimumDuration: 2.0) {
+                        showMagicianDebugInfo()
+                    }
+            }
+            .padding(40)
+        }
+        .alert("🔓 Debug Info (Magician Only)", isPresented: $showingMagicianDebug) {
+            Button("Close", role: .cancel) { }
+        } message: {
+            if let lockUntil = instagram.lockUntil {
+                let remaining = max(0, Int(lockUntil.timeIntervalSinceNow))
+                let mins = remaining / 60
+                let secs = remaining % 60
+                
+                Text("""
+                Real Cause: \(instagram.lockReason)
+                
+                ⚠️ STOP THE TRICK - DO NOT CONTINUE
+                
+                Countdown: \(mins):\(String(format: "%02d", secs)) remaining
+                
+                Instructions:
+                • Do NOT reveal/hide more photos
+                • Do NOT open Instagram
+                • End the trick naturally
+                • Wait for countdown to finish
+                • Check logs in Settings > Developer > Logs
+                
+                The app has stopped all requests to prevent account suspension.
+                """)
+            } else {
+                Text("""
+                Real Cause: \(instagram.lockReason)
+                
+                ⚠️ STOP THE TRICK - DO NOT CONTINUE
+                
+                Check logs in Settings > Developer > Logs for details.
+                """)
+            }
+        }
+    }
+    
+    private func showMagicianDebugInfo() {
+        print("🔓 [MAGICIAN] Debug info requested")
+        LogManager.shared.info("Magician accessed debug info during performance lockdown", category: .general)
+        showingMagicianDebug = true
     }
 }
 
