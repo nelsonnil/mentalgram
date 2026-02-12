@@ -1808,6 +1808,8 @@ class InstagramService: ObservableObject {
         
         print("✅ [REVEAL] Unarchived successfully")
         
+        // TEMPORARY: Auto-comment disabled until timing issues are resolved
+        /*
         // IMPORTANT: Instagram needs time to process the unarchive before allowing comments
         let delay = UInt64.random(in: 10_000_000_000...15_000_000_000) // 10-15 seconds
         print("   Waiting \(delay / 1_000_000_000)s before commenting (Instagram needs time)...")
@@ -1829,8 +1831,9 @@ class InstagramService: ObservableObject {
         } else {
             print("⚠️ [REVEAL] Comment posting failed")
         }
+        */
         
-        return (true, followerName, commentId)
+        return (true, nil, nil)
     }
     
     // MARK: - Hide (Delete comment + Archive)

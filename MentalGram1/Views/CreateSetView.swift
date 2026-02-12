@@ -203,8 +203,8 @@ struct CreateSetView: View {
         .onChange(of: selectedItems) { newItems in
             loadPhotosFromPicker(items: newItems)
         }
-        .onChange(of: loadedPhotos) { photos in
-            if !photos.isEmpty {
+        .onChange(of: loadedPhotos.count) { count in
+            if count > 0 {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
@@ -355,40 +355,31 @@ struct CreateSetView: View {
                         .cornerRadius(8)
                         .padding(.horizontal)
                         .padding(.bottom, 8)
-                    }
                 }
             }
         }
-        .toolbar {
-            // Toolbar buttons for Step 3 when photos are loaded
-            if currentStep == 3 && !loadedPhotos.isEmpty {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { withAnimation { currentStep = 2 } }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-                        .foregroundColor(.purple)
+    }
+    
+    @ToolbarContentBuilder
+    private var step3ToolbarContent: some ToolbarContent {
+        if currentStep == 3 && !loadedPhotos.isEmpty {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { withAnimation { currentStep = 2 } }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
                     }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Create") {
-                        createSet()
-                    }
-                    .fontWeight(.semibold)
-                    .foregroundColor(consecutiveDuplicates.isEmpty ? .green : .gray)
-                    .disabled(!consecutiveDuplicates.isEmpty)
+                    .foregroundColor(.purple)
                 }
             }
-        }
-        .onChange(of: selectedItems) { newItems in
-            loadPhotosFromPicker(items: newItems)
-        }
-        .onChange(of: loadedPhotos) { photos in
-            if !photos.isEmpty {
-                // Hide keyboard when photos are loaded
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Create") {
+                    createSet()
+                }
+                .fontWeight(.semibold)
+                .foregroundColor(consecutiveDuplicates.isEmpty ? .green : .gray)
+                .disabled(!consecutiveDuplicates.isEmpty)
             }
         }
     }
