@@ -208,6 +208,10 @@ struct CreateSetView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
+        .simultaneousGesture(
+            // Block swipe-back gesture when photos are loaded
+            loadedPhotos.isEmpty ? nil : DragGesture().onChanged { _ in }
+        )
     }
     
     private var step3EmptyState: some View {
