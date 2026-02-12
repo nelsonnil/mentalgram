@@ -47,14 +47,19 @@ struct CreateSetView: View {
             }
             .navigationTitle("Create Set")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(currentStep == 3 && !loadedPhotos.isEmpty)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        isPresented = false
+                    // Show Cancel only when not in Step 3 with photos (toolbar handles Back then)
+                    if !(currentStep == 3 && !loadedPhotos.isEmpty) {
+                        Button("Cancel") {
+                            isPresented = false
+                        }
                     }
                 }
             }
         }
+        .navigationViewStyle(.stack)
     }
     
     // MARK: - Step 1: Type Selection
@@ -321,37 +326,42 @@ struct CreateSetView: View {
                         .background(Color.red.opacity(0.1))
                         .cornerRadius(8)
                         .padding(.horizontal)
+                        .padding(.bottom, 8)
                     }
-                    
-                    // Action buttons
-                    HStack(spacing: 12) {
-                        Button(action: { withAnimation { currentStep = 2 } }) {
+                }
+            }
+        }
+        .toolbar {
+            // Toolbar buttons for Step 3 when photos are loaded
+            if currentStep == 3 && !loadedPhotos.isEmpty {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { withAnimation { currentStep = 2 } }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
                             Text("Back")
-                                .font(.headline)
-                                .foregroundColor(.purple)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(12)
                         }
-                        
-                        Button(action: createSet) {
-                            Text("Create Set")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(consecutiveDuplicates.isEmpty ? Color.green : Color.gray)
-                                .cornerRadius(12)
-                        }
-                        .disabled(!consecutiveDuplicates.isEmpty)
+                        .foregroundColor(.purple)
                     }
-                    .padding()
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Create") {
+                        createSet()
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(consecutiveDuplicates.isEmpty ? .green : .gray)
+                    .disabled(!consecutiveDuplicates.isEmpty)
                 }
             }
         }
         .onChange(of: selectedItems) { newItems in
             loadPhotosFromPicker(items: newItems)
+        }
+        .onChange(of: loadedPhotos) { photos in
+            if !photos.isEmpty {
+                // Hide keyboard when photos are loaded
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
     
@@ -461,72 +471,85 @@ struct DraggablePhotoCell: View {
     @State private var isDragging = false
     
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            // Photo
+        ZStack {
+            // Photo - limpia y más grande
             if let uiImage = UIImage(data: photo.imageData) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 100, height: 100)
+                    .frame(width: 110, height: 110)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(isDuplicate ? Color.red : Color.purple.opacity(0.3), lineWidth: isDuplicate ? 3 : 2)
                     )
-                    .shadow(color: isDragging ? Color.purple.opacity(0.3) : Color.clear, radius: 8)
+                    .shadow(color: isDragging ? Color.purple.opacity(0.5) : Color.clear, radius: 10)
             }
             
-            // Position badge (BIG number) - RED if duplicate
+            // Grip icon (centro, sutil) - indica que es draggable
+            Image(systemName: "line.3.horizontal")
+                .font(.title3)
+                .foregroundColor(.white.opacity(0.6))
+                .shadow(color: .black.opacity(0.3), radius: 2)
+            
+            // Position badge (grande, top-left) - RED si duplicate
             ZStack {
                 Circle()
                     .fill(isDuplicate ? Color.red : Color.purple)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 34, height: 34)
                 
                 Text("\(position)")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
             }
-            .offset(x: -4, y: -4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .offset(x: -5, y: -5)
             
-            // Warning icon for duplicates
+            // Warning icon para duplicates (debajo del número)
             if isDuplicate {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(.red)
-                    .background(Circle().fill(Color.white).frame(width: 20, height: 20))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .offset(x: -24, y: -4)
+                    .font(.system(size: 14))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .offset(x: -5, y: 32)
             }
             
-            // Symbol label
+            // Symbol badge (pequeño, top-right)
             Text(photo.symbol)
                 .font(.caption2.bold())
                 .foregroundColor(.white)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(Color.black.opacity(0.7))
-                .cornerRadius(4)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(4)
+                .background(Color.black.opacity(0.75))
+                .cornerRadius(5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(6)
             
-            // Delete button
+            // Delete button (bottom-right)
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20))
+                    .font(.system(size: 22))
                     .foregroundColor(.red)
-                    .background(Circle().fill(Color.white))
+                    .background(Circle().fill(Color.white).frame(width: 18, height: 18))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            .offset(x: 4, y: -4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .offset(x: 6, y: 6)
         }
-        .frame(width: 100, height: 100)
+        .frame(width: 110, height: 110)
+        .contentShape(Rectangle())
         .onDrag {
             isDragging = true
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
             return NSItemProvider(object: String(position - 1) as NSString)
         }
         .onDrop(of: [.text], delegate: PhotoDropDelegate(
             position: position - 1,
-            onMove: onMove,
+            onMove: { from, to in
+                onMove(from, to)
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+            },
             isDragging: $isDragging
         ))
     }

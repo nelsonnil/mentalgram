@@ -12,6 +12,8 @@ struct SetDetailView: View {
     @State private var isPaused = false
     @State private var uploadProgress: (current: Int, total: Int) = (0, 0)
     @State private var showingError: String?
+    @State private var failedPhotoIndex: Int? = nil  // Track which photo failed for retry
+    @State private var isNetworkError = false         // Track if it's a network error (retryable)
     
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
@@ -39,7 +41,21 @@ struct SetDetailView: View {
         .navigationTitle(currentSet.name)
         .navigationBarTitleDisplayMode(.inline)
         .alert("Error", isPresented: .constant(showingError != nil), presenting: showingError) { _ in
-            Button("OK") { showingError = nil }
+            if isNetworkError {
+                Button("Retry Upload", role: .none) {
+                    showingError = nil
+                    Task { await retryFromFailedPhoto() }
+                }
+                Button("Cancel", role: .cancel) {
+                    showingError = nil
+                    failedPhotoIndex = nil
+                    isNetworkError = false
+                }
+            } else {
+                Button("OK") {
+                    showingError = nil
+                }
+            }
         } message: { error in
             Text(error)
         }
@@ -208,9 +224,13 @@ struct SetDetailView: View {
             ? currentSet.photos 
             : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[selectedBankIndex].id)
         
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 12)], spacing: 12) {
-            ForEach(photosToShow) { photo in
-                PhotoItemView(photo: photo, setId: currentSet.id)
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 12) {
+            ForEach(Array(photosToShow.enumerated()), id: \.element.id) { index, photo in
+                PhotoItemView(
+                    photo: photo,
+                    setId: currentSet.id,
+                    position: index + 1  // Posición relativa dentro del bank (1, 2, 3...)
+                )
             }
         }
     }
@@ -240,7 +260,52 @@ struct SetDetailView: View {
         }
     }
     
-    private func uploadAllPhotos() async {
+    private func retryFromFailedPhoto() async {
+        guard let startIndex = failedPhotoIndex else {
+            print("⚠️ [RETRY] No failed photo index found")
+            return
+        }
+        
+        print("🔄 [RETRY] Retrying from photo #\(startIndex + 1)")
+        failedPhotoIndex = nil
+        isNetworkError = false
+        
+        await uploadAllPhotos(startFrom: startIndex)
+    }
+    
+    // Helper: Check if error is network-related (retryable)
+    private func isNetworkRelatedError(_ error: Error) -> Bool {
+        let description = error.localizedDescription.lowercased()
+        let nsError = error as NSError
+        
+        // Check NSURLError codes
+        if nsError.domain == NSURLErrorDomain {
+            let networkErrorCodes: [Int] = [
+                NSURLErrorTimedOut,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorDNSLookupFailed,
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorInternationalRoamingOff,
+                NSURLErrorCallIsActive,
+                NSURLErrorDataNotAllowed
+            ]
+            if networkErrorCodes.contains(nsError.code) {
+                return true
+            }
+        }
+        
+        // Check description keywords
+        return description.contains("timeout") ||
+               description.contains("network") ||
+               description.contains("connection") ||
+               description.contains("offline") ||
+               description.contains("no internet") ||
+               description.contains("unreachable")
+    }
+    
+    private func uploadAllPhotos(startFrom: Int = 0) async {
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
         
@@ -279,12 +344,22 @@ struct SetDetailView: View {
             return
         }
         
-        let photosToUpload = currentSet.photos.filter { $0.mediaId == nil }
-        uploadProgress = (0, photosToUpload.count)
+        let allPhotosToUpload = currentSet.photos.filter { $0.mediaId == nil }
+        
+        // If retrying, start from failed photo index
+        let photosToUpload = startFrom > 0 ? Array(allPhotosToUpload.dropFirst(startFrom)) : allPhotosToUpload
+        
+        let totalPhotos = allPhotosToUpload.count
+        let alreadyUploaded = totalPhotos - photosToUpload.count
+        uploadProgress = (alreadyUploaded, totalPhotos)
         
         print("   Photos needing upload: \(photosToUpload.count)")
+        if startFrom > 0 {
+            print("   🔄 [RETRY] Starting from photo #\(startFrom + 1) (skipping \(startFrom) already processed)")
+        }
         
-        for (index, photo) in photosToUpload.enumerated() {
+        for (relativeIndex, photo) in photosToUpload.enumerated() {
+            let index = relativeIndex + startFrom
             // Check if paused
             if isPaused {
                 print("⏸️ [UPLOAD] Paused by user")
@@ -389,7 +464,7 @@ struct SetDetailView: View {
                     // Current: 2-4 min (moderate risk, faster uploads)
                     // Conservative: 3-6 min (lower risk, safer for new accounts)
                     // Aggressive: 1.5-3 min (higher risk, only for established accounts)
-                    if index < photosToUpload.count - 1 {
+                    if relativeIndex < photosToUpload.count - 1 {
                         let delaySeconds = Double.random(in: 120...240) // 2-4 min (moderate)
                         print("   Waiting \(String(format: "%.0f", delaySeconds))s before next photo...")
                         
@@ -417,30 +492,61 @@ struct SetDetailView: View {
                 // Build detailed error info about which photo failed
                 let photoInfo = "Photo #\(index + 1) (\(photo.symbol))"
                 
-                // Check if it's a bot detection error
+                // Check error type
                 let errorDescription = error.localizedDescription.lowercased()
                 let isBotError = errorDescription.contains("challenge") || 
                                  errorDescription.contains("spam") || 
                                  errorDescription.contains("login_required") ||
                                  errorDescription.contains("checkpoint")
+                let isNetworkErr = isNetworkRelatedError(error)
                 
-                // Mark photo as error with detailed message
-                let errorMsg = isBotError ? "⚠️ Bot detection - STOP" : error.localizedDescription
-                dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
-                
-                await MainActor.run {
-                    UIApplication.shared.isIdleTimerDisabled = false
-                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (upload error)")
-                    if isBotError {
-                        showingError = "⚠️ Instagram flagged activity at \(photoInfo).\n\nWAIT at least 10 minutes before retrying. Do NOT open Instagram app during this time."
-                    } else {
-                        // Show which specific photo failed
-                        showingError = "❌ Upload failed at \(photoInfo)\n\nError: \(error.localizedDescription)\n\nCheck connection and retry manually."
+                if isNetworkErr && !isBotError {
+                    // NETWORK ERROR: Pause and allow retry (don't mark as permanent error)
+                    print("🌐 [UPLOAD] Network error detected - pausing for retry")
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .pending, errorMessage: "Network error")
+                    
+                    await MainActor.run {
+                        UIApplication.shared.isIdleTimerDisabled = false
+                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (network error)")
+                        
+                        failedPhotoIndex = index
+                        isNetworkError = true
+                        showingError = "🌐 Connection lost at \(photoInfo)\n\nCheck your internet connection and tap 'Retry Upload' to continue from where you left off."
+                        
+                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                        isUploading = false
                     }
-                    dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                    isUploading = false
+                    return
+                    
+                } else if isBotError {
+                    // BOT DETECTION: Stop completely (critical error)
+                    print("🚨 [UPLOAD] Bot detection - STOPPING")
+                    let errorMsg = "⚠️ Bot detection - STOP"
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
+                    
+                    await MainActor.run {
+                        UIApplication.shared.isIdleTimerDisabled = false
+                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (bot error)")
+                        showingError = "⚠️ Instagram flagged activity at \(photoInfo).\n\nWAIT at least 10 minutes before retrying. Do NOT open Instagram app during this time."
+                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                        isUploading = false
+                    }
+                    return
+                    
+                } else {
+                    // OTHER ERROR: Mark as error but could retry manually
+                    print("⚠️ [UPLOAD] Unknown error - marking as error")
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: error.localizedDescription)
+                    
+                    await MainActor.run {
+                        UIApplication.shared.isIdleTimerDisabled = false
+                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (unknown error)")
+                        showingError = "❌ Upload failed at \(photoInfo)\n\nError: \(error.localizedDescription)\n\nCheck connection and retry manually."
+                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                        isUploading = false
+                    }
+                    return
                 }
-                return
             }
         }
         
@@ -527,6 +633,7 @@ struct SetDetailView: View {
 struct PhotoItemView: View {
     let photo: SetPhoto
     let setId: UUID
+    let position: Int
     
     @ObservedObject var instagram = InstagramService.shared
     @ObservedObject var dataManager = DataManager.shared
@@ -536,28 +643,53 @@ struct PhotoItemView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Photo
-            if let imageData = photo.imageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 100, height: 100)
-                    .clipped()
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 100, height: 100)
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(.gray)
-                    )
+            // Photo con badges
+            ZStack {
+                if let imageData = photo.imageData, let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 110, height: 110)
+                        .clipped()
+                        .cornerRadius(12)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 110, height: 110)
+                        .cornerRadius(12)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.gray)
+                        )
+                }
+                
+                // Position badge (top-left) - morado
+                ZStack {
+                    Circle()
+                        .fill(Color.purple)
+                        .frame(width: 32, height: 32)
+                    
+                    Text("\(position)")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .offset(x: -4, y: -4)
+                
+                // Symbol badge (top-right) - pequeño
+                Text(photo.symbol)
+                    .font(.caption2.bold())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.75))
+                    .cornerRadius(5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(6)
             }
             
             // Info
             VStack(spacing: 4) {
-                Text(photo.symbol)
-                    .font(.caption.bold())
-                    .lineLimit(1)
                 
                 if let uploadDate = photo.uploadDate {
                     Text(uploadDate.formatted(date: .abbreviated, time: .omitted))
