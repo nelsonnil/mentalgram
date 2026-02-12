@@ -1643,17 +1643,13 @@ class InstagramService: ObservableObject {
             throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before uploading another photo.\(photoInfo)")
         }
         
-        // ASPECT RATIO FIX: Auto-crop to Instagram-compatible ratio BEFORE duplicate check
-        let validImageData = adjustImageAspectRatio(imageData: imageData)
-        print("✅ [UPLOAD] Image aspect ratio validated/adjusted")
-        
-        // COMPRESSION: Compress if > 500KB for fast upload
-        let compressedImageData = compressImageIfNeeded(imageData: validImageData, photoIndex: photoIndex)
-        print("✅ [UPLOAD] Image optimized for upload")
+        // NOTE: Image is already aspect-adjusted and compressed when loaded from gallery
+        // We use the imageData as-is for upload
+        print("✅ [UPLOAD] Using pre-processed image")
         
         // ANTI-BOT: Detect duplicate image (prevent uploading same photo twice)
         // EXCEPTION: Word Reveal and Number Reveal sets need to upload duplicate letters/numbers
-        let finalHash = hashImageData(compressedImageData)
+        let finalHash = hashImageData(imageData)
         if !allowDuplicates {
             if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
                lastHash == finalHash {
@@ -1712,15 +1708,15 @@ class InstagramService: ObservableObject {
         
         // Upload-specific headers (matching instagrapi exactly)
         uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        uploadRequest.setValue(String(compressedImageData.count), forHTTPHeaderField: "Content-Length")
+        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "Content-Length")
         uploadRequest.setValue(ruploadParamsString, forHTTPHeaderField: "X-Instagram-Rupload-Params")
         uploadRequest.setValue(waterfallId, forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
         uploadRequest.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
         uploadRequest.setValue(uploadName, forHTTPHeaderField: "X-Entity-Name")
-        uploadRequest.setValue(String(compressedImageData.count), forHTTPHeaderField: "X-Entity-Length")
+        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "X-Entity-Length")
         uploadRequest.setValue("0", forHTTPHeaderField: "Offset")
         
-        uploadRequest.httpBody = compressedImageData
+        uploadRequest.httpBody = imageData
         
         print("   Sending image bytes to Instagram...")
         let (uploadData, uploadResponse) = try await postSession.data(for: uploadRequest)
@@ -2252,7 +2248,8 @@ class InstagramService: ObservableObject {
     
     /// Adjusts image to Instagram-compatible aspect ratio (1:1, 4:5, or 1.91:1)
     /// Returns adjusted image data or original if already valid
-    private func adjustImageAspectRatio(imageData: Data) -> Data {
+    /// PUBLIC: Called when selecting photos from gallery
+    static func adjustImageAspectRatio(imageData: Data) -> Data {
         guard let image = UIImage(data: imageData) else {
             print("⚠️ [ASPECT] Cannot create UIImage, using original")
             return imageData
@@ -2342,12 +2339,13 @@ class InstagramService: ObservableObject {
         return adjustedData
     }
     
-    // MARK: - Image Compression
+    // MARK: - Image Compression (PUBLIC for photo selection)
     
-    /// Compress image if needed for fast upload
-    /// Target: MAX 500KB, Quality 0.82 (82%)
-    /// Instagram compresses to 1080px anyway, so we optimize before upload
-    private func compressImageIfNeeded(imageData: Data, photoIndex: Int?) -> Data {
+    /// Compress image intelligently with adaptive quality
+    /// Target: MAX 480KB (safe margin below 500KB limit)
+    /// Uses calculated quality based on original size for optimal results
+    /// PUBLIC: Called when selecting photos from gallery
+    static func compressImageForUpload(imageData: Data, photoIndex: Int? = nil) -> Data {
         let sizeKB = imageData.count / 1024
         let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
         
@@ -2368,9 +2366,24 @@ class InstagramService: ObservableObject {
         let originalSize = image.size
         print("📐 [COMPRESS] Original dimensions: \(Int(originalSize.width))x\(Int(originalSize.height))")
         
-        // Strategy 1: If > 2MB, resize to max 1080px (Instagram's limit) + compress
-        if imageData.count > 2_000_000 { // 2MB
-            print("🔧 [COMPRESS] Large image (>2MB), resizing to 1080px + compressing...")
+        let targetKB = 480 // Safe margin below 500KB limit
+        let targetBytes = targetKB * 1024
+        
+        // ADAPTIVE COMPRESSION: Calculate optimal quality based on size
+        // Formula: quality = sqrt(targetSize / originalSize)
+        // This gives us the quality needed to reach target in ONE compression
+        
+        let sizeRatio = Double(targetBytes) / Double(imageData.count)
+        var calculatedQuality = sqrt(sizeRatio)
+        
+        // Clamp quality between 0.70 (minimum acceptable) and 0.95 (maximum useful)
+        calculatedQuality = max(0.70, min(0.95, calculatedQuality))
+        
+        print("🧮 [COMPRESS] Calculated optimal quality: \(String(format: "%.2f", calculatedQuality)) for target \(targetKB)KB")
+        
+        // If calculated quality is too low (<0.70), we need to resize first
+        if calculatedQuality <= 0.70 {
+            print("🔧 [COMPRESS] Quality too low, will resize to 1080px first")
             
             let maxDimension: CGFloat = 1080
             var newSize = originalSize
@@ -2378,6 +2391,7 @@ class InstagramService: ObservableObject {
             if originalSize.width > maxDimension || originalSize.height > maxDimension {
                 let ratio = min(maxDimension / originalSize.width, maxDimension / originalSize.height)
                 newSize = CGSize(width: originalSize.width * ratio, height: originalSize.height * ratio)
+                print("   Resizing from \(Int(originalSize.width))x\(Int(originalSize.height)) to \(Int(newSize.width))x\(Int(newSize.height))")
             }
             
             // Resize
@@ -2385,48 +2399,48 @@ class InstagramService: ObservableObject {
             image.draw(in: CGRect(origin: .zero, size: newSize))
             guard let resizedImage = UIGraphicsGetImageFromCurrentImageContext() else {
                 UIGraphicsEndImageContext()
-                print("❌ [COMPRESS] Resize failed, trying compression only")
-                // Fall through to compression-only strategy
-                guard let compressed = image.jpegData(compressionQuality: 0.82) else {
+                print("❌ [COMPRESS] Resize failed, using fallback compression")
+                guard let compressed = image.jpegData(compressionQuality: 0.75) else {
                     return imageData
                 }
                 let finalSizeKB = compressed.count / 1024
-                print("✅ [COMPRESS] Compressed to \(finalSizeKB)KB (quality 0.82)")
-                LogManager.shared.info("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (compressed)", category: .upload)
+                print("✅ [COMPRESS] Fallback: \(finalSizeKB)KB (quality 0.75)")
+                LogManager.shared.info("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (fallback)", category: .upload)
                 return compressed
             }
             UIGraphicsEndImageContext()
             
-            // Compress resized image
+            // Now compress the resized image with quality 0.82
             guard let finalData = resizedImage.jpegData(compressionQuality: 0.82) else {
                 print("❌ [COMPRESS] Failed to compress resized image")
                 return imageData
             }
             
             let finalSizeKB = finalData.count / 1024
-            print("✅ [COMPRESS] Resized to \(Int(newSize.width))x\(Int(newSize.height)) + compressed")
-            print("✅ [COMPRESS] Final size: \(finalSizeKB)KB (from \(sizeKB)KB, saved \(sizeKB - finalSizeKB)KB)")
-            LogManager.shared.success("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (resized + compressed, -\((100 - (finalSizeKB * 100 / sizeKB)))%)", category: .upload)
+            let savedPercent = 100 - (finalSizeKB * 100 / sizeKB)
+            print("✅ [COMPRESS] Resized + compressed: \(finalSizeKB)KB (from \(sizeKB)KB, -\(savedPercent)%)")
+            LogManager.shared.success("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (resized + compressed, -\(savedPercent)%)", category: .upload)
             return finalData
         }
         
-        // Strategy 2: 500KB-2MB → Just compress with 0.82 quality
-        print("🔧 [COMPRESS] Compressing with quality 0.82...")
-        guard let compressedData = image.jpegData(compressionQuality: 0.82) else {
+        // Apply calculated quality in ONE compression (no quality loss from multiple compressions)
+        print("🔧 [COMPRESS] Applying quality \(String(format: "%.2f", calculatedQuality))...")
+        guard let compressedData = image.jpegData(compressionQuality: calculatedQuality) else {
             print("❌ [COMPRESS] Compression failed, using original")
             return imageData
         }
         
         let finalSizeKB = compressedData.count / 1024
         
-        // If compression didn't help much, use original
+        // Verify result
         if compressedData.count >= imageData.count {
             print("⚠️ [COMPRESS] Compression didn't reduce size, using original")
             return imageData
         }
         
-        print("✅ [COMPRESS] Compressed to \(finalSizeKB)KB (from \(sizeKB)KB, saved \(sizeKB - finalSizeKB)KB)")
-        LogManager.shared.success("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (compressed, -\((100 - (finalSizeKB * 100 / sizeKB)))%)", category: .upload)
+        let savedPercent = 100 - (finalSizeKB * 100 / sizeKB)
+        print("✅ [COMPRESS] Final: \(finalSizeKB)KB (from \(sizeKB)KB, -\(savedPercent)%, quality \(String(format: "%.2f", calculatedQuality)))")
+        LogManager.shared.success("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (adaptive quality \(String(format: "%.2f", calculatedQuality)), -\(savedPercent)%)", category: .upload)
         return compressedData
     }
 }

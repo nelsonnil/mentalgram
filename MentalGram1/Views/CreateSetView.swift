@@ -189,7 +189,7 @@ struct CreateSetView: View {
             if isLoadingPhotos {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text("Creating set and loading photos...")
+                    Text("Optimizing photos and creating set...")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -230,10 +230,14 @@ struct CreateSetView: View {
         Task {
             var loadedPhotos: [(symbol: String, filename: String, imageData: Data)] = []
             
-            for item in items {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data),
-                   let jpegData = image.jpegData(compressionQuality: 0.8) {
+            for (index, item) in items.enumerated() {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    
+                    // Step 1: Adjust aspect ratio for Instagram compatibility
+                    let validImageData = InstagramService.adjustImageAspectRatio(imageData: data)
+                    
+                    // Step 2: Apply intelligent adaptive compression
+                    let optimizedImageData = InstagramService.compressImageForUpload(imageData: validImageData, photoIndex: index)
                     
                     let filename = item.itemIdentifier ?? "photo_\(UUID().uuidString)"
                     let symbol = filename.replacingOccurrences(of: ".jpg", with: "")
@@ -241,7 +245,7 @@ struct CreateSetView: View {
                         .replacingOccurrences(of: ".png", with: "")
                         .replacingOccurrences(of: ".heic", with: "")
                     
-                    loadedPhotos.append((symbol: symbol, filename: filename, imageData: jpegData))
+                    loadedPhotos.append((symbol: symbol, filename: filename, imageData: optimizedImageData))
                 }
             }
             
