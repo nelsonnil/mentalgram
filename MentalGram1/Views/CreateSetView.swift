@@ -190,59 +190,87 @@ struct CreateSetView: View {
     // MARK: - Step 3: Photo Selection & Reorder
     
     private var step3PhotoSelection: some View {
-        VStack(spacing: 16) {
+        Group {
             if loadedPhotos.isEmpty {
-                // Initial state: photo picker
-                VStack(spacing: 20) {
-                    Text("Select Photos")
-                        .font(.title2.bold())
-                        .padding(.top)
-                    
-                    PhotosPicker(
-                        selection: $selectedItems,
-                        maxSelectionCount: 100,
-                        matching: .images
-                    ) {
-                        VStack(spacing: 12) {
-                            Image(systemName: "photo.on.rectangle.angled")
-                                .font(.system(size: 48))
-                                .foregroundColor(.purple)
-                            
-                            Text("Tap to select photos")
-                                .font(.headline)
-                            
-                            Text(selectedType == .word ? "Select A-Z images" : selectedType == .number ? "Select 0-9 images" : "Select your images")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 200)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                    .padding(.horizontal)
-                    
-                    if isLoadingPhotos {
-                        ProgressView("Loading photos...")
-                            .padding()
-                    }
-                    
-                    Spacer()
-                    
-                    Button(action: { withAnimation { currentStep = 2 } }) {
-                        Text("Back")
-                            .font(.headline)
-                            .foregroundColor(.purple)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.gray.opacity(0.1))
-                            .cornerRadius(12)
-                    }
-                    .padding()
-                }
+                step3EmptyState
             } else {
-                // Photos loaded: show reorderable grid
+                step3PhotoGrid
+            }
+        }
+        .toolbar {
+            step3ToolbarContent
+        }
+        .onChange(of: selectedItems) { newItems in
+            loadPhotosFromPicker(items: newItems)
+        }
+        .onChange(of: loadedPhotos) { photos in
+            if !photos.isEmpty {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+        }
+    }
+    
+    private var step3EmptyState: some View {
+        VStack(spacing: 20) {
+            Text("Select Photos")
+                .font(.title2.bold())
+                .padding(.top)
+            
+            PhotosPicker(
+                selection: $selectedItems,
+                maxSelectionCount: 100,
+                matching: .images
+            ) {
                 VStack(spacing: 12) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 48))
+                        .foregroundColor(.purple)
+                    
+                    Text("Tap to select photos")
+                        .font(.headline)
+                    
+                    Text(photoPickerPrompt)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 200)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(12)
+            }
+            .padding(.horizontal)
+            
+            if isLoadingPhotos {
+                ProgressView("Loading photos...")
+                    .padding()
+            }
+            
+            Spacer()
+            
+            Button(action: { withAnimation { currentStep = 2 } }) {
+                Text("Back")
+                    .font(.headline)
+                    .foregroundColor(.purple)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(12)
+            }
+            .padding()
+        }
+    }
+    
+    private var photoPickerPrompt: String {
+        switch selectedType {
+        case .word: return "Select A-Z images"
+        case .number: return "Select 0-9 images"
+        case .custom: return "Select your images"
+        }
+    }
+    
+    private var step3PhotoGrid: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 12) {
                     HStack {
                         Text("Drag to reorder (\(loadedPhotos.count) photos)")
                             .font(.headline)
