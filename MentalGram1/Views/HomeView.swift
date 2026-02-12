@@ -54,6 +54,7 @@ struct HomeView: View {
 
 struct SetsListView: View {
     @ObservedObject var dataManager = DataManager.shared
+    @ObservedObject var instagram = InstagramService.shared
     @State private var showingCreateSet = false
     @State private var newlyCreatedSet: PhotoSet? = nil
     @State private var navigateToNewSet = false
@@ -80,24 +81,31 @@ struct SetsListView: View {
                     Text("No Sets Yet")
                         .font(.title2.bold())
                     
-                    Text("Create your first photo set")
-                        .foregroundColor(.secondary)
-                    
-                    Button(action: { showingCreateSet = true }) {
-                        Label("Create Set", systemImage: "plus.circle.fill")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 12)
-                            .background(Color.purple)
-                            .cornerRadius(10)
+                    if instagram.isLoggedIn {
+                        Text("Create your first photo set")
+                            .foregroundColor(.secondary)
+                        
+                        Button(action: { showingCreateSet = true }) {
+                            Label("Create Set", systemImage: "plus.circle.fill")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 12)
+                                .background(Color.purple)
+                                .cornerRadius(10)
+                        }
+                    } else {
+                        Text("Your photo collections will appear here")
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
                 }
             } else {
                 List {
                     ForEach(dataManager.sets) { set in
                         NavigationLink(destination: SetDetailView(set: set)) {
-                            SetRowView(set: set)
+                            SetRowView(set: set, isLoggedIn: instagram.isLoggedIn)
                         }
                     }
                     .onDelete(perform: deleteSets)
@@ -107,9 +115,11 @@ struct SetsListView: View {
         }
         .navigationTitle("My Sets")
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showingCreateSet = true }) {
-                    Image(systemName: "plus")
+            if instagram.isLoggedIn {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showingCreateSet = true }) {
+                        Image(systemName: "plus")
+                    }
                 }
             }
         }
@@ -136,6 +146,7 @@ struct SetsListView: View {
 
 struct SetRowView: View {
     let set: PhotoSet
+    let isLoggedIn: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -148,8 +159,11 @@ struct SetRowView: View {
                 
                 Spacer()
                 
-                Image(systemName: set.status.icon)
-                    .foregroundColor(set.status.color)
+                // Only show status icon when logged in
+                if isLoggedIn {
+                    Image(systemName: set.status.icon)
+                        .foregroundColor(set.status.color)
+                }
             }
             
             HStack {
@@ -157,7 +171,8 @@ struct SetRowView: View {
                 Text("•")
                 Text("\(set.totalPhotos) photos")
                 
-                if set.status == .completed {
+                // Only show completion date when logged in
+                if isLoggedIn && set.status == .completed {
                     Text("•")
                     Text(set.completedAt?.formatted(date: .abbreviated, time: .omitted) ?? "")
                 }
@@ -165,8 +180,8 @@ struct SetRowView: View {
             .font(.caption)
             .foregroundColor(.secondary)
             
-            // Progress bar for uploading
-            if set.status == .uploading || set.status == .paused {
+            // Progress bar for uploading - ONLY VISIBLE WHEN LOGGED IN
+            if isLoggedIn && (set.status == .uploading || set.status == .paused) {
                 ProgressView(value: Double(set.uploadedPhotos), total: Double(set.totalPhotos))
                     .tint(.purple)
                 

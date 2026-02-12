@@ -135,54 +135,18 @@ struct SetDetailView: View {
     
     private var statusSection: some View {
         VStack(spacing: 12) {
-            HStack {
-                Image(systemName: currentSet.status.icon)
-                Text(currentSet.status.label)
-                    .font(.headline)
-            }
-            .foregroundColor(currentSet.status.color)
-            
-            if currentSet.status == .ready {
-                Button(action: startUpload) {
-                    Label("Start Upload", systemImage: "arrow.up.circle.fill")
+            // Only show upload status and actions when logged in
+            if instagram.isLoggedIn {
+                HStack {
+                    Image(systemName: currentSet.status.icon)
+                    Text(currentSet.status.label)
                         .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .cornerRadius(12)
                 }
-            } else if currentSet.status == .uploading {
-                VStack(spacing: 12) {
-                    ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
-                        .tint(isPaused ? .orange : .purple)
-                    
-                    Text(isPaused ? "⏸️ Paused - \(uploadProgress.current) / \(uploadProgress.total)" : "📤 Uploading - \(uploadProgress.current) / \(uploadProgress.total)")
-                        .font(.caption)
-                        .foregroundColor(isPaused ? .orange : .secondary)
-                    
-                    // Pause/Resume Button
-                    Button(action: togglePause) {
-                        Label(isPaused ? "Resume Upload" : "Pause Upload", systemImage: isPaused ? "play.fill" : "pause.fill")
-                            .font(.subheadline.bold())
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(isPaused ? Color.green : Color.orange)
-                            .cornerRadius(8)
-                    }
-                }
-            } else if currentSet.status == .paused {
-                VStack(spacing: 12) {
-                    ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
-                        .tint(.orange)
-                    
-                    Text("⏸️ Upload Paused - \(uploadProgress.current) / \(uploadProgress.total)")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                    
-                    Button(action: resumeUpload) {
-                        Label("Resume Upload", systemImage: "play.fill")
+                .foregroundColor(currentSet.status.color)
+                
+                if currentSet.status == .ready {
+                    Button(action: startUpload) {
+                        Label("Start Upload", systemImage: "arrow.up.circle.fill")
                             .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -190,10 +154,57 @@ struct SetDetailView: View {
                             .background(Color.green)
                             .cornerRadius(12)
                     }
+                } else if currentSet.status == .uploading {
+                    VStack(spacing: 12) {
+                        ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
+                            .tint(isPaused ? .orange : .purple)
+                        
+                        Text(isPaused ? "⏸️ Paused - \(uploadProgress.current) / \(uploadProgress.total)" : "📤 Uploading - \(uploadProgress.current) / \(uploadProgress.total)")
+                            .font(.caption)
+                            .foregroundColor(isPaused ? .orange : .secondary)
+                        
+                        // Pause/Resume Button
+                        Button(action: togglePause) {
+                            Label(isPaused ? "Resume Upload" : "Pause Upload", systemImage: isPaused ? "play.fill" : "pause.fill")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(isPaused ? Color.green : Color.orange)
+                                .cornerRadius(8)
+                        }
+                    }
+                } else if currentSet.status == .paused {
+                    VStack(spacing: 12) {
+                        ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
+                            .tint(.orange)
+                        
+                        Text("⏸️ Upload Paused - \(uploadProgress.current) / \(uploadProgress.total)")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        
+                        Button(action: resumeUpload) {
+                            Label("Resume Upload", systemImage: "play.fill")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.green)
+                                .cornerRadius(12)
+                        }
+                    }
+                } else if currentSet.status == .completed {
+                    // Quick Actions para sets completados
+                    quickActionsSection
                 }
-            } else if currentSet.status == .completed {
-                // Quick Actions para sets completados
-                quickActionsSection
+            } else {
+                // When not logged in, show generic info
+                HStack {
+                    Image(systemName: "square.stack.3d.up")
+                    Text("Photo Collection")
+                        .font(.headline)
+                }
+                .foregroundColor(.secondary)
             }
         }
         .padding()
@@ -1177,54 +1188,56 @@ struct PhotoItemView: View {
                 // Status - Detailed based on uploadStatus
                 statusBadge(for: photo)
                 
-                // Action Buttons - MÁS GRANDES Y VISIBLES
-                if let mediaId = photo.mediaId {
-                    if isProcessing {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .padding(.top, 6)
-                    } else {
-                        if photo.isArchived {
-                            Button(action: { revealPhoto() }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "eye.fill")
-                                    Text("Reveal")
-                                        .font(.caption.bold())
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 8)
-                                .background(
-                                    LinearGradient(
-                                        colors: [Color.green, Color.green.opacity(0.8)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                                .shadow(color: Color.green.opacity(0.3), radius: 3, x: 0, y: 2)
-                            }
-                            .padding(.top, 6)
+                // Action Buttons - ONLY VISIBLE WHEN LOGGED IN
+                if instagram.isLoggedIn {
+                    if let mediaId = photo.mediaId {
+                        if isProcessing {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .padding(.top, 6)
                         } else {
-                            Button(action: { hidePhoto() }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "archivebox.fill")
-                                    Text("Hide")
-                                        .font(.caption.bold())
+                            if photo.isArchived {
+                                Button(action: { revealPhoto() }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "eye.fill")
+                                        Text("Reveal")
+                                            .font(.caption.bold())
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 8)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [Color.green, Color.green.opacity(0.8)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                                    .shadow(color: Color.green.opacity(0.3), radius: 3, x: 0, y: 2)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 8)
-                                .background(Color.orange.opacity(0.2))
-                                .foregroundColor(.orange)
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.orange.opacity(0.5), lineWidth: 1)
-                                )
+                                .padding(.top, 6)
+                            } else {
+                                Button(action: { hidePhoto() }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "archivebox.fill")
+                                        Text("Hide")
+                                            .font(.caption.bold())
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 8)
+                                    .background(Color.orange.opacity(0.2))
+                                    .foregroundColor(.orange)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.orange.opacity(0.5), lineWidth: 1)
+                                        )
+                                }
+                                .padding(.top, 6)
                             }
-                            .padding(.top, 6)
                         }
                     }
                 }
