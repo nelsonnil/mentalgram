@@ -722,6 +722,12 @@ class InstagramService: ObservableObject {
     func archivePhoto(mediaId: String) async throws -> Bool {
         print("📦 [ARCHIVE] Starting archive for media ID: \(mediaId)")
         
+        // ANTI-BOT: Check lockdown IMMEDIATELY (don't waste time on delay)
+        if isLocked {
+            print("🚨 [ARCHIVE] Lockdown active - ABORT")
+            throw InstagramError.botDetected("Lockdown active. Cannot archive.")
+        }
+        
         // Simulate human delay
         let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
         print("   Waiting \(delay / 1_000_000_000)s before archive...")
@@ -769,6 +775,12 @@ class InstagramService: ObservableObject {
     
     func unarchivePhoto(mediaId: String) async throws -> Bool {
         print("📤 [UNARCHIVE] Starting unarchive for media ID: \(mediaId)")
+        
+        // ANTI-BOT: Check lockdown IMMEDIATELY (don't waste time on delay)
+        if isLocked {
+            print("🚨 [UNARCHIVE] Lockdown active - ABORT")
+            throw InstagramError.botDetected("Lockdown active. Cannot reveal/unarchive.")
+        }
         
         // Simulate human delay
         let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
@@ -818,6 +830,12 @@ class InstagramService: ObservableObject {
     func commentOnMedia(mediaId: String, text: String) async throws -> String? {
         print("💬 [COMMENT] Posting comment on media ID: \(mediaId)")
         print("   Text: \"\(text)\"")
+        
+        // ANTI-BOT: Check lockdown IMMEDIATELY
+        if isLocked {
+            print("🚨 [COMMENT] Lockdown active - ABORT")
+            throw InstagramError.botDetected("Lockdown active. Cannot post comments.")
+        }
         
         // Extract just the PK (without _userid) for comment endpoint
         let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
@@ -917,6 +935,12 @@ class InstagramService: ObservableObject {
     // MARK: - Delete Comment
     
     func deleteComment(mediaId: String, commentId: String) async throws -> Bool {
+        // ANTI-BOT: Check lockdown IMMEDIATELY
+        if isLocked {
+            print("🚨 [DELETE COMMENT] Lockdown active - ABORT")
+            throw InstagramError.botDetected("Lockdown active. Cannot delete comments.")
+        }
+        
         let data = try await apiRequest(
             method: "POST",
             path: "/media/\(mediaId)/comment/\(commentId)/delete/",
@@ -935,6 +959,12 @@ class InstagramService: ObservableObject {
     
     func getLatestFollower() async throws -> InstagramFollower? {
         print("👤 [FOLLOWER] Fetching latest follower...")
+        
+        // ANTI-BOT: Check lockdown IMMEDIATELY
+        if isLocked {
+            print("🚨 [FOLLOWER] Lockdown active - ABORT")
+            throw InstagramError.botDetected("Lockdown active. Cannot fetch followers.")
+        }
         
         let data = try await apiRequest(
             method: "GET",
@@ -1823,6 +1853,12 @@ class InstagramService: ObservableObject {
     
     func reveal(mediaId: String) async throws -> (success: Bool, follower: String?, commentId: String?) {
         print("✨ [REVEAL] Starting reveal for media ID: \(mediaId)")
+        
+        // ANTI-BOT: Check lockdown IMMEDIATELY
+        if isLocked {
+            print("🚨 [REVEAL] Lockdown active - ABORT")
+            throw InstagramError.botDetected("Lockdown active. Cannot reveal photos during lockdown.")
+        }
         
         // Step 1: Unarchive
         print("   Step 1: Unarchiving...")
