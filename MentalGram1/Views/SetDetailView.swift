@@ -1,7 +1,6 @@
 import SwiftUI
 import CryptoKit
 import UniformTypeIdentifiers
-import UniformTypeIdentifiers
 
 // MARK: - Set Detail View
 
@@ -19,6 +18,7 @@ struct SetDetailView: View {
     @State private var isNetworkError = false
     @State private var isReorderMode = false
     @State private var consecutiveDuplicates: Set<Int> = []
+    @State private var selectedReorderIndex: Int? = nil  // Tap-to-swap: first selected photo
     
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
@@ -49,7 +49,10 @@ struct SetDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if isReorderMode {
                     Button("Done") {
-                        withAnimation { isReorderMode = false }
+                        withAnimation {
+                            isReorderMode = false
+                            selectedReorderIndex = nil
+                        }
                     }
                     .fontWeight(.semibold)
                     .foregroundColor(.purple)
@@ -274,6 +277,23 @@ struct SetDetailView: View {
     
     private func reorderableGrid(photos: [SetPhoto]) -> some View {
         VStack(spacing: 12) {
+            // Instructions
+            HStack(spacing: 8) {
+                Image(systemName: "hand.tap.fill")
+                    .foregroundColor(.purple)
+                if selectedReorderIndex != nil {
+                    Text("Now tap the photo to swap with")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                        .fontWeight(.semibold)
+                } else {
+                    Text("Tap a photo, then tap another to swap them")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal)
+            
             // Warning for consecutive duplicates
             if !consecutiveDuplicates.isEmpty {
                 HStack(spacing: 8) {
@@ -299,22 +319,61 @@ struct SetDetailView: View {
                 ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                     let isUploaded = photo.uploadStatus == .completed || photo.uploadStatus == .uploaded || photo.uploadStatus == .archiving
                     let isDup = consecutiveDuplicates.contains(index)
+                    let isSelected = selectedReorderIndex == index
                     
-                    ReorderablePhotoCell(
+                    TapToSwapPhotoCell(
                         photo: photo,
                         position: index + 1,
                         isDuplicate: isDup,
                         isLocked: isUploaded,
-                        onMove: { from, to in
-                            let bankId = currentSet.banks.isEmpty ? nil : currentSet.banks[selectedBankIndex].id
-                            dataManager.reorderPhotos(setId: currentSet.id, bankId: bankId, fromIndex: from, toIndex: to)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                checkConsecutiveDuplicates()
-                            }
-                        }
+                        isSelected: isSelected
                     )
+                    .onTapGesture {
+                        handleReorderTap(index: index, isLocked: isUploaded)
+                    }
                 }
             }
+        }
+    }
+    
+    private func handleReorderTap(index: Int, isLocked: Bool) {
+        guard !isLocked else {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+            return
+        }
+        
+        if let fromIndex = selectedReorderIndex {
+            if fromIndex == index {
+                // Tapped same photo: deselect
+                withAnimation(.spring(response: 0.3)) {
+                    selectedReorderIndex = nil
+                }
+                return
+            }
+            
+            // SWAP: Exchange positions directly (A goes to B, B goes to A)
+            let bankId = currentSet.banks.isEmpty ? nil : currentSet.banks[selectedBankIndex].id
+            
+            withAnimation(.spring(response: 0.3)) {
+                dataManager.swapPhotos(setId: currentSet.id, bankId: bankId, indexA: fromIndex, indexB: index)
+                selectedReorderIndex = nil
+            }
+            
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                checkConsecutiveDuplicates()
+            }
+        } else {
+            // First tap: select photo
+            withAnimation(.spring(response: 0.3)) {
+                selectedReorderIndex = index
+            }
+            
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
         }
     }
     
@@ -1027,16 +1086,14 @@ struct PhotoItemView: View {
     }
 }
 
-// MARK: - Reorderable Photo Cell (for drag & drop mode)
+// MARK: - Tap-to-Swap Photo Cell (for reorder mode)
 
-struct ReorderablePhotoCell: View {
+struct TapToSwapPhotoCell: View {
     let photo: SetPhoto
     let position: Int
     let isDuplicate: Bool
-    let isLocked: Bool  // Already uploaded - can't move
-    let onMove: (Int, Int) -> Void
-    
-    @State private var isDragging = false
+    let isLocked: Bool
+    let isSelected: Bool
     
     var body: some View {
         VStack(spacing: 4) {
@@ -1049,7 +1106,13 @@ struct ReorderablePhotoCell: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(isDuplicate ? Color.red : (isLocked ? Color.gray.opacity(0.5) : Color.purple.opacity(0.3)), lineWidth: isDuplicate ? 3 : 2)
+                                .stroke(
+                                    isSelected ? Color.green :
+                                    isDuplicate ? Color.red :
+                                    isLocked ? Color.gray.opacity(0.5) :
+                                    Color.purple.opacity(0.3),
+                                    lineWidth: isSelected ? 4 : (isDuplicate ? 3 : 2)
+                                )
                         )
                         .opacity(isLocked ? 0.4 : 1.0)
                         .overlay(
@@ -1057,15 +1120,8 @@ struct ReorderablePhotoCell: View {
                                 Color.black.opacity(0.3).cornerRadius(12)
                                 : nil
                         )
-                        .shadow(color: isDragging ? Color.purple.opacity(0.5) : Color.clear, radius: 10)
-                }
-                
-                // Grip icon (only for movable photos)
-                if !isLocked {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.title3)
-                        .foregroundColor(.white.opacity(0.7))
-                        .shadow(color: .black.opacity(0.5), radius: 2)
+                        .scaleEffect(isSelected ? 1.08 : 1.0)
+                        .shadow(color: isSelected ? Color.green.opacity(0.5) : Color.clear, radius: 8)
                 }
                 
                 // Lock icon for uploaded photos
@@ -1076,10 +1132,23 @@ struct ReorderablePhotoCell: View {
                         .shadow(color: .black.opacity(0.5), radius: 2)
                 }
                 
+                // Selected checkmark
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.green)
+                        .shadow(color: .black.opacity(0.3), radius: 2)
+                }
+                
                 // Position badge
                 ZStack {
                     Circle()
-                        .fill(isDuplicate ? Color.red : (isLocked ? Color.gray : Color.purple))
+                        .fill(
+                            isSelected ? Color.green :
+                            isDuplicate ? Color.red :
+                            isLocked ? Color.gray :
+                            Color.purple
+                        )
                         .frame(width: 34, height: 34)
                     
                     Text("\(position)")
@@ -1101,23 +1170,7 @@ struct ReorderablePhotoCell: View {
             }
             .frame(width: 110, height: 110)
             .contentShape(Rectangle())
-            .onDrag {
-                guard !isLocked else { return NSItemProvider() }
-                isDragging = true
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
-                return NSItemProvider(object: String(position - 1) as NSString)
-            }
-            .onDrop(of: [.text], delegate: SetPhotoDropDelegate(
-                position: position - 1,
-                isLocked: isLocked,
-                onMove: { from, to in
-                    onMove(from, to)
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                },
-                isDragging: $isDragging
-            ))
+            .animation(.spring(response: 0.3), value: isSelected)
             
             // Symbol label below photo
             Text(String(photo.symbol.prefix(3)))
@@ -1125,44 +1178,6 @@ struct ReorderablePhotoCell: View {
                 .foregroundColor(.secondary)
                 .lineLimit(1)
         }
-    }
-}
-
-// MARK: - Drop Delegate for SetDetailView
-
-struct SetPhotoDropDelegate: DropDelegate {
-    let position: Int
-    let isLocked: Bool
-    let onMove: (Int, Int) -> Void
-    @Binding var isDragging: Bool
-    
-    func performDrop(info: DropInfo) -> Bool {
-        isDragging = false
-        return true
-    }
-    
-    func dropEntered(info: DropInfo) {
-        guard !isLocked else { return }
-        guard let itemProvider = info.itemProviders(for: [.text]).first else { return }
-        
-        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
-            guard let data = data as? Data,
-                  let fromString = String(data: data, encoding: .utf8),
-                  let from = Int(fromString),
-                  from != position else { return }
-            
-            DispatchQueue.main.async {
-                onMove(from, position)
-            }
-        }
-    }
-    
-    func dropExited(info: DropInfo) {
-        isDragging = false
-    }
-    
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        return DropProposal(operation: isLocked ? .forbidden : .move)
     }
 }
 

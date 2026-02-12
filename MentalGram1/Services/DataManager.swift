@@ -165,47 +165,34 @@ class DataManager: ObservableObject {
         return set.photos.filter { $0.bankId == bankId }
     }
     
-    // MARK: - Reorder Photos
+    // MARK: - Swap Photos (exchange positions)
     
-    func reorderPhotos(setId: UUID, bankId: UUID?, fromIndex: Int, toIndex: Int) {
+    func swapPhotos(setId: UUID, bankId: UUID?, indexA: Int, indexB: Int) {
         guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return }
+        guard indexA != indexB else { return }
         
         if let bankId = bankId {
-            // Get indices of photos in this bank within the global photos array
-            let bankPhotoIndices = sets[setIndex].photos.enumerated()
-                .filter { $0.element.bankId == bankId }
-                .map { $0.offset }
+            // BANK-BASED SWAP
+            var bankPhotos = sets[setIndex].photos.filter { $0.bankId == bankId }
+            let otherPhotos = sets[setIndex].photos.filter { $0.bankId != bankId }
             
-            guard fromIndex < bankPhotoIndices.count, toIndex < bankPhotoIndices.count else { return }
+            guard indexA < bankPhotos.count, indexB < bankPhotos.count else { return }
             
-            let globalFrom = bankPhotoIndices[fromIndex]
-            let photo = sets[setIndex].photos.remove(at: globalFrom)
+            // Swap the two photos
+            bankPhotos.swapAt(indexA, indexB)
             
-            // Recalculate target index after removal
-            let updatedBankIndices = sets[setIndex].photos.enumerated()
-                .filter { $0.element.bankId == bankId }
-                .map { $0.offset }
-            
-            if toIndex < updatedBankIndices.count {
-                let globalTo = updatedBankIndices[toIndex]
-                sets[setIndex].photos.insert(photo, at: globalTo)
-            } else {
-                // Insert at end of bank photos
-                if let lastBankIndex = updatedBankIndices.last {
-                    sets[setIndex].photos.insert(photo, at: lastBankIndex + 1)
-                } else {
-                    sets[setIndex].photos.append(photo)
-                }
-            }
+            // Rebuild global array
+            sets[setIndex].photos = otherPhotos + bankPhotos
         } else {
-            // Custom set: reorder directly
-            guard fromIndex < sets[setIndex].photos.count, toIndex < sets[setIndex].photos.count else { return }
-            let photo = sets[setIndex].photos.remove(at: fromIndex)
-            sets[setIndex].photos.insert(photo, at: min(toIndex, sets[setIndex].photos.count))
+            // CUSTOM SET: Swap directly
+            guard indexA < sets[setIndex].photos.count, indexB < sets[setIndex].photos.count else { return }
+            
+            sets[setIndex].photos.swapAt(indexA, indexB)
         }
         
         saveSets()
-        print("✅ [REORDER] Moved photo from position \(fromIndex + 1) to \(toIndex + 1)")
+        objectWillChange.send()
+        print("✅ [SWAP] Swapped position \(indexA + 1) ↔ \(indexB + 1)")
     }
     
     func deleteSet(id: UUID) {
