@@ -18,7 +18,7 @@ class DataManager: ObservableObject {
     
     // MARK: - Sets CRUD
     
-    func createSet(name: String, type: SetType, bankCount: Int, photos: [(symbol: String, filename: String, imageData: Data)]) -> PhotoSet {
+    func createSet(name: String, type: SetType, bankCount: Int, photos: [(symbol: String, filename: String, imageData: Data)], selectedAlphabet: AlphabetType? = nil) -> PhotoSet {
         var banks: [Bank] = []
         var setPhotos: [SetPhoto] = []
         let setId = UUID()
@@ -92,7 +92,8 @@ class DataManager: ObservableObject {
             status: .ready,
             banks: banks,
             photos: setPhotos,
-            createdAt: Date()
+            createdAt: Date(),
+            selectedAlphabet: selectedAlphabet
         )
         
         sets.append(newSet)
@@ -100,6 +101,93 @@ class DataManager: ObservableObject {
         addLog(action: "set_created", details: "Created set \(name) with \(setPhotos.count) photos")
         
         return newSet
+    }
+    
+    // MARK: - Insert Photo at Position
+    
+    /// Insert a photo into a specific slot position within a set.
+    /// For bank-based sets, the photo is inserted into each bank at that position.
+    func insertPhotoAtPosition(setId: UUID, symbol: String, filename: String, imageData: Data, position: Int) {
+        guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return }
+        let set = sets[setIndex]
+        
+        if set.type == .word || set.type == .number {
+            // Insert into each bank
+            for bank in set.banks {
+                let photoId = UUID()
+                let setPhoto = SetPhoto(
+                    id: photoId,
+                    setId: setId,
+                    bankId: bank.id,
+                    symbol: symbol,
+                    filename: filename,
+                    imageData: imageData,
+                    mediaId: nil,
+                    isArchived: false,
+                    uploadDate: nil,
+                    lastCommentId: nil,
+                    uploadStatus: .pending,
+                    errorMessage: nil
+                )
+                sets[setIndex].photos.append(setPhoto)
+            }
+        } else {
+            let photoId = UUID()
+            let setPhoto = SetPhoto(
+                id: photoId,
+                setId: setId,
+                symbol: symbol,
+                filename: filename,
+                imageData: imageData,
+                mediaId: nil,
+                isArchived: false,
+                uploadDate: nil,
+                lastCommentId: nil,
+                uploadStatus: .pending,
+                errorMessage: nil
+            )
+            sets[setIndex].photos.append(setPhoto)
+        }
+        
+        saveSets()
+        objectWillChange.send()
+        print("✅ [INSERT] Photo inserted at position \(position) with symbol '\(symbol)'")
+    }
+    
+    // MARK: - Replace Photo at Position
+    
+    /// Replace the image data for all photos matching a given symbol in a set
+    func replacePhotoAtSymbol(setId: UUID, symbol: String, newFilename: String, newImageData: Data) {
+        guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return }
+        
+        for photoIndex in sets[setIndex].photos.indices {
+            if sets[setIndex].photos[photoIndex].symbol == symbol {
+                sets[setIndex].photos[photoIndex].filename = newFilename
+                sets[setIndex].photos[photoIndex].imageData = newImageData
+                sets[setIndex].photos[photoIndex].uploadStatus = .pending
+                sets[setIndex].photos[photoIndex].mediaId = nil
+                sets[setIndex].photos[photoIndex].errorMessage = nil
+            }
+        }
+        
+        saveSets()
+        objectWillChange.send()
+        print("✅ [REPLACE] Photo replaced for symbol '\(symbol)'")
+    }
+    
+    // MARK: - Delete Photos by Symbol
+    
+    /// Remove all photos matching a given symbol from a set
+    func deletePhotosBySymbol(setId: UUID, symbol: String) {
+        guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return }
+        
+        let countBefore = sets[setIndex].photos.count
+        sets[setIndex].photos.removeAll { $0.symbol == symbol }
+        let countAfter = sets[setIndex].photos.count
+        
+        saveSets()
+        objectWillChange.send()
+        print("🗑️ [DELETE] Removed \(countBefore - countAfter) photos with symbol '\(symbol)'")
     }
     
     func updateSetStatus(id: UUID, status: SetStatus) {

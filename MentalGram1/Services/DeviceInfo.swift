@@ -40,9 +40,11 @@ struct DeviceInfo {
         print("📱 [DEVICE] iOS: \(version)")
     }
     
-    /// Instagram app version - should be updated periodically to stay current
-    let appVersion = "337.1.0.34.99"
-    let appVersionCode = "606284584"
+    /// Instagram app version - MUST be updated periodically to stay current
+    /// Last verified: Feb 2026 (from real user agent data)
+    /// Check latest at: https://apps.apple.com/app/instagram/id389801252
+    let appVersion = "390.0.0.28.85"
+    let appVersionCode = "765313520"
     
     /// Device locale matching the real device settings
     var deviceLocale: String {

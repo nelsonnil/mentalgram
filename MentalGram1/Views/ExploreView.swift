@@ -4,6 +4,9 @@ import SwiftUI
 
 struct ExploreView: View {
     @ObservedObject var exploreManager = ExploreManager.shared
+    @ObservedObject var instagram = InstagramService.shared
+    @ObservedObject var dataManager = DataManager.shared
+    @ObservedObject var secretInputSettings = SecretInputSettings.shared
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     @State private var searchText = ""
@@ -15,6 +18,10 @@ struct ExploreView: View {
     @FocusState private var isSearchFieldFocused: Bool
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
+    
+    // Secret Input Masking
+    @State private var secretInputBuffer: String = ""  // Real typed letters (what the magician types)
+    @State private var maskTextCache: String = ""  // Cached mask text from settings
     
     var body: some View {
         ZStack {
@@ -37,12 +44,16 @@ struct ExploreView: View {
                             .disableAutocorrection(true)
                             .focused($isSearchFieldFocused)
                             .onChange(of: searchText) { newValue in
-                                performSearch(query: newValue)
+                                handleSearchTextChange(oldValue: searchText, newValue: newValue)
+                            }
+                            .onAppear {
+                                updateMaskTextCache()
                             }
                         
                         if !searchText.isEmpty {
                             Button(action: {
                                 searchText = ""
+                                secretInputBuffer = ""
                                 searchResults = []
                                 isSearchFieldFocused = false
                             }) {
@@ -60,6 +71,7 @@ struct ExploreView: View {
                     if isSearchFieldFocused || !searchText.isEmpty {
                         Button("Cancelar") {
                             searchText = ""
+                            secretInputBuffer = ""
                             searchResults = []
                             isSearchFieldFocused = false
                         }
@@ -190,6 +202,7 @@ struct ExploreView: View {
             }
         }
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
+        .preferredColorScheme(.light) // CRITICAL: Explore must look exactly like Instagram (light mode)
         .onAppear {
             // Auto-load Explore feed on appear (like Instagram real)
             // If cache has old count (not multiple of 3), clear and reload
@@ -285,7 +298,190 @@ struct ExploreView: View {
             }
         }
     }
+    
+    // MARK: - Secret Input Logic
+    
+    private func updateMaskTextCache() {
+        // Get latest follower username if mode is latestFollower
+        // We need to fetch it asynchronously if not cached
+        if secretInputSettings.mode == .latestFollower {
+            Task {
+                do {
+                    let follower = try await instagram.getLatestFollower()
+                    await MainActor.run {
+                        let username = follower?.username
+                        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: username)
+                    }
+                } catch {
+                    // Fallback to generic "user" if fetch fails
+                    await MainActor.run {
+                        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
+                    }
+                }
+            }
+        } else {
+            // Custom mode - no need for async
+            maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
+        }
+    }
+    
+    /// Handle text change in search field with secret input masking
+    private func handleSearchTextChange(oldValue: String, newValue: String) {
+        // Update mask cache on each change (in case settings changed)
+        updateMaskTextCache()
+        
+        // Detect user's actual input
+        if newValue.count > oldValue.count {
+            // User typed character(s)
+            let typedCharacters = String(newValue.dropFirst(oldValue.count))
+            
+            for char in typedCharacters {
+                if char == " " {
+                    // SPACE pressed → trigger auto-reveal
+                    handleSpacePressed()
+                    return
+                } else {
+                    // Regular character typed
+                    secretInputBuffer.append(char)
+                    
+                    // Update visible text with mask
+                    searchText = buildMaskedText()
+                }
+            }
+        } else if newValue.count < oldValue.count {
+            // User deleted character(s) → delete from secret buffer too
+            let deletedCount = oldValue.count - newValue.count
+            secretInputBuffer = String(secretInputBuffer.dropLast(deletedCount))
+            
+            // Update visible text with mask
+            searchText = buildMaskedText()
+        }
+        
+        // Continue with normal search (for regular search functionality)
+        performSearch(query: newValue)
+    }
+    
+    /// Build the masked text that the spectator sees
+    private func buildMaskedText() -> String {
+        guard !secretInputBuffer.isEmpty, !maskTextCache.isEmpty else {
+            return secretInputBuffer
+        }
+        
+        var result = ""
+        for i in 0..<secretInputBuffer.count {
+            let maskIndex = i % maskTextCache.count
+            let char = maskTextCache[maskTextCache.index(maskTextCache.startIndex, offsetBy: maskIndex)]
+            result.append(char)
+        }
+        return result
+    }
+    
+    /// Handle SPACE key → Auto-reveal word from active Word Reveal set
+    private func handleSpacePressed() {
+        print("🎩 [SECRET] Space pressed - secret word: '\(secretInputBuffer)'")
+        LogManager.shared.info("Secret input triggered: '\(secretInputBuffer)'", category: .general)
+        
+        // Clear the search text and buffer
+        searchText = ""
+        let wordToReveal = secretInputBuffer
+        secretInputBuffer = ""
+        
+        // Find active Word Reveal set with completed photos
+        guard let activeSet = findActiveWordRevealSet() else {
+            print("⚠️ [SECRET] No active Word Reveal set found")
+            return
+        }
+        
+        print("🎩 [SECRET] Using set: \(activeSet.name), banks: \(activeSet.banks.count)")
+        
+        // Validate we have enough banks for the word length
+        guard activeSet.banks.count >= wordToReveal.count else {
+            print("⚠️ [SECRET] Not enough banks (\(activeSet.banks.count)) for word length (\(wordToReveal.count))")
+            return
+        }
+        
+        // Auto-reveal each letter from corresponding bank
+        Task {
+            await revealWord(wordToReveal, fromSet: activeSet)
+        }
+    }
+    
+    /// Find the first completed Word Reveal set
+    private func findActiveWordRevealSet() -> PhotoSet? {
+        return dataManager.sets.first { set in
+            set.type == .word &&
+            set.status == .completed &&
+            !set.banks.isEmpty &&
+            set.photos.allSatisfy { $0.uploadStatus == .completed && $0.mediaId != nil }
+        }
+    }
+    
+    /// Reveal word by unarchiving letters one by one (1s delay between each)
+    private func revealWord(_ word: String, fromSet set: PhotoSet) async {
+        let letters = Array(word.lowercased())
+        let alphabet = set.selectedAlphabet ?? .latin
+        
+        print("🎩 [SECRET] Revealing '\(word)' using alphabet: \(alphabet.displayName)")
+        
+        for (index, letter) in letters.enumerated() {
+            // Find the letter character in the alphabet
+            guard let charIndex = alphabet.indexFor(String(letter)) else {
+                print("⚠️ [SECRET] Letter '\(letter)' not found in alphabet")
+                continue
+            }
+            
+            let symbol = alphabet.characters[charIndex]
+            
+            // Get the photo from the corresponding bank
+            guard index < set.banks.count else {
+                print("⚠️ [SECRET] Bank index \(index) out of range")
+                break
+            }
+            
+            let bank = set.banks[index]
+            
+            // Find photo with this symbol in this bank
+            guard let photo = set.photos.first(where: { $0.bankId == bank.id && $0.symbol == symbol && $0.mediaId != nil && $0.isArchived }) else {
+                print("⚠️ [SECRET] Photo not found for symbol '\(symbol)' in bank \(bank.name)")
+                continue
+            }
+            
+            print("🎩 [SECRET] Revealing letter '\(letter)' (symbol: \(symbol)) from \(bank.name)")
+            
+            // Reveal (unarchive) the photo
+            do {
+                guard let mediaId = photo.mediaId else { continue }
+                
+                let result = try await instagram.reveal(mediaId: mediaId)
+                
+                if result.success {
+                    await MainActor.run {
+                        dataManager.updatePhoto(
+                            photoId: photo.id,
+                            mediaId: nil,
+                            isArchived: false,
+                            commentId: result.commentId
+                        )
+                    }
+                    print("✅ [SECRET] Letter '\(letter)' revealed successfully")
+                } else {
+                    print("❌ [SECRET] Failed to reveal letter '\(letter)'")
+                }
+                
+                // ANTI-BOT: 1 second delay between reveals
+                if index < letters.count - 1 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+            } catch {
+                print("❌ [SECRET] Error revealing letter '\(letter)': \(error)")
+                // Continue with next letter even if one fails
+            }
+        }
+        
+        print("✅ [SECRET] Word reveal complete")
+    }
 }
+
 
 // MARK: - Explore Grid View
 

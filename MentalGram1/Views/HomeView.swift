@@ -12,12 +12,14 @@ struct HomeView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Performance Tab - empty placeholder until logged in
+            // Performance Tab - MUST stay light (Instagram replica)
             Group {
                 if instagram.isLoggedIn {
                     PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
                 } else {
-                    Color(.systemBackground)
+                    // Blank dark view when not logged in
+                    VaultTheme.Colors.background
+                        .ignoresSafeArea()
                 }
             }
             .tabItem {
@@ -25,28 +27,71 @@ struct HomeView: View {
             }
             .tag(0)
             
-            // Sets Tab - always available
+            // Sets Tab - dark theme
             NavigationView {
                 SetsListView()
             }
             .tabItem {
-                Label("Sets", systemImage: "square.grid.2x2")
+                Label("Sets", systemImage: "square.grid.2x2.fill")
             }
             .tag(1)
             
-            // Settings Tab
+            // Settings Tab - dark theme
             NavigationView {
                 SettingsView()
             }
             .tabItem {
-                Label("Settings", systemImage: "gearshape")
+                Label("Settings", systemImage: "gearshape.fill")
             }
             .tag(2)
         }
-        .accentColor(.purple)
+        .accentColor(selectedTab == 0 ? .primary : VaultTheme.Colors.primary)
+        .onChange(of: selectedTab) { newTab in
+            // Dynamically update tab bar appearance based on selected tab
+            updateTabBarAppearance(forTab: newTab)
+        }
+        .onAppear {
+            // Set initial tab bar appearance
+            updateTabBarAppearance(forTab: selectedTab)
+        }
         .fullScreenCover(isPresented: $showingExplore) {
             ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
+                .preferredColorScheme(.light) // CRITICAL: Explore must look like Instagram (light)
         }
+    }
+    
+    /// Update tab bar appearance based on which tab is active
+    /// Performance tab = Instagram-style (light), Sets/Settings = Vault dark theme
+    private func updateTabBarAppearance(forTab tab: Int) {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        
+        if tab == 0 {
+            // Performance: Instagram-style white tab bar
+            appearance.backgroundColor = .white
+            appearance.stackedLayoutAppearance.selected.iconColor = .black
+            appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+                .foregroundColor: UIColor.black
+            ]
+            appearance.stackedLayoutAppearance.normal.iconColor = .gray
+            appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+                .foregroundColor: UIColor.gray
+            ]
+        } else {
+            // Sets/Settings: Vault dark theme
+            appearance.backgroundColor = UIColor(VaultTheme.Colors.backgroundSecondary)
+            appearance.stackedLayoutAppearance.selected.iconColor = UIColor(VaultTheme.Colors.primary)
+            appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+                .foregroundColor: UIColor(VaultTheme.Colors.primary)
+            ]
+            appearance.stackedLayoutAppearance.normal.iconColor = UIColor(VaultTheme.Colors.textSecondary)
+            appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+                .foregroundColor: UIColor(VaultTheme.Colors.textSecondary)
+            ]
+        }
+        
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 }
 
@@ -61,6 +106,10 @@ struct SetsListView: View {
     
     var body: some View {
         ZStack {
+            // Dark background
+            VaultTheme.Colors.background
+                .ignoresSafeArea()
+            
             // Hidden NavigationLink for programmatic navigation to newly created set
             if let newSet = newlyCreatedSet {
                 NavigationLink(
@@ -73,56 +122,56 @@ struct SetsListView: View {
             }
             
             if dataManager.sets.isEmpty {
-                VStack(spacing: 20) {
-                    Image(systemName: "square.stack.3d.up.slash")
-                        .font(.system(size: 64))
-                        .foregroundColor(.secondary)
-                    
-                    Text("No Sets Yet")
-                        .font(.title2.bold())
-                    
-                    if instagram.isLoggedIn {
-                        Text("Create your first photo set")
-                            .foregroundColor(.secondary)
-                        
-                        Button(action: { showingCreateSet = true }) {
-                            Label("Create Set", systemImage: "plus.circle.fill")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 12)
-                                .background(Color.purple)
-                                .cornerRadius(10)
-                        }
-                    } else {
-                        Text("Your photo collections will appear here")
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                }
+                EmptyStateView(
+                    icon: "square.stack.3d.up.slash.fill",
+                    title: "No Sets Yet",
+                    message: "Create your first photo set to get started with magic performances",
+                    actionTitle: "Create Set",
+                    action: { showingCreateSet = true }
+                )
             } else {
-                List {
-                    ForEach(dataManager.sets) { set in
-                        NavigationLink(destination: SetDetailView(set: set)) {
-                            SetRowView(set: set, isLoggedIn: instagram.isLoggedIn)
+                ScrollView {
+                    LazyVStack(spacing: VaultTheme.Spacing.md) {
+                        ForEach(dataManager.sets) { set in
+                            NavigationLink(destination: SetDetailView(set: set)) {
+                                SetRowView(set: set, isLoggedIn: instagram.isLoggedIn)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    withAnimation {
+                                        dataManager.deleteSet(id: set.id)
+                                    }
+                                } label: {
+                                    Label("Delete Set", systemImage: "trash")
+                                }
+                            }
                         }
                     }
-                    .onDelete(perform: deleteSets)
+                    .padding(VaultTheme.Spacing.lg)
                 }
-                .listStyle(.insetGrouped)
             }
         }
         .navigationTitle("My Sets")
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            if instagram.isLoggedIn {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingCreateSet = true }) {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showingCreateSet = true }) {
+                    ZStack {
+                        Circle()
+                            .fill(VaultTheme.Colors.gradientPrimary)
+                            .frame(width: 36, height: 36)
+                        
                         Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white)
                     }
                 }
             }
         }
+        .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(isPresented: $showingCreateSet) {
             CreateSetView(isPresented: $showingCreateSet) { createdSet in
                 // Callback when set is created: navigate to it automatically
@@ -132,6 +181,7 @@ struct SetsListView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
     }
     
     private func deleteSets(at offsets: IndexSet) {
@@ -148,49 +198,127 @@ struct SetRowView: View {
     let set: PhotoSet
     let isLoggedIn: Bool
     
+    private var statusBadgeStyle: StatusBadge.BadgeStyle {
+        switch set.status {
+        case .ready: return .info
+        case .uploading: return .warning
+        case .paused: return .pending
+        case .completed: return .success
+        case .error: return .error
+        }
+    }
+    
+    private var typeGradient: [Color] {
+        switch set.type {
+        case .word: return [VaultTheme.Colors.primary, VaultTheme.Colors.primaryDark]
+        case .number: return [VaultTheme.Colors.secondary, VaultTheme.Colors.secondaryDark]
+        case .custom: return [VaultTheme.Colors.info, Color(hex: "6366F1")]
+        }
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: set.type.icon)
-                    .foregroundColor(.purple)
+        VaultCard {
+            HStack(spacing: VaultTheme.Spacing.md) {
+                // Type icon with gradient
+                IconBadge(icon: set.type.icon, colors: typeGradient, size: 56)
                 
-                Text(set.name)
-                    .font(.headline)
-                
-                Spacer()
-                
-                // Only show status icon when logged in
-                if isLoggedIn {
-                    Image(systemName: set.status.icon)
-                        .foregroundColor(set.status.color)
+                VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                    // Title + Status Badge
+                    HStack {
+                        Text(set.name)
+                            .font(VaultTheme.Typography.title())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        // Only show status badge when logged in
+                        if isLoggedIn {
+                            StatusBadge(text: set.status.rawValue, style: statusBadgeStyle)
+                        }
+                    }
+                    
+                    // Stats row
+                    HStack(spacing: VaultTheme.Spacing.md) {
+                        // Type label
+                        HStack(spacing: 4) {
+                            Image(systemName: "tag.fill")
+                                .font(.system(size: 10))
+                            Text(set.type.title)
+                        }
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        
+                        Text("•")
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                        
+                        // Banks
+                        HStack(spacing: 4) {
+                            Image(systemName: "square.stack.3d.up.fill")
+                                .font(.system(size: 10))
+                            Text("\(set.banks.isEmpty ? 1 : set.banks.count)")
+                        }
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        
+                        Text("•")
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                        
+                        // Photos
+                        HStack(spacing: 4) {
+                            Image(systemName: "photo.stack.fill")
+                                .font(.system(size: 10))
+                            Text("\(set.totalPhotos)")
+                        }
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        
+                        // Only show completion date when logged in
+                        if isLoggedIn && set.status == .completed, let completedDate = set.completedAt {
+                            Text("•")
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                            
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 10))
+                                Text(completedDate.formatted(date: .abbreviated, time: .omitted))
+                            }
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                        }
+                    }
+                    
+                    // Progress bar for uploading - ONLY VISIBLE WHEN LOGGED IN
+                    if isLoggedIn && (set.status == .uploading || set.status == .paused) {
+                        VStack(spacing: 6) {
+                            ProgressBar(
+                                progress: set.totalPhotos > 0 ? Double(set.uploadedPhotos) / Double(set.totalPhotos) : 0,
+                                height: 6,
+                                gradient: set.status == .paused 
+                                    ? LinearGradient(colors: [VaultTheme.Colors.textSecondary], startPoint: .leading, endPoint: .trailing)
+                                    : VaultTheme.Colors.gradientWarning
+                            )
+                            
+                            HStack {
+                                Text("\(set.uploadedPhotos) / \(set.totalPhotos)")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                                
+                                Spacer()
+                                
+                                let percentage = set.totalPhotos > 0 ? Int((Double(set.uploadedPhotos) / Double(set.totalPhotos)) * 100) : 0
+                                Text("\(percentage)%")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .fontWeight(.bold)
+                                    .foregroundColor(set.status == .paused ? VaultTheme.Colors.textSecondary : VaultTheme.Colors.warning)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
                 }
-            }
-            
-            HStack {
-                Text("\(set.banks.isEmpty ? "1" : "\(set.banks.count)") banks")
-                Text("•")
-                Text("\(set.totalPhotos) photos")
-                
-                // Only show completion date when logged in
-                if isLoggedIn && set.status == .completed {
-                    Text("•")
-                    Text(set.completedAt?.formatted(date: .abbreviated, time: .omitted) ?? "")
-                }
-            }
-            .font(.caption)
-            .foregroundColor(.secondary)
-            
-            // Progress bar for uploading - ONLY VISIBLE WHEN LOGGED IN
-            if isLoggedIn && (set.status == .uploading || set.status == .paused) {
-                ProgressView(value: Double(set.uploadedPhotos), total: Double(set.totalPhotos))
-                    .tint(.purple)
-                
-                Text("\(set.uploadedPhotos) / \(set.totalPhotos)")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
             }
         }
-        .padding(.vertical, 4)
+        .glowEffect(color: isLoggedIn && set.status == .uploading ? VaultTheme.Colors.warning : .clear, radius: 8)
     }
 }
 
@@ -252,294 +380,557 @@ struct SettingsView: View {
     @State private var showingLogin = false
     @State private var developerMode = false
     
+    // Secret Input - Observing to update example
+    @ObservedObject var secretInputSettings = SecretInputSettings.shared
+    
+    private var exampleMaskOutput: String {
+        let word = "coche"
+        let maskText = secretInputSettings.mode == .customUsername
+            ? secretInputSettings.customUsername.lowercased()
+            : "user"
+        
+        if maskText.isEmpty {
+            return "user"
+        }
+        
+        var result = ""
+        for i in 0..<word.count {
+            let maskIndex = i % maskText.count
+            result.append(maskText[maskText.index(maskText.startIndex, offsetBy: maskIndex)])
+        }
+        return result
+    }
+    
     var body: some View {
-        List {
-            // MARK: About - Always visible at top
-            Section("About") {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text("1.0.0")
-                        .foregroundColor(.secondary)
-                        .onLongPressGesture(minimumDuration: 2.0) {
-                            // Easter egg: long press 2 seconds to reveal developer mode
-                            withAnimation { developerMode = true }
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
-                        }
-                }
-                
-                HStack {
-                    Text("Build")
-                    Spacer()
-                    Text("1")
-                        .foregroundColor(.secondary)
-                }
-                
-                // Hidden login button (only visible after long press on version)
-                if developerMode && !instagram.isLoggedIn {
-                    Button(action: { showingLogin = true }) {
+        ScrollView {
+            VStack(spacing: VaultTheme.Spacing.lg) {
+                // MARK: About - Always visible at top
+                VaultCard {
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                        Text("About")
+                            .font(VaultTheme.Typography.titleSmall())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        
                         HStack {
-                            Image(systemName: "link.badge.plus")
-                                .foregroundColor(.purple)
-                            Text("Connect Account")
+                            Text("Version")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Spacer()
+                            Text("1.0.0")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                                .onLongPressGesture(minimumDuration: 2.0) {
+                                    // Easter egg: long press 2 seconds to reveal developer mode
+                                    withAnimation { developerMode = true }
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.success)
+                                }
+                        }
+                        
+                        HStack {
+                            Text("Build")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Spacer()
+                            Text("1")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        
+                        // Hidden login button (only visible after long press on version)
+                        if developerMode && !instagram.isLoggedIn {
+                            OutlineButton(
+                                title: "Connect Account",
+                                icon: "link.badge.plus",
+                                action: { showingLogin = true }
+                            )
                         }
                     }
                 }
-            }
-            
-            // MARK: - Developer Tools (always visible)
-            
-            Section("Developer") {
-                NavigationLink(destination: LogsView()) {
-                    HStack {
-                        Image(systemName: "doc.text.fill")
-                            .foregroundColor(.purple)
-                        Text("View App Logs")
-                        Spacer()
-                        Text("\(LogManager.shared.logs.count)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                }
-            }
-            
-            // MARK: - Everything below only visible when logged in
-            
-            if instagram.isLoggedIn {
-                Section("Account") {
-                    HStack {
-                        Text("Logged in as")
-                        Spacer()
-                        Text("@\(instagram.session.username)")
-                            .foregroundColor(.secondary)
+                
+                // MARK: - Everything below only visible when logged in
+                
+                if instagram.isLoggedIn {
+                    // MARK: - Developer Tools (only when logged in)
+                    
+                    VaultCard {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                            Text("Developer")
+                                .font(VaultTheme.Typography.titleSmall())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            
+                            NavigationLink(destination: LogsView()) {
+                                HStack {
+                                    Image(systemName: "doc.text.fill")
+                                        .foregroundColor(VaultTheme.Colors.primary)
+                                        .frame(width: 24)
+                                    Text("View App Logs")
+                                        .font(VaultTheme.Typography.body())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    Spacer()
+                                    Text("\(LogManager.shared.logs.count)")
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    Image(systemName: "chevron.right")
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                                }
+                                .padding(.vertical, VaultTheme.Spacing.sm)
+                            }
+                        }
                     }
                     
-                    Button(role: .destructive, action: { showingLogoutAlert = true }) {
-                        Text("Logout")
-                    }
-                }
-                
-                // Profile Picture Change
-                Section("Profile Picture") {
-                    VStack(spacing: 16) {
-                        // Preview
-                        if let imageData = selectedImageData, let uiImage = UIImage(data: imageData) {
-                            VStack(spacing: 12) {
-                                Image(uiImage: uiImage)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 120, height: 120)
-                                    .clipShape(Circle())
-                                    .overlay(Circle().stroke(Color.purple, lineWidth: 2))
-                                
-                                Text("Ready to upload")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                        }
-                        
-                        // Select Image Button
-                        Button(action: { showingImagePicker = true }) {
+                    VaultCard {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                            Text("Account")
+                                .font(VaultTheme.Typography.titleSmall())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            
                             HStack {
-                                Image(systemName: "photo.on.rectangle.angled")
-                                    .foregroundColor(.purple)
-                                Text(selectedImageData == nil ? "Select from Gallery" : "Change Selection")
+                                Text("Logged in as")
+                                    .font(VaultTheme.Typography.body())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Spacer()
+                                Text("@\(instagram.session.username)")
+                                    .font(VaultTheme.Typography.body())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
                             }
-                            .frame(maxWidth: .infinity)
+                            
+                            GradientButton(
+                                title: "Logout",
+                                icon: nil,
+                                action: { showingLogoutAlert = true },
+                                style: .destructive
+                            )
                         }
-                        .disabled(isUploadingProfilePic)
-                        
-                        // Upload Button (only show if image selected)
-                        if selectedImageData != nil {
-                            Button(action: uploadProfilePicture) {
+                    }
+                    
+                    // Profile Picture Change
+                    VaultCard {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.lg) {
+                            Text("Profile Picture")
+                                .font(VaultTheme.Typography.titleSmall())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            
+                            VStack(spacing: VaultTheme.Spacing.lg) {
+                                // Preview
+                                if let imageData = selectedImageData, let uiImage = UIImage(data: imageData) {
+                                    VStack(spacing: VaultTheme.Spacing.sm) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 120, height: 120)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(VaultTheme.Colors.primary, lineWidth: 2))
+                                        
+                                        Text("Ready to upload")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, VaultTheme.Spacing.sm)
+                                }
+                                
+                                OutlineButton(
+                                    title: selectedImageData == nil ? "Select from Gallery" : "Change Selection",
+                                    icon: "photo.on.rectangle.angled",
+                                    action: { showingImagePicker = true },
+                                    isEnabled: !isUploadingProfilePic
+                                )
+                                
+                                // Upload Button (only show if image selected)
+                                if selectedImageData != nil {
+                                    Button(action: uploadProfilePicture) {
+                                        HStack(spacing: VaultTheme.Spacing.sm) {
+                                            if isUploadingProfilePic {
+                                                ProgressView()
+                                                    .scaleEffect(0.8)
+                                                    .tint(.white)
+                                                Text("Uploading...")
+                                            } else {
+                                                Image(systemName: "arrow.up.circle.fill")
+                                                Text("Upload Profile Picture")
+                                            }
+                                        }
+                                        .font(VaultTheme.Typography.bodyBold())
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, VaultTheme.Spacing.md)
+                                        .background(canUpload() ? VaultTheme.Colors.primary : VaultTheme.Colors.textDisabled)
+                                        .cornerRadius(VaultTheme.CornerRadius.md)
+                                    }
+                                    .disabled(!canUpload() || isUploadingProfilePic)
+                                }
+                                
+                                // Status messages
+                                if let cooldown = getCooldownMessage() {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        Image(systemName: "clock.fill")
+                                            .foregroundColor(VaultTheme.Colors.warning)
+                                        Text(cooldown)
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.warning)
+                                    }
+                                }
+                                
+                                if instagram.isLocked {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(VaultTheme.Colors.error)
+                                        Text("Lockdown active - cannot upload")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.error)
+                                    }
+                                }
+                                
+                                if instagram.isNetworkStabilizing {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                            .tint(VaultTheme.Colors.textSecondary)
+                                        Text("Network stabilizing...")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .sheet(isPresented: $showingImagePicker) {
+                        ImagePicker(selectedImageData: $selectedImageData)
+                    }
+                    .alert(uploadMessage ?? "Upload Complete", isPresented: $showingUploadAlert) {
+                        Button("OK") {
+                            uploadMessage = nil
+                            if uploadMessage?.contains("success") == true {
+                                selectedImageData = nil // Clear selection on success
+                            }
+                        }
+                    } message: {
+                        Text(uploadMessage ?? "")
+                    }
+                    
+                    // Instagram Notes
+                    VaultCard {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                            Text("Note")
+                                .font(VaultTheme.Typography.titleSmall())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            
+                            VStack(spacing: VaultTheme.Spacing.md) {
+                                HStack(spacing: VaultTheme.Spacing.sm) {
+                                    Image(systemName: "bubble.left.fill")
+                                        .foregroundColor(VaultTheme.Colors.primary)
+                                    Text("Appears above your profile pic in DMs")
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                }
+                                
+                                // Text field + character count
+                                VStack(alignment: .trailing, spacing: VaultTheme.Spacing.xs) {
+                                    TextField("Write a note...", text: $noteText)
+                                        .font(VaultTheme.Typography.body())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                        .padding(VaultTheme.Spacing.md)
+                                        .background(VaultTheme.Colors.backgroundSecondary)
+                                        .cornerRadius(VaultTheme.CornerRadius.sm)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.sm)
+                                                .stroke(VaultTheme.Colors.cardBorder, lineWidth: 1)
+                                        )
+                                        .disabled(isSendingNote)
+                                        .onChange(of: noteText) { newValue in
+                                            if newValue.count > 60 {
+                                                noteText = String(newValue.prefix(60))
+                                            }
+                                        }
+                                    
+                                    Text("\(noteText.count)/60")
+                                        .font(VaultTheme.Typography.captionSmall())
+                                        .foregroundColor(noteText.count > 50 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                                }
+                                
+                                Button(action: sendNote) {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        if isSendingNote {
+                                            ProgressView()
+                                                .scaleEffect(0.8)
+                                                .tint(.white)
+                                            Text("Sending...")
+                                        } else {
+                                            Image(systemName: "paperplane.fill")
+                                            Text("Send Note")
+                                        }
+                                    }
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, VaultTheme.Spacing.md)
+                                    .background(noteText.isEmpty || isSendingNote || instagram.isLocked ? VaultTheme.Colors.textDisabled : VaultTheme.Colors.primary)
+                                    .cornerRadius(VaultTheme.CornerRadius.md)
+                                }
+                                .disabled(noteText.isEmpty || isSendingNote || instagram.isLocked || getNoteCooldownSeconds() > 0)
+                                
+                                // Status messages
+                                if let cooldownMsg = getNoteCooldownMessage() {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        Image(systemName: "clock.fill")
+                                            .foregroundColor(VaultTheme.Colors.warning)
+                                        Text(cooldownMsg)
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.warning)
+                                    }
+                                }
+                                
+                                if instagram.isLocked {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(VaultTheme.Colors.error)
+                                        Text("Lockdown active")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.error)
+                                    }
+                                }
+                                
+                                if instagram.isNetworkStabilizing {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                            .tint(VaultTheme.Colors.textSecondary)
+                                        Text("Network stabilizing...")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .alert(noteMessage ?? "", isPresented: $showingNoteAlert) {
+                        Button("OK") { noteMessage = nil }
+                    } message: {
+                        Text(noteMessage ?? "")
+                    }
+                    
+                    // MARK: - Secret Input
+                    
+                    VaultCard {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                            HStack(spacing: VaultTheme.Spacing.sm) {
+                                Image(systemName: "eye.slash.fill")
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                                Text("Secret Input")
+                                    .font(VaultTheme.Typography.titleSmall())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                            }
+                            
+                            Text("Secret Input is used in Performance mode to hide your input from spectators")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                                .padding(.bottom, VaultTheme.Spacing.xs)
+                            
+                            // Mode selector
+                            VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                                Text("Mask Mode")
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                
+                                ForEach(MaskInputMode.allCases, id: \.self) { mode in
+                                    Button(action: {
+                                        SecretInputSettings.shared.mode = mode
+                                    }) {
+                                        HStack(spacing: VaultTheme.Spacing.md) {
+                                            Image(systemName: mode.icon)
+                                                .frame(width: 24)
+                                                .foregroundColor(VaultTheme.Colors.primary)
+                                            
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(mode.displayName)
+                                                    .font(VaultTheme.Typography.body())
+                                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                                
+                                                Text(mode == .latestFollower ? "Uses your latest follower's username" : "Uses a custom username you set")
+                                                    .font(VaultTheme.Typography.caption())
+                                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            if SecretInputSettings.shared.mode == mode {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(VaultTheme.Colors.primary)
+                                            }
+                                        }
+                                        .padding(.vertical, VaultTheme.Spacing.sm)
+                                        .padding(.horizontal, VaultTheme.Spacing.md)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                                                .fill(SecretInputSettings.shared.mode == mode ? VaultTheme.Colors.primary.opacity(0.1) : VaultTheme.Colors.backgroundSecondary)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                                                .stroke(SecretInputSettings.shared.mode == mode ? VaultTheme.Colors.primary : Color.clear, lineWidth: 1.5)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            
+                            // Custom username field (only show if custom mode selected)
+                            if SecretInputSettings.shared.mode == .customUsername {
+                                VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+                                    Text("Custom Username")
+                                        .font(VaultTheme.Typography.bodyBold())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    
+                                    TextField("Enter username (e.g. magonil1)", text: Binding(
+                                        get: { SecretInputSettings.shared.customUsername },
+                                        set: { SecretInputSettings.shared.customUsername = $0 }
+                                    ))
+                                    .font(VaultTheme.Typography.body())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    .padding(VaultTheme.Spacing.md)
+                                    .background(VaultTheme.Colors.backgroundSecondary)
+                                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.sm)
+                                            .stroke(VaultTheme.Colors.cardBorder, lineWidth: 1)
+                                    )
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    
+                                    if !SecretInputSettings.shared.customUsername.isEmpty {
+                                        Text("Mask text: \(SecretInputSettings.shared.customUsername.lowercased())")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.success)
+                                            .padding(VaultTheme.Spacing.xs)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(VaultTheme.Colors.success.opacity(0.1))
+                                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                                    }
+                                }
+                            }
+                            
+                            // Preview/Example
+                            VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+                                Text("Example")
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                
+                                VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        Text("You type:")
+                                            .font(VaultTheme.Typography.captionBold())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                        Text("coche")
+                                            .font(VaultTheme.Typography.caption())
+                                            .monospaced()
+                                            .padding(.horizontal, VaultTheme.Spacing.xs)
+                                            .padding(.vertical, 2)
+                                            .background(VaultTheme.Colors.info.opacity(0.2))
+                                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    }
+                                    
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        Text("Spectator sees:")
+                                            .font(VaultTheme.Typography.captionBold())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                        Text(exampleMaskOutput)
+                                            .font(VaultTheme.Typography.caption())
+                                            .monospaced()
+                                            .padding(.horizontal, VaultTheme.Spacing.xs)
+                                            .padding(.vertical, 2)
+                                            .background(VaultTheme.Colors.primary.opacity(0.2))
+                                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    }
+                                }
+                                .padding(VaultTheme.Spacing.sm)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(VaultTheme.Colors.backgroundSecondary)
+                                .cornerRadius(VaultTheme.CornerRadius.sm)
+                            }
+                            
+                            // Instructions
+                            VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+                                HStack(spacing: VaultTheme.Spacing.xs) {
+                                    Image(systemName: "lightbulb.fill")
+                                        .foregroundColor(VaultTheme.Colors.warning)
+                                        .font(VaultTheme.Typography.caption())
+                                    Text("How to use")
+                                        .font(VaultTheme.Typography.captionBold())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+                                    Text("1. Create a Word Reveal set with enough banks (5 banks = 5-letter words)")
+                                    Text("2. In Performance → Explore, tap the search bar")
+                                    Text("3. Type your secret word (spectator sees mask text)")
+                                    Text("4. Press SPACE to reveal the word automatically")
+                                }
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            .padding(VaultTheme.Spacing.sm)
+                            .background(VaultTheme.Colors.warning.opacity(0.1))
+                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                            
+                            Text("Used in Performance mode to secretly type words that get auto-revealed from your Word Reveal sets.")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                        }
+                    }
+                    
+                    // Debug section
+                    VaultCard {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                            Text("Debug & Testing")
+                                .font(VaultTheme.Typography.titleSmall())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            
+                            Button(action: fetchLatestFollower) {
                                 HStack {
-                                    if isUploadingProfilePic {
+                                    Image(systemName: "person.crop.circle.badge.checkmark")
+                                        .foregroundColor(VaultTheme.Colors.primary)
+                                        .frame(width: 24)
+                                    Text("Get Latest Follower Data")
+                                        .font(VaultTheme.Typography.body())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    Spacer()
+                                    if isLoadingFollower {
                                         ProgressView()
                                             .scaleEffect(0.8)
-                                        Text("Uploading...")
+                                            .tint(VaultTheme.Colors.textSecondary)
                                     } else {
-                                        Image(systemName: "arrow.up.circle.fill")
-                                        Text("Upload Profile Picture")
+                                        Image(systemName: "chevron.right")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.textTertiary)
                                     }
                                 }
-                                .frame(maxWidth: .infinity)
-                                .foregroundColor(.white)
-                                .padding(.vertical, 12)
-                                .background(canUpload() ? Color.purple : Color.gray)
-                                .cornerRadius(10)
+                                .padding(.vertical, VaultTheme.Spacing.sm)
                             }
-                            .disabled(!canUpload() || isUploadingProfilePic)
-                        }
-                        
-                        // Status messages
-                        if let cooldown = getCooldownMessage() {
-                            HStack {
-                                Image(systemName: "clock.fill")
-                                    .foregroundColor(.orange)
-                                Text(cooldown)
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            }
-                        }
-                        
-                        if instagram.isLocked {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.red)
-                                Text("Lockdown active - cannot upload")
-                                    .font(.caption)
-                                    .foregroundColor(.red)
-                            }
-                        }
-                        
-                        if instagram.isNetworkStabilizing {
-                            HStack {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                                Text("Network stabilizing...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
-                .sheet(isPresented: $showingImagePicker) {
-                    ImagePicker(selectedImageData: $selectedImageData)
-                }
-                .alert(uploadMessage ?? "Upload Complete", isPresented: $showingUploadAlert) {
-                    Button("OK") {
-                        uploadMessage = nil
-                        if uploadMessage?.contains("success") == true {
-                            selectedImageData = nil // Clear selection on success
-                        }
-                    }
-                } message: {
-                    Text(uploadMessage ?? "")
-                }
-                
-                // Instagram Notes
-                Section("Note") {
-                    VStack(spacing: 12) {
-                        HStack {
-                            Image(systemName: "bubble.left.fill")
-                                .foregroundColor(.purple)
-                            Text("Appears above your profile pic in DMs")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        // Text field + character count
-                        VStack(alignment: .trailing, spacing: 4) {
-                            TextField("Write a note...", text: $noteText)
-                                .textFieldStyle(.roundedBorder)
-                                .disabled(isSendingNote)
-                                .onChange(of: noteText) { newValue in
-                                    if newValue.count > 60 {
-                                        noteText = String(newValue.prefix(60))
-                                    }
-                                }
+                            .disabled(isLoadingFollower)
+                            .buttonStyle(.plain)
                             
-                            Text("\(noteText.count)/60")
-                                .font(.caption2)
-                                .foregroundColor(noteText.count > 50 ? .orange : .secondary)
-                        }
-                        
-                        // Send button
-                        Button(action: sendNote) {
-                            HStack {
-                                if isSendingNote {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                    Text("Sending...")
-                                } else {
-                                    Image(systemName: "paperplane.fill")
-                                    Text("Send Note")
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .foregroundColor(.white)
-                            .padding(.vertical, 10)
-                            .background(noteText.isEmpty || isSendingNote || instagram.isLocked ? Color.gray : Color.purple)
-                            .cornerRadius(8)
-                        }
-                        .disabled(noteText.isEmpty || isSendingNote || instagram.isLocked || getNoteCooldownSeconds() > 0)
-                        
-                        // Status messages
-                        if let cooldownMsg = getNoteCooldownMessage() {
-                            HStack {
-                                Image(systemName: "clock.fill")
-                                    .foregroundColor(.orange)
-                                Text(cooldownMsg)
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            }
-                        }
-                        
-                        if instagram.isLocked {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.red)
-                                Text("Lockdown active")
-                                    .font(.caption)
-                                    .foregroundColor(.red)
-                            }
-                        }
-                        
-                        if instagram.isNetworkStabilizing {
-                            HStack {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                                Text("Network stabilizing...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
-                .alert(noteMessage ?? "", isPresented: $showingNoteAlert) {
-                    Button("OK") { noteMessage = nil }
-                } message: {
-                    Text(noteMessage ?? "")
-                }
-                
-                // Debug section
-                Section("Debug & Testing") {
-                    Button(action: fetchLatestFollower) {
-                        HStack {
-                            Image(systemName: "person.crop.circle.badge.checkmark")
-                                .foregroundColor(.purple)
-                            Text("Get Latest Follower Data")
-                            Spacer()
-                            if isLoadingFollower {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            } else {
-                                Image(systemName: "chevron.right")
-                                    .foregroundColor(.secondary)
-                                    .font(.caption)
-                            }
-                        }
-                    }
-                    .disabled(isLoadingFollower)
-                    
-                    Button(role: .destructive, action: { showingResetDeviceAlert = true }) {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                            Text("Reset Device ID (Emergency)")
-                            Spacer()
+                            GradientButton(
+                                title: "Reset Device ID (Emergency)",
+                                icon: "exclamationmark.triangle.fill",
+                                action: { showingResetDeviceAlert = true },
+                                style: .destructive
+                            )
                         }
                     }
                 }
             }
+            .padding(.horizontal, VaultTheme.Spacing.lg)
+            .padding(.vertical, VaultTheme.Spacing.lg)
         }
+        .background(VaultTheme.Colors.background)
         .navigationTitle("Settings")
+        .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .preferredColorScheme(.dark)
         .alert("Logout", isPresented: $showingLogoutAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Logout", role: .destructive) {
@@ -561,7 +952,7 @@ struct SettingsView: View {
             FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
         }
         .sheet(isPresented: $showingLogin) {
-            LoginView()
+            InstagramWebLoginView(isPresented: $showingLogin)
         }
     }
     

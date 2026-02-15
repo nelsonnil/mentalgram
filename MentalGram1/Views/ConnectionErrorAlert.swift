@@ -173,16 +173,14 @@ struct ConnectionErrorAlert: ViewModifier {
         }
         
         // Add additional context if message contains specific keywords
-        if let error = error {
-            let errorDesc = error.errorDescription ?? ""
-            if errorDesc.lowercased().contains("please wait") {
-                details += """
-                
-                
-                💡 This is a cooldown error, not a connection issue.
-                Wait the specified time before retrying.
-                """
-            }
+        let errorDesc = error.errorDescription ?? ""
+        if errorDesc.lowercased().contains("please wait") {
+            details += """
+            
+            
+            💡 This is a cooldown error, not a connection issue.
+            Wait the specified time before retrying.
+            """
         }
         
         return details

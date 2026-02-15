@@ -79,6 +79,7 @@ struct PerformanceView: View {
         .toolbar(.hidden, for: .tabBar) // HIDE native TabBar in Performance
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarHidden(true)
+        .preferredColorScheme(.light) // CRITICAL: Performance must look exactly like Instagram (light mode)
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .onAppear {
             // CRITICAL: Keep screen on during performance (magic trick needs screen always on)

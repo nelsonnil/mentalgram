@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - Instagram Models
 
@@ -94,6 +95,69 @@ struct InstagramMediaItem: Identifiable, Codable {
     }
 }
 
+// MARK: - Alphabet Type
+
+enum AlphabetType: String, Codable, CaseIterable {
+    case latin = "latin"
+    case cyrillic = "cyrillic"
+    case greek = "greek"
+    case arabic = "arabic"
+    case hebrew = "hebrew"
+    case hiragana = "hiragana"
+    case katakana = "katakana"
+    
+    var displayName: String {
+        switch self {
+        case .latin: return "Latin (A-Z)"
+        case .cyrillic: return "Cyrillic (А-Я)"
+        case .greek: return "Greek (Α-Ω)"
+        case .arabic: return "Arabic (أ-ي)"
+        case .hebrew: return "Hebrew (א-ת)"
+        case .hiragana: return "Hiragana (あ-ん)"
+        case .katakana: return "Katakana (ア-ン)"
+        }
+    }
+    
+    var flag: String {
+        switch self {
+        case .latin: return "🌍"
+        case .cyrillic: return "🇷🇺"
+        case .greek: return "🇬🇷"
+        case .arabic: return "🇸🇦"
+        case .hebrew: return "🇮🇱"
+        case .hiragana: return "🇯🇵"
+        case .katakana: return "🇯🇵"
+        }
+    }
+    
+    var characters: [String] {
+        switch self {
+        case .latin:
+            return ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+        case .cyrillic:
+            return ["А","Б","В","Г","Д","Е","Ё","Ж","З","И","Й","К","Л","М","Н","О","П","Р","С","Т","У","Ф","Х","Ц","Ч","Ш","Щ","Ъ","Ы","Ь","Э","Ю","Я"]
+        case .greek:
+            return ["Α","Β","Γ","Δ","Ε","Ζ","Η","Θ","Ι","Κ","Λ","Μ","Ν","Ξ","Ο","Π","Ρ","Σ","Τ","Υ","Φ","Χ","Ψ","Ω"]
+        case .arabic:
+            return ["ا","ب","ت","ث","ج","ح","خ","د","ذ","ر","ز","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ك","ل","م","ن","ه","و","ي"]
+        case .hebrew:
+            return ["א","ב","ג","ד","ה","ו","ז","ח","ט","י","כ","ל","מ","נ","ס","ע","פ","צ","ק","ר","ש","ת"]
+        case .hiragana:
+            return ["あ","い","う","え","お","か","き","く","け","こ","さ","し","す","せ","そ","た","ち","つ","て","と","な","に","ぬ","ね","の","は","ひ","ふ","へ","ほ","ま","み","む","め","も","や","ゆ","よ","ら","り","る","れ","ろ","わ","を","ん"]
+        case .katakana:
+            return ["ア","イ","ウ","エ","オ","カ","キ","ク","ケ","コ","サ","シ","ス","セ","ソ","タ","チ","ツ","テ","ト","ナ","ニ","ヌ","ネ","ノ","ハ","ヒ","フ","ヘ","ホ","マ","ミ","ム","メ","モ","ヤ","ユ","ヨ","ラ","リ","ル","レ","ロ","ワ","ヲ","ン"]
+        }
+    }
+    
+    var count: Int { characters.count }
+    
+    /// Find the index of a character in this alphabet (case-insensitive for latin)
+    func indexFor(_ char: String) -> Int? {
+        let upper = char.uppercased()
+        return characters.firstIndex(of: upper) ?? characters.firstIndex(of: char)
+    }
+}
+
 // MARK: - Set Models
 
 enum SetType: String, Codable, CaseIterable {
@@ -122,6 +186,24 @@ enum SetType: String, Codable, CaseIterable {
         case .word: return "Multiple banks of letters (A-Z)"
         case .number: return "Multiple banks of digits (0-9)"
         case .custom: return "Single bank of custom images"
+        }
+    }
+    
+    /// Expected number of photos per bank
+    func expectedPhotoCount(alphabet: AlphabetType?) -> Int {
+        switch self {
+        case .number: return 10  // 0-9
+        case .word: return alphabet?.count ?? 26
+        case .custom: return 0  // No fixed count
+        }
+    }
+    
+    /// Labels for each slot position
+    func slotLabels(alphabet: AlphabetType?) -> [String] {
+        switch self {
+        case .number: return (0...9).map { "\($0)" }
+        case .word: return alphabet?.characters ?? AlphabetType.latin.characters
+        case .custom: return []
         }
     }
 }
@@ -173,6 +255,7 @@ struct PhotoSet: Identifiable, Codable {
     var photos: [SetPhoto]
     var createdAt: Date
     var completedAt: Date?
+    var selectedAlphabet: AlphabetType?  // For Word Reveal: which alphabet to use
     
     var totalPhotos: Int {
         photos.count
@@ -180,6 +263,16 @@ struct PhotoSet: Identifiable, Codable {
     
     var uploadedPhotos: Int {
         photos.filter { $0.mediaId != nil }.count
+    }
+    
+    /// Expected number of unique photos per bank
+    var expectedPhotosPerBank: Int {
+        type.expectedPhotoCount(alphabet: selectedAlphabet)
+    }
+    
+    /// Labels for each slot
+    var slotLabels: [String] {
+        type.slotLabels(alphabet: selectedAlphabet)
     }
 }
 
@@ -243,3 +336,64 @@ struct LogEntry: Identifiable, Codable {
         self.timestamp = Date()
     }
 }
+
+// MARK: - Secret Input Mask
+
+enum MaskInputMode: String, Codable, CaseIterable {
+    case latestFollower = "latest_follower"
+    case customUsername = "custom_username"
+    
+    var displayName: String {
+        switch self {
+        case .latestFollower: return "Latest Follower"
+        case .customUsername: return "Custom Username"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .latestFollower: return "person.badge.plus"
+        case .customUsername: return "textformat.abc"
+        }
+    }
+}
+
+// MARK: - Secret Input Settings
+
+class SecretInputSettings: ObservableObject {
+    static let shared = SecretInputSettings()
+    
+    @Published var mode: MaskInputMode {
+        didSet {
+            UserDefaults.standard.set(mode.rawValue, forKey: "secretInputMode")
+        }
+    }
+    
+    @Published var customUsername: String {
+        didSet {
+            UserDefaults.standard.set(customUsername, forKey: "secretInputCustomUsername")
+        }
+    }
+    
+    private init() {
+        if let savedMode = UserDefaults.standard.string(forKey: "secretInputMode"),
+           let mode = MaskInputMode(rawValue: savedMode) {
+            self.mode = mode
+        } else {
+            self.mode = .latestFollower
+        }
+        
+        self.customUsername = UserDefaults.standard.string(forKey: "secretInputCustomUsername") ?? ""
+    }
+    
+    /// Get the mask text based on current mode
+    func getMaskText(latestFollowerUsername: String?) -> String {
+        switch mode {
+        case .latestFollower:
+            return latestFollowerUsername?.lowercased() ?? "user"
+        case .customUsername:
+            return customUsername.lowercased()
+        }
+    }
+}
+

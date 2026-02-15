@@ -1,6 +1,67 @@
 import SwiftUI
 import CryptoKit
 import UniformTypeIdentifiers
+import PhotosUI
+
+// MARK: - Upload Phase Enum
+
+enum UploadPhase: Equatable {
+    case idle
+    case uploading(photoNumber: Int)
+    case archiving(photoNumber: Int)
+    case waiting(nextPhoto: Int, remainingSeconds: Int)
+    case cooldown(remainingSeconds: Int)
+    case autoRetrying(remainingSeconds: Int, attempt: Int)
+    case waitingNetwork(attempt: Int)
+    case escalatedPause(remainingSeconds: Int)
+    case botLockdown(remainingSeconds: Int)
+    case sessionExpired
+    case paused
+    case completed
+    
+    var borderColor: Color {
+        switch self {
+        case .idle: return .green
+        case .uploading: return .purple
+        case .archiving: return .blue
+        case .waiting: return .orange
+        case .cooldown: return Color.orange.opacity(0.8)
+        case .autoRetrying: return .orange
+        case .waitingNetwork: return .yellow
+        case .escalatedPause: return .red
+        case .botLockdown: return .red
+        case .sessionExpired: return .red
+        case .paused: return .gray
+        case .completed: return .green
+        }
+    }
+    
+    var backgroundColor: Color {
+        switch self {
+        case .botLockdown, .sessionExpired: return Color.red.opacity(0.05)
+        case .cooldown, .autoRetrying: return Color.orange.opacity(0.05)
+        case .escalatedPause: return Color.red.opacity(0.05)
+        default: return Color.gray.opacity(0.1)
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .idle: return "checkmark.circle.fill"
+        case .uploading: return "arrow.up.circle.fill"
+        case .archiving: return "archivebox.fill"
+        case .waiting: return "clock.fill"
+        case .cooldown: return "clock.badge.exclamationmark"
+        case .autoRetrying: return "arrow.clockwise.circle.fill"
+        case .waitingNetwork: return "wifi.exclamationmark"
+        case .escalatedPause: return "exclamationmark.triangle.fill"
+        case .botLockdown: return "exclamationmark.triangle.fill"
+        case .sessionExpired: return "lock.fill"
+        case .paused: return "pause.circle.fill"
+        case .completed: return "checkmark.circle.fill"
+        }
+    }
+}
 
 // MARK: - Set Detail View
 
@@ -9,44 +70,43 @@ struct SetDetailView: View {
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject var instagram = InstagramService.shared
     
+    @ObservedObject var uploadManager = UploadManager.shared
+    
     @State private var selectedBankIndex = 0
-    @State private var isUploading = false
-    @State private var isPaused = false
-    @State private var uploadProgress: (current: Int, total: Int) = (0, 0)
-    @State private var showingError: String?
-    @State private var failedPhotoIndex: Int? = nil
-    @State private var isNetworkError = false
-    @State private var isBotDetection = false
-    @State private var isPhotoRejected = false
-    @State private var botDetectionTime: Date? = nil
-    @State private var botCountdownSeconds: Int = 0
-    @State private var botCountdownTimer: Timer? = nil
     @State private var isReorderMode = false
     @State private var consecutiveDuplicates: Set<Int> = []
     @State private var selectedReorderIndex: Int? = nil  // Tap-to-swap: first selected photo
-    @State private var cooldownRetryDisabledUntil: Date? = nil  // Disable retry until cooldown expires
-    @State private var cooldownTimer: Timer? = nil  // Update UI every second
+    
+    // SLOT-BASED PHOTO MANAGEMENT (Word/Number Reveal)
+    @State private var slotPickerItem: PhotosPickerItem? = nil
+    @State private var targetSlotSymbol: String? = nil
+    @State private var showDeleteConfirm = false
+    @State private var deleteTargetSymbol: String? = nil
+    @State private var isProcessingSlotPhoto = false
     
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
     }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
+        ZStack {
+            VaultTheme.Colors.background
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: VaultTheme.Spacing.lg) {
                 // Header Stats
                 statsSection
                 
-                // Status & Actions
-                statusSection
-                
-                // ERROR RECOVERY SECTION
-                if isBotDetection {
-                    botDetectionRecoverySection
-                } else if isPhotoRejected {
-                    photoRejectedRecoverySection
-                } else if isNetworkError {
-                    networkErrorRecoverySection
+                // Status & Actions (only when logged in)
+                if instagram.isLoggedIn {
+                    statusSection
+                        .id("\(uploadManager.uploadPhase)-\(uploadManager.nextPhotoCountdown)-\(uploadManager.botCountdownSeconds)-\(uploadManager.autoRetryCountdown)-\(uploadManager.escalatedPauseCountdown)")
+                    
+                    // ERROR RECOVERY SECTION (only for photo rejected - others are auto-handled)
+                    if uploadManager.isPhotoRejected {
+                        photoRejectedRecoverySection
+                    }
                 }
                 
                 // Banks Tabs (for word/number)
@@ -60,161 +120,175 @@ struct SetDetailView: View {
                 // Photos Grid
                 photosGridSection
             }
-            .padding()
+            .padding(VaultTheme.Spacing.lg)
+        }
         }
         .navigationTitle(currentSet.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { }
-        .alert("Error", isPresented: .constant(showingError != nil && cooldownRetryDisabledUntil == nil), presenting: showingError) { _ in
-            if isBotDetection {
-                // Bot detection: Show countdown, only allow after 15 min
-                if botCountdownSeconds > 0 {
-                    let mins = botCountdownSeconds / 60
-                    let secs = botCountdownSeconds % 60
-                    Button("Wait \(mins):\(String(format: "%02d", secs))", role: .none) { }
-                        .disabled(true)
-                } else {
-                    Button("Retry Upload") {
-                        botCountdownTimer?.invalidate()
-                        botCountdownTimer = nil
-                        resetErrorState()
-                        Task { await retryFromFailedPhoto() }
-                    }
-                }
-                Button("Cancel", role: .cancel) {
-                    botCountdownTimer?.invalidate()
-                    botCountdownTimer = nil
-                    resetErrorState()
-                }
-                
-            } else if isPhotoRejected {
-                // Photo rejected: Offer skip or replace
+        .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .alert("Error", isPresented: .constant(uploadManager.showingError != nil), presenting: uploadManager.showingError) { _ in
+            if uploadManager.isPhotoRejected {
+                // Photo rejected: Offer skip or replace (only non-auto-retryable alert)
                 Button("Skip This Photo") {
                     resetErrorState()
                     Task { await skipFailedPhotoAndContinue() }
                 }
-                Button("Replace Photo") {
-                    resetErrorState()
-                    // TODO: Open gallery to replace
-                }
                 Button("Cancel Upload", role: .cancel) { resetErrorState() }
-                
-            } else if isNetworkError {
-                // Network error: Simple retry
-                Button("Retry Upload", role: .none) {
-                    resetErrorState()
-                    Task { await retryFromFailedPhoto() }
-                }
-                Button("Cancel", role: .cancel) { resetErrorState() }
-                
             } else {
-                // Generic error
+                // Generic dismissible alert (startup errors, etc.)
                 Button("OK") { resetErrorState() }
             }
         } message: { error in
             Text(error)
         }
-        .onDisappear {
-            // Cleanup timers if view disappears
-            botCountdownTimer?.invalidate()
-            botCountdownTimer = nil
-            cooldownTimer?.invalidate()
-            cooldownTimer = nil
-        }
         .onChange(of: instagram.networkChangedDuringUpload) { changed in
             // Network changed during active upload → pause and warn
-            if changed && isUploading {
+            if changed && uploadManager.isUploading {
                 print("⚠️ [UPLOAD] Network changed during upload - PAUSING")
                 LogManager.shared.warning("Network changed during active upload - pausing for safety", category: .network)
-                isPaused = true
-                isUploading = false
+                uploadManager.isPaused = true
+                uploadManager.isUploading = false
                 dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                 UIApplication.shared.isIdleTimerDisabled = false
-                showingError = "⚠️ Network Changed\n\nYour connection changed (e.g., WiFi → Cellular).\n\nThis may cause session errors. Check your connection and tap 'Resume Upload' to continue."
+                uploadManager.showingError = "⚠️ Network Changed\n\nYour connection changed (e.g., WiFi → Cellular).\n\nThis may cause session errors. Check your connection and tap 'Resume Upload' to continue."
                 // Reset flag
                 instagram.networkChangedDuringUpload = false
             }
         }
+        .onAppear {
+            // Reconstruir timers si es necesario cuando la vista aparece
+            restoreTimersIfNeeded()
+        }
+        .onDisappear {
+            // NO invalidar timers aquí - deben seguir corriendo en background
+            // Solo los invalidamos cuando el upload termina/pausa/cancela
+        }
+        .onChange(of: slotPickerItem) { newItem in
+            guard let item = newItem, let symbol = targetSlotSymbol else { return }
+            loadPhotoForSlot(item: item, symbol: symbol)
+        }
+        .alert("Delete Photo", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                if let symbol = deleteTargetSymbol {
+                    dataManager.deletePhotosBySymbol(setId: currentSet.id, symbol: symbol)
+                    deleteTargetSymbol = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                deleteTargetSymbol = nil
+            }
+        } message: {
+            Text("Remove this photo from all banks? This cannot be undone.")
+        }
+        .preferredColorScheme(.dark)
+    }
+    
+    // MARK: - Restore State
+    
+    private func restoreTimersIfNeeded() {
+        uploadManager.restoreTimersIfNeeded()
     }
     
     // MARK: - Stats Section
     
     private var statsSection: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: VaultTheme.Spacing.xl) {
             StatCard(title: "Total", value: "\(currentSet.totalPhotos)", icon: "photo.stack")
-            StatCard(title: "Uploaded", value: "\(currentSet.uploadedPhotos)", icon: "arrow.up.circle")
+            
+            // Only show "Uploaded" when logged in
+            if instagram.isLoggedIn {
+                StatCard(title: "Uploaded", value: "\(currentSet.uploadedPhotos)", icon: "arrow.up.circle")
+            }
+            
             if !currentSet.banks.isEmpty {
                 StatCard(title: "Banks", value: "\(currentSet.banks.count)", icon: "square.stack.3d.up")
             }
         }
     }
     
-    // MARK: - Status Section
+    // MARK: - Status Section (Enhanced)
     
     private var statusSection: some View {
-        VStack(spacing: 12) {
-            // Only show upload status and actions when logged in
+        VStack(spacing: 16) {
             if instagram.isLoggedIn {
-                HStack {
-                    Image(systemName: currentSet.status.icon)
-                    Text(currentSet.status.label)
+                // Estado actual y ícono
+                HStack(spacing: 8) {
+                    Image(systemName: uploadManager.uploadPhase.icon)
+                        .font(.title3)
+                    Text(uploadManager.currentPhaseDescription.isEmpty ? currentSet.status.label : uploadManager.currentPhaseDescription)
                         .font(.headline)
                 }
-                .foregroundColor(currentSet.status.color)
+                .foregroundColor(uploadManager.uploadPhase.borderColor)
                 
-                if currentSet.status == .ready {
-                    Button(action: startUpload) {
-                        Label("Start Upload", systemImage: "arrow.up.circle.fill")
+                // COUNTDOWN DISPLAY
+                if case .waiting(_, let seconds) = uploadManager.uploadPhase, seconds > 0 {
+                    countdownDisplay(seconds: seconds, color: .orange, label: "Next photo in")
+                } else if case .cooldown(let seconds) = uploadManager.uploadPhase, seconds > 0 {
+                    countdownDisplay(seconds: seconds, color: .orange, label: "Cooldown remaining")
+                } else if case .autoRetrying(let seconds, let attempt) = uploadManager.uploadPhase, seconds > 0 {
+                    VStack(spacing: 8) {
+                        countdownDisplay(seconds: seconds, color: .orange, label: "Auto-retrying in")
+                        Text("Attempt \(attempt) of 3")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else if case .waitingNetwork(let attempt) = uploadManager.uploadPhase {
+                    VStack(spacing: 8) {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .tint(.yellow)
+                            Text("Waiting for connection...")
+                                .font(.subheadline)
+                                .foregroundColor(.yellow)
+                        }
+                        Text("Attempt \(attempt) of 3 - Will retry automatically")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color.yellow.opacity(0.1))
+                    .cornerRadius(12)
+                } else if case .escalatedPause(let seconds) = uploadManager.uploadPhase {
+                    VStack(spacing: 8) {
+                        countdownDisplay(seconds: seconds, color: .red, label: "Multiple errors - Cooling down")
+                        Text("Upload will be available to resume after this wait")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else if case .botLockdown(let seconds) = uploadManager.uploadPhase, seconds > 0 {
+                    countdownDisplay(seconds: seconds, color: .red, label: "Lockdown - Wait")
+                } else if case .sessionExpired = uploadManager.uploadPhase {
+                    VStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.red)
+                        Text("Session Expired")
                             .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .cornerRadius(12)
-                    }
-                } else if currentSet.status == .uploading {
-                    VStack(spacing: 12) {
-                        ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
-                            .tint(isPaused ? .orange : .purple)
-                        
-                        Text(isPaused ? "⏸️ Paused - \(uploadProgress.current) / \(uploadProgress.total)" : "📤 Uploading - \(uploadProgress.current) / \(uploadProgress.total)")
+                            .foregroundColor(.red)
+                        Text("Go to Settings and re-login to continue")
                             .font(.caption)
-                            .foregroundColor(isPaused ? .orange : .secondary)
-                        
-                        // Pause/Resume Button
-                        Button(action: togglePause) {
-                            Label(isPaused ? "Resume Upload" : "Pause Upload", systemImage: isPaused ? "play.fill" : "pause.fill")
-                                .font(.subheadline.bold())
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(isPaused ? Color.green : Color.orange)
-                                .cornerRadius(8)
-                        }
+                            .foregroundColor(.secondary)
                     }
-                } else if currentSet.status == .paused {
-                    VStack(spacing: 12) {
-                        ProgressView(value: Double(uploadProgress.current), total: Double(uploadProgress.total))
-                            .tint(.orange)
-                        
-                        Text("⏸️ Upload Paused - \(uploadProgress.current) / \(uploadProgress.total)")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                        
-                        Button(action: resumeUpload) {
-                            Label("Resume Upload", systemImage: "play.fill")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .cornerRadius(12)
-                        }
-                    }
-                } else if currentSet.status == .completed {
-                    // Quick Actions para sets completados
-                    quickActionsSection
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(12)
                 }
+                
+                // Barra de progreso (si subiendo)
+                if uploadManager.isUploading {
+                    VStack(spacing: VaultTheme.Spacing.sm) {
+                        ProgressView(value: Double(uploadManager.uploadProgress.current), total: Double(uploadManager.uploadProgress.total))
+                            .tint(VaultTheme.Colors.gradientWarning)
+                        
+                        progressText
+                    }
+                }
+                
+                // Botones de acción
+                actionButtons
             } else {
                 // When not logged in, show generic info
                 HStack {
@@ -225,9 +299,126 @@ struct SetDetailView: View {
                 .foregroundColor(.secondary)
             }
         }
+        .padding(VaultTheme.Spacing.lg)
+        .background(VaultTheme.Colors.cardBackground)
+        .cornerRadius(VaultTheme.CornerRadius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                .strokeBorder(uploadManager.uploadPhase.borderColor, lineWidth: 2)
+        )
+    }
+    
+    // MARK: - Status Section Helpers
+    
+    private func countdownDisplay(seconds: Int, color: Color, label: String) -> some View {
+        VStack(spacing: 8) {
+            Text("\(seconds / 60):\(String(format: "%02d", seconds % 60))")
+                .font(.system(size: 48, weight: .bold, design: .monospaced))
+                .foregroundColor(color)
+            
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
         .padding()
-        .background(Color.gray.opacity(0.1))
+        .background(color.opacity(0.1))
         .cornerRadius(12)
+    }
+    
+    private var progressText: some View {
+        Group {
+            if case .waiting(let nextPhoto, let seconds) = uploadManager.uploadPhase {
+                Text("\(uploadManager.uploadProgress.current)/\(uploadManager.uploadProgress.total) completed - Waiting \(seconds / 60):\(String(format: "%02d", seconds % 60)) for photo #\(nextPhoto)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("\(uploadManager.uploadProgress.current) / \(uploadManager.uploadProgress.total)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var actionButtons: some View {
+        if currentSet.status == .ready {
+            Button(action: startUpload) {
+                Label("Start Upload", systemImage: "arrow.up.circle.fill")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(VaultTheme.Colors.success)
+                    .cornerRadius(VaultTheme.CornerRadius.md)
+            }
+        } else if currentSet.status == .uploading {
+            // During auto-retry / waiting network / cooldown, don't show pause button
+            if case .autoRetrying = uploadManager.uploadPhase {
+                // No button - auto-retrying in progress
+                EmptyView()
+            } else if case .waitingNetwork = uploadManager.uploadPhase {
+                // No button - waiting for network
+                EmptyView()
+            } else if case .cooldown = uploadManager.uploadPhase {
+                // No button - cooldown active
+                EmptyView()
+            } else {
+                Button(action: togglePause) {
+                    Label(uploadManager.isPaused ? "Continue Upload" : "Pause Upload", systemImage: uploadManager.isPaused ? "play.fill" : "pause.fill")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(uploadManager.isPaused ? VaultTheme.Colors.success : VaultTheme.Colors.warning)
+                        .cornerRadius(VaultTheme.CornerRadius.sm)
+                }
+            }
+        } else if currentSet.status == .paused || currentSet.status == .error {
+            // Check if in escalated pause - only show button after countdown ends
+            if case .escalatedPause(let seconds) = uploadManager.uploadPhase, seconds > 0 {
+                // Show disabled button with countdown
+                Label("Resume available in \(seconds / 60):\(String(format: "%02d", seconds % 60))", systemImage: "clock.fill")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.gray.opacity(0.3))
+                    .cornerRadius(VaultTheme.CornerRadius.md)
+            } else if case .sessionExpired = uploadManager.uploadPhase {
+                // Session expired - no resume, show re-login hint
+                Button(action: {}) {
+                    Label("Re-login Required", systemImage: "lock.fill")
+                        .font(.headline)
+                        .foregroundColor(.white.opacity(0.5))
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.3))
+                        .cornerRadius(VaultTheme.CornerRadius.md)
+                }
+                .disabled(true)
+            } else if case .botLockdown(let seconds) = uploadManager.uploadPhase, seconds > 0 {
+                // Bot lockdown - disabled with countdown
+                Label("Locked for \(seconds / 60):\(String(format: "%02d", seconds % 60))", systemImage: "lock.fill")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red.opacity(0.3))
+                    .cornerRadius(VaultTheme.CornerRadius.md)
+            } else {
+                Button(action: resumeUpload) {
+                    Label("Resume Upload", systemImage: "play.fill")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(VaultTheme.Colors.success)
+                        .cornerRadius(VaultTheme.CornerRadius.md)
+                }
+            }
+        } else if currentSet.status == .completed {
+            quickActionsSection
+        }
     }
     
     // MARK: - Quick Actions Section
@@ -249,9 +440,9 @@ struct SetDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.green.opacity(0.15))
-                    .foregroundColor(.green)
-                    .cornerRadius(10)
+                    .background(VaultTheme.Colors.success.opacity(0.15))
+                    .foregroundColor(VaultTheme.Colors.success)
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
                 }
                 
                 // Hide All Visible
@@ -264,9 +455,9 @@ struct SetDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.orange.opacity(0.15))
-                    .foregroundColor(.orange)
-                    .cornerRadius(10)
+                    .background(VaultTheme.Colors.warning.opacity(0.15))
+                    .foregroundColor(VaultTheme.Colors.warning)
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
                 }
             }
             
@@ -288,16 +479,16 @@ struct SetDetailView: View {
     
     private var banksTabsSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: VaultTheme.Spacing.md) {
                 ForEach(currentSet.banks.indices, id: \.self) { index in
                     Button(action: { selectedBankIndex = index }) {
                         Text(currentSet.banks[index].name)
                             .font(.subheadline.weight(selectedBankIndex == index ? .bold : .regular))
-                            .foregroundColor(selectedBankIndex == index ? .white : .purple)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(selectedBankIndex == index ? .purple : Color.purple.opacity(0.1))
-                            .cornerRadius(8)
+                            .foregroundColor(selectedBankIndex == index ? .white : VaultTheme.Colors.primary)
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
+                            .padding(.vertical, VaultTheme.Spacing.sm)
+                            .background(selectedBankIndex == index ? VaultTheme.Colors.primary : VaultTheme.Colors.primary.opacity(0.1))
+                            .cornerRadius(VaultTheme.CornerRadius.sm)
                     }
                 }
             }
@@ -305,55 +496,6 @@ struct SetDetailView: View {
     }
     
     // MARK: - Error Recovery Sections
-    
-    private var botDetectionRecoverySection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.red)
-                Text("Bot Detection - Account Flagged")
-                    .font(.headline)
-                    .foregroundColor(.red)
-            }
-            
-            if botCountdownSeconds > 0 {
-                VStack(spacing: 8) {
-                    Text("Wait Time Remaining")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Text("\(botCountdownSeconds / 60):\(String(format: "%02d", botCountdownSeconds % 60))")
-                        .font(.system(size: 36, weight: .bold, design: .monospaced))
-                        .foregroundColor(.red)
-                    
-                    Text("Do NOT open Instagram or retry during this time")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding()
-                .background(Color.red.opacity(0.1))
-                .cornerRadius(12)
-            } else {
-                Button(action: {
-                    botCountdownTimer?.invalidate()
-                    botCountdownTimer = nil
-                    Task { await retryFromFailedPhoto() }
-                }) {
-                    Label("Retry Upload Now", systemImage: "arrow.clockwise")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .cornerRadius(12)
-                }
-            }
-        }
-        .padding()
-        .background(Color(uiColor: .systemGray6))
-        .cornerRadius(12)
-    }
     
     private var photoRejectedRecoverySection: some View {
         VStack(spacing: 12) {
@@ -365,8 +507,8 @@ struct SetDetailView: View {
                     .foregroundColor(.orange)
             }
             
-            if let failedIndex = failedPhotoIndex {
-                Text("Photo #\(failedIndex + 1) was rejected by Instagram")
+            if let failedIndex = uploadManager.failedPhotoIndex {
+                Text("Photo #\(failedIndex + 1) was rejected")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -380,8 +522,8 @@ struct SetDetailView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.orange)
-                        .cornerRadius(8)
+                        .background(VaultTheme.Colors.warning)
+                        .cornerRadius(VaultTheme.CornerRadius.sm)
                 }
                 
                 Button(action: {
@@ -393,71 +535,14 @@ struct SetDetailView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.purple)
-                        .cornerRadius(8)
+                        .background(VaultTheme.Colors.primary)
+                        .cornerRadius(VaultTheme.CornerRadius.sm)
                 }
             }
         }
-        .padding()
-        .background(Color(uiColor: .systemGray6))
-        .cornerRadius(12)
-    }
-    
-    private var networkErrorRecoverySection: some View {
-        VStack(spacing: 12) {
-            // Check if cooldown is active to show appropriate title
-            let isCooldownActive = cooldownRetryDisabledUntil != nil && Date() < cooldownRetryDisabledUntil!
-            let cooldownRemaining = isCooldownActive ? Int(cooldownRetryDisabledUntil!.timeIntervalSinceNow) : 0
-            let cooldownMins = cooldownRemaining / 60
-            let cooldownSecs = cooldownRemaining % 60
-            
-            HStack(spacing: 8) {
-                Image(systemName: isCooldownActive ? "clock.badge.exclamationmark" : "wifi.exclamationmark")
-                    .foregroundColor(isCooldownActive ? .orange : .blue)
-                Text(isCooldownActive ? "Cooldown Active" : "Network Error")
-                    .font(.headline)
-                    .foregroundColor(isCooldownActive ? .orange : .blue)
-            }
-            
-            if let failedIndex = failedPhotoIndex {
-                if isCooldownActive {
-                    Text("Instagram requires waiting between uploads.\nPhoto #\(failedIndex + 1) paused.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text("Connection error at Photo #\(failedIndex + 1)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Button(action: {
-                Task { await retryFromFailedPhoto() }
-            }) {
-                if isCooldownActive {
-                    Label("Wait \(cooldownMins):\(String(format: "%02d", cooldownSecs))", systemImage: "clock")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.gray)
-                        .cornerRadius(12)
-                } else {
-                    Label("Retry Upload", systemImage: "arrow.clockwise")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                }
-            }
-            .disabled(isCooldownActive)
-        }
-        .padding()
-        .background(Color(uiColor: .systemGray6))
-        .cornerRadius(12)
+        .padding(VaultTheme.Spacing.lg)
+        .background(VaultTheme.Colors.cardBackground)
+        .cornerRadius(VaultTheme.CornerRadius.md)
     }
     
     // MARK: - Reorder Toggle Button
@@ -478,10 +563,10 @@ struct SetDetailView: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundColor(.white)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, VaultTheme.Spacing.lg)
                 .padding(.vertical, 10)
-                .background(Color.green)
-                .cornerRadius(8)
+                .background(VaultTheme.Colors.success)
+                .cornerRadius(VaultTheme.CornerRadius.sm)
             }
             .disabled(!consecutiveDuplicates.isEmpty)
             .opacity(consecutiveDuplicates.isEmpty ? 1.0 : 0.5)
@@ -499,11 +584,11 @@ struct SetDetailView: View {
                     }
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.purple)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.purple.opacity(0.1))
-                    .cornerRadius(8)
+                    .foregroundColor(VaultTheme.Colors.primary)
+                    .padding(.horizontal, VaultTheme.Spacing.lg)
+                    .padding(.vertical, VaultTheme.Spacing.sm)
+                    .background(VaultTheme.Colors.primary.opacity(0.1))
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -519,8 +604,330 @@ struct SetDetailView: View {
         
         if isReorderMode {
             return AnyView(reorderableGrid(photos: photosToShow))
+        } else if (currentSet.type == .word || currentSet.type == .number) && currentSet.expectedPhotosPerBank > 0 {
+            return AnyView(slotBasedGrid(photos: photosToShow))
         } else {
             return AnyView(normalGrid(photos: photosToShow))
+        }
+    }
+    
+    // MARK: - Slot-Based Grid (Word/Number Reveal)
+    
+    private func slotBasedGrid(photos: [SetPhoto]) -> some View {
+        let labels = currentSet.slotLabels
+        let photosBySymbol = Dictionary(grouping: photos, by: { $0.symbol })
+        
+        return VStack(spacing: 12) {
+            // Summary
+            let filled = labels.filter { photosBySymbol[$0] != nil }.count
+            let total = labels.count
+            
+            HStack(spacing: 8) {
+                Image(systemName: filled == total ? "checkmark.circle.fill" : "circle.dotted")
+                    .foregroundColor(filled == total ? .green : .orange)
+                Text("\(filled)/\(total) slots filled")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                if filled < total {
+                    Text("(\(total - filled) missing)")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+            .padding(.horizontal)
+            
+            if isProcessingSlotPhoto {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Processing photo...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 10)], spacing: 10) {
+                ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
+                    if let photos = photosBySymbol[label], let photo = photos.first {
+                        // FILLED SLOT: show photo with symbol label
+                        filledSlotView(photo: photo, label: label, position: index + 1)
+                    } else {
+                        // EMPTY SLOT: tappable placeholder to add photo
+                        emptySlotView(label: label, position: index + 1)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func filledSlotView(photo: SetPhoto, label: String, position: Int) -> some View {
+        VStack(spacing: 4) {
+            ZStack {
+                if let imageData = photo.imageData, let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 100, height: 100)
+                        .clipped()
+                        .cornerRadius(10)
+                        .opacity(photo.isArchived ? 0.4 : 1.0)
+                        .overlay(
+                            // Overlay oscuro cuando está archivado
+                            photo.isArchived ? 
+                                Color.black.opacity(0.3)
+                                    .cornerRadius(10)
+                                : nil
+                        )
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 100, height: 100)
+                        .cornerRadius(10)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.gray)
+                        )
+                }
+                
+                // Symbol label badge (top-left)
+                Text(label)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(VaultTheme.Colors.primary))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .offset(x: -3, y: -3)
+                
+                // Upload status badge (top-right) - only when logged in
+                if instagram.isLoggedIn {
+                    uploadStatusBadge(for: photo)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .offset(x: 3, y: -3)
+                }
+            }
+            .frame(width: 100, height: 100)
+            .contextMenu {
+                Button(role: .destructive) {
+                    deleteTargetSymbol = label
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Remove Photo", systemImage: "trash")
+                }
+                
+                // Replace photo option
+                Button {
+                    targetSlotSymbol = label
+                    // Trigger picker via a workaround (set a flag)
+                } label: {
+                    Label("Replace Photo", systemImage: "arrow.triangle.2.circlepath")
+                }
+            }
+            
+            // Status text below photo (only when logged in)
+            if instagram.isLoggedIn {
+                statusTextView(for: photo)
+            }
+        }
+    }
+    
+    private func emptySlotView(label: String, position: Int) -> some View {
+        PhotosPicker(
+            selection: Binding(
+                get: { slotPickerItem },
+                set: { newItem in
+                    targetSlotSymbol = label
+                    slotPickerItem = newItem
+                }
+            ),
+            matching: .images
+        ) {
+            VStack(spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                        .foregroundColor(VaultTheme.Colors.primary.opacity(0.4))
+                        .frame(width: 100, height: 100)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(VaultTheme.Colors.primary.opacity(0.05))
+                        )
+                    
+                    VStack(spacing: 6) {
+                        // Symbol label
+                        Text(label)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(VaultTheme.Colors.primary.opacity(0.6))
+                        
+                        // Plus icon
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(VaultTheme.Colors.primary.opacity(0.5))
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func uploadStatusBadge(for photo: SetPhoto) -> some View {
+        switch photo.uploadStatus {
+        case .completed:
+            ZStack {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 20, height: 20)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        case .error:
+            ZStack {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 20, height: 20)
+                Image(systemName: "exclamationmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        case .uploading, .archiving, .uploaded:
+            ZStack {
+                Circle()
+                    .fill(Color.blue)
+                    .frame(width: 20, height: 20)
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .tint(.white)
+            }
+        case .pending:
+            ZStack {
+                Circle()
+                    .fill(Color.gray.opacity(0.6))
+                    .frame(width: 20, height: 20)
+                Image(systemName: "clock")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func statusTextView(for photo: SetPhoto) -> some View {
+        switch photo.uploadStatus {
+        case .pending:
+            Text("Pending")
+                .font(.caption2)
+                .foregroundColor(.orange)
+        case .uploading:
+            Text("Uploading...")
+                .font(.caption2)
+                .foregroundColor(.blue)
+        case .uploaded:
+            Text("Archiving...")
+                .font(.caption2)
+                .foregroundColor(VaultTheme.Colors.primary)
+        case .archiving:
+            Text("Archiving...")
+                .font(.caption2)
+                .foregroundColor(VaultTheme.Colors.primary)
+        case .completed:
+            if photo.isArchived {
+                Text("Archived")
+                    .font(.caption2)
+                    .foregroundColor(.green)
+            } else {
+                Text("Visible")
+                    .font(.caption2)
+                    .foregroundColor(.green)
+            }
+        case .error:
+            Text("Error")
+                .font(.caption2)
+                .foregroundColor(.red)
+        }
+    }
+    
+    @ViewBuilder
+    private func uploadStatusDot(for photo: SetPhoto) -> some View {
+        switch photo.uploadStatus {
+        case .completed:
+            Circle()
+                .fill(Color.green)
+                .frame(width: 12, height: 12)
+                .overlay(
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundColor(.white)
+                )
+        case .error:
+            Circle()
+                .fill(Color.red)
+                .frame(width: 12, height: 12)
+                .overlay(
+                    Image(systemName: "exclamationmark")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundColor(.white)
+                )
+        case .uploading, .archiving, .uploaded:
+            Circle()
+                .fill(Color.blue)
+                .frame(width: 12, height: 12)
+                .overlay(
+                    ProgressView()
+                        .scaleEffect(0.4)
+                )
+        case .pending:
+            Circle()
+                .fill(Color.gray.opacity(0.5))
+                .frame(width: 12, height: 12)
+        }
+    }
+    
+    // MARK: - Load Photo for Specific Slot
+    
+    private func loadPhotoForSlot(item: PhotosPickerItem, symbol: String) {
+        isProcessingSlotPhoto = true
+        
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                await MainActor.run { isProcessingSlotPhoto = false }
+                return
+            }
+            
+            // Apply same compression pipeline as CreateSetView
+            let validImageData = InstagramService.adjustImageAspectRatio(imageData: data)
+            let optimizedImageData = InstagramService.compressImageForUpload(imageData: validImageData, photoIndex: 0)
+            
+            let filename = item.itemIdentifier ?? "photo_\(UUID().uuidString)"
+            
+            // Check if slot already has a photo (replace) or is empty (insert)
+            let existingPhotos = currentSet.photos.filter { $0.symbol == symbol }
+            
+            await MainActor.run {
+                if !existingPhotos.isEmpty {
+                    // Replace existing
+                    dataManager.replacePhotoAtSymbol(
+                        setId: currentSet.id,
+                        symbol: symbol,
+                        newFilename: filename,
+                        newImageData: optimizedImageData
+                    )
+                } else {
+                    // Insert new
+                    let labels = currentSet.slotLabels
+                    let position = labels.firstIndex(of: symbol) ?? labels.count
+                    dataManager.insertPhotoAtPosition(
+                        setId: currentSet.id,
+                        symbol: symbol,
+                        filename: filename,
+                        imageData: optimizedImageData,
+                        position: position
+                    )
+                }
+                
+                slotPickerItem = nil
+                targetSlotSymbol = nil
+                isProcessingSlotPhoto = false
+            }
         }
     }
     
@@ -539,13 +946,13 @@ struct SetDetailView: View {
     private func reorderableGrid(photos: [SetPhoto]) -> some View {
         VStack(spacing: 12) {
             // Instructions
-            HStack(spacing: 8) {
+            HStack(spacing: VaultTheme.Spacing.sm) {
                 Image(systemName: "hand.tap.fill")
-                    .foregroundColor(.purple)
+                    .foregroundColor(VaultTheme.Colors.primary)
                 if selectedReorderIndex != nil {
                     Text("Now tap the photo to swap with")
                         .font(.caption)
-                        .foregroundColor(.purple)
+                        .foregroundColor(VaultTheme.Colors.primary)
                         .fontWeight(.semibold)
                 } else {
                     Text("Tap a photo, then tap another to swap them")
@@ -665,30 +1072,43 @@ struct SetDetailView: View {
     // MARK: - Upload Controls
     
     private func startUpload() {
+        uploadManager.activeSetId = currentSet.id
         Task {
             await uploadAllPhotos()
         }
     }
     
     private func togglePause() {
-        isPaused.toggle()
-        if isPaused {
+        uploadManager.isPaused.toggle()
+        if uploadManager.isPaused {
             print("⏸️ [UPLOAD] User paused upload")
+            uploadManager.uploadPhase = .paused
+            uploadManager.currentPhaseDescription = "Upload Paused"
         } else {
             print("▶️ [UPLOAD] User resumed upload")
         }
     }
     
     private func resumeUpload() {
-        isPaused = false
+        uploadManager.isPaused = false
+        resetErrorState()
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
+        
+        // Update phase immediately
+        uploadManager.uploadPhase = .idle
+        uploadManager.currentPhaseDescription = "Resuming upload..."
+        
+        // If we have a failed photo index, resume from there
+        let startIndex = uploadManager.failedPhotoIndex ?? 0
+        uploadManager.failedPhotoIndex = nil
+        
         Task {
-            await uploadAllPhotos()
+            await uploadAllPhotos(startFrom: startIndex)
         }
     }
     
     private func retryFromFailedPhoto() async {
-        guard let startIndex = failedPhotoIndex else {
+        guard let startIndex = uploadManager.failedPhotoIndex else {
             print("⚠️ [RETRY] No failed photo index found")
             return
         }
@@ -699,7 +1119,7 @@ struct SetDetailView: View {
     }
     
     private func skipFailedPhotoAndContinue() async {
-        guard let skipIndex = failedPhotoIndex else {
+        guard let skipIndex = uploadManager.failedPhotoIndex else {
             print("⚠️ [SKIP] No failed photo index found")
             return
         }
@@ -717,14 +1137,7 @@ struct SetDetailView: View {
     }
     
     private func resetErrorState() {
-        showingError = nil
-        failedPhotoIndex = nil
-        isNetworkError = false
-        isPhotoRejected = false
-        isBotDetection = false
-        botCountdownSeconds = 0
-        botCountdownTimer?.invalidate()
-        botCountdownTimer = nil
+        uploadManager.resetErrorState()
     }
     
     // Helper: Check if error is network-related (retryable)
@@ -776,27 +1189,25 @@ struct SetDetailView: View {
             print("🚨 [UPLOAD] Cannot start - lockdown is active")
             await MainActor.run {
                 UIApplication.shared.isIdleTimerDisabled = false
-                print("🌙 [SCREEN] Screen sleep RE-ENABLED")
-                showingError = "⚠️ Instagram lockdown active. Cannot upload. Wait for lockdown to clear."
+                uploadManager.showingError = "Instagram lockdown active. Cannot upload. Wait for lockdown to clear."
             }
             return
         }
         
         // CRITICAL: Check GLOBAL cooldown before starting (prevent switching sets to bypass cooldown)
-        let (onCooldown, remainingSeconds) = instagram.isPhotoUploadOnCooldown()
-        if onCooldown {
-            let minutes = remainingSeconds / 60
-            let seconds = remainingSeconds % 60
+        let (onCooldown, remainingCooldown) = instagram.isPhotoUploadOnCooldown()
+        if onCooldown && startFrom == 0 {
+            // If this is a fresh start (not auto-retry), show cooldown info
+            // For auto-retry, we handle the cooldown wait inside the retry loop
+            let minutes = remainingCooldown / 60
+            let seconds = remainingCooldown % 60
             print("⏰ [UPLOAD] Global cooldown active: \(minutes)m \(seconds)s remaining")
-            await MainActor.run {
-                UIApplication.shared.isIdleTimerDisabled = false
-                print("🌙 [SCREEN] Screen sleep RE-ENABLED")
-                showingError = "⏰ Please wait \(minutes)m \(seconds)s before uploading.\n\nYou recently uploaded a photo. Instagram requires waiting between uploads to avoid bot detection."
-            }
-            return
+            
+            // Instead of showing an error, wait for cooldown with countdown
+            await waitWithCountdown(seconds: remainingCooldown, label: "Cooldown Active")
         }
         
-        isUploading = true
+        uploadManager.isUploading = true
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
         
         // ANTI-BOT: Wait if network changed recently (before first upload)
@@ -806,10 +1217,9 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD] Network stability check failed: \(error)")
             await MainActor.run {
                 UIApplication.shared.isIdleTimerDisabled = false
-                print("🌙 [SCREEN] Screen sleep RE-ENABLED")
-                isUploading = false
+                uploadManager.isUploading = false
                 dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                showingError = "Network error starting upload: \(error.localizedDescription)"
+                uploadManager.showingError = "Network error starting upload: \(error.localizedDescription)"
             }
             return
         }
@@ -821,23 +1231,28 @@ struct SetDetailView: View {
         
         let totalPhotos = allPhotosToUpload.count
         let alreadyUploaded = totalPhotos - photosToUpload.count
-        uploadProgress = (alreadyUploaded, totalPhotos)
+        uploadManager.uploadProgress = UploadManager.UploadProgressInfo(current: alreadyUploaded, total: totalPhotos)
         
         print("   Photos needing upload: \(photosToUpload.count)")
         if startFrom > 0 {
             print("   🔄 [RETRY] Starting from photo #\(startFrom + 1) (skipping \(startFrom) already processed)")
         }
         
+        // Reset consecutive retries at start
+        await MainActor.run { uploadManager.consecutiveAutoRetries = 0 }
+        
         for (relativeIndex, photo) in photosToUpload.enumerated() {
             let index = relativeIndex + startFrom
+            
             // Check if paused
-            if isPaused {
+            if uploadManager.isPaused {
                 print("⏸️ [UPLOAD] Paused by user")
                 await MainActor.run {
                     UIApplication.shared.isIdleTimerDisabled = false
-                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (paused)")
                     dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                    isUploading = false
+                    uploadManager.isUploading = false
+                    // Save current index so resume continues from here
+                    uploadManager.failedPhotoIndex = index
                 }
                 return
             }
@@ -847,312 +1262,488 @@ struct SetDetailView: View {
                 print("🚨 [UPLOAD] Lockdown is active - STOPPING upload")
                 await MainActor.run {
                     UIApplication.shared.isIdleTimerDisabled = false
-                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (lockdown)")
                     dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                    isUploading = false
-                    showingError = "⚠️ Instagram lockdown active. Upload paused for safety. Wait for lockdown to clear before resuming."
+                    uploadManager.isUploading = false
                 }
                 return
             }
             
-            print("\n--- Photo \(index + 1)/\(photosToUpload.count) ---")
+            print("\n--- Photo \(index + 1)/\(totalPhotos) ---")
             print("   Symbol: \(photo.symbol)")
             print("   Filename: \(photo.filename)")
-            print("   Has imageData: \(photo.imageData != nil)")
             
             guard let imageData = photo.imageData else {
                 print("❌ [UPLOAD ALL] No imageData for photo \(photo.id)")
                 continue
             }
             
-            // Update photo status: uploading
-            dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .uploading, errorMessage: nil)
+            // ===== AUTO-RETRY LOOP FOR EACH PHOTO =====
+            let maxRetries = 3
+            var retryAttempt = 0
+            var photoUploadSuccess = false
             
-            do {
-                // Upload photo
-                print("   Starting upload for \(photo.symbol)...")
-                
-                // ANTI-BOT: Allow duplicates for Word/Number Reveal sets (letters/numbers repeat)
-                let allowDuplicates = (currentSet.type == .word || currentSet.type == .number)
-                let mediaId = try await instagram.uploadPhoto(
-                    imageData: imageData,
-                    caption: "",
-                    allowDuplicates: allowDuplicates,
-                    photoIndex: index
-                )
-                
-                if let mediaId = mediaId {
-                    print("✅ [UPLOAD ALL] Photo uploaded. Media ID: \(mediaId)")
-                    // Update status: uploaded (waiting for archive)
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .uploaded, errorMessage: nil)
-                    
-                    // Wait before archiving
-                    let waitSeconds = Double.random(in: 5...10)
-                    print("   Waiting \(String(format: "%.1f", waitSeconds))s before archive...")
-                    try await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
-                    
-                    // Check if paused during wait
-                    if isPaused {
-                        print("⏸️ [UPLOAD] Paused by user during wait")
-                        await MainActor.run {
-                            UIApplication.shared.isIdleTimerDisabled = false
-                            print("🌙 [SCREEN] Screen sleep RE-ENABLED (paused)")
-                            dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                            isUploading = false
-                        }
-                        return
+            while retryAttempt <= maxRetries && !photoUploadSuccess {
+                // Check if paused between retries
+                if uploadManager.isPaused {
+                    await MainActor.run {
+                        UIApplication.shared.isIdleTimerDisabled = false
+                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                        uploadManager.isUploading = false
+                        // Save current index
+                        uploadManager.failedPhotoIndex = index
                     }
+                    return
+                }
+                
+                // Update photo status: uploading
+                dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .uploading, errorMessage: nil)
+                
+                // UPDATE PHASE: Uploading
+                await MainActor.run {
+                    uploadManager.uploadPhase = .uploading(photoNumber: index + 1)
+                    uploadManager.currentPhaseDescription = retryAttempt > 0 
+                        ? "Retrying photo #\(index + 1) (attempt \(retryAttempt + 1))"
+                        : "Uploading photo #\(index + 1) of \(totalPhotos)"
+                }
+                
+                do {
+                    // Upload photo
+                    let sizeKB = imageData.count / 1024
+                    LogManager.shared.upload("Starting upload: Photo #\(index + 1) (\(sizeKB)KB)")
                     
-                    // Update status: archiving
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .archiving, errorMessage: nil)
+                    // ANTI-BOT: Allow duplicates for Word/Number Reveal sets
+                    let allowDuplicates = (currentSet.type == .word || currentSet.type == .number)
+                    let mediaId = try await instagram.uploadPhoto(
+                        imageData: imageData,
+                        caption: "",
+                        allowDuplicates: allowDuplicates,
+                        photoIndex: index
+                    )
                     
-                    // Archive
-                    print("   Archiving...")
-                    let archived = try await instagram.archivePhoto(mediaId: mediaId)
-                    
-                    if archived {
-                        print("✅ [UPLOAD ALL] Photo archived successfully")
-                        // Update status: completed
-                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
-                    } else {
-                        print("❌ [UPLOAD ALL] Archive failed - STOPPING upload")
-                        // Update status: error
-                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: false, uploadStatus: .error, errorMessage: "Archive failed - Manual review needed")
+                    if let mediaId = mediaId {
+                        print("✅ [UPLOAD] Photo #\(index + 1) uploaded. Media ID: \(mediaId)")
+                        LogManager.shared.success("Photo #\(index + 1) uploaded successfully (ID: \(mediaId))", category: .upload)
                         
-                        // CRITICAL: STOP upload, don't continue
-                        await MainActor.run {
-                            showingError = "Archive failed. Please check connection and Instagram status before retrying."
-                            dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                            isUploading = false
+                        // Update status: uploaded (waiting for archive)
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .uploaded, errorMessage: nil)
+                        
+                        // Wait before archiving (human-like delay)
+                        let waitSeconds = Double.random(in: 5...10)
+                        print("   Waiting \(String(format: "%.1f", waitSeconds))s before archive...")
+                        try await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+                        
+                        // Check if paused during wait
+                        if uploadManager.isPaused {
+                            await MainActor.run {
+                                UIApplication.shared.isIdleTimerDisabled = false
+                                dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                                uploadManager.isUploading = false
+                                uploadManager.failedPhotoIndex = index
+                            }
+                            return
                         }
-                        return
-                    }
-                    
-                    uploadProgress.current = index + 1
-                    
-                    // ANTI-BOT: Delay before next photo
-                    // Current: 2m5s-3min (safe minimum to avoid Instagram cooldown)
-                    // Conservative: 3-6 min (lower risk, safer for new accounts)
-                    // Instagram minimum: 120s (2 min) + 5s safety margin
-                    if relativeIndex < photosToUpload.count - 1 {
-                        let delaySeconds = Double.random(in: 125...180) // 2m5s-3min (safe)
-                        print("   Waiting \(String(format: "%.0f", delaySeconds))s before next photo...")
                         
-                        // Split sleep into 1-second chunks to check pause more frequently
-                        for _ in 0..<Int(delaySeconds) {
-                            if isPaused {
-                                print("⏸️ [UPLOAD] Paused by user during delay")
-                                await MainActor.run {
-                                    UIApplication.shared.isIdleTimerDisabled = false
-                                    print("🌙 [SCREEN] Screen sleep RE-ENABLED (paused)")
-                                    dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                                    isUploading = false
-                                }
+                        // Update status: archiving
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .archiving, errorMessage: nil)
+                        
+                        // UPDATE PHASE: Archiving
+                        await MainActor.run {
+                            uploadManager.uploadPhase = .archiving(photoNumber: index + 1)
+                            uploadManager.currentPhaseDescription = "Archiving photo #\(index + 1)..."
+                        }
+                        
+                        // Archive
+                        let archived = try await instagram.archivePhoto(mediaId: mediaId)
+                        
+                        if archived {
+                            print("✅ [UPLOAD] Photo #\(index + 1) archived successfully")
+                            dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                            photoUploadSuccess = true
+                            
+                            // Reset consecutive retries on success
+                            await MainActor.run { uploadManager.consecutiveAutoRetries = 0 }
+                        } else {
+                            print("❌ [UPLOAD] Archive failed for photo #\(index + 1)")
+                            dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: false, uploadStatus: .error, errorMessage: "Archive failed")
+                            LogManager.shared.error("Archive failed for Photo #\(index + 1) (ID: \(mediaId))", category: .upload)
+                            
+                            // Treat archive failure as retryable
+                            retryAttempt += 1
+                            await MainActor.run { uploadManager.consecutiveAutoRetries += 1 }
+                            
+                            if retryAttempt > maxRetries || uploadManager.consecutiveAutoRetries >= maxRetries {
+                                // ESCALATION: Too many failures
+                                await handleEscalation(photoIndex: index)
                                 return
                             }
-                            try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                            
+                            // Wait 60s before retrying
+                            await autoRetryWait(seconds: 60, attempt: retryAttempt, photoInfo: "Photo #\(index + 1)")
+                            continue
                         }
-                    }
-                } else {
-                    print("❌ [UPLOAD ALL] Upload returned nil media ID")
-                }
-            } catch {
-                print("❌ [UPLOAD ALL] Error: \(error)")
-                
-                // Build detailed error info about which photo failed
-                let photoInfo = "Photo #\(index + 1) (\(photo.symbol))"
-                
-                // Classify error type for proper handling
-                let errorDescription = error.localizedDescription.lowercased()
-                
-                // 0. SESSION EXPIRED (most critical - requires re-login)
-                let isSessionExpired = errorDescription.contains("session expired") ||
-                                       errorDescription.contains("session invalid") ||
-                                       errorDescription.contains("please login again")
-                
-                // 1. BOT DETECTION (most critical)
-                let isBotError = errorDescription.contains("challenge") || 
-                                 errorDescription.contains("spam") || 
-                                 errorDescription.contains("login_required") ||
-                                 errorDescription.contains("checkpoint") ||
-                                 errorDescription.contains("bot")
-                
-                // 2. PHOTO REJECTED (aspect ratio, file format, etc.)
-                let isPhotoError = errorDescription.contains("aspect ratio") ||
-                                   errorDescription.contains("400") ||
-                                   errorDescription.contains("invalid image") ||
-                                   errorDescription.contains("file format")
-                
-                // 3. NETWORK ERROR
-                let isNetworkErr = isNetworkRelatedError(error) && !isBotError && !isSessionExpired
-                
-                if isSessionExpired {
-                    // 🔒 SESSION EXPIRED: Critical - requires re-login
-                    print("🔒 [UPLOAD] Session expired - RE-LOGIN REQUIRED")
-                    LogManager.shared.error("Session expired at \(photoInfo) - re-login required", category: .auth)
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Session expired")
-                    
-                    await MainActor.run {
-                        UIApplication.shared.isIdleTimerDisabled = false
-                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (session expired)")
+                    } else {
+                        print("❌ [UPLOAD] Upload returned nil media ID for photo #\(index + 1)")
+                        retryAttempt += 1
+                        await MainActor.run { uploadManager.consecutiveAutoRetries += 1 }
                         
-                        showingError = "🔒 Session Expired\n\nYour Instagram session is no longer valid.\n\nPossible causes:\n• Network changed (WiFi ↔ Cellular)\n• Too much time passed\n• Session invalidated by Instagram\n\nPlease go to Settings and re-login to continue."
-                        
-                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                        isUploading = false
-                    }
-                    return
-                    
-                } else if isBotError {
-                    // 🚨 BOT DETECTION: Activate 15-min lockdown
-                    print("🚨 [UPLOAD] Bot detection - ACTIVATING LOCKDOWN")
-                    LogManager.shared.bot("Bot detection triggered at \(photoInfo): \(error.localizedDescription)")
-                    let errorMsg = "⚠️ Bot detected"
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: errorMsg)
-                    
-                    await MainActor.run {
-                        UIApplication.shared.isIdleTimerDisabled = false
-                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (bot detection)")
-                        
-                        failedPhotoIndex = index
-                        isBotDetection = true
-                        isNetworkError = false
-                        isPhotoRejected = false
-                        botDetectionTime = Date()
-                        botCountdownSeconds = 900  // 15 min
-                        
-                        // Start countdown timer
-                        botCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                            if botCountdownSeconds > 0 {
-                                botCountdownSeconds -= 1
-                            } else {
-                                botCountdownTimer?.invalidate()
-                                botCountdownTimer = nil
-                            }
+                        if retryAttempt > maxRetries || uploadManager.consecutiveAutoRetries >= maxRetries {
+                            await handleEscalation(photoIndex: index)
+                            return
                         }
                         
-                        showingError = "🚨 Account Flagged at \(photoInfo)\n\nWAIT 15 MINUTES before trying again.\nDo NOT open Instagram during this time."
-                        
-                        dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                        isUploading = false
+                        await autoRetryWait(seconds: 60, attempt: retryAttempt, photoInfo: "Photo #\(index + 1)")
+                        continue
                     }
-                    return
                     
-                } else if isPhotoError {
-                    // 📸 PHOTO REJECTED: Offer skip or replace
-                    print("📸 [UPLOAD] Photo rejected - offering skip/replace")
-                    LogManager.shared.error("Photo rejected at \(photoInfo): \(error.localizedDescription)", category: .upload)
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Photo rejected")
+                } catch {
+                    print("❌ [UPLOAD] Error at Photo #\(index + 1): \(error)")
+                    let photoInfo = "Photo #\(index + 1) (\(photo.symbol))"
+                    let errorDescription = error.localizedDescription.lowercased()
                     
-                    await MainActor.run {
-                        UIApplication.shared.isIdleTimerDisabled = false
-                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (photo rejected)")
-                        
-                        failedPhotoIndex = index
-                        isPhotoRejected = true
-                        isNetworkError = false
-                        isBotDetection = false
-                        
-                        showingError = "📸 \(photoInfo) was rejected\n\nReason: \(error.localizedDescription)\n\nYou can skip this photo or replace it with another from your gallery."
-                        
-                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                        isUploading = false
-                    }
-                    return
+                    // ===== CLASSIFY ERROR =====
                     
-                } else if isNetworkErr {
-                    // 🌐 NETWORK ERROR: Pause and allow retry
-                    print("🌐 [UPLOAD] Network error - pausing for retry")
-                    LogManager.shared.network("Network error during upload at \(photoInfo): \(error.localizedDescription)")
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .pending, errorMessage: "Network error")
+                    // SESSION EXPIRED - STOP, no retry
+                    let isSessionExpired = errorDescription.contains("session expired") ||
+                                           errorDescription.contains("session invalid") ||
+                                           errorDescription.contains("please login again")
                     
-                    await MainActor.run {
-                        UIApplication.shared.isIdleTimerDisabled = false
-                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (network error)")
-                        
-                        failedPhotoIndex = index
-                        isNetworkError = true
-                        isPhotoRejected = false
-                        isBotDetection = false
-                        
-                        showingError = "🌐 Connection lost at \(photoInfo)\n\nCheck your internet and tap 'Retry Upload' to continue."
-                        
-                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                        isUploading = false
-                    }
-                    return
+                    // BOT DETECTION - STOP, lockdown
+                    let isBotError = errorDescription.contains("challenge") || 
+                                     errorDescription.contains("spam") || 
+                                     errorDescription.contains("login_required") ||
+                                     errorDescription.contains("checkpoint") ||
+                                     errorDescription.contains("bot")
                     
-                } else {
-                    // ⚠️ OTHER ERROR: Treat as retryable
-                    // Check if it's a cooldown error
+                    // PHOTO REJECTED - STOP, offer skip
+                    let isPhotoError = errorDescription.contains("aspect ratio") ||
+                                       errorDescription.contains("invalid image") ||
+                                       errorDescription.contains("file format")
+                    
+                    // COOLDOWN - auto-retry after wait
                     let isCooldownError = errorDescription.contains("please wait") && 
-                                         (errorDescription.contains("before uploading") || errorDescription.contains("before upload"))
+                                         (errorDescription.contains("before uploading") || errorDescription.contains("before upload") || errorDescription.contains("uploading another"))
                     
-                    if isCooldownError {
-                        // Extract time from error message (e.g., "Please wait 1m 30s")
-                        let components = errorDescription.components(separatedBy: " ")
-                        var totalSeconds = 0
-                        for (index, component) in components.enumerated() {
-                            if component.hasSuffix("m") {
-                                if let mins = Int(component.dropLast()) {
-                                    totalSeconds += mins * 60
-                                }
-                            } else if component.hasSuffix("s") {
-                                if let secs = Int(component.dropLast()) {
-                                    totalSeconds += secs
+                    // NETWORK - auto-retry when connected
+                    let isNetworkErr = isNetworkRelatedError(error) && !isBotError && !isSessionExpired
+                    
+                    // ===== HANDLE BY TYPE =====
+                    
+                    if isSessionExpired {
+                        // SESSION EXPIRED: Critical - STOP everything
+                        LogManager.shared.error("Session expired at \(photoInfo) - re-login required", category: .auth)
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Session expired")
+                        
+                        await MainActor.run {
+                            UIApplication.shared.isIdleTimerDisabled = false
+                            uploadManager.uploadPhase = .sessionExpired
+                            uploadManager.currentPhaseDescription = "Session Expired - Re-login Required"
+                            dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                            uploadManager.isUploading = false
+                        }
+                        return
+                        
+                    } else if isBotError {
+                        // BOT DETECTION: STOP, activate 15-min lockdown
+                        LogManager.shared.bot("Bot detection triggered at \(photoInfo): \(error.localizedDescription)")
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Bot detected")
+                        
+                        await MainActor.run {
+                            UIApplication.shared.isIdleTimerDisabled = false
+                            uploadManager.failedPhotoIndex = index
+                            uploadManager.isBotDetection = true
+                            uploadManager.botDetectionTime = Date()
+                            uploadManager.botCountdownSeconds = 900
+                            
+                            uploadManager.uploadPhase = .botLockdown(remainingSeconds: 900)
+                            uploadManager.currentPhaseDescription = "Bot Detection - Account Locked"
+                            
+                            uploadManager.botCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                                if uploadManager.botCountdownSeconds > 0 {
+                                    uploadManager.botCountdownSeconds -= 1
+                                    uploadManager.uploadPhase = .botLockdown(remainingSeconds: uploadManager.botCountdownSeconds)
+                                } else {
+                                    uploadManager.botCountdownTimer?.invalidate()
+                                    uploadManager.botCountdownTimer = nil
                                 }
                             }
+                            
+                            dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                            uploadManager.isUploading = false
+                        }
+                        return
+                        
+                    } else if isPhotoError {
+                        // PHOTO REJECTED: STOP, offer skip (no auto-retry for bad photos)
+                        LogManager.shared.error("Photo rejected at \(photoInfo): \(error.localizedDescription)", category: .upload)
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Photo rejected")
+                        
+                        await MainActor.run {
+                            UIApplication.shared.isIdleTimerDisabled = false
+                            uploadManager.failedPhotoIndex = index
+                            uploadManager.isPhotoRejected = true
+                            uploadManager.showingError = "Photo #\(index + 1) was rejected\n\nReason: \(error.localizedDescription)\n\nYou can skip this photo or replace it."
+                            dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                            uploadManager.isUploading = false
+                        }
+                        return
+                        
+                    } else {
+                        // ===== AUTO-RETRYABLE ERRORS (cooldown, network, generic) =====
+                        retryAttempt += 1
+                        await MainActor.run { uploadManager.consecutiveAutoRetries += 1 }
+                        
+                        LogManager.shared.warning("Auto-retryable error at \(photoInfo) (attempt \(retryAttempt)/\(maxRetries)): \(error.localizedDescription)", category: .upload)
+                        dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .pending, errorMessage: "Retrying...")
+                        
+                        // Check if we've exceeded max retries → ESCALATE
+                        if retryAttempt > maxRetries || uploadManager.consecutiveAutoRetries >= maxRetries {
+                            LogManager.shared.error("Max auto-retries reached at \(photoInfo) - escalating to pause", category: .upload)
+                            await handleEscalation(photoIndex: index)
+                            return
                         }
                         
-                        if totalSeconds > 0 {
-                            print("⏰ [UPLOAD] Cooldown error detected: \(totalSeconds)s")
-                            LogManager.shared.warning("Cooldown error at \(photoInfo): wait \(totalSeconds)s", category: .upload)
+                        // AUTO-RETRY based on error type
+                        if isCooldownError {
+                            // Extract wait time from error
+                            var waitSeconds = extractCooldownSeconds(from: errorDescription)
+                            // Add 30s safety margin
+                            waitSeconds += 30
+                            print("⏰ [AUTO-RETRY] Cooldown detected. Waiting \(waitSeconds)s then auto-retrying...")
+                            LogManager.shared.info("Auto-retry: waiting \(waitSeconds)s for cooldown (attempt \(retryAttempt))", category: .upload)
+                            
+                            await autoRetryWait(seconds: waitSeconds, attempt: retryAttempt, photoInfo: photoInfo)
+                            
+                        } else if isNetworkErr {
+                            // Wait for network to come back
+                            print("🌐 [AUTO-RETRY] Network error. Waiting for connection...")
+                            LogManager.shared.info("Auto-retry: waiting for network (attempt \(retryAttempt))", category: .upload)
                             
                             await MainActor.run {
-                                cooldownRetryDisabledUntil = Date().addingTimeInterval(TimeInterval(totalSeconds))
-                                // Start timer to update UI
-                                cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                                    if let until = cooldownRetryDisabledUntil, Date() >= until {
-                                        cooldownTimer?.invalidate()
-                                        cooldownTimer = nil
-                                        cooldownRetryDisabledUntil = nil
-                                    }
+                                uploadManager.uploadPhase = .waitingNetwork(attempt: retryAttempt)
+                                uploadManager.currentPhaseDescription = "Waiting for connection..."
+                            }
+                            
+                            // Wait up to 120s for network
+                            var networkWait = 0
+                            while networkWait < 120 {
+                                if uploadManager.isPaused { return }
+                                try? await Task.sleep(nanoseconds: 2_000_000_000) // check every 2s
+                                networkWait += 2
+                                
+                                // Check if network is back
+                                do {
+                                    try await instagram.waitForNetworkStability()
+                                    break // Network is back
+                                } catch {
+                                    continue // Keep waiting
                                 }
                             }
+                            
+                            // Add small buffer after network returns
+                            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s buffer
+                            
+                        } else {
+                            // Generic error: wait 60s then retry
+                            let waitSeconds = 60 + Int.random(in: 0...30)
+                            print("⚠️ [AUTO-RETRY] Generic error. Waiting \(waitSeconds)s then auto-retrying...")
+                            LogManager.shared.info("Auto-retry: waiting \(waitSeconds)s for generic error (attempt \(retryAttempt))", category: .upload)
+                            
+                            await autoRetryWait(seconds: waitSeconds, attempt: retryAttempt, photoInfo: photoInfo)
+                        }
+                        
+                        // Continue to next iteration of while loop (retry)
+                        continue
+                    }
+                }
+            } // end while (retry loop)
+            
+            if !photoUploadSuccess {
+                // Should not reach here normally, but safety net
+                print("❌ [UPLOAD] Photo #\(index + 1) failed after all retries")
+                await handleEscalation(photoIndex: index)
+                return
+            }
+            
+            uploadManager.uploadProgress.current = index + 1
+            
+            // ANTI-BOT: Delay before next photo (wait for cooldown from archive)
+            if relativeIndex < photosToUpload.count - 1 {
+                // Check if there's a global cooldown set by archivePhoto
+                let (hasCooldown, cooldownRemaining) = instagram.isPhotoUploadOnCooldown()
+                let delaySeconds: Int
+                
+                if hasCooldown && cooldownRemaining > 0 {
+                    // Use the cooldown set by archive + small buffer
+                    delaySeconds = cooldownRemaining + Int.random(in: 5...15)
+                    print("   Using archive cooldown: \(cooldownRemaining)s + buffer = \(delaySeconds)s")
+                } else {
+                    // Fallback: use safe minimum delay
+                    delaySeconds = Int(Double.random(in: 160...220))
+                    print("   Using fallback delay: \(delaySeconds)s")
+                }
+                
+                // UPDATE PHASE: Waiting with countdown
+                await MainActor.run {
+                    uploadManager.uploadPhase = .waiting(nextPhoto: index + 2, remainingSeconds: delaySeconds)
+                    uploadManager.currentPhaseDescription = "Waiting for photo #\(index + 2)"
+                    uploadManager.nextPhotoCountdown = delaySeconds
+                    
+                    uploadManager.nextPhotoTimer?.invalidate()
+                    uploadManager.nextPhotoTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                        if uploadManager.nextPhotoCountdown > 0 {
+                            uploadManager.nextPhotoCountdown -= 1
+                            uploadManager.uploadPhase = .waiting(nextPhoto: index + 2, remainingSeconds: uploadManager.nextPhotoCountdown)
+                        } else {
+                            uploadManager.nextPhotoTimer?.invalidate()
+                            uploadManager.nextPhotoTimer = nil
                         }
                     }
-                    
-                    print("⚠️ [UPLOAD] Unknown error - treating as retryable")
-                    LogManager.shared.error("Unknown upload error at \(photoInfo): \(error.localizedDescription)", category: .upload)
-                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .pending, errorMessage: error.localizedDescription)
-                    
-                    await MainActor.run {
-                        UIApplication.shared.isIdleTimerDisabled = false
-                        print("🌙 [SCREEN] Screen sleep RE-ENABLED (unknown error)")
-                        
-                        failedPhotoIndex = index
-                        isNetworkError = true  // Treat as network error (retryable)
-                        isPhotoRejected = false
-                        isBotDetection = false
-                        
-                        showingError = "❌ Upload failed at \(photoInfo)\n\nError: \(error.localizedDescription)\n\nTap 'Retry Upload' to continue."
-                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                        isUploading = false
+                }
+                
+                // Split sleep into 1-second chunks to check pause
+                for _ in 0..<delaySeconds {
+                    if uploadManager.isPaused {
+                        print("⏸️ [UPLOAD] Paused by user during delay")
+                        await MainActor.run {
+                            uploadManager.nextPhotoTimer?.invalidate()
+                            uploadManager.nextPhotoTimer = nil
+                            UIApplication.shared.isIdleTimerDisabled = false
+                            dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                            uploadManager.isUploading = false
+                            uploadManager.uploadPhase = .paused
+                            // Save next photo index (current one is already completed)
+                            uploadManager.failedPhotoIndex = index + 1
+                        }
+                        return
                     }
-                    return
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+                
+                await MainActor.run {
+                    uploadManager.nextPhotoTimer?.invalidate()
+                    uploadManager.nextPhotoTimer = nil
+                }
+            }
+        } // end for (photos loop)
+        
+        print("\n✅ [UPLOAD ALL] All photos uploaded and archived!")
+        LogManager.shared.success("Upload completed for set '\(currentSet.name)' - All \(currentSet.photos.count) photos uploaded", category: .upload)
+        await MainActor.run {
+            UIApplication.shared.isIdleTimerDisabled = false
+            LogManager.shared.info("Screen sleep re-enabled after upload completion", category: .device)
+            uploadManager.uploadPhase = .completed
+            uploadManager.currentPhaseDescription = "Upload Completed"
+        }
+        dataManager.updateSetStatus(id: currentSet.id, status: .completed)
+        uploadManager.isUploading = false
+    }
+    
+    // MARK: - Auto-Retry Helpers
+    
+    /// Wait with countdown display for auto-retry
+    private func autoRetryWait(seconds: Int, attempt: Int, photoInfo: String) async {
+        await MainActor.run {
+            uploadManager.autoRetryCountdown = seconds
+            uploadManager.uploadPhase = .autoRetrying(remainingSeconds: seconds, attempt: attempt)
+            uploadManager.currentPhaseDescription = "Auto-retrying \(photoInfo) in \(seconds)s"
+            
+            uploadManager.autoRetryTimer?.invalidate()
+            uploadManager.autoRetryTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                if uploadManager.autoRetryCountdown > 0 {
+                    uploadManager.autoRetryCountdown -= 1
+                    uploadManager.uploadPhase = .autoRetrying(remainingSeconds: uploadManager.autoRetryCountdown, attempt: attempt)
+                } else {
+                    uploadManager.autoRetryTimer?.invalidate()
+                    uploadManager.autoRetryTimer = nil
                 }
             }
         }
         
-        print("\n✅ [UPLOAD ALL] All photos uploaded and archived!")
-        LogManager.shared.success("Upload completed successfully for set '\(currentSet.name)' - All \(currentSet.photos.count) photos uploaded", category: .upload)
+        // Wait in 1-second chunks (respects pause)
+        for _ in 0..<seconds {
+            if uploadManager.isPaused {
+                await MainActor.run {
+                    uploadManager.autoRetryTimer?.invalidate()
+                    uploadManager.autoRetryTimer = nil
+                }
+                return
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        
+        await MainActor.run {
+            uploadManager.autoRetryTimer?.invalidate()
+            uploadManager.autoRetryTimer = nil
+        }
+    }
+    
+    /// Wait with countdown for cooldown (used before first upload)
+    private func waitWithCountdown(seconds: Int, label: String) async {
+        await MainActor.run {
+            uploadManager.uploadPhase = .cooldown(remainingSeconds: seconds)
+            uploadManager.currentPhaseDescription = label
+        }
+        
+        for remaining in stride(from: seconds, to: 0, by: -1) {
+            if uploadManager.isPaused { return }
+            await MainActor.run {
+                uploadManager.uploadPhase = .cooldown(remainingSeconds: remaining)
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+    }
+    
+    /// Extract cooldown seconds from error message like "Please wait 1m 30s"
+    private func extractCooldownSeconds(from errorDescription: String) -> Int {
+        let components = errorDescription.components(separatedBy: " ")
+        var totalSeconds = 0
+        for component in components {
+            if component.hasSuffix("m") {
+                if let mins = Int(component.dropLast()) {
+                    totalSeconds += mins * 60
+                }
+            } else if component.hasSuffix("s") {
+                if let secs = Int(component.dropLast()) {
+                    totalSeconds += secs
+                }
+            }
+        }
+        return max(totalSeconds, 30) // minimum 30s
+    }
+    
+    /// Handle escalation after 3 consecutive failures
+    private func handleEscalation(photoIndex: Int) async {
+        let escalationWaitSeconds = 300 // 5 minutes
+        
+        print("🚨 [ESCALATION] Multiple failures - pausing for \(escalationWaitSeconds)s")
+        LogManager.shared.warning("Upload escalated at Photo #\(photoIndex + 1) - pausing for 5 minutes after multiple failures", category: .upload)
+        
         await MainActor.run {
             UIApplication.shared.isIdleTimerDisabled = false
-            print("🌙 [SCREEN] Screen sleep RE-ENABLED (upload complete)")
-            LogManager.shared.info("Screen sleep re-enabled after upload completion", category: .device)
+            uploadManager.failedPhotoIndex = photoIndex
+            uploadManager.isUploading = false
+            
+            uploadManager.escalatedPauseCountdown = escalationWaitSeconds
+            uploadManager.uploadPhase = .escalatedPause(remainingSeconds: escalationWaitSeconds)
+            uploadManager.currentPhaseDescription = "Multiple errors - Cooling down"
+            
+            dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+            
+            uploadManager.escalatedPauseTimer?.invalidate()
+            uploadManager.escalatedPauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                if uploadManager.escalatedPauseCountdown > 0 {
+                    uploadManager.escalatedPauseCountdown -= 1
+                    uploadManager.uploadPhase = .escalatedPause(remainingSeconds: uploadManager.escalatedPauseCountdown)
+                    if uploadManager.escalatedPauseCountdown <= 0 {
+                        // Time's up - show resume button (phase goes to paused)
+                        uploadManager.escalatedPauseTimer?.invalidate()
+                        uploadManager.escalatedPauseTimer = nil
+                        uploadManager.uploadPhase = .paused
+                        uploadManager.currentPhaseDescription = "Upload Paused - Ready to Resume"
+                    }
+                }
+            }
         }
-        dataManager.updateSetStatus(id: currentSet.id, status: .completed)
-        isUploading = false
     }
     
     // MARK: - Reveal All Archived
@@ -1267,10 +1858,10 @@ struct PhotoItemView: View {
                         )
                 }
                 
-                // Position badge (top-left) - morado
+                // Position badge (top-left)
                 ZStack {
                     Circle()
-                        .fill(Color.purple)
+                        .fill(VaultTheme.Colors.primary)
                         .frame(width: 32, height: 32)
                     
                     Text("\(position)")
@@ -1295,14 +1886,17 @@ struct PhotoItemView: View {
             // Info
             VStack(spacing: 4) {
                 
-                if let uploadDate = photo.uploadDate {
-                    Text(uploadDate.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                // ONLY show upload-related info when logged in
+                if instagram.isLoggedIn {
+                    if let uploadDate = photo.uploadDate {
+                        Text(uploadDate.formatted(date: .abbreviated, time: .omitted))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Status - Detailed based on uploadStatus
+                    statusBadge(for: photo)
                 }
-                
-                // Status - Detailed based on uploadStatus
-                statusBadge(for: photo)
                 
                 // Action Buttons - ONLY VISIBLE WHEN LOGGED IN
                 if instagram.isLoggedIn {
@@ -1324,14 +1918,14 @@ struct PhotoItemView: View {
                                     .padding(.horizontal, 8)
                                     .background(
                                         LinearGradient(
-                                            colors: [Color.green, Color.green.opacity(0.8)],
+                                            colors: [VaultTheme.Colors.success, VaultTheme.Colors.success.opacity(0.8)],
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         )
                                     )
                                     .foregroundColor(.white)
-                                    .cornerRadius(8)
-                                    .shadow(color: Color.green.opacity(0.3), radius: 3, x: 0, y: 2)
+                                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                                    .shadow(color: VaultTheme.Colors.success.opacity(0.3), radius: 3, x: 0, y: 2)
                                 }
                                 .padding(.top, 6)
                             } else {
@@ -1343,13 +1937,13 @@ struct PhotoItemView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 6)
-                                    .padding(.horizontal, 8)
-                                    .background(Color.orange.opacity(0.2))
-                                    .foregroundColor(.orange)
-                                    .cornerRadius(8)
+                                    .padding(.horizontal, VaultTheme.Spacing.sm)
+                                    .background(VaultTheme.Colors.warning.opacity(0.2))
+                                    .foregroundColor(VaultTheme.Colors.warning)
+                                    .cornerRadius(VaultTheme.CornerRadius.sm)
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.orange.opacity(0.5), lineWidth: 1)
+                                        RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.sm)
+                                            .stroke(VaultTheme.Colors.warning.opacity(0.5), lineWidth: 1)
                                         )
                                 }
                                 .padding(.top, 6)
@@ -1360,8 +1954,8 @@ struct PhotoItemView: View {
             }
             .padding(8)
         }
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(12)
+        .background(VaultTheme.Colors.cardBackground)
+        .cornerRadius(VaultTheme.CornerRadius.md)
         .opacity(photo.isArchived ? 0.6 : 1.0)
         .alert("Result", isPresented: $showingAlert) {
             Button("OK") {}
@@ -1469,7 +2063,7 @@ struct PhotoItemView: View {
                 Text("Waiting to archive...")
             }
             .font(.caption2)
-            .foregroundColor(.purple)
+            .foregroundColor(VaultTheme.Colors.primary)
             
         case .archiving:
             HStack(spacing: 4) {
@@ -1479,7 +2073,7 @@ struct PhotoItemView: View {
                 Text("Archiving...")
             }
             .font(.caption2)
-            .foregroundColor(.purple)
+            .foregroundColor(VaultTheme.Colors.primary)
             
         case .completed:
             if photo.isArchived {
@@ -1539,10 +2133,10 @@ struct TapToSwapPhotoCell: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(
-                                    isSelected ? Color.green :
-                                    isDuplicate ? Color.red :
-                                    isLocked ? Color.gray.opacity(0.5) :
-                                    Color.purple.opacity(0.3),
+                                    isSelected ? VaultTheme.Colors.success :
+                                    isDuplicate ? VaultTheme.Colors.error :
+                                    isLocked ? VaultTheme.Colors.textDisabled.opacity(0.5) :
+                                    VaultTheme.Colors.primary.opacity(0.3),
                                     lineWidth: isSelected ? 4 : (isDuplicate ? 3 : 2)
                                 )
                         )
@@ -1553,7 +2147,7 @@ struct TapToSwapPhotoCell: View {
                                 : nil
                         )
                         .scaleEffect(isSelected ? 1.08 : 1.0)
-                        .shadow(color: isSelected ? Color.green.opacity(0.5) : Color.clear, radius: 8)
+                        .shadow(color: isSelected ? VaultTheme.Colors.success.opacity(0.5) : Color.clear, radius: 8)
                 }
                 
                 // Lock icon for uploaded photos
@@ -1568,7 +2162,7 @@ struct TapToSwapPhotoCell: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
-                        .foregroundColor(.green)
+                        .foregroundColor(VaultTheme.Colors.success)
                         .shadow(color: .black.opacity(0.3), radius: 2)
                 }
                 
@@ -1576,10 +2170,10 @@ struct TapToSwapPhotoCell: View {
                 ZStack {
                     Circle()
                         .fill(
-                            isSelected ? Color.green :
-                            isDuplicate ? Color.red :
-                            isLocked ? Color.gray :
-                            Color.purple
+                            isSelected ? VaultTheme.Colors.success :
+                            isDuplicate ? VaultTheme.Colors.error :
+                            isLocked ? VaultTheme.Colors.textDisabled :
+                            VaultTheme.Colors.primary
                         )
                         .frame(width: 34, height: 34)
                     
@@ -1613,29 +2207,4 @@ struct TapToSwapPhotoCell: View {
     }
 }
 
-// MARK: - Stat Card
-
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(.purple)
-            
-            Text(value)
-                .font(.title3.bold())
-            
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(12)
-    }
-}
+// MARK: - Stat Card is now in VaultComponents.swift

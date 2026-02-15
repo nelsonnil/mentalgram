@@ -53,6 +53,21 @@ class InstagramService: ObservableObject {
         return URLSession(configuration: config)
     }()
     
+    // MARK: - Pigeon Session (anti-bot: session tracking like real Instagram app)
+    private var pigeonSessionId: String = UUID().uuidString
+    private let bloksVersionId = "0a3ae4c88248863609c67e278f34af44673cff300bc76add965a9fb036bd3ca3"
+    
+    // MARK: - Bandwidth Simulation (anti-bot: report realistic connection speeds)
+    private var bandwidthSpeedKbps: String = "\(Int.random(in: 2500...8000))"
+    private var bandwidthTotalBytesB: Int = 0
+    private var bandwidthTotalTimeMs: Int = 0
+    
+    // MARK: - Rate Limiting (anti-bot: max 60 actions/hour)
+    private var actionTimestamps: [Date] = []
+    private let maxActionsPerHour: Int = 55 // Safe margin below 60
+    @Published var actionsThisHour: Int = 0
+    @Published var isRateLimited: Bool = false
+    
     // Network monitoring
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "com.vault.network")
@@ -521,21 +536,159 @@ class InstagramService: ObservableObject {
     
     private func buildHeaders() -> [String: String] {
         let device = DeviceInfo.shared
-        return [
+        
+        // ANTI-BOT: Simulate realistic bandwidth tracking (accumulate like real app)
+        bandwidthTotalBytesB += Int.random(in: 5000...50000)
+        bandwidthTotalTimeMs += Int.random(in: 50...500)
+        
+        // ANTI-BOT: Refresh bandwidth speed occasionally (like real network fluctuation)
+        if Int.random(in: 0...10) == 0 {
+            bandwidthSpeedKbps = "\(Int.random(in: 2500...8000))"
+        }
+        
+        var headers: [String: String] = [
+            // Core identification
             "User-Agent": userAgent,
             "X-CSRFToken": session.csrfToken,
             "X-IG-App-ID": "936619743392459",
             "X-IG-Device-ID": deviceId,
+            
+            // Connection info
             "X-IG-Connection-Type": connectionType == "WiFi" ? "WIFI" : "4G",
+            "X-IG-Connection-Speed": "\(Int.random(in: 1000...3700))kbps",
             "X-IG-Capabilities": "36r/F/8=",
+            
+            // Locale
             "X-IG-App-Locale": device.deviceLocale,
             "X-IG-Device-Locale": device.deviceLocale,
+            
+            // ANTI-BOT: Pigeon session tracking (like real Instagram app)
+            "X-Pigeon-Session-Id": pigeonSessionId,
+            "X-Pigeon-Rawclienttime": String(format: "%.3f", Date().timeIntervalSince1970),
+            
+            // ANTI-BOT: Bandwidth reporting (real app sends these)
+            "X-IG-Bandwidth-Speed-KBPS": bandwidthSpeedKbps,
+            "X-IG-Bandwidth-TotalBytes-B": String(bandwidthTotalBytesB),
+            "X-IG-Bandwidth-TotalTime-MS": String(bandwidthTotalTimeMs),
+            
+            // ANTI-BOT: Bloks framework version
+            "X-Bloks-Version-Id": bloksVersionId,
+            "X-Bloks-Is-Layout-RTL": "false",
+            
+            // ANTI-BOT: WWW Claim (real app sends this)
+            "X-IG-WWW-Claim": "0",
+            
+            // Standard headers
             "X-Requested-With": "XMLHttpRequest",
             "Accept-Language": "\(device.deviceLanguage)-\(Locale.current.region?.identifier ?? "US"),\(device.deviceLanguage);q=0.9",
             "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/x-www-form-urlencoded",
             "Cookie": "sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)"
         ]
+        
+        // ANTI-BOT: Add X-MID if available (Machine ID, set by Instagram after first request)
+        if let mid = UserDefaults.standard.string(forKey: "instagram_mid") {
+            headers["X-MID"] = mid
+        }
+        
+        return headers
+    }
+    
+    /// Refresh Pigeon session ID (call when app comes to foreground)
+    func refreshPigeonSession() {
+        pigeonSessionId = UUID().uuidString
+        print("🐦 [PIGEON] New session ID: \(String(pigeonSessionId.prefix(8)))...")
+    }
+    
+    // MARK: - Rate Limiting (ANTI-BOT: max ~55 actions/hour)
+    
+    /// Track an action for rate limiting
+    private func trackAction() {
+        let now = Date()
+        // Remove timestamps older than 1 hour
+        actionTimestamps = actionTimestamps.filter { now.timeIntervalSince($0) < 3600 }
+        actionTimestamps.append(now)
+        
+        DispatchQueue.main.async {
+            self.actionsThisHour = self.actionTimestamps.count
+            self.isRateLimited = self.actionTimestamps.count >= self.maxActionsPerHour
+        }
+        
+        if actionTimestamps.count >= maxActionsPerHour {
+            print("⚠️ [RATE LIMIT] \(actionTimestamps.count)/\(maxActionsPerHour) actions this hour - LIMIT REACHED")
+            LogManager.shared.warning("Rate limit approaching: \(actionTimestamps.count)/\(maxActionsPerHour) actions/hour", category: .api)
+        }
+    }
+    
+    /// Check if rate limited (PUBLIC for views to show warning)
+    func checkRateLimit() -> (limited: Bool, actionsUsed: Int, remaining: Int) {
+        let now = Date()
+        let recentActions = actionTimestamps.filter { now.timeIntervalSince($0) < 3600 }
+        let remaining = max(0, maxActionsPerHour - recentActions.count)
+        return (recentActions.count >= maxActionsPerHour, recentActions.count, remaining)
+    }
+    
+    // MARK: - Exponential Backoff (ANTI-BOT)
+    
+    /// Calculate backoff delay based on consecutive errors
+    private func backoffDelay() -> UInt64 {
+        if consecutiveErrors <= 0 { return 0 }
+        // Exponential: 2^errors seconds, max 5 minutes, with jitter
+        let baseSeconds = min(pow(2.0, Double(consecutiveErrors)), 300.0)
+        let jitter = Double.random(in: 0...baseSeconds * 0.3) // up to 30% jitter
+        let totalSeconds = baseSeconds + jitter
+        print("⏳ [BACKOFF] Error #\(consecutiveErrors) → waiting \(Int(totalSeconds))s")
+        return UInt64(totalSeconds * 1_000_000_000)
+    }
+    
+    // MARK: - Session Warm Up (ANTI-BOT: simulate app opening behavior)
+    
+    /// Perform a lightweight "warm up" request before heavy actions
+    /// Simulates opening the app and browsing before taking action
+    func warmUpSession() async {
+        guard isLoggedIn else { return }
+        
+        print("🔥 [WARMUP] Simulating app open behavior...")
+        LogManager.shared.info("Session warm-up started", category: .api)
+        
+        // Small delay like a user opening the app
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
+        
+        // Make a lightweight GET request (like loading timeline)
+        do {
+            let _ = try await apiRequest(method: "GET", path: "/feed/timeline/")
+            print("✅ [WARMUP] Timeline fetched - session is warm")
+        } catch {
+            print("⚠️ [WARMUP] Timeline fetch failed: \(error.localizedDescription)")
+        }
+        
+        // Another small delay
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 500_000_000...1_500_000_000))
+    }
+    
+    // MARK: - MID Extraction (ANTI-BOT: capture Machine ID from responses)
+    
+    /// Extract X-MID from response headers if Instagram sends it
+    private func extractMID(from response: URLResponse?) {
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+        
+        // Check Set-Cookie headers for "mid=" value
+        if let cookies = httpResponse.allHeaderFields["Set-Cookie"] as? String {
+            if let midRange = cookies.range(of: "mid=") {
+                let afterMid = cookies[midRange.upperBound...]
+                if let endRange = afterMid.range(of: ";") {
+                    let mid = String(afterMid[..<endRange.lowerBound])
+                    UserDefaults.standard.set(mid, forKey: "instagram_mid")
+                    print("🔑 [MID] Captured Machine ID: \(String(mid.prefix(8)))...")
+                }
+            }
+        }
+        
+        // Also check direct header
+        if let mid = httpResponse.value(forHTTPHeaderField: "x-mid") {
+            UserDefaults.standard.set(mid, forKey: "instagram_mid")
+            print("🔑 [MID] Captured Machine ID from header: \(String(mid.prefix(8)))...")
+        }
     }
     
     // MARK: - Generate Signature (HMAC-SHA256)
@@ -556,6 +709,20 @@ class InstagramService: ObservableObject {
         // Check if we're locked down
         if isLocked {
             throw InstagramError.botDetected("App is in lockdown mode. Wait for countdown to finish.")
+        }
+        
+        // ANTI-BOT: Check rate limit (max 55 actions/hour)
+        let rateCheck = checkRateLimit()
+        if rateCheck.limited {
+            print("🚫 [RATE LIMIT] \(rateCheck.actionsUsed) actions in last hour - BLOCKED")
+            LogManager.shared.warning("Rate limit reached (\(rateCheck.actionsUsed)/\(maxActionsPerHour)). Wait before continuing.", category: .api)
+            throw InstagramError.apiError("Rate limit reached. \(rateCheck.actionsUsed) actions in the last hour. Wait a few minutes before continuing.")
+        }
+        
+        // ANTI-BOT: Apply exponential backoff if we've had consecutive errors
+        let backoff = backoffDelay()
+        if backoff > 0 {
+            try await Task.sleep(nanoseconds: backoff)
         }
         
         // Check network connection
@@ -582,6 +749,9 @@ class InstagramService: ObservableObject {
             request.httpBody = bodyString.data(using: .utf8)
         }
         
+        // Track this action for rate limiting
+        trackAction()
+        
         // Use different sessions: GET can wait, POST cannot (critical for bot detection)
         let session = (method == "GET") ? getSession : postSession
         
@@ -596,6 +766,16 @@ class InstagramService: ObservableObject {
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw InstagramError.invalidResponse
+        }
+        
+        // ANTI-BOT: Extract MID (Machine ID) from response if present
+        extractMID(from: response)
+        
+        // ANTI-BOT: Reset consecutive errors on success
+        if httpResponse.statusCode == 200 {
+            consecutiveErrors = 0
+        } else {
+            consecutiveErrors += 1
         }
         
         // Check for bot detection signals in HTTP status
@@ -728,9 +908,11 @@ class InstagramService: ObservableObject {
             throw InstagramError.botDetected("Lockdown active. Cannot archive.")
         }
         
-        // Simulate human delay
-        let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
-        print("   Waiting \(delay / 1_000_000_000)s before archive...")
+        // ANTI-BOT: Realistic human delay (3-6 seconds with jitter)
+        let baseDelay = UInt64.random(in: 3_000_000_000...6_000_000_000)
+        let jitter = UInt64.random(in: 0...500_000_000) // up to 0.5s extra jitter
+        let delay = baseDelay + jitter
+        print("   Waiting \(String(format: "%.1f", Double(delay) / 1_000_000_000.0))s before archive...")
         try await Task.sleep(nanoseconds: delay)
         
         // Instagram expects media_id in format: pk_userid (e.g., 3827949643435346901_80533585162)
@@ -758,6 +940,15 @@ class InstagramService: ObservableObject {
             if status == "ok" {
                 print("✅ [ARCHIVE] Photo archived successfully")
                 LogManager.shared.success("Photo archived (ID: \(mediaId))", category: .api)
+                
+                // ANTI-BOT: Set cooldown AFTER archive completes (not after upload)
+                // This ensures the full cycle upload+archive is finished before starting next
+                let cooldownSeconds = Double.random(in: 160...220)
+                let cooldownUntil = Date().addingTimeInterval(cooldownSeconds)
+                UserDefaults.standard.set(cooldownUntil, forKey: "photo_upload_cooldown_until")
+                print("   ⏳ Cooldown set: \(Int(cooldownSeconds))s after archive")
+                LogManager.shared.info("Cooldown: \(Int(cooldownSeconds))s until next upload", category: .upload)
+                
                 return true
             } else {
                 print("❌ [ARCHIVE] Archive failed. Status: \(status)")
@@ -782,9 +973,12 @@ class InstagramService: ObservableObject {
             throw InstagramError.botDetected("Lockdown active. Cannot reveal/unarchive.")
         }
         
-        // Simulate human delay
-        let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
-        print("   Waiting \(delay / 1_000_000_000)s before unarchive...")
+        // ANTI-BOT: Shorter delay for unarchive (used during performance/trick)
+        // Only 2-3s since these are small bursts (max ~5 photos), not sustained patterns
+        let baseDelay = UInt64.random(in: 2_000_000_000...3_000_000_000)
+        let jitter = UInt64.random(in: 0...300_000_000)
+        let delay = baseDelay + jitter
+        print("   Waiting \(String(format: "%.1f", Double(delay) / 1_000_000_000.0))s before unarchive...")
         try await Task.sleep(nanoseconds: delay)
         
         // Instagram expects media_id in format: pk_userid
@@ -1674,12 +1868,21 @@ class InstagramService: ObservableObject {
         }
         
         // NOTE: Image is already aspect-adjusted and compressed when loaded from gallery
-        // We use the imageData as-is for upload
         print("✅ [UPLOAD] Using pre-processed image")
         
+        // ANTI-BOT: For duplicate photos (Word/Number Reveal), make each copy unique
+        // This prevents Instagram from detecting identical image uploads across banks
+        let uploadData: Data
+        if allowDuplicates {
+            print("🎲 [UPLOAD] Duplicates allowed - making image unique for this bank...")
+            uploadData = InstagramService.makeImageUnique(imageData: imageData)
+        } else {
+            uploadData = imageData
+        }
+        
         // ANTI-BOT: Detect duplicate image (prevent uploading same photo twice)
-        // EXCEPTION: Word Reveal and Number Reveal sets need to upload duplicate letters/numbers
-        let finalHash = hashImageData(imageData)
+        // EXCEPTION: Word Reveal and Number Reveal already have unique bytes per bank
+        let finalHash = hashImageData(uploadData)
         if !allowDuplicates {
             if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
                lastHash == finalHash {
@@ -1688,7 +1891,7 @@ class InstagramService: ObservableObject {
                 throw InstagramError.apiError("\(photoInfo) was already uploaded. Duplicate uploads may trigger bot detection.")
             }
         } else {
-            print("✅ [UPLOAD] Duplicates allowed for this set type (Word/Number Reveal)")
+            print("✅ [UPLOAD] Duplicates allowed with unique bytes for this set type (Word/Number Reveal)")
         }
         
         // ANTI-BOT: Wait if network changed recently
@@ -1696,8 +1899,10 @@ class InstagramService: ObservableObject {
         
         print("   Image hash: \(String(finalHash.prefix(16)))...")
         
-        // Step 1: Generate upload ID and names (like instagrapi)
-        let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
+        // Step 1: Generate upload ID and names (with realistic variation)
+        // ANTI-BOT: Add small random offset to timestamp to avoid perfectly predictable IDs
+        let timestampMs = Int(Date().timeIntervalSince1970 * 1000) + Int.random(in: -500...500)
+        let uploadId = String(timestampMs)
         let uploadName = "\(uploadId)_0_\(Int.random(in: 1000000000...9999999999))"
         let waterfallId = UUID().uuidString
         print("   Upload ID: \(uploadId)")
@@ -1728,52 +1933,70 @@ class InstagramService: ObservableObject {
         var uploadRequest = URLRequest(url: uploadURL)
         uploadRequest.httpMethod = "POST"
         
-        // Critical headers (matching instagrapi exactly)
-        uploadRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        uploadRequest.setValue("sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)", forHTTPHeaderField: "Cookie")
-        uploadRequest.setValue(session.csrfToken, forHTTPHeaderField: "X-CSRFToken")
-        uploadRequest.setValue("936619743392459", forHTTPHeaderField: "X-IG-App-ID")
-        uploadRequest.setValue(deviceId, forHTTPHeaderField: "X-IG-Device-ID")
-        uploadRequest.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+        // ANTI-BOT: Use ALL headers from buildHeaders() for consistency, then add upload-specific ones
+        let baseHeaders = buildHeaders()
+        for (key, value) in baseHeaders {
+            // Skip Content-Type from base (upload uses octet-stream, not form-urlencoded)
+            if key == "Content-Type" { continue }
+            uploadRequest.setValue(value, forHTTPHeaderField: key)
+        }
         
-        // Upload-specific headers (matching instagrapi exactly)
+        // Upload-specific headers (use uploadData which may be uniquified for duplicates)
         uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "Content-Length")
+        uploadRequest.setValue(String(uploadData.count), forHTTPHeaderField: "Content-Length")
         uploadRequest.setValue(ruploadParamsString, forHTTPHeaderField: "X-Instagram-Rupload-Params")
         uploadRequest.setValue(waterfallId, forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
         uploadRequest.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
         uploadRequest.setValue(uploadName, forHTTPHeaderField: "X-Entity-Name")
-        uploadRequest.setValue(String(imageData.count), forHTTPHeaderField: "X-Entity-Length")
+        uploadRequest.setValue(String(uploadData.count), forHTTPHeaderField: "X-Entity-Length")
         uploadRequest.setValue("0", forHTTPHeaderField: "Offset")
         
-        uploadRequest.httpBody = imageData
+        uploadRequest.httpBody = uploadData
         
         print("   Sending image bytes to Instagram...")
-        let (uploadData, uploadResponse) = try await postSession.data(for: uploadRequest)
+        let (responseData, uploadResponse) = try await postSession.data(for: uploadRequest)
         
         if let httpResponse = uploadResponse as? HTTPURLResponse {
             print("   Upload response status: \(httpResponse.statusCode)")
         }
         
-        if let jsonString = String(data: uploadData, encoding: .utf8) {
+        if let jsonString = String(data: responseData, encoding: .utf8) {
             print("   Upload response body: \(jsonString)")
         }
         
-        guard let uploadJson = try? JSONSerialization.jsonObject(with: uploadData) as? [String: Any],
+        // IMPROVED: Detailed error logging for upload failures
+        let httpStatusCode = (uploadResponse as? HTTPURLResponse)?.statusCode ?? -1
+        
+        guard let uploadJson = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
               let uploadIdResponse = uploadJson["upload_id"] as? String else {
-            print("❌ [UPLOAD] Failed to get upload_id from response")
-            if let uploadJson = try? JSONSerialization.jsonObject(with: uploadData) as? [String: Any] {
+            // Extract detailed error info for debugging
+            var errorDetail = "HTTP \(httpStatusCode)"
+            if let uploadJson = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] {
                 print("   Response JSON: \(uploadJson)")
+                if let message = uploadJson["message"] as? String {
+                    errorDetail += " - \(message)"
+                }
+                if let status = uploadJson["status"] as? String {
+                    errorDetail += " (status: \(status))"
+                }
+            } else if let bodyText = String(data: responseData, encoding: .utf8), !bodyText.isEmpty {
+                errorDetail += " - Body: \(String(bodyText.prefix(200)))"
             }
-            throw InstagramError.uploadFailed
+            
+            print("❌ [UPLOAD] Failed to get upload_id. Detail: \(errorDetail)")
+            let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
+            LogManager.shared.error("Upload failed: \(photoDesc) - \(errorDetail)", category: .upload)
+            throw InstagramError.apiError("Upload failed (\(errorDetail))")
         }
         
         print("✅ [UPLOAD] Image bytes uploaded. Upload ID: \(uploadIdResponse)")
         
-        // Human delay before configure
-        let delay = UInt64.random(in: 3_000_000_000...4_000_000_000)
-        print("   Waiting \(delay / 1_000_000_000)s before configure...")
-        try await Task.sleep(nanoseconds: delay)
+        // ANTI-BOT: Variable human delay before configure (3-7 seconds with jitter)
+        let configBaseDelay = UInt64.random(in: 3_000_000_000...7_000_000_000)
+        let configJitter = UInt64.random(in: 0...1_000_000_000) // up to 1s extra
+        let configDelay = configBaseDelay + configJitter
+        print("   Waiting \(String(format: "%.1f", Double(configDelay) / 1_000_000_000.0))s before configure...")
+        try await Task.sleep(nanoseconds: configDelay)
         
         // Step 4: Configure media (with more complete data like instagrapi)
         let configBody: [String: String] = [
@@ -1816,13 +2039,12 @@ class InstagramService: ObservableObject {
                 LogManager.shared.success("\(photoDesc) uploaded successfully (ID: \(mediaId))", category: .upload)
                 
                 // ANTI-BOT: Save hash and cooldown after successful upload
-                let imageHash = hashImageData(imageData)
+                let imageHash = hashImageData(uploadData)
                 UserDefaults.standard.set(imageHash, forKey: "last_upload_photo_hash")
                 
-                // Cooldown: 2 minutes between photo uploads (realistic human behavior)
-                let cooldownUntil = Date().addingTimeInterval(120) // 2 min
-                UserDefaults.standard.set(cooldownUntil, forKey: "photo_upload_cooldown_until")
-                print("   Cooldown set: 2 minutes before next upload")
+                // ANTI-BOT: DO NOT set cooldown here - it will be set AFTER archive completes
+                // This ensures the full upload+archive cycle is counted, not just upload
+                print("   ⏳ Cooldown will be set after archive completes")
                 
                 return mediaId
             }
@@ -2176,13 +2398,12 @@ class InstagramService: ObservableObject {
         var uploadRequest = URLRequest(url: uploadURL)
         uploadRequest.httpMethod = "POST"
         
-        // Critical headers (matching instagrapi exactly)
-        uploadRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        uploadRequest.setValue("sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)", forHTTPHeaderField: "Cookie")
-        uploadRequest.setValue(session.csrfToken, forHTTPHeaderField: "X-CSRFToken")
-        uploadRequest.setValue("936619743392459", forHTTPHeaderField: "X-IG-App-ID")
-        uploadRequest.setValue(deviceId, forHTTPHeaderField: "X-IG-Device-ID")
-        uploadRequest.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+        // ANTI-BOT: Use ALL headers from buildHeaders() for consistency
+        let baseHeaders = buildHeaders()
+        for (key, value) in baseHeaders {
+            if key == "Content-Type" { continue }
+            uploadRequest.setValue(value, forHTTPHeaderField: key)
+        }
         
         // Upload-specific headers
         uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
@@ -2280,16 +2501,40 @@ class InstagramService: ObservableObject {
         return (false, 0)
     }
     
+    // MARK: - Image Orientation Fix
+    
+    /// Normalize image orientation to prevent rotation issues
+    /// Images with EXIF orientation data need to be redrawn in the correct orientation
+    private static func normalizeImageOrientation(_ image: UIImage) -> UIImage {
+        // If already in correct orientation, return as-is
+        if image.imageOrientation == .up {
+            return image
+        }
+        
+        print("🔄 [ORIENTATION] Fixing orientation: \(image.imageOrientation.rawValue) → up")
+        
+        // Redraw image in correct orientation
+        UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
+        image.draw(in: CGRect(origin: .zero, size: image.size))
+        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        return normalizedImage ?? image
+    }
+    
     // MARK: - Image Aspect Ratio Adjustment
     
     /// Adjusts image to Instagram-compatible aspect ratio (1:1, 4:5, or 1.91:1)
     /// Returns adjusted image data or original if already valid
     /// PUBLIC: Called when selecting photos from gallery
     static func adjustImageAspectRatio(imageData: Data) -> Data {
-        guard let image = UIImage(data: imageData) else {
+        guard let originalImage = UIImage(data: imageData) else {
             print("⚠️ [ASPECT] Cannot create UIImage, using original")
             return imageData
         }
+        
+        // CRITICAL: Normalize orientation first to prevent rotation
+        let image = normalizeImageOrientation(originalImage)
         
         let width = image.size.width
         let height = image.size.height
@@ -2304,11 +2549,24 @@ class InstagramService: ObservableObject {
         
         // Check if already valid (5% tolerance)
         let tolerance: CGFloat = 0.05
-        if abs(aspectRatio - squareRatio) < tolerance ||
-           abs(aspectRatio - verticalRatio) < tolerance ||
-           abs(aspectRatio - horizontalRatio) < tolerance {
-            print("✅ [ASPECT] Already valid, no adjustment needed")
-            return imageData
+        let isAspectValid = abs(aspectRatio - squareRatio) < tolerance ||
+                           abs(aspectRatio - verticalRatio) < tolerance ||
+                           abs(aspectRatio - horizontalRatio) < tolerance
+        
+        if isAspectValid {
+            // If aspect is valid AND orientation was correct, use original
+            if originalImage.imageOrientation == .up {
+                print("✅ [ASPECT] Already valid, no adjustment needed")
+                return imageData
+            }
+            
+            // If aspect is valid but orientation was wrong, re-encode the normalized image
+            guard let reEncodedData = image.jpegData(compressionQuality: 0.95) else {
+                print("⚠️ [ASPECT] Re-encoding failed, using original")
+                return imageData
+            }
+            print("✅ [ASPECT] Orientation fixed (aspect ratio already valid)")
+            return reEncodedData
         }
         
         // Determine target ratio
@@ -2349,6 +2607,8 @@ class InstagramService: ObservableObject {
             newHeight = width / targetRatio
         }
         
+        // NEW: Use drawing instead of cgImage.cropping to preserve orientation
+        let cropSize = CGSize(width: newWidth, height: newHeight)
         let cropRect = CGRect(
             x: (width - newWidth) / 2,
             y: (height - newHeight) / 2,
@@ -2356,13 +2616,25 @@ class InstagramService: ObservableObject {
             height: newHeight
         )
         
-        // Crop image
-        guard let cgImage = image.cgImage?.cropping(to: cropRect) else {
+        // Create a new image context with the cropped size
+        UIGraphicsBeginImageContextWithOptions(cropSize, false, image.scale)
+        
+        // Draw the image, cropped
+        let drawRect = CGRect(
+            x: -cropRect.origin.x,
+            y: -cropRect.origin.y,
+            width: width,
+            height: height
+        )
+        image.draw(in: drawRect)
+        
+        guard let croppedImage = UIGraphicsGetImageFromCurrentImageContext() else {
+            UIGraphicsEndImageContext()
             print("❌ [ASPECT] Failed to crop, using original")
             return imageData
         }
+        UIGraphicsEndImageContext()
         
-        let croppedImage = UIImage(cgImage: cgImage)
         print("✅ [ASPECT] Cropped to \(Int(newWidth))x\(Int(newHeight))")
         
         // Convert back to JPEG
@@ -2373,6 +2645,73 @@ class InstagramService: ObservableObject {
         
         print("✅ [ASPECT] Final size: \(adjustedData.count / 1024)KB")
         return adjustedData
+    }
+    
+    // MARK: - Image Uniqueness (ANTI-BOT for duplicate photos across banks)
+    
+    /// Makes an image subtly unique by applying invisible pixel-level variations.
+    /// This prevents Instagram from detecting that the same photo was uploaded multiple times.
+    /// Changes are imperceptible to the human eye but produce a different file hash.
+    static func makeImageUnique(imageData: Data) -> Data {
+        guard let originalImage = UIImage(data: imageData) else {
+            print("⚠️ [UNIQUE] Cannot create UIImage, using original")
+            return imageData
+        }
+        
+        let image = normalizeImageOrientation(originalImage)
+        let width = Int(image.size.width)
+        let height = Int(image.size.height)
+        
+        // Create a mutable pixel buffer
+        UIGraphicsBeginImageContextWithOptions(image.size, true, 1.0)
+        guard let context = UIGraphicsGetCurrentContext() else {
+            UIGraphicsEndImageContext()
+            print("⚠️ [UNIQUE] Cannot create graphics context")
+            return imageData
+        }
+        
+        // Draw the original image
+        image.draw(at: .zero)
+        
+        // ANTI-BOT: Apply subtle random pixel modifications
+        // Modify 15-30 random pixels with tiny color shifts (invisible to the eye)
+        let pixelCount = Int.random(in: 15...30)
+        
+        for _ in 0..<pixelCount {
+            let x = CGFloat(Int.random(in: 1..<max(width - 1, 2)))
+            let y = CGFloat(Int.random(in: 1..<max(height - 1, 2)))
+            
+            // Tiny color shift: just 1-3 units in RGB (out of 255), completely invisible
+            let r = CGFloat(Int.random(in: 0...3)) / 255.0
+            let g = CGFloat(Int.random(in: 0...3)) / 255.0
+            let b = CGFloat(Int.random(in: 0...3)) / 255.0
+            let alpha = CGFloat(Double.random(in: 0.01...0.03)) // nearly transparent
+            
+            context.setFillColor(red: r, green: g, blue: b, alpha: alpha)
+            context.fill(CGRect(x: x, y: y, width: 1, height: 1))
+        }
+        
+        // ANTI-BOT: Slight JPEG quality variation (produces different compression artifacts)
+        guard let uniqueImage = UIGraphicsGetImageFromCurrentImageContext() else {
+            UIGraphicsEndImageContext()
+            print("⚠️ [UNIQUE] Failed to create unique image")
+            return imageData
+        }
+        UIGraphicsEndImageContext()
+        
+        // Vary JPEG quality slightly each time (0.82 to 0.88) for different byte patterns
+        let quality = Double.random(in: 0.82...0.88)
+        guard let uniqueData = uniqueImage.jpegData(compressionQuality: quality) else {
+            print("⚠️ [UNIQUE] Failed to encode unique JPEG")
+            return imageData
+        }
+        
+        let originalKB = imageData.count / 1024
+        let uniqueKB = uniqueData.count / 1024
+        print("🎲 [UNIQUE] Image uniquified: \(originalKB)KB → \(uniqueKB)KB (\(pixelCount) pixels modified, quality: \(String(format: "%.2f", quality)))")
+        LogManager.shared.info("Image uniquified: \(originalKB)KB → \(uniqueKB)KB (\(pixelCount)px modified)", category: .upload)
+        
+        return uniqueData
     }
     
     // MARK: - Image Compression (PUBLIC for photo selection)
@@ -2387,16 +2726,32 @@ class InstagramService: ObservableObject {
         
         print("📦 [COMPRESS] \(photoDesc) original size: \(sizeKB)KB")
         
-        // Already small enough
-        if imageData.count <= 500_000 { // 500KB
-            print("✅ [COMPRESS] Already optimized (<500KB), no compression needed")
-            LogManager.shared.info("\(photoDesc): \(sizeKB)KB (no compression needed)", category: .upload)
+        guard let originalImage = UIImage(data: imageData) else {
+            print("❌ [COMPRESS] Failed to create UIImage")
             return imageData
         }
         
-        guard let image = UIImage(data: imageData) else {
-            print("❌ [COMPRESS] Failed to create UIImage")
+        // CRITICAL: Always normalize orientation first to prevent rotation
+        let image = normalizeImageOrientation(originalImage)
+        
+        // If already small enough AND orientation was correct, use original
+        // If orientation was fixed, we need to re-encode
+        if imageData.count <= 500_000 && originalImage.imageOrientation == .up {
+            print("✅ [COMPRESS] Already optimized (<500KB), no compression needed")
+            // Don't log to LogManager to avoid cluttering logs - only print for debug
             return imageData
+        }
+        
+        // If orientation was fixed but size is OK, just re-encode with high quality
+        if imageData.count <= 500_000 {
+            guard let reEncodedData = image.jpegData(compressionQuality: 0.95) else {
+                print("⚠️ [COMPRESS] Re-encoding failed, using original")
+                return imageData
+            }
+            let newSizeKB = reEncodedData.count / 1024
+            print("✅ [COMPRESS] Orientation fixed: \(sizeKB)KB → \(newSizeKB)KB")
+            LogManager.shared.info("\(photoDesc): Orientation fixed (\(newSizeKB)KB)", category: .upload)
+            return reEncodedData
         }
         
         let originalSize = image.size
