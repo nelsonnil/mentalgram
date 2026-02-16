@@ -297,7 +297,7 @@ struct SetPhoto: Identifiable, Codable {
     var bankId: UUID?
     var symbol: String
     var filename: String
-    var imageData: Data?
+    var imagePath: String?  // Path to image file in Documents directory
     var mediaId: String?
     var isArchived: Bool
     var uploadDate: Date?
@@ -305,19 +305,104 @@ struct SetPhoto: Identifiable, Codable {
     var uploadStatus: PhotoUploadStatus
     var errorMessage: String?
     
+    // OLD property for backward compatibility during migration - NOT saved to UserDefaults anymore
+    private var _legacyImageData: Data?
+    
+    // Computed property - loads imageData from disk
+    var imageData: Data? {
+        get {
+            // During migration/decode, might still have legacy data
+            if let legacy = _legacyImageData {
+                return legacy
+            }
+            
+            guard let path = imagePath else { return nil }
+            let fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(path)
+            return try? Data(contentsOf: fileURL)
+        }
+    }
+    
     init(id: UUID, setId: UUID, bankId: UUID? = nil, symbol: String, filename: String, imageData: Data? = nil, mediaId: String? = nil, isArchived: Bool = false, uploadDate: Date? = nil, lastCommentId: String? = nil, uploadStatus: PhotoUploadStatus = .pending, errorMessage: String? = nil) {
         self.id = id
         self.setId = setId
         self.bankId = bankId
         self.symbol = symbol
         self.filename = filename
-        self.imageData = imageData
         self.mediaId = mediaId
         self.isArchived = isArchived
         self.uploadDate = uploadDate
         self.lastCommentId = lastCommentId
         self.uploadStatus = uploadStatus
         self.errorMessage = errorMessage
+        self._legacyImageData = nil
+        
+        // Save imageData to filesystem if provided
+        if let data = imageData {
+            let path = "photos/\(setId.uuidString)/\(id.uuidString).jpg"
+            self.imagePath = SetPhoto.saveImageToFilesystem(data: data, path: path)
+        } else {
+            self.imagePath = nil
+        }
+    }
+    
+    // Helper: Save image data to filesystem
+    static func saveImageToFilesystem(data: Data, path: String) -> String? {
+        let fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(path)
+        
+        // Create directory if needed
+        let dirURL = fileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+        
+        // Write file
+        if (try? data.write(to: fileURL)) != nil {
+            return path
+        }
+        return nil
+    }
+    
+    // Custom coding to handle legacy imageData during decode
+    enum CodingKeys: String, CodingKey {
+        case id, setId, bankId, symbol, filename, imagePath, mediaId, isArchived
+        case uploadDate, lastCommentId, uploadStatus, errorMessage
+        case imageData  // Legacy key
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        setId = try container.decode(UUID.self, forKey: .setId)
+        bankId = try container.decodeIfPresent(UUID.self, forKey: .bankId)
+        symbol = try container.decode(String.self, forKey: .symbol)
+        filename = try container.decode(String.self, forKey: .filename)
+        imagePath = try container.decodeIfPresent(String.self, forKey: .imagePath)
+        mediaId = try container.decodeIfPresent(String.self, forKey: .mediaId)
+        isArchived = try container.decode(Bool.self, forKey: .isArchived)
+        uploadDate = try container.decodeIfPresent(Date.self, forKey: .uploadDate)
+        lastCommentId = try container.decodeIfPresent(String.self, forKey: .lastCommentId)
+        uploadStatus = try container.decode(PhotoUploadStatus.self, forKey: .uploadStatus)
+        errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        
+        // Handle legacy imageData
+        _legacyImageData = try container.decodeIfPresent(Data.self, forKey: .imageData)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(setId, forKey: .setId)
+        try container.encodeIfPresent(bankId, forKey: .bankId)
+        try container.encode(symbol, forKey: .symbol)
+        try container.encode(filename, forKey: .filename)
+        try container.encodeIfPresent(imagePath, forKey: .imagePath)
+        try container.encodeIfPresent(mediaId, forKey: .mediaId)
+        try container.encode(isArchived, forKey: .isArchived)
+        try container.encodeIfPresent(uploadDate, forKey: .uploadDate)
+        try container.encodeIfPresent(lastCommentId, forKey: .lastCommentId)
+        try container.encode(uploadStatus, forKey: .uploadStatus)
+        try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
+        // DO NOT encode imageData anymore - only imagePath
     }
 }
 

@@ -12,6 +12,7 @@ class DataManager: ObservableObject {
     private let logsKey = "com.vault.logs"
     
     private init() {
+        migrateImageDataToFilesystem()  // CRITICAL: Migrate old data first
         loadSets()
         loadLogs()
     }
@@ -163,7 +164,12 @@ class DataManager: ObservableObject {
         for photoIndex in sets[setIndex].photos.indices {
             if sets[setIndex].photos[photoIndex].symbol == symbol {
                 sets[setIndex].photos[photoIndex].filename = newFilename
-                sets[setIndex].photos[photoIndex].imageData = newImageData
+                
+                // Save new imageData to filesystem
+                let photoId = sets[setIndex].photos[photoIndex].id
+                let path = "photos/\(setId.uuidString)/\(photoId.uuidString).jpg"
+                sets[setIndex].photos[photoIndex].imagePath = SetPhoto.saveImageToFilesystem(data: newImageData, path: path)
+                
                 sets[setIndex].photos[photoIndex].uploadStatus = .pending
                 sets[setIndex].photos[photoIndex].mediaId = nil
                 sets[setIndex].photos[photoIndex].errorMessage = nil
@@ -200,12 +206,18 @@ class DataManager: ObservableObject {
         }
     }
     
-    func updatePhoto(photoId: UUID, mediaId: String? = nil, isArchived: Bool? = nil, commentId: String? = nil, clearComment: Bool = false, uploadStatus: PhotoUploadStatus? = nil, errorMessage: String? = nil) {
+    func updatePhoto(photoId: UUID, mediaId: String? = nil, isArchived: Bool? = nil, commentId: String? = nil, clearComment: Bool = false, uploadStatus: PhotoUploadStatus? = nil, errorMessage: String? = nil, uploadDate: Date? = nil) {
         for setIndex in sets.indices {
             if let photoIndex = sets[setIndex].photos.firstIndex(where: { $0.id == photoId }) {
                 if let mediaId = mediaId {
                     sets[setIndex].photos[photoIndex].mediaId = mediaId
-                    sets[setIndex].photos[photoIndex].uploadDate = Date()
+                    // Only set date if not explicitly provided
+                    if uploadDate == nil {
+                        sets[setIndex].photos[photoIndex].uploadDate = Date()
+                    }
+                }
+                if let uploadDate = uploadDate {
+                    sets[setIndex].photos[photoIndex].uploadDate = uploadDate
                 }
                 if let isArchived = isArchived {
                     sets[setIndex].photos[photoIndex].isArchived = isArchived
@@ -302,6 +314,87 @@ class DataManager: ObservableObject {
            let decoded = try? JSONDecoder().decode([PhotoSet].self, from: data) {
             sets = decoded
         }
+    }
+    
+    // MARK: - Migration: Move imageData from UserDefaults to Filesystem
+    
+    /// CRITICAL: Migrates old data structure (imageData in UserDefaults) to new structure (files on disk)
+    /// This runs once on app launch to fix the 5MB+ UserDefaults issue
+    private func migrateImageDataToFilesystem() {
+        let migrationKey = "com.vault.migration.imagedata.v1"
+        
+        // Check if migration already done
+        if UserDefaults.standard.bool(forKey: migrationKey) {
+            print("✅ [MIGRATION] Already migrated - skipping")
+            return
+        }
+        
+        print("🔄 [MIGRATION] Starting imageData migration to filesystem...")
+        
+        // Load old data structure (with imageData in struct)
+        guard let data = UserDefaults.standard.data(forKey: setsKey) else {
+            print("   No sets to migrate")
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            return
+        }
+        
+        // Try to decode with old structure (this will work even with imageData present)
+        guard var oldSets = try? JSONDecoder().decode([PhotoSet].self, from: data) else {
+            print("   Could not decode sets")
+            UserDefaults.standard.set(true, forKey: migrationKey)
+            return
+        }
+        
+        print("   Found \(oldSets.count) sets to migrate")
+        
+        var migratedCount = 0
+        var totalPhotos = 0
+        
+        // For each set, migrate photos' imageData to filesystem
+        for (setIndex, set) in oldSets.enumerated() {
+            print("   Migrating set: \(set.name) (\(set.photos.count) photos)")
+            
+            for (photoIndex, photo) in set.photos.enumerated() {
+                totalPhotos += 1
+                
+                // If photo has imageData but no imagePath, migrate it
+                if let imageData = photo.imageData, photo.imagePath == nil {
+                    let path = "photos/\(set.id.uuidString)/\(photo.id.uuidString).jpg"
+                    let fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        .appendingPathComponent(path)
+                    
+                    // Create directory
+                    let dirURL = fileURL.deletingLastPathComponent()
+                    try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+                    
+                    // Write file
+                    if (try? imageData.write(to: fileURL)) != nil {
+                        // Update photo to use path instead of data
+                        var updatedPhoto = photo
+                        updatedPhoto.imagePath = path
+                        oldSets[setIndex].photos[photoIndex] = updatedPhoto
+                        migratedCount += 1
+                    } else {
+                        print("   ⚠️ Failed to write photo \(photo.id)")
+                    }
+                }
+            }
+        }
+        
+        print("✅ [MIGRATION] Migrated \(migratedCount)/\(totalPhotos) photos to filesystem")
+        LogManager.shared.success("Migrated \(migratedCount) photos from UserDefaults to filesystem", category: .general)
+        
+        // Save migrated data back (now without imageData, much smaller)
+        if let newData = try? JSONEncoder().encode(oldSets) {
+            UserDefaults.standard.set(newData, forKey: setsKey)
+            let newSizeKB = newData.count / 1024
+            print("   New UserDefaults size: \(newSizeKB)KB (was ~5000KB)")
+            LogManager.shared.info("UserDefaults size reduced to \(newSizeKB)KB", category: .general)
+        }
+        
+        // Mark migration as complete
+        UserDefaults.standard.set(true, forKey: migrationKey)
+        print("🎉 [MIGRATION] Complete!")
     }
     
     // MARK: - Activity Logs

@@ -383,6 +383,10 @@ struct SettingsView: View {
     // Secret Input - Observing to update example
     @ObservedObject var secretInputSettings = SecretInputSettings.shared
     
+    // TEST: Archive access
+    @State private var isTestingArchive = false
+    @State private var archiveTestResult: String?
+    
     private var exampleMaskOutput: String {
         let word = "coche"
         let maskText = secretInputSettings.mode == .customUsername
@@ -476,6 +480,36 @@ struct SettingsView: View {
                                         .foregroundColor(VaultTheme.Colors.textTertiary)
                                 }
                                 .padding(.vertical, VaultTheme.Spacing.sm)
+                            }
+                            
+                            // TEST BUTTON: Check if we can access archived photos
+                            Button(action: { testArchiveAccess() }) {
+                                HStack {
+                                    Image(systemName: "archivebox.circle.fill")
+                                        .foregroundColor(.orange)
+                                        .frame(width: 24)
+                                    Text("TEST: Check Archived Photos")
+                                        .font(VaultTheme.Typography.body())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    Spacer()
+                                    if isTestingArchive {
+                                        ProgressView()
+                                            .tint(.orange)
+                                    } else {
+                                        Image(systemName: "play.circle.fill")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(.orange)
+                                    }
+                                }
+                                .padding(.vertical, VaultTheme.Spacing.sm)
+                            }
+                            .disabled(isTestingArchive)
+                            
+                            if let testResult = archiveTestResult {
+                                Text(testResult)
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(testResult.contains("✅") ? .green : .red)
+                                    .padding(.top, 4)
                             }
                         }
                     }
@@ -1096,6 +1130,42 @@ struct SettingsView: View {
                         uploadMessage = "❌ Upload failed\n\n\(errorMessage)"
                     }
                     showingUploadAlert = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - TEST Archive Access
+    
+    private func testArchiveAccess() {
+        // Warn if upload is active - API calls could trigger rate limiting
+        if UploadManager.shared.isUploading {
+            archiveTestResult = "⚠️ Cannot test while upload is active. Pause upload first."
+            return
+        }
+        
+        isTestingArchive = true
+        archiveTestResult = nil
+        
+        Task {
+            do {
+                let archivedPhotos = try await instagram.testGetArchivedPhotos()
+                
+                await MainActor.run {
+                    isTestingArchive = false
+                    archiveTestResult = "✅ Found \(archivedPhotos.count) archived photos!\nCheck logs for details."
+                    LogManager.shared.success("Archive test: Found \(archivedPhotos.count) photos", category: .api)
+                    
+                    // Log first 5 for preview
+                    for (index, photo) in archivedPhotos.prefix(5).enumerated() {
+                        LogManager.shared.info("Archived #\(index + 1): ID=\(photo.mediaId), Date=\(photo.timestamp?.description ?? "unknown")", category: .api)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isTestingArchive = false
+                    archiveTestResult = "❌ Could not access archived photos\n\(error.localizedDescription)\nCheck logs for details."
+                    LogManager.shared.error("Archive test failed: \(error.localizedDescription)", category: .api)
                 }
             }
         }

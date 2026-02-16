@@ -2834,6 +2834,173 @@ class InstagramService: ObservableObject {
         LogManager.shared.success("\(photoDesc): \(sizeKB)KB → \(finalSizeKB)KB (adaptive quality \(String(format: "%.2f", calculatedQuality)), -\(savedPercent)%)", category: .upload)
         return compressedData
     }
+    
+    // MARK: - TEST: Get Archived Photos
+    
+    /// Get archived photos from Instagram's "Only Me" archive
+    /// Returns array of media IDs, image URLs, and timestamps
+    func testGetArchivedPhotos() async throws -> [(mediaId: String, imageURL: String, timestamp: Date?)] {
+        print("🔍 [TEST] Attempting to fetch archived photos...")
+        
+        // Based on instagram_private_api documentation:
+        // feed/only_me_feed/ is the correct endpoint for archived media
+        // We'll also try some alternative endpoints as fallback
+        let possiblePaths = [
+            "/feed/only_me_feed/",                 // PRIMARY: Official archived feed endpoint
+            "/feed/saved/",                        // Saved posts (sometimes confused with archive)
+            "/archive/reel/day_shells/",           // Stories archive (different from posts)
+        ]
+        
+        for path in possiblePaths {
+            print("   Trying endpoint: \(path)")
+            
+            do {
+                let data = try await apiRequest(method: "GET", path: path)
+                
+                // Try to parse response
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    print("   ⚠️ Could not parse JSON from \(path)")
+                    continue
+                }
+                
+                print("   ✅ Got response from \(path)")
+                print("   JSON keys: \(json.keys.joined(separator: ", "))")
+                
+                // Log response for debugging (truncated if too large)
+                if let jsonData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    let preview = jsonString.prefix(500)
+                    LogManager.shared.info("Archive endpoint \(path) response (first 500 chars):\n\(preview)...", category: .api)
+                }
+                
+                // Check for error messages in response
+                if let status = json["status"] as? String, status != "ok" {
+                    if let message = json["message"] as? String {
+                        print("   ⚠️ API returned status '\(status)': \(message)")
+                        continue
+                    }
+                }
+                
+                // Try to extract media items from different possible response structures
+                var archivedPhotos: [(String, String, Date?)] = []
+                
+                // STRUCTURE 1: Direct items array (feed/only_me_feed, feed/saved)
+                // Example: { "items": [ { "pk": 123, "image_versions2": {...}, "taken_at": 1234567890 } ] }
+                if let items = json["items"] as? [[String: Any]] {
+                    print("   Found 'items' array with \(items.count) items")
+                    
+                    for item in items {
+                        // Some endpoints wrap media in "media" key (like feed/saved)
+                        let mediaItem = item["media"] as? [String: Any] ?? item
+                        
+                        if let pk = mediaItem["pk"] as? Int64 {
+                            let mediaId = String(pk)
+                            
+                            // Extract image URL
+                            var imageUrl = ""
+                            if let imageVersions = mediaItem["image_versions2"] as? [String: Any],
+                               let candidates = imageVersions["candidates"] as? [[String: Any]],
+                               let firstCandidate = candidates.first,
+                               let url = firstCandidate["url"] as? String {
+                                imageUrl = url
+                            }
+                            
+                            // Extract timestamp
+                            let takenAt: Date?
+                            if let timestamp = mediaItem["taken_at"] as? TimeInterval {
+                                takenAt = Date(timeIntervalSince1970: timestamp)
+                            } else if let timestamp = mediaItem["taken_at"] as? Int64 {
+                                takenAt = Date(timeIntervalSince1970: TimeInterval(timestamp))
+                            } else {
+                                takenAt = nil
+                            }
+                            
+                            archivedPhotos.append((mediaId, imageUrl, takenAt))
+                            print("      Found media: \(mediaId), timestamp: \(takenAt?.description ?? "nil")")
+                        } else if let pkString = mediaItem["pk"] as? String,
+                                  let pk = Int64(pkString) {
+                            // Handle pk as string
+                            let mediaId = String(pk)
+                            
+                            var imageUrl = ""
+                            if let imageVersions = mediaItem["image_versions2"] as? [String: Any],
+                               let candidates = imageVersions["candidates"] as? [[String: Any]],
+                               let firstCandidate = candidates.first,
+                               let url = firstCandidate["url"] as? String {
+                                imageUrl = url
+                            }
+                            
+                            let takenAt: Date?
+                            if let timestamp = mediaItem["taken_at"] as? TimeInterval {
+                                takenAt = Date(timeIntervalSince1970: timestamp)
+                            } else if let timestamp = mediaItem["taken_at"] as? Int64 {
+                                takenAt = Date(timeIntervalSince1970: TimeInterval(timestamp))
+                            } else {
+                                takenAt = nil
+                            }
+                            
+                            archivedPhotos.append((mediaId, imageUrl, takenAt))
+                        }
+                    }
+                }
+                
+                // STRUCTURE 2: Archive day shells (nested structure)
+                // Example: { "items": [ { "medias": [ {...} ] } ] }
+                if archivedPhotos.isEmpty, let items = json["items"] as? [[String: Any]] {
+                    for item in items {
+                        if let medias = item["medias"] as? [[String: Any]] {
+                            print("   Found 'medias' array in item")
+                            for media in medias {
+                                if let pk = media["pk"] as? Int64 {
+                                    let mediaId = String(pk)
+                                    var imageUrl = ""
+                                    
+                                    if let imageVersions = media["image_versions2"] as? [String: Any],
+                                       let candidates = imageVersions["candidates"] as? [[String: Any]],
+                                       let firstCandidate = candidates.first,
+                                       let url = firstCandidate["url"] as? String {
+                                        imageUrl = url
+                                    }
+                                    
+                                    let takenAt: Date?
+                                    if let timestamp = media["taken_at"] as? TimeInterval {
+                                        takenAt = Date(timeIntervalSince1970: timestamp)
+                                    } else if let timestamp = media["taken_at"] as? Int64 {
+                                        takenAt = Date(timeIntervalSince1970: TimeInterval(timestamp))
+                                    } else {
+                                        takenAt = nil
+                                    }
+                                    
+                                    archivedPhotos.append((mediaId, imageUrl, takenAt))
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if !archivedPhotos.isEmpty {
+                    print("   🎉 SUCCESS! Found \(archivedPhotos.count) archived photos from \(path)")
+                    LogManager.shared.success("Found \(archivedPhotos.count) archived photos from \(path)", category: .api)
+                    return archivedPhotos
+                } else {
+                    print("   ⚠️ Response parsed but no media items found")
+                }
+                
+            } catch let error as InstagramError {
+                print("   ❌ Endpoint \(path) failed: \(error.localizedDescription)")
+                LogManager.shared.warning("Endpoint \(path) failed: \(error.localizedDescription)", category: .api)
+                // Continue trying other endpoints
+            } catch {
+                print("   ❌ Endpoint \(path) failed with unexpected error: \(error.localizedDescription)")
+                // Continue trying other endpoints
+            }
+        }
+        
+        // If we get here, none of the endpoints worked
+        print("❌ [TEST] Could not find archived photos from any endpoint")
+        LogManager.shared.error("No archived photos found - tried \(possiblePaths.count) endpoints", category: .api)
+        throw InstagramError.apiError("Could not access archived photos. This may be due to:\n• No archived photos exist\n• Endpoint access restricted\n• Session may need refresh")
+    }
 }
 
 // MARK: - Errors
