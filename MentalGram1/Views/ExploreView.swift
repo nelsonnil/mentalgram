@@ -22,6 +22,10 @@ struct ExploreView: View {
     // Secret Input Masking
     @State private var secretInputBuffer: String = ""  // Real typed letters (what the magician types)
     @State private var maskTextCache: String = ""  // Cached mask text from settings
+    @State private var isUpdatingMask: Bool = false  // Flag to ignore programmatic searchText changes
+    
+    // Reveal task (runs silently in background)
+    @State private var revealTask: Task<Void, Never>?
     
     var body: some View {
         ZStack {
@@ -44,7 +48,8 @@ struct ExploreView: View {
                             .disableAutocorrection(true)
                             .focused($isSearchFieldFocused)
                             .onChange(of: searchText) { newValue in
-                                handleSearchTextChange(oldValue: searchText, newValue: newValue)
+                                guard !isUpdatingMask else { return }
+                                handleSearchTextChange(newValue: newValue)
                             }
                             .onAppear {
                                 updateMaskTextCache()
@@ -52,8 +57,10 @@ struct ExploreView: View {
                         
                         if !searchText.isEmpty {
                             Button(action: {
+                                isUpdatingMask = true
                                 searchText = ""
                                 secretInputBuffer = ""
+                                isUpdatingMask = false
                                 searchResults = []
                                 isSearchFieldFocused = false
                             }) {
@@ -70,8 +77,10 @@ struct ExploreView: View {
                     
                     if isSearchFieldFocused || !searchText.isEmpty {
                         Button("Cancelar") {
+                            isUpdatingMask = true
                             searchText = ""
                             secretInputBuffer = ""
+                            isUpdatingMask = false
                             searchResults = []
                             isSearchFieldFocused = false
                         }
@@ -200,6 +209,9 @@ struct ExploreView: View {
                 .transition(.move(edge: .trailing))
                 .zIndex(1000)
             }
+            
+            // Reveal runs silently in background — no visual indicator (spectator must not see anything)
+            // Magician gets haptic feedback: medium pulse on space, success/error on completion
         }
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .preferredColorScheme(.light) // CRITICAL: Explore must look exactly like Instagram (light mode)
@@ -326,39 +338,53 @@ struct ExploreView: View {
     }
     
     /// Handle text change in search field with secret input masking
-    private func handleSearchTextChange(oldValue: String, newValue: String) {
+    /// Uses secretInputBuffer.count as the "expected" length to detect typed vs deleted chars
+    private func handleSearchTextChange(newValue: String) {
         // Update mask cache on each change (in case settings changed)
         updateMaskTextCache()
         
-        // Detect user's actual input
-        if newValue.count > oldValue.count {
-            // User typed character(s)
-            let typedCharacters = String(newValue.dropFirst(oldValue.count))
+        let expectedLength = secretInputBuffer.count
+        
+        if newValue.count > expectedLength {
+            // User typed new character(s) — extract only the newly typed ones
+            let newChars = String(newValue.suffix(newValue.count - expectedLength))
             
-            for char in typedCharacters {
+            var hasSpace = false
+            for char in newChars {
                 if char == " " {
-                    // SPACE pressed → trigger auto-reveal
-                    handleSpacePressed()
-                    return
+                    // SPACE pressed → trigger auto-reveal (but DON'T clear the text)
+                    hasSpace = true
                 } else {
-                    // Regular character typed
                     secretInputBuffer.append(char)
-                    
-                    // Update visible text with mask
-                    searchText = buildMaskedText()
                 }
             }
-        } else if newValue.count < oldValue.count {
-            // User deleted character(s) → delete from secret buffer too
-            let deletedCount = oldValue.count - newValue.count
+            
+            // Replace visible text with mask characters (strip the space)
+            let masked = buildMaskedText()
+            isUpdatingMask = true
+            searchText = masked
+            isUpdatingMask = false
+            
+            // Trigger reveal AFTER updating the text (space = "transmit" the word)
+            if hasSpace {
+                handleSpacePressed()
+            }
+            
+        } else if newValue.count < expectedLength {
+            // User deleted character(s)
+            let deletedCount = expectedLength - newValue.count
             secretInputBuffer = String(secretInputBuffer.dropLast(deletedCount))
             
-            // Update visible text with mask
-            searchText = buildMaskedText()
+            // Replace visible text with mask characters
+            let masked = buildMaskedText()
+            isUpdatingMask = true
+            searchText = masked
+            isUpdatingMask = false
         }
+        // If newValue.count == expectedLength, it's either our own mask update or no real change — ignore
         
-        // Continue with normal search (for regular search functionality)
-        performSearch(query: newValue)
+        // Trigger search with the masked text (what the spectator sees)
+        performSearch(query: searchText)
     }
     
     /// Build the masked text that the spectator sees
@@ -376,96 +402,169 @@ struct ExploreView: View {
         return result
     }
     
-    /// Handle SPACE key → Auto-reveal word from active Word Reveal set
+    /// Handle SPACE key → Transmit the secret word (trigger reveal in background)
+    /// The search field keeps showing the mask text so the magician can tap into the profile
     private func handleSpacePressed() {
-        print("🎩 [SECRET] Space pressed - secret word: '\(secretInputBuffer)'")
-        LogManager.shared.info("Secret input triggered: '\(secretInputBuffer)'", category: .general)
+        let word = secretInputBuffer
+        print("🎩 [SECRET] ═══════════════════════════════════════")
+        print("🎩 [SECRET] SPACE PRESSED - transmitting secret word: '\(word)' (\(word.count) letters)")
+        print("🎩 [SECRET] Search field keeps showing: '\(searchText)' (mask text stays)")
+        LogManager.shared.info("Secret input SPACE triggered: '\(word)'", category: .general)
         
-        // Clear the search text and buffer
-        searchText = ""
-        let wordToReveal = secretInputBuffer
-        secretInputBuffer = ""
+        guard !word.isEmpty else {
+            print("⚠️ [SECRET] Empty word, ignoring space")
+            return
+        }
+        
+        // NOTE: Do NOT clear searchText or secretInputBuffer!
+        // The masked text stays visible so the magician can tap to enter the follower's profile.
+        // The spectator sees a normal username search.
+        
+        // Haptic feedback to confirm transmission (subtle, only magician feels it)
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        // Diagnostics: show all sets and their state
+        print("🎩 [SECRET] Total sets in DataManager: \(dataManager.sets.count)")
+        for (i, set) in dataManager.sets.enumerated() {
+            let archivedWithMedia = set.photos.filter { $0.mediaId != nil && $0.isArchived }.count
+            let withMedia = set.photos.filter { $0.mediaId != nil }.count
+            let archived = set.photos.filter { $0.isArchived }.count
+            print("🎩 [SECRET]   Set[\(i)]: '\(set.name)' type=\(set.type.rawValue) status=\(set.status.rawValue) banks=\(set.banks.count) photos=\(set.photos.count) withMediaId=\(withMedia) archived=\(archived) archivedWithMedia=\(archivedWithMedia)")
+        }
         
         // Find active Word Reveal set with completed photos
         guard let activeSet = findActiveWordRevealSet() else {
-            print("⚠️ [SECRET] No active Word Reveal set found")
+            print("❌ [SECRET] NO ACTIVE WORD REVEAL SET FOUND!")
+            print("❌ [SECRET] Requirements: type=word, status=completed, banks>0, has photos with mediaId+isArchived")
+            LogManager.shared.error("No active Word Reveal set found for '\(word)'", category: .general)
+            
+            // Haptic error feedback for magician (no visual, spectator won't notice)
+            let errorGenerator = UINotificationFeedbackGenerator()
+            errorGenerator.notificationOccurred(.error)
             return
         }
         
-        print("🎩 [SECRET] Using set: \(activeSet.name), banks: \(activeSet.banks.count)")
+        print("🎩 [SECRET] Using set: '\(activeSet.name)', banks: \(activeSet.banks.count)")
         
         // Validate we have enough banks for the word length
-        guard activeSet.banks.count >= wordToReveal.count else {
-            print("⚠️ [SECRET] Not enough banks (\(activeSet.banks.count)) for word length (\(wordToReveal.count))")
+        guard activeSet.banks.count >= word.count else {
+            print("⚠️ [SECRET] Not enough banks (\(activeSet.banks.count)) for word '\(word)' (\(word.count) letters)")
+            LogManager.shared.error("Not enough banks (\(activeSet.banks.count)) for word '\(word)' (\(word.count) letters)", category: .general)
             return
         }
         
-        // Auto-reveal each letter from corresponding bank
-        Task {
-            await revealWord(wordToReveal, fromSet: activeSet)
+        // Cancel any previous reveal task
+        revealTask?.cancel()
+        
+        // Auto-reveal each letter in background (completely silent, no UI changes)
+        revealTask = Task {
+            await revealWord(word, fromSet: activeSet)
         }
     }
     
-    /// Find the first completed Word Reveal set
+    /// Find the first completed Word Reveal set that has archived photos ready to reveal
     private func findActiveWordRevealSet() -> PhotoSet? {
-        return dataManager.sets.first { set in
+        // Try strict match first: completed word set with archived photos
+        if let strict = dataManager.sets.first(where: { set in
             set.type == .word &&
             set.status == .completed &&
             !set.banks.isEmpty &&
-            set.photos.allSatisfy { $0.uploadStatus == .completed && $0.mediaId != nil }
+            set.photos.contains(where: { $0.mediaId != nil && $0.isArchived })
+        }) {
+            return strict
         }
+        
+        // Fallback: any word set with archived photos (even if status is not .completed)
+        if let fallback = dataManager.sets.first(where: { set in
+            set.type == .word &&
+            !set.banks.isEmpty &&
+            set.photos.contains(where: { $0.mediaId != nil && $0.isArchived })
+        }) {
+            print("⚠️ [SECRET] Using fallback set (status: \(fallback.status.rawValue), not 'completed')")
+            return fallback
+        }
+        
+        return nil
     }
     
     /// Reveal word by unarchiving letters one by one (1s delay between each)
     private func revealWord(_ word: String, fromSet set: PhotoSet) async {
         let letters = Array(word.lowercased())
         let alphabet = set.selectedAlphabet ?? .latin
+        let sortedBanks = set.banks.sorted { $0.position < $1.position }
         
-        print("🎩 [SECRET] Revealing '\(word)' using alphabet: \(alphabet.displayName)")
+        print("🎩 [SECRET] ═══════════════════════════════════════")
+        print("🎩 [SECRET] REVEALING '\(word)' (\(letters.count) letters)")
+        print("🎩 [SECRET] Set: '\(set.name)', Alphabet: \(alphabet.displayName)")
+        print("🎩 [SECRET] Banks (sorted): \(sortedBanks.map { "pos\($0.position)=\($0.name)" })")
+        
+        var successCount = 0
+        var failCount = 0
         
         for (index, letter) in letters.enumerated() {
+            // Check if task was cancelled
+            if Task.isCancelled {
+                print("⚠️ [SECRET] Reveal task cancelled at letter \(index)")
+                break
+            }
+            
             // Find the letter character in the alphabet
             guard let charIndex = alphabet.indexFor(String(letter)) else {
-                print("⚠️ [SECRET] Letter '\(letter)' not found in alphabet")
+                print("❌ [SECRET] Letter '\(letter)' NOT FOUND in alphabet \(alphabet.displayName)")
+                failCount += 1
                 continue
             }
             
             let symbol = alphabet.characters[charIndex]
             
-            // Get the photo from the corresponding bank
-            guard index < set.banks.count else {
-                print("⚠️ [SECRET] Bank index \(index) out of range")
+            // Get the bank by position (1-based), not array index
+            let bankPosition = index + 1
+            guard let bank = sortedBanks.first(where: { $0.position == bankPosition }) ?? (index < sortedBanks.count ? sortedBanks[index] : nil) else {
+                print("❌ [SECRET] No bank for position \(bankPosition)")
+                failCount += 1
                 break
             }
             
-            let bank = set.banks[index]
-            
             // Find photo with this symbol in this bank
-            guard let photo = set.photos.first(where: { $0.bankId == bank.id && $0.symbol == symbol && $0.mediaId != nil && $0.isArchived }) else {
-                print("⚠️ [SECRET] Photo not found for symbol '\(symbol)' in bank \(bank.name)")
+            let photosInBank = set.photos.filter { $0.bankId == bank.id }
+            guard let photo = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && $0.isArchived }) else {
+                print("❌ [SECRET] Photo NOT FOUND for symbol '\(symbol)' in bank '\(bank.name)' (pos \(bank.position))")
+                print("❌ [SECRET] Bank has \(photosInBank.count) photos:")
+                for p in photosInBank.prefix(5) {
+                    print("   - symbol='\(p.symbol)' mediaId=\(p.mediaId ?? "nil") archived=\(p.isArchived) status=\(p.uploadStatus.rawValue)")
+                }
+                failCount += 1
                 continue
             }
             
-            print("🎩 [SECRET] Revealing letter '\(letter)' (symbol: \(symbol)) from \(bank.name)")
+            guard let mediaId = photo.mediaId else {
+                print("❌ [SECRET] Photo has nil mediaId (should not happen)")
+                failCount += 1
+                continue
+            }
+            
+            print("🎩 [SECRET] [\(index + 1)/\(letters.count)] Revealing '\(letter)' → symbol '\(symbol)' from bank '\(bank.name)' mediaId=\(mediaId)")
             
             // Reveal (unarchive) the photo
             do {
-                guard let mediaId = photo.mediaId else { continue }
-                
                 let result = try await instagram.reveal(mediaId: mediaId)
                 
                 if result.success {
                     await MainActor.run {
                         dataManager.updatePhoto(
                             photoId: photo.id,
-                            mediaId: nil,
                             isArchived: false,
                             commentId: result.commentId
                         )
                     }
-                    print("✅ [SECRET] Letter '\(letter)' revealed successfully")
+                    successCount += 1
+                    print("✅ [SECRET] [\(index + 1)/\(letters.count)] Letter '\(letter)' REVEALED OK")
+                    LogManager.shared.success("Revealed '\(letter)' (mediaId: \(mediaId))", category: .general)
                 } else {
-                    print("❌ [SECRET] Failed to reveal letter '\(letter)'")
+                    failCount += 1
+                    print("❌ [SECRET] [\(index + 1)/\(letters.count)] Reveal returned FALSE for '\(letter)'")
+                    LogManager.shared.error("Reveal failed for '\(letter)' (mediaId: \(mediaId))", category: .general)
                 }
                 
                 // ANTI-BOT: 1 second delay between reveals
@@ -473,12 +572,31 @@ struct ExploreView: View {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             } catch {
-                print("❌ [SECRET] Error revealing letter '\(letter)': \(error)")
-                // Continue with next letter even if one fails
+                failCount += 1
+                print("❌ [SECRET] [\(index + 1)/\(letters.count)] ERROR revealing '\(letter)': \(error)")
+                LogManager.shared.error("Reveal error for '\(letter)': \(error)", category: .general)
             }
         }
         
-        print("✅ [SECRET] Word reveal complete")
+        print("🎩 [SECRET] ═══════════════════════════════════════")
+        print("🎩 [SECRET] REVEAL COMPLETE: \(successCount) ok, \(failCount) failed, total \(letters.count)")
+        LogManager.shared.info("Word reveal '\(word)': \(successCount) ok, \(failCount) failed", category: .general)
+        
+        // Haptic feedback to magician when reveal finishes (spectator can't see anything)
+        await MainActor.run {
+            if failCount == 0 {
+                // Success: double light tap
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    generator.impactOccurred()
+                }
+            } else {
+                // Some failures: error vibration
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.warning)
+            }
+        }
     }
 }
 

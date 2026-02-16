@@ -1197,6 +1197,13 @@ struct SetDetailView: View {
                     
                     isProcessingSlotPhoto = false
                     LogManager.shared.success("Mapped archived photo (ID: \(archivedPhoto.mediaId)) to slot '\(symbol)'", category: .general)
+                    
+                    // Auto-complete set if all photos have mediaId and are archived
+                    let allPhotosReady = currentSet.photos.allSatisfy { $0.mediaId != nil && $0.uploadStatus == .completed }
+                    if allPhotosReady && currentSet.status != .completed {
+                        dataManager.updateSetStatus(id: currentSet.id, status: .completed)
+                        LogManager.shared.success("Set '\(currentSet.name)' auto-completed (all photos mapped from archived)", category: .general)
+                    }
                 }
                 
             } catch {

@@ -768,28 +768,30 @@ struct SettingsView: View {
                                     .font(VaultTheme.Typography.bodyBold())
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                                 
-                                ForEach(MaskInputMode.allCases, id: \.self) { mode in
+                                ForEach(MaskInputMode.allCases, id: \.self) { maskMode in
                                     Button(action: {
-                                        SecretInputSettings.shared.mode = mode
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            secretInputSettings.mode = maskMode
+                                        }
                                     }) {
                                         HStack(spacing: VaultTheme.Spacing.md) {
-                                            Image(systemName: mode.icon)
+                                            Image(systemName: maskMode.icon)
                                                 .frame(width: 24)
                                                 .foregroundColor(VaultTheme.Colors.primary)
                                             
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(mode.displayName)
+                                                Text(maskMode.displayName)
                                                     .font(VaultTheme.Typography.body())
                                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                                                 
-                                                Text(mode == .latestFollower ? "Uses your latest follower's username" : "Uses a custom username you set")
+                                                Text(maskMode == .latestFollower ? "Uses your latest follower's username" : "Uses a custom username you set")
                                                     .font(VaultTheme.Typography.caption())
                                                     .foregroundColor(VaultTheme.Colors.textSecondary)
                                             }
                                             
                                             Spacer()
                                             
-                                            if SecretInputSettings.shared.mode == mode {
+                                            if secretInputSettings.mode == maskMode {
                                                 Image(systemName: "checkmark.circle.fill")
                                                     .foregroundColor(VaultTheme.Colors.primary)
                                             }
@@ -798,11 +800,11 @@ struct SettingsView: View {
                                         .padding(.horizontal, VaultTheme.Spacing.md)
                                         .background(
                                             RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
-                                                .fill(SecretInputSettings.shared.mode == mode ? VaultTheme.Colors.primary.opacity(0.1) : VaultTheme.Colors.backgroundSecondary)
+                                                .fill(secretInputSettings.mode == maskMode ? VaultTheme.Colors.primary.opacity(0.1) : VaultTheme.Colors.backgroundSecondary)
                                         )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
-                                                .stroke(SecretInputSettings.shared.mode == mode ? VaultTheme.Colors.primary : Color.clear, lineWidth: 1.5)
+                                                .stroke(secretInputSettings.mode == maskMode ? VaultTheme.Colors.primary : Color.clear, lineWidth: 1.5)
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -810,16 +812,13 @@ struct SettingsView: View {
                             }
                             
                             // Custom username field (only show if custom mode selected)
-                            if SecretInputSettings.shared.mode == .customUsername {
+                            if secretInputSettings.mode == .customUsername {
                                 VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
                                     Text("Custom Username")
                                         .font(VaultTheme.Typography.bodyBold())
                                         .foregroundColor(VaultTheme.Colors.textPrimary)
                                     
-                                    TextField("Enter username (e.g. magonil1)", text: Binding(
-                                        get: { SecretInputSettings.shared.customUsername },
-                                        set: { SecretInputSettings.shared.customUsername = $0 }
-                                    ))
+                                    TextField("Enter username (e.g. magonil1)", text: $secretInputSettings.customUsername)
                                     .font(VaultTheme.Typography.body())
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                                     .padding(VaultTheme.Spacing.md)
@@ -832,8 +831,8 @@ struct SettingsView: View {
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
                                     
-                                    if !SecretInputSettings.shared.customUsername.isEmpty {
-                                        Text("Mask text: \(SecretInputSettings.shared.customUsername.lowercased())")
+                                    if !secretInputSettings.customUsername.isEmpty {
+                                        Text("Mask text: \(secretInputSettings.customUsername.lowercased())")
                                             .font(VaultTheme.Typography.caption())
                                             .foregroundColor(VaultTheme.Colors.success)
                                             .padding(VaultTheme.Spacing.xs)
