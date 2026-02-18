@@ -28,7 +28,7 @@ struct PerformanceView: View {
                     InstagramProfileView(
                         profile: profile,
                         cachedImages: $cachedImages,
-                        onRefresh: loadProfile,
+                        onRefresh: loadProfileSync,
                         onPlusPress: {
                             // Back to Sets tab
                             selectedTab = 1
@@ -99,19 +99,70 @@ struct PerformanceView: View {
         if let cached = ProfileCacheService.shared.loadProfile() {
             print("📦 [CACHE] Loading profile from cache (no auto-request)")
             self.profile = cached
-            // Initialize allMediaURLs with cached media
             self.allMediaURLs = cached.cachedMediaURLs
-            self.hasMorePages = cached.cachedMediaURLs.count >= 18 // Assume more if exactly 18
+            self.hasMorePages = cached.cachedMediaURLs.count >= 18
             loadCachedImages()
-            // DON'T make automatic request - user can pull-to-refresh if needed
+            
+            // If reels or tagged are missing from old cache, fetch them silently in background
+            if cached.cachedReelURLs.isEmpty || cached.cachedTaggedURLs.isEmpty {
+                print("📦 [CACHE] Reels/tagged missing from cache — fetching in background...")
+                Task { await fetchAndUpdateReelsTagged(for: cached) }
+            }
         } else {
-            // Only if NO cache, load fresh (with network stability check)
             print("📦 [CACHE] No cached profile found, loading fresh")
-            loadProfile()
+            loadProfileSync()
         }
     }
     
-    private func loadProfile() {
+    /// Fetches only reels and tagged in background, updates the cached profile
+    @MainActor
+    private func fetchAndUpdateReelsTagged(for cached: InstagramProfile) async {
+        guard instagram.isLoggedIn else { return }
+        do {
+            async let reelsTask = instagram.getUserReels(userId: cached.userId, amount: 18)
+            async let taggedTask = instagram.getUserTagged(userId: cached.userId, amount: 18)
+            
+            let reels = try await reelsTask
+            let tagged = try await taggedTask
+            
+            let reelURLs = reels.map { $0.imageURL }
+            let taggedURLs = tagged.map { $0.imageURL }
+            
+            print("📦 [CACHE] Background fetch: \(reelURLs.count) reels, \(taggedURLs.count) tagged")
+            
+            // Build updated profile with new data
+            let updated = InstagramProfile(
+                userId: cached.userId, username: cached.username, fullName: cached.fullName,
+                biography: cached.biography, externalUrl: cached.externalUrl,
+                profilePicURL: cached.profilePicURL, isVerified: cached.isVerified,
+                isPrivate: cached.isPrivate, followerCount: cached.followerCount,
+                followingCount: cached.followingCount, mediaCount: cached.mediaCount,
+                followedBy: cached.followedBy, isFollowing: cached.isFollowing,
+                isFollowRequested: cached.isFollowRequested, cachedAt: cached.cachedAt,
+                cachedMediaURLs: cached.cachedMediaURLs,
+                cachedReelURLs: reelURLs,
+                cachedTaggedURLs: taggedURLs
+            )
+            
+            self.profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+            
+            // Download thumbnails for reels + tagged
+            let allNew = reelURLs + taggedURLs
+            for url in allNew {
+                if let img = await downloadImage(from: url) {
+                    cachedImages[url] = img
+                    ProfileCacheService.shared.saveImage(img, forURL: url)
+                }
+            }
+            print("✅ [CACHE] Reels/tagged background fetch complete")
+        } catch {
+            print("⚠️ [CACHE] Background reels/tagged fetch failed (non-critical): \(error)")
+        }
+    }
+    
+    @MainActor
+    private func loadProfile() async {
         guard instagram.isLoggedIn else { return }
         
         isLoading = true
@@ -121,40 +172,36 @@ struct PerformanceView: View {
         ProfileCacheService.shared.clearAll()
         cachedImages.removeAll()
         
-        Task {
-            do {
-                // ANTI-BOT: Wait if network changed recently
-                try await instagram.waitForNetworkStability()
-                
-                let fetchedProfile = try await instagram.getProfileInfo()
-                
-                await MainActor.run {
-                    if let fetchedProfile = fetchedProfile {
-                        self.profile = fetchedProfile
-                        // Initialize allMediaURLs with first batch
-                        self.allMediaURLs = fetchedProfile.cachedMediaURLs
-                        self.hasMorePages = fetchedProfile.cachedMediaURLs.count >= 18
-                        ProfileCacheService.shared.saveProfile(fetchedProfile)
-                        downloadAndCacheImages(profile: fetchedProfile)
-                    }
-                    isLoading = false
-                }
-            } catch let error as InstagramError {
-                print("⚠️ Instagram error detected: \(error)")
-                await MainActor.run {
-                    isLoading = false
-                    lastError = error
-                    showingConnectionError = true
-                }
-            } catch {
-                print("❌ Error loading profile: \(error)")
-                await MainActor.run {
-                    isLoading = false
-                    lastError = .apiError(error.localizedDescription)
-                    showingConnectionError = true
-                }
+        do {
+            // ANTI-BOT: Wait if network changed recently
+            try await instagram.waitForNetworkStability()
+            
+            let fetchedProfile = try await instagram.getProfileInfo()
+            
+            if let fetchedProfile = fetchedProfile {
+                self.profile = fetchedProfile
+                self.allMediaURLs = fetchedProfile.cachedMediaURLs
+                self.hasMorePages = fetchedProfile.cachedMediaURLs.count >= 18
+                ProfileCacheService.shared.saveProfile(fetchedProfile)
+                downloadAndCacheImages(profile: fetchedProfile)
             }
+            isLoading = false
+        } catch let error as InstagramError {
+            print("⚠️ Instagram error detected: \(error)")
+            isLoading = false
+            lastError = error
+            showingConnectionError = true
+        } catch {
+            print("❌ Error loading profile: \(error)")
+            isLoading = false
+            lastError = .apiError(error.localizedDescription)
+            showingConnectionError = true
         }
+    }
+    
+    // Sync wrapper for non-async call sites (onRefresh button, header "@" button)
+    private func loadProfileSync() {
+        Task { await loadProfile() }
     }
     
     private func loadCachedImages() {
@@ -241,6 +288,29 @@ struct PerformanceView: View {
             }
         }
         
+        // Load reel + tagged thumbnails from disk cache
+        let allExtraURLs = profile.cachedReelURLs + profile.cachedTaggedURLs
+        var missingExtraURLs: [String] = []
+        for url in allExtraURLs {
+            if let image = ProfileCacheService.shared.loadImage(forURL: url) {
+                cachedImages[url] = image
+            } else {
+                missingExtraURLs.append(url)
+            }
+        }
+        if !missingExtraURLs.isEmpty {
+            Task {
+                for url in missingExtraURLs {
+                    if let image = await downloadImage(from: url) {
+                        await MainActor.run {
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                    }
+                }
+            }
+        }
+        
         print("📦 [CACHE] Total cached images loaded: \(cachedImages.count)")
     }
     
@@ -276,18 +346,38 @@ struct PerformanceView: View {
             print("🖼️ [CACHE] Downloading \(profile.followedBy.count) follower profile pics...")
             for (index, follower) in profile.followedBy.enumerated() {
                 if let picURL = follower.profilePicURL {
-                    print("🖼️ [CACHE] Downloading follower \(index + 1) pic: \(String(picURL.prefix(60)))...")
                     if let image = await downloadImage(from: picURL) {
                         await MainActor.run {
                             cachedImages[picURL] = image
                             ProfileCacheService.shared.saveImage(image, forURL: picURL)
-                            print("✅ [CACHE] Follower \(index + 1) pic downloaded")
                         }
-                    } else {
-                        print("❌ [CACHE] Failed to download follower \(index + 1) pic")
                     }
-                } else {
-                    print("⚠️ [CACHE] Follower \(index + 1) has no profile pic URL")
+                }
+            }
+            
+            // Download reel thumbnails
+            if !profile.cachedReelURLs.isEmpty {
+                print("🎬 [CACHE] Downloading \(profile.cachedReelURLs.count) reel thumbnails...")
+                for url in profile.cachedReelURLs {
+                    if let image = await downloadImage(from: url) {
+                        await MainActor.run {
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                    }
+                }
+            }
+            
+            // Download tagged thumbnails
+            if !profile.cachedTaggedURLs.isEmpty {
+                print("🏷️ [CACHE] Downloading \(profile.cachedTaggedURLs.count) tagged thumbnails...")
+                for url in profile.cachedTaggedURLs {
+                    if let image = await downloadImage(from: url) {
+                        await MainActor.run {
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                    }
                 }
             }
             
@@ -497,6 +587,7 @@ struct InstagramProfileView: View {
             VStack(spacing: 0) {
                 // Header
                 InstagramHeaderView(username: profile.username, isVerified: profile.isVerified, onRefresh: onRefresh, onPlusPress: onPlusPress)
+
                 
                 // Profile Info
                 VStack(spacing: 16) {
@@ -657,36 +748,101 @@ struct InstagramProfileView: View {
                 
                 Divider()
                 
-                // Photos Grid
-                if selectedTab == 0 {
+                // Tab content
+                switch selectedTab {
+                case 0:
+                    // Posts grid
                     let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
                     if urlsToShow.isEmpty {
-                        VStack(spacing: 20) {
-                            Image(systemName: "photo.on.rectangle.angled")
-                                .font(.system(size: 64))
-                                .foregroundColor(.secondary)
-                            
-                            Text("No hay publicaciones")
-                                .font(.headline)
-                            
-                            Text("Las fotos pueden estar archivadas")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            
-                            Button("Recargar Perfil") {
-                                onRefresh()
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 60)
+                        emptyTabView(icon: "photo.on.rectangle.angled", title: "No hay publicaciones", subtitle: "Las fotos pueden estar archivadas")
                     } else {
                         PhotosGridView(mediaURLs: urlsToShow, cachedImages: cachedImages, onMediaAppear: onMediaAppear)
                     }
+                case 1:
+                    // Reels grid
+                    if profile.cachedReelURLs.isEmpty {
+                        emptyTabView(icon: "play.rectangle", title: "No hay reels", subtitle: nil)
+                    } else {
+                        ReelsGridView(reelURLs: profile.cachedReelURLs, cachedImages: cachedImages)
+                    }
+                case 2:
+                    // Tagged grid
+                    if profile.cachedTaggedURLs.isEmpty {
+                        emptyTabView(icon: "person.crop.square", title: "No hay fotos etiquetadas", subtitle: nil)
+                    } else {
+                        PhotosGridView(mediaURLs: profile.cachedTaggedURLs, cachedImages: cachedImages)
+                    }
+                default:
+                    EmptyView()
                 }
             }
         }
+        // Pull-to-refresh: calls onRefresh which reloads profile + reels + tagged
+        .refreshable {
+            onRefresh()
+        }
         .background(Color(uiColor: .systemBackground))
+    }
+    
+    @ViewBuilder
+    private func emptyTabView(icon: String, title: String, subtitle: String?) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.primary)
+            if let subtitle = subtitle {
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+    }
+}
+
+// MARK: - Reels Grid View (4:5 aspect with play icon overlay)
+
+struct ReelsGridView: View {
+    let reelURLs: [String]
+    let cachedImages: [String: UIImage]
+    
+    let columns = [
+        GridItem(.flexible(), spacing: 1),
+        GridItem(.flexible(), spacing: 1),
+        GridItem(.flexible(), spacing: 1)
+    ]
+    
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 1) {
+            ForEach(reelURLs, id: \.self) { url in
+                ZStack(alignment: .bottomLeading) {
+                    if let image = cachedImages[url] {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(9/16, contentMode: .fill)
+                            .frame(minWidth: 0, maxWidth: .infinity)
+                            .aspectRatio(4/5, contentMode: .fit)
+                            .clipped()
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .aspectRatio(4/5, contentMode: .fit)
+                    }
+                    
+                    // Play icon (like Instagram reels tab)
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white)
+                        .shadow(radius: 2)
+                        .padding(6)
+                }
+            }
+        }
     }
 }
 
@@ -784,7 +940,7 @@ struct FollowedByView: View {
         HStack(spacing: 4) {
             // Profile pictures
             HStack(spacing: -8) {
-                ForEach(followers.prefix(3), id: \.userId) { follower in
+                ForEach(followers.prefix(3), id: \.username) { follower in
                     if let picURL = follower.profilePicURL,
                        let image = cachedImages[picURL] {
                         Image(uiImage: image)

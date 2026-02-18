@@ -69,12 +69,61 @@ struct InstagramProfile: Codable {
     let followingCount: Int
     let mediaCount: Int
     let followedBy: [InstagramFollower]  // "Followed by X, Y and Z others"
-    var isFollowing: Bool  // Si el usuario autenticado sigue a este perfil
-    var isFollowRequested: Bool  // Si hay solicitud de follow pendiente (para perfiles privados)
+    var isFollowing: Bool
+    var isFollowRequested: Bool
     
     // Cache info
     var cachedAt: Date
-    var cachedMediaURLs: [String]  // URLs of cached media thumbnails
+    var cachedMediaURLs: [String]       // Posts grid thumbnails
+    var cachedReelURLs: [String]        // Reels tab thumbnails (cover frames)
+    var cachedTaggedURLs: [String]      // Tagged tab thumbnails
+    
+    // Backward-compatible decoding (old cache files won't have reels/tagged)
+    enum CodingKeys: String, CodingKey {
+        case userId, username, fullName, biography, externalUrl, profilePicURL
+        case isVerified, isPrivate, followerCount, followingCount, mediaCount
+        case followedBy, isFollowing, isFollowRequested, cachedAt
+        case cachedMediaURLs, cachedReelURLs, cachedTaggedURLs
+    }
+    
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try c.decode(String.self, forKey: .userId)
+        username = try c.decode(String.self, forKey: .username)
+        fullName = try c.decode(String.self, forKey: .fullName)
+        biography = try c.decode(String.self, forKey: .biography)
+        externalUrl = try c.decodeIfPresent(String.self, forKey: .externalUrl)
+        profilePicURL = try c.decode(String.self, forKey: .profilePicURL)
+        isVerified = try c.decode(Bool.self, forKey: .isVerified)
+        isPrivate = try c.decode(Bool.self, forKey: .isPrivate)
+        followerCount = try c.decode(Int.self, forKey: .followerCount)
+        followingCount = try c.decode(Int.self, forKey: .followingCount)
+        mediaCount = try c.decode(Int.self, forKey: .mediaCount)
+        followedBy = try c.decode([InstagramFollower].self, forKey: .followedBy)
+        isFollowing = try c.decode(Bool.self, forKey: .isFollowing)
+        isFollowRequested = try c.decode(Bool.self, forKey: .isFollowRequested)
+        cachedAt = try c.decode(Date.self, forKey: .cachedAt)
+        cachedMediaURLs = try c.decode([String].self, forKey: .cachedMediaURLs)
+        cachedReelURLs = try c.decodeIfPresent([String].self, forKey: .cachedReelURLs) ?? []
+        cachedTaggedURLs = try c.decodeIfPresent([String].self, forKey: .cachedTaggedURLs) ?? []
+    }
+    
+    init(userId: String, username: String, fullName: String, biography: String,
+         externalUrl: String?, profilePicURL: String, isVerified: Bool, isPrivate: Bool,
+         followerCount: Int, followingCount: Int, mediaCount: Int,
+         followedBy: [InstagramFollower], isFollowing: Bool, isFollowRequested: Bool,
+         cachedAt: Date, cachedMediaURLs: [String],
+         cachedReelURLs: [String] = [], cachedTaggedURLs: [String] = []) {
+        self.userId = userId; self.username = username; self.fullName = fullName
+        self.biography = biography; self.externalUrl = externalUrl
+        self.profilePicURL = profilePicURL; self.isVerified = isVerified
+        self.isPrivate = isPrivate; self.followerCount = followerCount
+        self.followingCount = followingCount; self.mediaCount = mediaCount
+        self.followedBy = followedBy; self.isFollowing = isFollowing
+        self.isFollowRequested = isFollowRequested; self.cachedAt = cachedAt
+        self.cachedMediaURLs = cachedMediaURLs
+        self.cachedReelURLs = cachedReelURLs; self.cachedTaggedURLs = cachedTaggedURLs
+    }
 }
 
 struct InstagramMediaItem: Identifiable, Codable {

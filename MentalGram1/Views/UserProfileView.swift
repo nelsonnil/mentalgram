@@ -260,12 +260,50 @@ struct UserProfileView: View {
                     
                     Divider()
                     
-                    // Photo grid (with infinite scroll)
-                    PhotosGridView(
-                        mediaURLs: allMediaURLs,
-                        cachedImages: cachedImages,
-                        onMediaAppear: loadMoreIfNeeded
-                    )
+                    // Tab content
+                    switch selectedTab {
+                    case 0:
+                        // Posts grid (with infinite scroll)
+                        PhotosGridView(
+                            mediaURLs: allMediaURLs,
+                            cachedImages: cachedImages,
+                            onMediaAppear: loadMoreIfNeeded
+                        )
+                    case 1:
+                        // Reels grid
+                        if currentProfile.cachedReelURLs.isEmpty {
+                            VStack(spacing: 16) {
+                                Image(systemName: "play.rectangle")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.secondary)
+                                Text("No hay reels")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 60)
+                        } else {
+                            ReelsGridView(reelURLs: currentProfile.cachedReelURLs, cachedImages: cachedImages)
+                        }
+                    case 2:
+                        // Tagged grid
+                        if currentProfile.cachedTaggedURLs.isEmpty {
+                            VStack(spacing: 16) {
+                                Image(systemName: "person.crop.square")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.secondary)
+                                Text("No hay fotos etiquetadas")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 60)
+                        } else {
+                            PhotosGridView(mediaURLs: currentProfile.cachedTaggedURLs, cachedImages: cachedImages)
+                        }
+                    default:
+                        EmptyView()
+                    }
                 }
             }
         }
@@ -317,9 +355,10 @@ struct UserProfileView: View {
             }
             print("✅ [UI] Follower pics loaded")
             
-            // Load media thumbnails
-            print("🖼️ [UI] Loading \(targetProfile.cachedMediaURLs.count) media thumbnails...")
-            for mediaURL in targetProfile.cachedMediaURLs {
+            // Load all thumbnails (posts + reels + tagged) in one pass
+            let allURLs = targetProfile.cachedMediaURLs + targetProfile.cachedReelURLs + targetProfile.cachedTaggedURLs
+            print("🖼️ [UI] Loading \(allURLs.count) thumbnails (posts:\(targetProfile.cachedMediaURLs.count) reels:\(targetProfile.cachedReelURLs.count) tagged:\(targetProfile.cachedTaggedURLs.count))...")
+            for mediaURL in allURLs {
                 guard !mediaURL.isEmpty,
                       let url = URL(string: mediaURL),
                       let (data, _) = try? await URLSession.shared.data(from: url),
@@ -329,11 +368,10 @@ struct UserProfileView: View {
                     cachedImages[mediaURL] = image
                 }
             }
-            print("✅ [UI] Media thumbnails loaded")
+            print("✅ [UI] All thumbnails loaded")
             
             await MainActor.run {
                 isLoadingImages = false
-                print("✅ [UI] All images loaded successfully")
             }
         }
     }

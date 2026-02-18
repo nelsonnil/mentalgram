@@ -1365,20 +1365,32 @@ class InstagramService: ObservableObject {
         
         var followedBy: [InstagramFollower] = []
         var mediaURLs: [String] = []
+        var reelURLs: [String] = []
+        var taggedURLs: [String] = []
         
         if shouldFetchProtectedData {
-            print("✅ [PROFILE] Fetching followers and media (profile is accessible)")
-            // Get first 3 followers for "Followed by" section
-            followedBy = try await getFollowedByUsers(userId: uid, count: 3)
+            print("✅ [PROFILE] Fetching followers, media, reels & tagged (profile is accessible)")
             
-            // Get media thumbnails (18 photos for grid)
-            let (mediaItems, _) = try await getUserMediaItems(userId: uid, amount: 18)
+            // Fetch followers, posts, reels and tagged in parallel
+            async let followersTask = getFollowedByUsers(userId: uid, count: 3)
+            async let mediaTask = getUserMediaItems(userId: uid, amount: 18)
+            async let reelsTask = getUserReels(userId: uid, amount: 18)
+            async let taggedTask = getUserTagged(userId: uid, amount: 18)
+            
+            followedBy = try await followersTask
+            let (mediaItems, _) = try await mediaTask
             mediaURLs = mediaItems.map { $0.imageURL }
             
-            print("📊 [PROFILE] Media URLs count: \(mediaURLs.count)")
+            // Reels and tagged are non-critical — failures are silent
+            do { reelURLs = try await reelsTask.map { $0.imageURL } }
+            catch { print("⚠️ [PROFILE] Reels fetch failed (non-critical): \(error)") }
+            
+            do { taggedURLs = try await taggedTask.map { $0.imageURL } }
+            catch { print("⚠️ [PROFILE] Tagged fetch failed (non-critical): \(error)") }
+            
+            print("📊 [PROFILE] Posts: \(mediaURLs.count), Reels: \(reelURLs.count), Tagged: \(taggedURLs.count)")
         } else {
-            print("⚠️ [PROFILE] Skipping followers/media fetch (private profile, not following)")
-            print("💡 [PROFILE] This prevents Instagram from flagging as bot behavior")
+            print("⚠️ [PROFILE] Skipping data fetch (private profile, not following)")
         }
         
         let profile = InstagramProfile(
@@ -1397,7 +1409,9 @@ class InstagramService: ObservableObject {
             isFollowing: isFollowing,
             isFollowRequested: isFollowRequested,
             cachedAt: Date(),
-            cachedMediaURLs: mediaURLs
+            cachedMediaURLs: mediaURLs,
+            cachedReelURLs: reelURLs,
+            cachedTaggedURLs: taggedURLs
         )
         
         print("✅ [PROFILE] Profile loaded for @\(profile.username)")
@@ -1428,7 +1442,14 @@ class InstagramService: ObservableObject {
             print("👥 [FOLLOWERS] Processing follower \(index + 1)")
             print("👥 [FOLLOWERS] Follower keys: \(user.keys.sorted().joined(separator: ", "))")
             
-            let userId = String(user["pk"] as? Int64 ?? 0)
+            let userId: String
+            if let pkInt64 = user["pk"] as? Int64 {
+                userId = String(pkInt64)
+            } else if let pkStr = user["pk_id"] as? String ?? user["id"] as? String {
+                userId = pkStr
+            } else {
+                userId = UUID().uuidString  // avoid duplicate IDs
+            }
             let username = user["username"] as? String ?? ""
             let fullName = user["full_name"] as? String ?? ""
             let profilePicURL = user["profile_pic_url"] as? String
@@ -1449,6 +1470,142 @@ class InstagramService: ObservableObject {
         
         print("✅ [FOLLOWERS] Processed \(followers.count) followers")
         return followers
+    }
+    
+    // MARK: - Get User Reels
+    
+    func getUserReels(userId: String? = nil, amount: Int = 18) async throws -> [InstagramMediaItem] {
+        let uid = userId ?? session.userId
+        print("🎬 [REELS] Fetching reels for user ID: \(uid)")
+        
+        let body: [String: String] = [
+            "target_user_id": uid,
+            "page_size": String(amount),
+            "include_feed_video": "true"
+        ]
+        let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
+        
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [REELS] Failed to parse reels response")
+            return []
+        }
+        
+        // Log response structure for debugging
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("🎬 [REELS] Raw response (first 600 chars): \(String(jsonString.prefix(600)))")
+        }
+        print("🎬 [REELS] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
+        
+        var items: [InstagramMediaItem] = []
+        
+        // Try "items" key first (each item may have a nested "media" object)
+        if let reelsItems = json["items"] as? [[String: Any]] {
+            print("🎬 [REELS] Found \(reelsItems.count) items under 'items' key")
+            for item in reelsItems.prefix(amount) {
+                let media = item["media"] as? [String: Any] ?? item
+                guard let mediaItem = parseMediaItem(media) else { continue }
+                items.append(mediaItem)
+            }
+        }
+        // Fallback: some endpoints wrap under "clips_items"
+        else if let clipsItems = json["clips_items"] as? [[String: Any]] {
+            print("🎬 [REELS] Found \(clipsItems.count) items under 'clips_items' key")
+            for item in clipsItems.prefix(amount) {
+                let media = item["media"] as? [String: Any] ?? item
+                guard let mediaItem = parseMediaItem(media) else { continue }
+                items.append(mediaItem)
+            }
+        } else {
+            print("⚠️ [REELS] No 'items' or 'clips_items' key found — account may have 0 reels or endpoint changed")
+        }
+        
+        print("🎬 [REELS] Parsed \(items.count) reels")
+        return items
+    }
+    
+    // MARK: - Get User Tagged Posts
+    
+    func getUserTagged(userId: String? = nil, amount: Int = 18) async throws -> [InstagramMediaItem] {
+        let uid = userId ?? session.userId
+        print("🏷️ [TAGGED] Fetching tagged posts for user ID: \(uid)")
+        
+        let data = try await apiRequest(method: "GET", path: "/usertags/\(uid)/feed/")
+        
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [TAGGED] Failed to parse tagged response")
+            return []
+        }
+        
+        // Log response structure for debugging
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("🏷️ [TAGGED] Raw response (first 400 chars): \(String(jsonString.prefix(400)))")
+        }
+        print("🏷️ [TAGGED] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
+        
+        var items: [InstagramMediaItem] = []
+        
+        if let taggedItems = json["items"] as? [[String: Any]] {
+            print("🏷️ [TAGGED] Found \(taggedItems.count) items")
+            for item in taggedItems.prefix(amount) {
+                guard let mediaItem = parseMediaItem(item) else { continue }
+                items.append(mediaItem)
+            }
+        } else {
+            print("⚠️ [TAGGED] No 'items' key found — account may have 0 tagged posts or endpoint changed")
+        }
+        
+        print("🏷️ [TAGGED] Parsed \(items.count) tagged posts")
+        return items
+    }
+    
+    /// Shared parser for media items from different endpoints
+    private func parseMediaItem(_ media: [String: Any]) -> InstagramMediaItem? {
+        let mediaType = media["media_type"] as? Int ?? 1
+        
+        // Get thumbnail/cover image URL
+        var imageURL = ""
+        if let imageVersions = media["image_versions2"] as? [String: Any],
+           let candidates = imageVersions["candidates"] as? [[String: Any]],
+           let first = candidates.first,
+           let url = first["url"] as? String {
+            imageURL = url
+        }
+        
+        // For videos/reels, also get video URL
+        var videoURL: String? = nil
+        if mediaType == 2 {
+            if let videoVersions = media["video_versions"] as? [[String: Any]],
+               let first = videoVersions.first,
+               let url = first["url"] as? String {
+                videoURL = url
+            }
+        }
+        
+        guard !imageURL.isEmpty else { return nil }
+        
+        // Extract media ID
+        let mediaId: String
+        if let pk = media["pk"] as? Int64 {
+            mediaId = String(pk)
+        } else if let pk = media["pk"] as? String {
+            mediaId = pk
+        } else if let id = media["id"] as? String {
+            mediaId = id
+        } else {
+            mediaId = UUID().uuidString
+        }
+        
+        return InstagramMediaItem(
+            id: mediaId,
+            mediaId: mediaId,
+            imageURL: imageURL,
+            videoURL: videoURL,
+            caption: (media["caption"] as? [String: Any])?["text"] as? String,
+            takenAt: (media["taken_at"] as? TimeInterval).map { Date(timeIntervalSince1970: $0) },
+            likeCount: media["like_count"] as? Int,
+            commentCount: media["comment_count"] as? Int,
+            mediaType: mediaType == 2 ? .video : (mediaType == 8 ? .carousel : .photo)
+        )
     }
     
     // MARK: - Get User Media Items (Extended with metadata)
