@@ -577,10 +577,14 @@ struct InstagramProfileView: View {
     let onRefresh: () -> Void
     let onPlusPress: () -> Void
     @State private var selectedTab = 0
-    
+
     // Infinite scroll support
     var mediaURLs: [String]? = nil // If provided, use instead of profile.cachedMediaURLs
     var onMediaAppear: ((String) -> Void)? = nil // Called when a media cell appears
+
+    // Secret number input
+    @ObservedObject private var secretManager = SecretNumberManager.shared
+    @State private var followingOverride: String? = nil
     
     var body: some View {
         ScrollView {
@@ -636,7 +640,8 @@ struct InstagramProfileView: View {
                         HStack(spacing: 0) {
                             StatView(number: profile.mediaCount, label: "publicaciones")
                             StatView(number: profile.followerCount, label: "seguidores")
-                            StatView(number: profile.followingCount, label: "seguidos")
+                            StatView(number: profile.followingCount, label: "seguidos",
+                                     overrideText: followingOverride)
                         }
                         .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                     }
@@ -732,49 +737,48 @@ struct InstagramProfileView: View {
                 }
                 .padding(.vertical, 12)
                 
-                // Tabs
+                // Tabs — tapping a tab resets the secret digit buffer
                 HStack(spacing: 0) {
                     TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
                         selectedTab = 0
+                        secretManager.reset()
+                        followingOverride = nil
                     }
                     TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
                         selectedTab = 1
+                        secretManager.reset()
+                        followingOverride = nil
                     }
                     TabButton(icon: "person.crop.square", isSelected: selectedTab == 2) {
                         selectedTab = 2
+                        secretManager.reset()
+                        followingOverride = nil
                     }
                 }
                 .frame(height: 44)
                 
                 Divider()
                 
-                // Tab content
-                switch selectedTab {
-                case 0:
-                    // Posts grid
-                    let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
-                    if urlsToShow.isEmpty {
-                        emptyTabView(icon: "photo.on.rectangle.angled", title: "No hay publicaciones", subtitle: "Las fotos pueden estar archivadas")
-                    } else {
-                        PhotosGridView(mediaURLs: urlsToShow, cachedImages: cachedImages, onMediaAppear: onMediaAppear)
-                    }
-                case 1:
-                    // Reels grid
-                    if profile.cachedReelURLs.isEmpty {
-                        emptyTabView(icon: "play.rectangle", title: "No hay reels", subtitle: nil)
-                    } else {
+                // Tab content — always show the full grid (with placeholders if needed)
+                // so swipe digit-detection works regardless of how many photos exist.
+                Group {
+                    switch selectedTab {
+                    case 0:
+                        let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+                        PhotosGridView(mediaURLs: urlsToShow, cachedImages: cachedImages,
+                                       onMediaAppear: onMediaAppear)
+                    case 1:
                         ReelsGridView(reelURLs: profile.cachedReelURLs, cachedImages: cachedImages)
-                    }
-                case 2:
-                    // Tagged grid
-                    if profile.cachedTaggedURLs.isEmpty {
-                        emptyTabView(icon: "person.crop.square", title: "No hay fotos etiquetadas", subtitle: nil)
-                    } else {
+                    case 2:
                         PhotosGridView(mediaURLs: profile.cachedTaggedURLs, cachedImages: cachedImages)
+                    default:
+                        EmptyView()
                     }
-                default:
-                    EmptyView()
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 20, coordinateSpace: .local)
+                        .onEnded { value in handleGridSwipe(value) }
+                )
             }
         }
         // Pull-to-refresh: calls onRefresh which reloads profile + reels + tagged
@@ -782,27 +786,51 @@ struct InstagramProfileView: View {
             onRefresh()
         }
         .background(Color(uiColor: .systemBackground))
-    }
-    
-    @ViewBuilder
-    private func emptyTabView(icon: String, title: String, subtitle: String?) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.primary)
-            if let subtitle = subtitle {
-                Text(subtitle)
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+        // Keep following count display in sync with digit buffer
+        .onChange(of: secretManager.digitBuffer) { _ in
+            updateFollowingOverride()
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
     }
+
+    // MARK: - Secret number gesture handling
+
+    private func handleGridSwipe(_ value: DragGesture.Value) {
+        let dx = value.translation.width
+        let dy = value.translation.height
+        let absDx = abs(dx)
+        let absDy = abs(dy)
+
+        let isHorizontal = absDx > absDy && absDx > 30
+        let isVertical   = absDy > absDx && absDy > 40
+
+        guard isHorizontal else { return }
+
+        // Register digit from the row where the swipe started
+        let gridWidth = UIScreen.main.bounds.width
+        let digit = SecretNumberManager.digit(
+            x: value.startLocation.x,
+            y: value.startLocation.y,
+            gridWidth: gridWidth
+        )
+        secretManager.addDigit(digit)
+        updateFollowingOverride()
+
+        // Natural tab navigation: swipe left = next tab, right = previous tab
+        withAnimation(.easeInOut(duration: 0.18)) {
+            selectedTab = dx < 0
+                ? min(2, selectedTab + 1)
+                : max(0, selectedTab - 1)
+        }
+    }
+
+    private func updateFollowingOverride() {
+        if secretManager.digitBuffer.isEmpty {
+            followingOverride = nil
+        } else {
+            followingOverride = secretManager.followingDisplayString(originalCount: profile.followingCount)
+        }
+    }
+
 }
 
 // MARK: - Reels Grid View (4:5 aspect with play icon overlay)
@@ -810,36 +838,50 @@ struct InstagramProfileView: View {
 struct ReelsGridView: View {
     let reelURLs: [String]
     let cachedImages: [String: UIImage]
-    
+    /// 12 cells = 4 rows, so digit 0 (row 4+) is reachable
+    var minCells: Int = 12
+
     let columns = [
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1)
     ]
-    
+
     var body: some View {
+        let placeholderCount = max(0, minCells - reelURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
             ForEach(reelURLs, id: \.self) { url in
                 ZStack(alignment: .bottomLeading) {
                     if let image = cachedImages[url] {
                         Image(uiImage: image)
                             .resizable()
-                            .aspectRatio(9/16, contentMode: .fill)
-                            .frame(minWidth: 0, maxWidth: .infinity)
-                            .aspectRatio(4/5, contentMode: .fit)
+                            .aspectRatio(4/5, contentMode: .fill) // Same size as Posts grid
                             .clipped()
                     } else {
                         Rectangle()
                             .fill(Color.gray.opacity(0.3))
-                            .aspectRatio(4/5, contentMode: .fit)
+                            .aspectRatio(4/5, contentMode: .fill)
                     }
-                    
-                    // Play icon (like Instagram reels tab)
+                    // Play icon overlay (like Instagram reels tab)
                     Image(systemName: "play.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.white)
                         .shadow(radius: 2)
                         .padding(6)
+                }
+            }
+            // Placeholder cells — same size, same play icon
+            if placeholderCount > 0 {
+                ForEach(0..<placeholderCount, id: \.self) { _ in
+                    ZStack(alignment: .bottomLeading) {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.15))
+                            .aspectRatio(4/5, contentMode: .fill)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.4))
+                            .padding(6)
+                    }
                 }
             }
         }
@@ -853,7 +895,9 @@ struct InstagramHeaderView: View {
     let isVerified: Bool
     let onRefresh: () -> Void
     let onPlusPress: () -> Void
-    
+    // Prevent accidental rapid-fire refresh taps (min 10s between taps)
+    @State private var lastRefreshTap: Date = .distantPast
+
     var body: some View {
         HStack {
             // Plus button (closes Performance and goes to Sets)
@@ -881,8 +925,16 @@ struct InstagramHeaderView: View {
             Spacer()
             
             HStack(spacing: 20) {
-                // At symbol button (refresh)
-                Button(action: onRefresh) {
+                // At symbol button (refresh) — debounced to 10 s between taps
+                Button(action: {
+                    let now = Date()
+                    guard now.timeIntervalSince(lastRefreshTap) > 10 else {
+                        print("⚠️ [PROFILE] @ refresh debounced (too fast)")
+                        return
+                    }
+                    lastRefreshTap = now
+                    onRefresh()
+                }) {
                     Image(systemName: "at")
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundColor(.primary)
@@ -907,18 +959,21 @@ struct InstagramHeaderView: View {
 struct StatView: View {
     let number: Int
     let label: String
-    
+    /// When set, displayed instead of the formatted number (used for secret digit feedback)
+    var overrideText: String? = nil
+
     var body: some View {
         VStack(spacing: 2) {
-            Text(formatNumber(number))
+            Text(overrideText ?? formatNumber(number))
                 .font(.system(size: 16, weight: .semibold))
+                .monospacedDigit()
             Text(label)
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
         }
         .frame(width: 100)
     }
-    
+
     private func formatNumber(_ num: Int) -> String {
         if num >= 1_000_000 {
             return String(format: "%.1f M", Double(num) / 1_000_000).replacingOccurrences(of: ".", with: ",")
@@ -1009,31 +1064,39 @@ struct PhotosGridView: View {
     let mediaURLs: [String]
     let cachedImages: [String: UIImage]
     var onMediaAppear: ((String) -> Void)? = nil
-    
+    /// Always render at least this many cells so swipe digit-detection works
+    /// even on tabs with few or no photos. 12 = 4 rows (row 4 maps to digit 0).
+    var minCells: Int = 12
+
     let columns = [
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1)
     ]
-    
+
     var body: some View {
+        let placeholderCount = max(0, minCells - mediaURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
             ForEach(mediaURLs, id: \.self) { url in
                 if let image = cachedImages[url] {
                     Image(uiImage: image)
                         .resizable()
-                        .aspectRatio(4/5, contentMode: .fill) // Instagram aspect ratio (más alto que ancho)
+                        .aspectRatio(4/5, contentMode: .fill)
                         .clipped()
-                        .onAppear {
-                            onMediaAppear?(url)
-                        }
+                        .onAppear { onMediaAppear?(url) }
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.3))
-                        .aspectRatio(4/5, contentMode: .fill) // Instagram aspect ratio
-                        .onAppear {
-                            onMediaAppear?(url)
-                        }
+                        .aspectRatio(4/5, contentMode: .fill)
+                        .onAppear { onMediaAppear?(url) }
+                }
+            }
+            // Placeholder cells — look like loading skeletons, enable digit-detection anywhere
+            if placeholderCount > 0 {
+                ForEach(0..<placeholderCount, id: \.self) { _ in
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.15))
+                        .aspectRatio(4/5, contentMode: .fill)
                 }
             }
         }

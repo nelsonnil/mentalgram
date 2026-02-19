@@ -1001,19 +1001,30 @@ class InstagramService: ObservableObject {
             print("   Unarchive response: \(jsonString)")
         }
         
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let status = json["status"] as? String {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let status = json["status"] as? String ?? ""
+            let message = (json["message"] as? String ?? "").lowercased()
+
             if status == "ok" {
                 print("✅ [UNARCHIVE] Photo unarchived successfully")
                 LogManager.shared.success("Photo revealed/unarchived (ID: \(mediaId))", category: .api)
                 return true
-            } else {
-                print("❌ [UNARCHIVE] Unarchive failed. Status: \(status)")
-                LogManager.shared.error("Reveal/unarchive failed (ID: \(mediaId)) - Status: \(status)", category: .api)
-                return false
             }
+
+            // Instagram returns various messages when a photo is already public/not-archived.
+            // Treat these as success so we don't count them as failures or retry them.
+            let alreadyPublicHints = ["not archived", "already", "media not found", "not archived", "media_not_found"]
+            if alreadyPublicHints.contains(where: { message.contains($0) }) {
+                print("ℹ️ [UNARCHIVE] Photo already public / not archived (ID: \(mediaId)) — treating as success")
+                LogManager.shared.success("Photo already public (ID: \(mediaId))", category: .api)
+                return true
+            }
+
+            print("❌ [UNARCHIVE] Unarchive failed. Status: \(status), message: \(message)")
+            LogManager.shared.error("Reveal/unarchive failed (ID: \(mediaId)) - Status: \(status)", category: .api)
+            return false
         }
-        
+
         print("❌ [UNARCHIVE] Failed to parse unarchive response")
         LogManager.shared.error("Reveal/unarchive failed (ID: \(mediaId)) - Parse error", category: .api)
         return false

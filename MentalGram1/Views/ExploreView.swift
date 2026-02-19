@@ -26,6 +26,8 @@ struct ExploreView: View {
     
     // Reveal task (runs silently in background)
     @State private var revealTask: Task<Void, Never>?
+    // Debounce duplicate space triggers (keyboard can fire onChange multiple times)
+    @State private var lastSpaceTriggerTime: Date = .distantPast
     
     var body: some View {
         ZStack {
@@ -405,6 +407,15 @@ struct ExploreView: View {
     /// Handle SPACE key → Transmit the secret word (trigger reveal in background)
     /// The search field keeps showing the mask text so the magician can tap into the profile
     private func handleSpacePressed() {
+        // Debounce: keyboard/onChange can fire this twice in the same millisecond.
+        // Require at least 1.5 s between consecutive space triggers.
+        let now = Date()
+        guard now.timeIntervalSince(lastSpaceTriggerTime) > 1.5 else {
+            print("⚠️ [SECRET] Space debounced (called \(String(format: "%.2f", now.timeIntervalSince(lastSpaceTriggerTime)))s after previous)")
+            return
+        }
+        lastSpaceTriggerTime = now
+
         let word = secretInputBuffer
         print("🎩 [SECRET] ═══════════════════════════════════════")
         print("🎩 [SECRET] SPACE PRESSED - transmitting secret word: '\(word)' (\(word.count) letters)")
@@ -528,6 +539,14 @@ struct ExploreView: View {
             
             // Find photo with this symbol in this bank
             let photosInBank = set.photos.filter { $0.bankId == bank.id }
+
+            // Check if the photo was already unarchived in a previous reveal (count as success, no API call needed)
+            if let alreadyRevealed = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
+                print("ℹ️ [SECRET] [\(index + 1)/\(letters.count)] '\(letter)' already unarchived locally (mediaId: \(alreadyRevealed.mediaId ?? "?")) — skipping API call")
+                successCount += 1
+                continue
+            }
+
             guard let photo = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && $0.isArchived }) else {
                 print("❌ [SECRET] Photo NOT FOUND for symbol '\(symbol)' in bank '\(bank.name)' (pos \(bank.position))")
                 print("❌ [SECRET] Bank has \(photosInBank.count) photos:")
@@ -567,9 +586,10 @@ struct ExploreView: View {
                     LogManager.shared.error("Reveal failed for '\(letter)' (mediaId: \(mediaId))", category: .general)
                 }
                 
-                // ANTI-BOT: 1 second delay between reveals
+                // ANTI-BOT: Random delay between reveals (800ms–2200ms) to avoid machine-like patterns
                 if index < letters.count - 1 {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    let betweenDelay = UInt64.random(in: 800_000_000...2_200_000_000)
+                    try? await Task.sleep(nanoseconds: betweenDelay)
                 }
             } catch {
                 failCount += 1

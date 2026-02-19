@@ -20,6 +20,10 @@ struct UserProfileView: View {
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
     private let maxPhotosOtherProfile = 50 // Anti-bot limit for other profiles
+
+    // Secret number input
+    @ObservedObject private var secretManager = SecretNumberManager.shared
+    @State private var followingOverride: String? = nil
     
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
@@ -132,7 +136,8 @@ struct UserProfileView: View {
                             HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
                                 UserStatView(number: currentProfile.mediaCount, label: "posts")
                                 UserStatView(number: currentProfile.followerCount, label: "followers")
-                                UserStatView(number: currentProfile.followingCount, label: "following")
+                                UserStatView(number: currentProfile.followingCount, label: "following",
+                                             overrideText: followingOverride)
                             }
                             .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                         }
@@ -244,66 +249,49 @@ struct UserProfileView: View {
                     }
                     .padding(.vertical, 12)
                     
-                    // Tabs
+                    // Tabs — tapping a tab resets the secret digit buffer
                     HStack(spacing: 0) {
                         TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
                             selectedTab = 0
+                            secretManager.reset()
+                            followingOverride = nil
                         }
                         TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
                             selectedTab = 1
+                            secretManager.reset()
+                            followingOverride = nil
                         }
                         TabButton(icon: "person.crop.square", isSelected: selectedTab == 2) {
                             selectedTab = 2
+                            secretManager.reset()
+                            followingOverride = nil
                         }
                     }
                     .frame(height: 44)
                     
                     Divider()
                     
-                    // Tab content
-                    switch selectedTab {
-                    case 0:
-                        // Posts grid (with infinite scroll)
-                        PhotosGridView(
-                            mediaURLs: allMediaURLs,
-                            cachedImages: cachedImages,
-                            onMediaAppear: loadMoreIfNeeded
-                        )
-                    case 1:
-                        // Reels grid
-                        if currentProfile.cachedReelURLs.isEmpty {
-                            VStack(spacing: 16) {
-                                Image(systemName: "play.rectangle")
-                                    .font(.system(size: 48))
-                                    .foregroundColor(.secondary)
-                                Text("No hay reels")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 60)
-                        } else {
+                    // Tab content — always show the full grid (with placeholders if needed)
+                    Group {
+                        switch selectedTab {
+                        case 0:
+                            PhotosGridView(
+                                mediaURLs: allMediaURLs,
+                                cachedImages: cachedImages,
+                                onMediaAppear: loadMoreIfNeeded
+                            )
+                        case 1:
                             ReelsGridView(reelURLs: currentProfile.cachedReelURLs, cachedImages: cachedImages)
-                        }
-                    case 2:
-                        // Tagged grid
-                        if currentProfile.cachedTaggedURLs.isEmpty {
-                            VStack(spacing: 16) {
-                                Image(systemName: "person.crop.square")
-                                    .font(.system(size: 48))
-                                    .foregroundColor(.secondary)
-                                Text("No hay fotos etiquetadas")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 60)
-                        } else {
+                        case 2:
                             PhotosGridView(mediaURLs: currentProfile.cachedTaggedURLs, cachedImages: cachedImages)
+                        default:
+                            EmptyView()
                         }
-                    default:
-                        EmptyView()
                     }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+                            .onEnded { value in handleGridSwipe(value) }
+                    )
                 }
             }
         }
@@ -315,8 +303,43 @@ struct UserProfileView: View {
             print("🎨 [UI] Profile pic URL: \(profile.profilePicURL)")
             loadImages()
         }
+        .onChange(of: secretManager.digitBuffer) { _ in
+            updateFollowingOverride()
+        }
     }
-    
+
+    // MARK: - Secret number gesture handling
+
+    private func handleGridSwipe(_ value: DragGesture.Value) {
+        let dx = value.translation.width
+        let absDx = abs(dx)
+        let absDy = abs(value.translation.height)
+        guard absDx > absDy && absDx > 30 else { return }
+
+        let gridWidth = UIScreen.main.bounds.width
+        let digit = SecretNumberManager.digit(
+            x: value.startLocation.x,
+            y: value.startLocation.y,
+            gridWidth: gridWidth
+        )
+        secretManager.addDigit(digit)
+        updateFollowingOverride()
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            selectedTab = dx < 0
+                ? min(2, selectedTab + 1)
+                : max(0, selectedTab - 1)
+        }
+    }
+
+    private func updateFollowingOverride() {
+        if secretManager.digitBuffer.isEmpty {
+            followingOverride = nil
+        } else {
+            followingOverride = secretManager.followingDisplayString(originalCount: currentProfile.followingCount)
+        }
+    }
+
     private func loadImages(from profileToLoad: InstagramProfile? = nil) {
         let targetProfile = profileToLoad ?? currentProfile
         
@@ -606,18 +629,19 @@ struct UserProfileView: View {
 private struct UserStatView: View {
     let number: Int
     let label: String
-    
+    var overrideText: String? = nil
+
     var body: some View {
         VStack(spacing: 2) {
-            Text("\(formatCount(number))")
+            Text(overrideText ?? formatCount(number))
                 .font(.system(size: 16, weight: .semibold))
-            
+                .monospacedDigit()
             Text(label)
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
         }
     }
-    
+
     private func formatCount(_ count: Int) -> String {
         if count >= 1_000_000 {
             return String(format: "%.1fM", Double(count) / 1_000_000)
