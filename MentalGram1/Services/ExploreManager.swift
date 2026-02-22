@@ -300,6 +300,40 @@ class ExploreManager: ObservableObject {
         }
     }
     
+    // MARK: - Force Reel injection
+
+    /// Returns `exploreMedia` with the forced reel injected at the position
+    /// stored in `ForceReelSettings.pendingPosition` (1-based, consumed once).
+    /// If Force Reel is disabled or no position/reel is set, returns the array unchanged.
+    func exploreMediaWithForce() -> [InstagramMediaItem] {
+        let forceSettings = ForceReelSettings.shared
+        guard forceSettings.isEnabled,
+              forceSettings.pendingPosition > 0,
+              let forcedItem = forceSettings.asFakeMediaItem() else {
+            return exploreMedia
+        }
+
+        let pos = forceSettings.pendingPosition          // 1-based
+        let insertIndex = min(pos - 1, exploreMedia.count)   // clamp to array bounds
+
+        var result = exploreMedia
+        result.insert(forcedItem, at: insertIndex)
+
+        // Pre-cache the forced reel thumbnail so it shows immediately
+        if cachedImages[forcedItem.imageURL] == nil {
+            Task {
+                if let url = URL(string: forcedItem.imageURL),
+                   let (data, _) = try? await URLSession.shared.data(from: url),
+                   let img = UIImage(data: data) {
+                    await MainActor.run { cachedImages[forcedItem.imageURL] = img }
+                }
+            }
+        }
+
+        print("🎭 [FORCE] Injected reel at position \(pos) (index \(insertIndex)) in Explore grid (\(result.count) total items)")
+        return result
+    }
+
     func clearCache() {
         exploreMedia.removeAll()
         cachedImages.removeAll()

@@ -139,7 +139,7 @@ struct ExploreView: View {
                     } else {
                         ScrollView {
                             ExploreGridView(
-                                mediaItems: exploreManager.exploreMedia,
+                                mediaItems: exploreManager.exploreMediaWithForce(),
                                 cachedImages: exploreManager.cachedImages,
                                 exploreManager: exploreManager
                             )

@@ -745,6 +745,10 @@ struct SettingsView: View {
                         Text(noteMessage ?? "")
                     }
                     
+                    // MARK: - Force Reel
+
+                    ForceReelSettingsCard()
+
                     // MARK: - Secret Input
                     
                     VaultCard {
@@ -1374,5 +1378,121 @@ struct DataRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.gray.opacity(0.1))
         .cornerRadius(10)
+    }
+}
+
+// MARK: - Force Reel Settings Card
+
+struct ForceReelSettingsCard: View {
+    @ObservedObject private var settings = ForceReelSettings.shared
+    @State private var showingPicker = false
+    @State private var previewImage: UIImage?
+
+    var body: some View {
+        VaultCard {
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                // Header
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "hand.point.up.left.fill")
+                        .foregroundColor(VaultTheme.Colors.primary)
+                    Text("Force Reel")
+                        .font(VaultTheme.Typography.titleSmall())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settings.isEnabled)
+                        .labelsHidden()
+                }
+
+                Text("Pre-select a reel from any profile. In Performance, swipe the grid to set a position, then open Explore — the reel will appear at that exact slot.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                if settings.isEnabled {
+                    Divider()
+
+                    if settings.hasReel {
+                        // Show selected reel preview
+                        HStack(spacing: VaultTheme.Spacing.md) {
+                            ZStack(alignment: .bottomLeading) {
+                                if let img = previewImage {
+                                    Image(uiImage: img)
+                                        .resizable()
+                                        .aspectRatio(4/5, contentMode: .fill)
+                                        .frame(width: 64, height: 80)
+                                        .clipped()
+                                        .cornerRadius(8)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.gray.opacity(0.25))
+                                        .frame(width: 64, height: 80)
+                                        .overlay(ProgressView().scaleEffect(0.7))
+                                }
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white)
+                                    .padding(4)
+                            }
+                            .onAppear { loadPreview() }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Reel selected")
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("from @\(settings.sourceUsername)")
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                                Text("ID: \(String(settings.mediaId.prefix(16)))…")
+                                    .font(.system(size: 10).monospaced())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Button(action: { showingPicker = true }) {
+                                Label("Change Reel", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(VaultTheme.Typography.body())
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(role: .destructive, action: { settings.clearReel() }) {
+                                Label("Remove", systemImage: "trash")
+                                    .font(VaultTheme.Typography.body())
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.red)
+                        }
+                    } else {
+                        // No reel selected yet
+                        Button(action: { showingPicker = true }) {
+                            Label("Select Reel", systemImage: "play.rectangle.on.rectangle.fill")
+                                .font(VaultTheme.Typography.body())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, VaultTheme.Spacing.sm)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingPicker) {
+            ForceReelPickerView()
+        }
+        .onChange(of: settings.thumbnailURL) { _ in loadPreview() }
+    }
+
+    private func loadPreview() {
+        guard !settings.thumbnailURL.isEmpty else { previewImage = nil; return }
+        if let cached = ProfileCacheService.shared.loadImage(forURL: settings.thumbnailURL) {
+            previewImage = cached; return
+        }
+        Task {
+            guard let url = URL(string: settings.thumbnailURL),
+                  let (data, _) = try? await URLSession.shared.data(from: url),
+                  let img = UIImage(data: data) else { return }
+            await MainActor.run { previewImage = img }
+            ProfileCacheService.shared.saveImage(img, forURL: settings.thumbnailURL)
+        }
     }
 }

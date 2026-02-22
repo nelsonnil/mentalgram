@@ -62,7 +62,17 @@ struct PerformanceView: View {
                     // Already on home/profile, do nothing
                 },
                 onSearchPress: {
-                    // Open Explore view
+                    // Capture pending digit buffer as the force position
+                    if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel {
+                        let buffer = SecretNumberManager.shared.digitBuffer
+                        if !buffer.isEmpty {
+                            let position = buffer.reduce(0) { $0 * 10 + $1 }
+                            ForceReelSettings.shared.pendingPosition = position
+                            print("🎭 [FORCE] Position captured: \(position) — will force reel at slot \(position) in Explore")
+                            // Reset buffer — InstagramProfileView's onChange will clear followingOverride automatically
+                            SecretNumberManager.shared.reset()
+                        }
+                    }
                     showingExplore = true
                 },
                 onReelsPress: {
@@ -81,6 +91,12 @@ struct PerformanceView: View {
         .navigationBarHidden(true)
         .preferredColorScheme(.light) // CRITICAL: Performance must look exactly like Instagram (light mode)
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
+        // When Explore closes, reset digit buffer (InstagramProfileView's onChange clears followingOverride)
+        .onChange(of: showingExplore) { isOpen in
+            if !isOpen {
+                SecretNumberManager.shared.reset()
+            }
+        }
         .onAppear {
             // CRITICAL: Keep screen on during performance (magic trick needs screen always on)
             UIApplication.shared.isIdleTimerDisabled = true
