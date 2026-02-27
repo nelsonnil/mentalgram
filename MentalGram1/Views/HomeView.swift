@@ -197,6 +197,7 @@ struct SetsListView: View {
 struct SetRowView: View {
     let set: PhotoSet
     let isLoggedIn: Bool
+    @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     
     private var statusBadgeStyle: StatusBadge.BadgeStyle {
         switch set.status {
@@ -288,6 +289,27 @@ struct SetRowView: View {
                         }
                     }
                     
+                    // Active set toggle (word / number / custom — only one active per type)
+                    let isActive = activeSetSettings.isActive(set.id, type: set.type)
+                    Button(action: {
+                        if isActive {
+                            activeSetSettings.setActive(nil, for: set.type)
+                        } else {
+                            activeSetSettings.setActive(set.id, for: set.type)
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 13))
+                                .foregroundColor(isActive ? VaultTheme.Colors.success : VaultTheme.Colors.textTertiary)
+                            Text(isActive ? "Active set" : "Set as active")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(isActive ? VaultTheme.Colors.success : VaultTheme.Colors.textTertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+
                     // Progress bar for uploading - ONLY VISIBLE WHEN LOGGED IN
                     if isLoggedIn && (set.status == .uploading || set.status == .paused) {
                         VStack(spacing: 6) {
@@ -748,6 +770,10 @@ struct SettingsView: View {
                     // MARK: - Force Reel
 
                     ForceReelSettingsCard()
+
+                    // MARK: - Force Number Reveal
+
+                    ForceNumberRevealSettingsCard()
 
                     // MARK: - Secret Input
                     
@@ -1493,6 +1519,66 @@ struct ForceReelSettingsCard: View {
                   let img = UIImage(data: data) else { return }
             await MainActor.run { previewImage = img }
             ProfileCacheService.shared.saveImage(img, forURL: settings.thumbnailURL)
+        }
+    }
+}
+
+// MARK: - Force Number Reveal Settings Card
+
+struct ForceNumberRevealSettingsCard: View {
+    @ObservedObject private var settings = ForceNumberRevealSettings.shared
+    @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
+    @ObservedObject private var dataManager = DataManager.shared
+
+    private var activeNumberSet: PhotoSet? {
+        guard let id = activeSetSettings.activeNumberSetId else { return nil }
+        return dataManager.sets.first { $0.id == id && $0.type == .number }
+    }
+
+    var body: some View {
+        VaultCard {
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "number.circle.fill")
+                        .foregroundColor(VaultTheme.Colors.secondary)
+                    Text("Force Number Reveal")
+                        .font(VaultTheme.Typography.titleSmall())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settings.isEnabled)
+                        .labelsHidden()
+                }
+                Text("Swipe the grid to build a number, then tap the Posts icon to unarchive the matching photo in each bank of the active number set.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                if settings.isEnabled {
+                    Divider()
+                    if let set = activeNumberSet {
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(VaultTheme.Colors.success)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Active set: \(set.name)")
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+                    } else {
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(VaultTheme.Colors.warning)
+                            Text("No active number set selected. Go to your sets and mark one as active.")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                    }
+                }
+            }
         }
     }
 }

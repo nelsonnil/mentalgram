@@ -248,7 +248,21 @@ struct UserProfileView: View {
                         .responsiveHorizontalPadding()
                     }
                     .padding(.vertical, 12)
-                    
+
+                    // Story Highlights
+                    if !currentProfile.cachedHighlights.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 16) {
+                                ForEach(currentProfile.cachedHighlights) { highlight in
+                                    StoryHighlightCell(highlight: highlight,
+                                                       image: cachedImages[highlight.coverImageURL])
+                                }
+                            }
+                            .responsiveHorizontalPadding()
+                        }
+                        .padding(.vertical, 8)
+                    }
+
                     // Tabs — tapping a tab resets the secret digit buffer
                     HStack(spacing: 0) {
                         TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
@@ -378,9 +392,10 @@ struct UserProfileView: View {
             }
             print("✅ [UI] Follower pics loaded")
             
-            // Load all thumbnails (posts + reels + tagged) in one pass
-            let allURLs = targetProfile.cachedMediaURLs + targetProfile.cachedReelURLs + targetProfile.cachedTaggedURLs
-            print("🖼️ [UI] Loading \(allURLs.count) thumbnails (posts:\(targetProfile.cachedMediaURLs.count) reels:\(targetProfile.cachedReelURLs.count) tagged:\(targetProfile.cachedTaggedURLs.count))...")
+            // Load all thumbnails (posts + reels + tagged + highlight covers) in one pass
+            let highlightCoverURLs = targetProfile.cachedHighlights.map { $0.coverImageURL }
+            let allURLs = targetProfile.cachedMediaURLs + targetProfile.cachedReelURLs + targetProfile.cachedTaggedURLs + highlightCoverURLs
+            print("🖼️ [UI] Loading \(allURLs.count) thumbnails (posts:\(targetProfile.cachedMediaURLs.count) reels:\(targetProfile.cachedReelURLs.count) tagged:\(targetProfile.cachedTaggedURLs.count) highlights:\(highlightCoverURLs.count))...")
             for mediaURL in allURLs {
                 guard !mediaURL.isEmpty,
                       let url = URL(string: mediaURL),

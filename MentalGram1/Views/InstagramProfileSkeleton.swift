@@ -147,7 +147,7 @@ struct InstagramProfileSkeleton: View {
                 }
             }
         }
-        .background(Color(UIColor.systemBackground))
+        .background(Color.white)
     }
 }
 

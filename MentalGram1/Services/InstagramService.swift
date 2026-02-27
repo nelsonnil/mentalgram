@@ -1379,31 +1379,37 @@ class InstagramService: ObservableObject {
         var reelURLs: [String] = []
         var taggedURLs: [String] = []
         
+        var highlights: [InstagramHighlight] = []
+
         if shouldFetchProtectedData {
-            print("✅ [PROFILE] Fetching followers, media, reels & tagged (profile is accessible)")
-            
-            // Fetch followers, posts, reels and tagged in parallel
-            async let followersTask = getFollowedByUsers(userId: uid, count: 3)
-            async let mediaTask = getUserMediaItems(userId: uid, amount: 18)
-            async let reelsTask = getUserReels(userId: uid, amount: 18)
-            async let taggedTask = getUserTagged(userId: uid, amount: 18)
-            
+            print("✅ [PROFILE] Fetching followers, media, reels, tagged & highlights (profile is accessible)")
+
+            // Fetch all in parallel
+            async let followersTask   = getFollowedByUsers(userId: uid, count: 3)
+            async let mediaTask       = getUserMediaItems(userId: uid, amount: 18)
+            async let reelsTask       = getUserReels(userId: uid, amount: 18)
+            async let taggedTask      = getUserTagged(userId: uid, amount: 18)
+            async let highlightsTask  = getUserHighlights(userId: uid)
+
             followedBy = try await followersTask
             let (mediaItems, _) = try await mediaTask
             mediaURLs = mediaItems.map { $0.imageURL }
-            
-            // Reels and tagged are non-critical — failures are silent
-            do { reelURLs = try await reelsTask.map { $0.imageURL } }
+
+            // Non-critical — silent failures
+            do { reelURLs   = try await reelsTask.map { $0.imageURL } }
             catch { print("⚠️ [PROFILE] Reels fetch failed (non-critical): \(error)") }
-            
+
             do { taggedURLs = try await taggedTask.map { $0.imageURL } }
             catch { print("⚠️ [PROFILE] Tagged fetch failed (non-critical): \(error)") }
-            
-            print("📊 [PROFILE] Posts: \(mediaURLs.count), Reels: \(reelURLs.count), Tagged: \(taggedURLs.count)")
+
+            do { highlights = try await highlightsTask }
+            catch { print("⚠️ [PROFILE] Highlights fetch failed (non-critical): \(error)") }
+
+            print("📊 [PROFILE] Posts: \(mediaURLs.count), Reels: \(reelURLs.count), Tagged: \(taggedURLs.count), Highlights: \(highlights.count)")
         } else {
             print("⚠️ [PROFILE] Skipping data fetch (private profile, not following)")
         }
-        
+
         let profile = InstagramProfile(
             userId: extractedUserId,
             username: user["username"] as? String ?? "",
@@ -1422,7 +1428,8 @@ class InstagramService: ObservableObject {
             cachedAt: Date(),
             cachedMediaURLs: mediaURLs,
             cachedReelURLs: reelURLs,
-            cachedTaggedURLs: taggedURLs
+            cachedTaggedURLs: taggedURLs,
+            cachedHighlights: highlights
         )
         
         print("✅ [PROFILE] Profile loaded for @\(profile.username)")
@@ -1569,6 +1576,46 @@ class InstagramService: ObservableObject {
         return items
     }
     
+    // MARK: - Get User Story Highlights
+
+    func getUserHighlights(userId: String? = nil) async throws -> [InstagramHighlight] {
+        let uid = userId ?? session.userId
+        print("🌟 [HIGHLIGHTS] Fetching story highlights for user ID: \(uid)")
+
+        let data = try await apiRequest(method: "GET", path: "/highlights/\(uid)/highlights_tray/")
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tray = json["tray"] as? [[String: Any]] else {
+            print("⚠️ [HIGHLIGHTS] No tray found in response")
+            return []
+        }
+
+        var highlights: [InstagramHighlight] = []
+        for item in tray {
+            guard let id    = item["id"] as? String,
+                  let title = item["title"] as? String else { continue }
+
+            // Cover image: prefer cropped_image_version, fallback to cover_media_cropped_image
+            var coverURL = ""
+            if let coverMedia = item["cover_media"] as? [String: Any] {
+                if let cropped = coverMedia["cropped_image_version"] as? [String: Any],
+                   let url = cropped["url"] as? String {
+                    coverURL = url
+                } else if let imgVersions = coverMedia["image_versions2"] as? [String: Any],
+                          let candidates = imgVersions["candidates"] as? [[String: Any]],
+                          let first = candidates.first,
+                          let url = first["url"] as? String {
+                    coverURL = url
+                }
+            }
+            guard !coverURL.isEmpty else { continue }
+            highlights.append(InstagramHighlight(id: id, title: title, coverImageURL: coverURL))
+        }
+
+        print("🌟 [HIGHLIGHTS] Parsed \(highlights.count) highlights")
+        return highlights
+    }
+
     /// Shared parser for media items from different endpoints
     private func parseMediaItem(_ media: [String: Any]) -> InstagramMediaItem? {
         let mediaType = media["media_type"] as? Int ?? 1

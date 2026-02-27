@@ -22,8 +22,11 @@ struct PerformanceView: View {
     
     var body: some View {
         ZStack(alignment: .bottom) {
+            Color.white.ignoresSafeArea() // Prevents black flash before profile loads
+
             // Main content (Instagram replica)
             ZStack {
+                Color.white.ignoresSafeArea()
                 if let profile = profile {
                     InstagramProfileView(
                         profile: profile,
@@ -86,6 +89,7 @@ struct PerformanceView: View {
                 }
             )
         }
+        .background(Color.white.ignoresSafeArea()) // Always white — like Instagram
         .toolbar(.hidden, for: .tabBar) // HIDE native TabBar in Performance
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarHidden(true)
@@ -119,9 +123,9 @@ struct PerformanceView: View {
             self.hasMorePages = cached.cachedMediaURLs.count >= 18
             loadCachedImages()
             
-            // If reels or tagged are missing from old cache, fetch them silently in background
-            if cached.cachedReelURLs.isEmpty || cached.cachedTaggedURLs.isEmpty {
-                print("📦 [CACHE] Reels/tagged missing from cache — fetching in background...")
+            // If supplementary data is missing from old cache, fetch silently in background
+            if cached.cachedReelURLs.isEmpty || cached.cachedTaggedURLs.isEmpty || cached.cachedHighlights.isEmpty {
+                print("📦 [CACHE] Supplementary data missing from cache — fetching in background...")
                 Task { await fetchAndUpdateReelsTagged(for: cached) }
             }
         } else {
@@ -130,23 +134,25 @@ struct PerformanceView: View {
         }
     }
     
-    /// Fetches only reels and tagged in background, updates the cached profile
+    /// Fetches reels, tagged and highlights in background, updates the cached profile
     @MainActor
     private func fetchAndUpdateReelsTagged(for cached: InstagramProfile) async {
         guard instagram.isLoggedIn else { return }
         do {
-            async let reelsTask = instagram.getUserReels(userId: cached.userId, amount: 18)
-            async let taggedTask = instagram.getUserTagged(userId: cached.userId, amount: 18)
-            
-            let reels = try await reelsTask
-            let tagged = try await taggedTask
-            
-            let reelURLs = reels.map { $0.imageURL }
-            let taggedURLs = tagged.map { $0.imageURL }
-            
-            print("📦 [CACHE] Background fetch: \(reelURLs.count) reels, \(taggedURLs.count) tagged")
-            
-            // Build updated profile with new data
+            async let reelsTask      = instagram.getUserReels(userId: cached.userId, amount: 18)
+            async let taggedTask     = instagram.getUserTagged(userId: cached.userId, amount: 18)
+            async let highlightsTask = instagram.getUserHighlights(userId: cached.userId)
+
+            let reels      = try await reelsTask
+            let tagged     = try await taggedTask
+            let highlights = (try? await highlightsTask) ?? cached.cachedHighlights
+
+            let reelURLs     = reels.map { $0.imageURL }
+            let taggedURLs   = tagged.map { $0.imageURL }
+
+            print("📦 [CACHE] Background fetch: \(reelURLs.count) reels, \(taggedURLs.count) tagged, \(highlights.count) highlights")
+
+            // Build updated profile preserving all existing data
             let updated = InstagramProfile(
                 userId: cached.userId, username: cached.username, fullName: cached.fullName,
                 biography: cached.biography, externalUrl: cached.externalUrl,
@@ -157,23 +163,24 @@ struct PerformanceView: View {
                 isFollowRequested: cached.isFollowRequested, cachedAt: cached.cachedAt,
                 cachedMediaURLs: cached.cachedMediaURLs,
                 cachedReelURLs: reelURLs,
-                cachedTaggedURLs: taggedURLs
+                cachedTaggedURLs: taggedURLs,
+                cachedHighlights: highlights
             )
-            
+
             self.profile = updated
             ProfileCacheService.shared.saveProfile(updated)
-            
-            // Download thumbnails for reels + tagged
-            let allNew = reelURLs + taggedURLs
+
+            // Download thumbnails for reels + tagged + highlight covers
+            let allNew = reelURLs + taggedURLs + highlights.map { $0.coverImageURL }
             for url in allNew {
                 if let img = await downloadImage(from: url) {
                     cachedImages[url] = img
                     ProfileCacheService.shared.saveImage(img, forURL: url)
                 }
             }
-            print("✅ [CACHE] Reels/tagged background fetch complete")
+            print("✅ [CACHE] Background supplementary fetch complete")
         } catch {
-            print("⚠️ [CACHE] Background reels/tagged fetch failed (non-critical): \(error)")
+            print("⚠️ [CACHE] Background supplementary fetch failed (non-critical): \(error)")
         }
     }
     
@@ -304,8 +311,9 @@ struct PerformanceView: View {
             }
         }
         
-        // Load reel + tagged thumbnails from disk cache
-        let allExtraURLs = profile.cachedReelURLs + profile.cachedTaggedURLs
+        // Load reel + tagged + highlight cover thumbnails from disk cache
+        let highlightCoverURLs = profile.cachedHighlights.map { $0.coverImageURL }
+        let allExtraURLs = profile.cachedReelURLs + profile.cachedTaggedURLs + highlightCoverURLs
         var missingExtraURLs: [String] = []
         for url in allExtraURLs {
             if let image = ProfileCacheService.shared.loadImage(forURL: url) {
@@ -326,7 +334,7 @@ struct PerformanceView: View {
                 }
             }
         }
-        
+
         print("📦 [CACHE] Total cached images loaded: \(cachedImages.count)")
     }
     
@@ -396,7 +404,21 @@ struct PerformanceView: View {
                     }
                 }
             }
-            
+
+            // Download highlight cover images
+            if !profile.cachedHighlights.isEmpty {
+                print("🌟 [CACHE] Downloading \(profile.cachedHighlights.count) highlight covers...")
+                for highlight in profile.cachedHighlights {
+                    let url = highlight.coverImageURL
+                    if let image = await downloadImage(from: url) {
+                        await MainActor.run {
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                    }
+                }
+            }
+
             print("✅ [CACHE] All images download process completed")
         }
     }
@@ -721,9 +743,10 @@ struct InstagramProfileView: View {
                     }
                     .responsiveHorizontalPadding()
                     
-                    // Story Highlights (placeholder)
+                    // Story Highlights
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
+                            // "New" button (always shown, Instagram-style)
                             VStack(spacing: 4) {
                                 Circle()
                                     .stroke(Color.gray.opacity(0.3), lineWidth: 1)
@@ -734,16 +757,25 @@ struct InstagramProfileView: View {
                                     )
                                 Text("Nuevo")
                                     .font(.system(size: 12))
+                                    .foregroundColor(.primary)
                             }
-                            
-                            // Placeholder highlights
-                            ForEach(0..<4, id: \.self) { _ in
-                                VStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.gray.opacity(0.3))
-                                        .frame(width: 64, height: 64)
-                                    Text("Historia")
-                                        .font(.system(size: 12))
+
+                            if profile.cachedHighlights.isEmpty {
+                                // Skeleton placeholders while loading
+                                ForEach(0..<4, id: \.self) { _ in
+                                    VStack(spacing: 4) {
+                                        Circle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 64, height: 64)
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 44, height: 10)
+                                    }
+                                }
+                            } else {
+                                ForEach(profile.cachedHighlights) { highlight in
+                                    StoryHighlightCell(highlight: highlight,
+                                                       image: cachedImages[highlight.coverImageURL])
                                 }
                             }
                         }
@@ -756,9 +788,20 @@ struct InstagramProfileView: View {
                 // Tabs — tapping a tab resets the secret digit buffer
                 HStack(spacing: 0) {
                     TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
+                        // Force Number Reveal: if enabled and digits are buffered, trigger reveal
+                        if ForceNumberRevealSettings.shared.isEnabled,
+                           secretManager.hasDigits,
+                           let activeId = ActiveSetSettings.shared.activeNumberSetId,
+                           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
+                            let digits = secretManager.digitBuffer
+                            secretManager.reset()
+                            followingOverride = nil
+                            Task { await revealByDigits(digits, fromSet: activeSet) }
+                        } else {
+                            secretManager.reset()
+                            followingOverride = nil
+                        }
                         selectedTab = 0
-                        secretManager.reset()
-                        followingOverride = nil
                     }
                     TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
                         selectedTab = 1
@@ -801,7 +844,7 @@ struct InstagramProfileView: View {
         .refreshable {
             onRefresh()
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(Color.white)
         // Keep following count display in sync with digit buffer
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
@@ -845,6 +888,86 @@ struct InstagramProfileView: View {
         } else {
             followingOverride = secretManager.followingDisplayString(originalCount: profile.followingCount)
         }
+    }
+
+    // MARK: - Force Number Reveal
+
+    /// Unarchives the photo matching each digit in the corresponding bank, sequentially.
+    /// Digit at position i (0-based) → bank i+1 → find photo with symbol == String(digit).
+    private func revealByDigits(_ digits: [Int], fromSet set: PhotoSet) async {
+        let sortedBanks = set.banks.sorted { $0.position < $1.position }
+        let instagram = InstagramService.shared
+        let dataManager = DataManager.shared
+
+        // Digits are read right-to-left: last digit → bank 1, second-to-last → bank 2, etc.
+        // e.g. 568 → bank1=8, bank2=6, bank3=5
+        let reversedDigits = digits.reversed()
+
+        print("🔢 [FORCE#] ═══════════════════════════════════════")
+        print("🔢 [FORCE#] Revealing digits: \(digits.map { String($0) }.joined()) (reversed: \(reversedDigits.map { String($0) }.joined())) from set '\(set.name)'")
+        LogManager.shared.info("Force number reveal: \(digits.map { String($0) }.joined()) from set '\(set.name)'", category: .general)
+
+        var successCount = 0
+        var skipCount   = 0
+        var failCount   = 0
+
+        for (i, digit) in reversedDigits.enumerated() {
+            // Stop if lockdown activates mid-reveal
+            guard !instagram.isLocked else {
+                print("🚨 [FORCE#] Lockdown active — stopping reveal")
+                break
+            }
+
+            guard i < sortedBanks.count else {
+                print("⚠️ [FORCE#] No bank at position \(i + 1) — skipping digit \(digit)")
+                failCount += 1
+                continue
+            }
+
+            let bank   = sortedBanks[i]
+            let symbol = String(digit)
+            let photosInBank = set.photos.filter { $0.bankId == bank.id }
+
+            // Already unarchived locally → count as success, skip API call
+            if photosInBank.contains(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
+                print("ℹ️ [FORCE#] Digit \(digit) bank \(i + 1): already unarchived locally — skipping")
+                skipCount += 1
+                continue
+            }
+
+            // Not archived locally → need to call API
+            guard let photo = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && $0.isArchived }),
+                  let mediaId = photo.mediaId else {
+                print("❌ [FORCE#] Digit \(digit) bank \(i + 1): no archived photo found with symbol '\(symbol)'")
+                failCount += 1
+                continue
+            }
+
+            // Anti-bot: random human-like delay before each unarchive (same as word reveal)
+            let delay = UInt64.random(in: 800_000_000...2_200_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+
+            do {
+                let unarchived = try await instagram.unarchivePhoto(mediaId: mediaId)
+                if unarchived {
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId,
+                                            isArchived: false, uploadStatus: .completed, errorMessage: nil)
+                    print("✅ [FORCE#] Digit \(digit) bank \(i + 1): unarchived (ID: \(mediaId))")
+                    LogManager.shared.success("Force reveal digit \(digit) bank \(i + 1) (ID: \(mediaId))", category: .general)
+                    successCount += 1
+                } else {
+                    print("⚠️ [FORCE#] Digit \(digit) bank \(i + 1): unarchive returned false")
+                    failCount += 1
+                }
+            } catch {
+                print("❌ [FORCE#] Digit \(digit) bank \(i + 1) error: \(error)")
+                LogManager.shared.error("Force reveal error digit \(digit) bank \(i + 1): \(error.localizedDescription)", category: .general)
+                failCount += 1
+            }
+        }
+
+        print("🔢 [FORCE#] Done — \(successCount) ok, \(skipCount) skipped, \(failCount) failed")
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
 }
@@ -966,7 +1089,7 @@ struct InstagramHeaderView: View {
         }
         .responsiveHorizontalPadding()
         .frame(height: 44)
-        .background(Color(uiColor: .systemBackground))
+        .background(Color.white)
     }
 }
 
@@ -997,6 +1120,53 @@ struct StatView: View {
             return String(format: "%.1f K", Double(num) / 1_000).replacingOccurrences(of: ".", with: ",")
         } else {
             return "\(num)"
+        }
+    }
+}
+
+// MARK: - Followed By View
+
+// MARK: - Story Highlight Cell
+
+struct StoryHighlightCell: View {
+    let highlight: InstagramHighlight
+    let image: UIImage?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color(red: 0.99, green: 0.42, blue: 0.05),
+                                     Color(red: 0.85, green: 0.08, blue: 0.40),
+                                     Color(red: 0.57, green: 0.12, blue: 0.76)],
+                            startPoint: .bottomLeading,
+                            endPoint: .topTrailing
+                        ),
+                        lineWidth: 2
+                    )
+                    .frame(width: 68, height: 68)
+
+                if let img = image {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 62, height: 62)
+                        .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 62, height: 62)
+                        .overlay(ProgressView().scaleEffect(0.6))
+                }
+            }
+
+            Text(highlight.title)
+                .font(.system(size: 11))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .frame(width: 68)
         }
     }
 }

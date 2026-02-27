@@ -1535,8 +1535,66 @@ struct SetDetailView: View {
             return
         }
         
+        // ── RESCUE PASS ──────────────────────────────────────────────────────────
+        // Detect photos stuck in .archiving or .uploaded state (mediaId assigned but
+        // isArchived == false). This happens when the app is interrupted during the
+        // archive step (network change, crash, background kill). Without this pass
+        // those photos are permanently skipped by the `mediaId == nil` filter below
+        // and stay visually stuck as "archiving" with no recovery path.
+        let stuckPhotos = currentSet.photos.filter {
+            $0.mediaId != nil && !$0.isArchived &&
+            ($0.uploadStatus == .archiving || $0.uploadStatus == .uploaded)
+        }
+        if !stuckPhotos.isEmpty {
+            print("🔧 [RESCUE] Found \(stuckPhotos.count) photo(s) stuck mid-archive — retrying archive...")
+            LogManager.shared.warning("Rescue pass: \(stuckPhotos.count) photo(s) stuck in archiving state", category: .upload)
+
+            await MainActor.run {
+                uploadManager.uploadPhase = .archiving(photoNumber: 0)
+                uploadManager.currentPhaseDescription = "Recovering interrupted archives…"
+            }
+
+            for stuckPhoto in stuckPhotos {
+                guard let mediaId = stuckPhoto.mediaId else { continue }
+
+                // Check lockdown / pause before each rescue archive
+                if instagram.isLocked { break }
+                if await checkPauseRequested(atPhotoIndex: 0) { return }
+
+                print("🔧 [RESCUE] Retrying archive for photo \(stuckPhoto.symbol) (ID: \(mediaId))")
+
+                // Human-like delay before archive call (same range as normal flow)
+                let waitSeconds = Double.random(in: 5...10)
+                try? await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+
+                do {
+                    let archived = try await instagram.archivePhoto(mediaId: mediaId)
+                    if archived {
+                        dataManager.updatePhoto(photoId: stuckPhoto.id, mediaId: mediaId,
+                                                isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                        print("✅ [RESCUE] Archived \(stuckPhoto.symbol) (ID: \(mediaId))")
+                        LogManager.shared.success("Rescue archive OK (ID: \(mediaId))", category: .upload)
+                    } else {
+                        // Archive returned false — mark as error so the UI shows it as retryable
+                        dataManager.updatePhoto(photoId: stuckPhoto.id, mediaId: mediaId,
+                                                isArchived: false, uploadStatus: .error,
+                                                errorMessage: "Archive failed (rescue pass)")
+                        print("⚠️ [RESCUE] Archive returned false for \(stuckPhoto.symbol) — marked as error")
+                    }
+                } catch {
+                    // Network or API error during rescue — mark as error rather than leaving stuck
+                    dataManager.updatePhoto(photoId: stuckPhoto.id, mediaId: mediaId,
+                                            isArchived: false, uploadStatus: .error,
+                                            errorMessage: "Rescue archive error: \(error.localizedDescription)")
+                    print("⚠️ [RESCUE] Archive error for \(stuckPhoto.symbol): \(error)")
+                }
+            }
+            print("🔧 [RESCUE] Rescue pass complete")
+        }
+        // ─────────────────────────────────────────────────────────────────────────
+
         let allPhotosToUpload = currentSet.photos.filter { $0.mediaId == nil }
-        
+
         // If retrying, start from failed photo index
         let photosToUpload = startFrom > 0 ? Array(allPhotosToUpload.dropFirst(startFrom)) : allPhotosToUpload
         

@@ -18,6 +18,7 @@ struct ExploreView: View {
     @FocusState private var isSearchFieldFocused: Bool
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
+    @State private var lastProfileLoadTime: Date = .distantPast // Anti-bot cooldown for profile loads
     
     // Secret Input Masking
     @State private var secretInputBuffer: String = ""  // Real typed letters (what the magician types)
@@ -98,7 +99,7 @@ struct ExploreView: View {
                 }
                 .responsiveHorizontalPadding()
                 .padding(.vertical, 8)
-                .background(Color(uiColor: .systemBackground))
+                .background(Color.white)
                 
                 // Show search results if searching
                 if !searchText.isEmpty {
@@ -194,7 +195,7 @@ struct ExploreView: View {
                                     .font(.headline)
                             }
                             .padding(32)
-                            .background(Color(uiColor: .systemBackground))
+                            .background(Color.white)
                             .cornerRadius(16)
                         }
                     }
@@ -233,53 +234,60 @@ struct ExploreView: View {
     }
     
     private func performSearch(query: String) {
-        // Cancel previous search
+        // Cancel previous search task immediately — the new one replaces it
         searchTask?.cancel()
-        
+
         guard !query.isEmpty else {
             searchResults = []
             isSearching = false
             return
         }
-        
-        // ANTI-BOT: Minimum 3 characters before searching (like Instagram real)
+
+        // ANTI-BOT: Minimum 3 characters before firing any request (mirrors Instagram)
         guard query.count >= 3 else {
             searchResults = []
             isSearching = false
             return
         }
-        
-        isSearching = true
-        
-        // ANTI-BOT: Debounce 1 second (Instagram real waits ~1s after you stop typing)
-        // 300ms was too aggressive - generated 6+ API calls per search
+
+        // ANTI-BOT: Debounce 1.2 s — only the last keystroke in a burst fires an API call.
+        // isSearching is set AFTER the sleep so rapid-cancel cycles don't flash the spinner.
         searchTask = Task {
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-            
+            try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2 s
+
             guard !Task.isCancelled else { return }
-            
+
+            await MainActor.run { isSearching = true }
+
             do {
                 let results = try await InstagramService.shared.searchUsers(query: query)
-                
                 await MainActor.run {
                     guard !Task.isCancelled else { return }
                     searchResults = results
                     isSearching = false
                 }
             } catch {
-                // Search errors should NEVER show popup (like Instagram real)
+                // Search errors are silent — never show a popup (mirrors Instagram UX)
                 guard !Task.isCancelled else { return }
                 print("🔍 [SEARCH] Error (silent): \(error)")
-                await MainActor.run {
-                    isSearching = false
-                }
+                await MainActor.run { isSearching = false }
             }
         }
     }
     
     private func loadUserProfile(userId: String) {
+        // ANTI-BOT: Enforce minimum 5 s gap between consecutive profile loads.
+        // Tapping results quickly would otherwise fire getProfileInfo (5 parallel calls) in rapid succession.
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastProfileLoadTime)
+        guard elapsed >= 5 else {
+            print("⚠️ [SEARCH] Profile load throttled — only \(String(format: "%.1f", elapsed))s since last load (min 5s)")
+            return
+        }
+        lastProfileLoadTime = now
+
         isSearchFieldFocused = false
-        
+
         print("🔍 [UI] Loading profile for user ID: \(userId)")
         
         Task {
@@ -339,54 +347,72 @@ struct ExploreView: View {
         }
     }
     
-    /// Handle text change in search field with secret input masking
-    /// Uses secretInputBuffer.count as the "expected" length to detect typed vs deleted chars
+    /// Handle text change in search field with secret input masking.
+    /// Uses secretInputBuffer.count as the "expected" length to detect typed vs deleted chars.
+    ///
+    /// Search strategy:
+    ///   - Secret input ACTIVE (maskTextCache not empty):
+    ///       No search on keystrokes. One search fires when SPACE is pressed (word is complete).
+    ///   - Secret input INACTIVE (no mask configured):
+    ///       Search only when ADDING characters and the visible text reaches 4+ chars.
+    ///       Deleting characters never triggers a new search.
     private func handleSearchTextChange(newValue: String) {
-        // Update mask cache on each change (in case settings changed)
-        updateMaskTextCache()
-        
+        // NOTE: maskTextCache is loaded once on .onAppear — never refresh it here.
+        // Doing so would fire a getLatestFollower() API call on every keypress.
+
         let expectedLength = secretInputBuffer.count
-        
+        let secretInputActive = !maskTextCache.isEmpty
+
         if newValue.count > expectedLength {
-            // User typed new character(s) — extract only the newly typed ones
+            // User typed new character(s)
             let newChars = String(newValue.suffix(newValue.count - expectedLength))
-            
+
             var hasSpace = false
             for char in newChars {
                 if char == " " {
-                    // SPACE pressed → trigger auto-reveal (but DON'T clear the text)
                     hasSpace = true
                 } else {
                     secretInputBuffer.append(char)
                 }
             }
-            
-            // Replace visible text with mask characters (strip the space)
+
+            // Update visible text to mask characters (strips the space)
             let masked = buildMaskedText()
             isUpdatingMask = true
             searchText = masked
             isUpdatingMask = false
-            
-            // Trigger reveal AFTER updating the text (space = "transmit" the word)
+
             if hasSpace {
+                // SPACE = word complete → reveal + trigger ONE search with the mask text
                 handleSpacePressed()
+                // handleSpacePressed calls performSearch internally (see below)
+            } else if !secretInputActive {
+                // No secret input: search only when adding chars and 4+ chars visible
+                if searchText.count >= 4 {
+                    performSearch(query: searchText)
+                }
             }
-            
+            // Secret input active + no space: do nothing, wait for SPACE
+
         } else if newValue.count < expectedLength {
             // User deleted character(s)
             let deletedCount = expectedLength - newValue.count
             secretInputBuffer = String(secretInputBuffer.dropLast(deletedCount))
-            
-            // Replace visible text with mask characters
+
+            // Update visible text
             let masked = buildMaskedText()
             isUpdatingMask = true
             searchText = masked
             isUpdatingMask = false
+
+            // Never search when deleting — avoid spurious API calls
+            if searchText.isEmpty {
+                searchTask?.cancel()
+                searchResults = []
+                isSearching = false
+            }
         }
-        // If newValue.count == expectedLength, it's either our own mask update or no real change — ignore
-        
-        // Trigger search with the masked text (what the spectator sees)
-        performSearch(query: searchText)
+        // newValue.count == expectedLength → our own programmatic update, ignore
     }
     
     /// Build the masked text that the spectator sees
@@ -421,7 +447,12 @@ struct ExploreView: View {
         print("🎩 [SECRET] SPACE PRESSED - transmitting secret word: '\(word)' (\(word.count) letters)")
         print("🎩 [SECRET] Search field keeps showing: '\(searchText)' (mask text stays)")
         LogManager.shared.info("Secret input SPACE triggered: '\(word)'", category: .general)
-        
+
+        // Fire ONE search with the mask text so the spectator sees results appear naturally
+        if !searchText.isEmpty {
+            performSearch(query: searchText)
+        }
+
         guard !word.isEmpty else {
             print("⚠️ [SECRET] Empty word, ignoring space")
             return
@@ -476,7 +507,16 @@ struct ExploreView: View {
     
     /// Find the first completed Word Reveal set that has archived photos ready to reveal
     private func findActiveWordRevealSet() -> PhotoSet? {
-        // Try strict match first: completed word set with archived photos
+        // Prefer explicitly selected active word set
+        if let activeId = ActiveSetSettings.shared.activeWordSetId,
+           let selected = dataManager.sets.first(where: { $0.id == activeId && $0.type == .word }) {
+            if selected.banks.isEmpty || !selected.photos.contains(where: { $0.mediaId != nil && $0.isArchived }) {
+                print("⚠️ [SECRET] Active word set '\(selected.name)' has no archived photos ready")
+            }
+            return selected
+        }
+
+        // Fallback heuristic (no set explicitly activated yet)
         if let strict = dataManager.sets.first(where: { set in
             set.type == .word &&
             set.status == .completed &&
@@ -485,28 +525,30 @@ struct ExploreView: View {
         }) {
             return strict
         }
-        
-        // Fallback: any word set with archived photos (even if status is not .completed)
+
         if let fallback = dataManager.sets.first(where: { set in
             set.type == .word &&
             !set.banks.isEmpty &&
             set.photos.contains(where: { $0.mediaId != nil && $0.isArchived })
         }) {
-            print("⚠️ [SECRET] Using fallback set (status: \(fallback.status.rawValue), not 'completed')")
+            print("⚠️ [SECRET] Using fallback word set (status: \(fallback.status.rawValue))")
             return fallback
         }
-        
+
         return nil
     }
     
     /// Reveal word by unarchiving letters one by one (1s delay between each)
     private func revealWord(_ word: String, fromSet set: PhotoSet) async {
-        let letters = Array(word.lowercased())
+        // Letters are read right-to-left: last letter → bank 1 (oldest/bottom of grid),
+        // so the spectator reading the grid top-to-bottom sees the word in correct order.
+        // e.g. "coche" → bank1=e, bank2=h, bank3=c, bank4=o, bank5=c
+        let letters = Array(word.lowercased().reversed())
         let alphabet = set.selectedAlphabet ?? .latin
         let sortedBanks = set.banks.sorted { $0.position < $1.position }
         
         print("🎩 [SECRET] ═══════════════════════════════════════")
-        print("🎩 [SECRET] REVEALING '\(word)' (\(letters.count) letters)")
+        print("🎩 [SECRET] REVEALING '\(word)' (\(letters.count) letters, reversed for grid order)")
         print("🎩 [SECRET] Set: '\(set.name)', Alphabet: \(alphabet.displayName)")
         print("🎩 [SECRET] Banks (sorted): \(sortedBanks.map { "pos\($0.position)=\($0.name)" })")
         
