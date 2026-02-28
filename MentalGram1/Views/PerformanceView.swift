@@ -65,14 +65,17 @@ struct PerformanceView: View {
                     // Already on home/profile, do nothing
                 },
                 onSearchPress: {
-                    // Capture pending digit buffer as the force position
+                    // 1. Capture offset for Following Counter Magic FIRST (before buffer is cleared)
+                    if FollowingMagicSettings.shared.isEnabled && SecretNumberManager.shared.hasDigits {
+                        FollowingMagicSettings.shared.captureFromBuffer() // also resets buffer
+                    }
+                    // 2. Capture digit buffer as force-reel position
                     if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel {
                         let buffer = SecretNumberManager.shared.digitBuffer
                         if !buffer.isEmpty {
                             let position = buffer.reduce(0) { $0 * 10 + $1 }
                             ForceReelSettings.shared.pendingPosition = position
                             print("🎭 [FORCE] Position captured: \(position) — will force reel at slot \(position) in Explore")
-                            // Reset buffer — InstagramProfileView's onChange will clear followingOverride automatically
                             SecretNumberManager.shared.reset()
                         }
                     }
@@ -105,6 +108,10 @@ struct PerformanceView: View {
             // CRITICAL: Keep screen on during performance (magic trick needs screen always on)
             UIApplication.shared.isIdleTimerDisabled = true
             print("🔆 [SCREEN] Screen sleep DISABLED (Performance mode)")
+            // Set volume to 50% so volume buttons are always detectable
+            if FollowingMagicSettings.shared.isEnabled {
+                VolumeButtonMonitor.shared.prepareVolume()
+            }
             checkAndLoadProfile()
         }
         .onDisappear {
@@ -907,9 +914,13 @@ struct InstagramProfileView: View {
         print("🔢 [FORCE#] Revealing digits: \(digits.map { String($0) }.joined()) (reversed: \(reversedDigits.map { String($0) }.joined())) from set '\(set.name)'")
         LogManager.shared.info("Force number reveal: \(digits.map { String($0) }.joined()) from set '\(set.name)'", category: .general)
 
-        var successCount = 0
-        var skipCount   = 0
-        var failCount   = 0
+        var successCount  = 0
+        var skipCount     = 0
+        var failCount     = 0
+        var revealedIds: [String] = [] // collected for auto re-archive
+
+        // Cancel any previous pending re-archive before starting a new reveal
+        ForceNumberRevealSettings.shared.cancelPendingReArchive()
 
         for (i, digit) in reversedDigits.enumerated() {
             // Stop if lockdown activates mid-reveal
@@ -924,18 +935,20 @@ struct InstagramProfileView: View {
                 continue
             }
 
-            let bank   = sortedBanks[i]
-            let symbol = String(digit)
+            let bank         = sortedBanks[i]
+            let symbol       = String(digit)
             let photosInBank = set.photos.filter { $0.bankId == bank.id }
 
-            // Already unarchived locally → count as success, skip API call
-            if photosInBank.contains(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
-                print("ℹ️ [FORCE#] Digit \(digit) bank \(i + 1): already unarchived locally — skipping")
+            // Already unarchived locally → count as success, still add to re-archive list
+            if let already = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }),
+               let mediaId = already.mediaId {
+                print("ℹ️ [FORCE#] Digit \(digit) bank \(i + 1): already unarchived locally — skipping API")
+                revealedIds.append(mediaId)
                 skipCount += 1
                 continue
             }
 
-            // Not archived locally → need to call API
+            // Find archived photo → need API call
             guard let photo = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && $0.isArchived }),
                   let mediaId = photo.mediaId else {
                 print("❌ [FORCE#] Digit \(digit) bank \(i + 1): no archived photo found with symbol '\(symbol)'")
@@ -943,7 +956,7 @@ struct InstagramProfileView: View {
                 continue
             }
 
-            // Anti-bot: random human-like delay before each unarchive (same as word reveal)
+            // Anti-bot: random human-like delay before each unarchive
             let delay = UInt64.random(in: 800_000_000...2_200_000_000)
             try? await Task.sleep(nanoseconds: delay)
 
@@ -954,6 +967,7 @@ struct InstagramProfileView: View {
                                             isArchived: false, uploadStatus: .completed, errorMessage: nil)
                     print("✅ [FORCE#] Digit \(digit) bank \(i + 1): unarchived (ID: \(mediaId))")
                     LogManager.shared.success("Force reveal digit \(digit) bank \(i + 1) (ID: \(mediaId))", category: .general)
+                    revealedIds.append(mediaId)
                     successCount += 1
                 } else {
                     print("⚠️ [FORCE#] Digit \(digit) bank \(i + 1): unarchive returned false")
@@ -968,6 +982,11 @@ struct InstagramProfileView: View {
 
         print("🔢 [FORCE#] Done — \(successCount) ok, \(skipCount) skipped, \(failCount) failed")
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        // Schedule auto re-archive if enabled and we have IDs to re-archive
+        if !revealedIds.isEmpty {
+            ForceNumberRevealSettings.shared.scheduleReArchive(mediaIds: revealedIds)
+        }
     }
 
 }

@@ -24,6 +24,14 @@ struct UserProfileView: View {
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
     @State private var followingOverride: String? = nil
+
+    // Following Counter Magic
+    @ObservedObject private var followingMagic = FollowingMagicSettings.shared
+    @ObservedObject private var volumeMonitor = VolumeButtonMonitor.shared
+    @State private var magicFollowingText: String? = nil
+    @State private var isCountingDown = false
+    @State private var countdownTimer: Timer? = nil
+    @State private var showGlitch = false
     
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
@@ -137,7 +145,7 @@ struct UserProfileView: View {
                                 UserStatView(number: currentProfile.mediaCount, label: "posts")
                                 UserStatView(number: currentProfile.followerCount, label: "followers")
                                 UserStatView(number: currentProfile.followingCount, label: "following",
-                                             overrideText: followingOverride)
+                                             overrideText: magicFollowingText ?? followingOverride)
                             }
                             .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                         }
@@ -311,14 +319,49 @@ struct UserProfileView: View {
         }
         .navigationBarHidden(true)
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
+        .overlay {
+            if showGlitch {
+                GlitchOverlayView {
+                    showGlitch = false
+                    startMagicCountdown()
+                }
+            }
+        }
         .onAppear {
             print("🎨 [UI] UserProfileView appeared for @\(profile.username)")
             print("🎨 [UI] Profile has \(profile.cachedMediaURLs.count) media URLs")
             print("🎨 [UI] Profile pic URL: \(profile.profilePicURL)")
             loadImages()
+            // Start Following Counter Magic if a secret offset was captured
+            print("🎩 [MAGIC] enabled=\(followingMagic.isEnabled) offset=\(followingMagic.pendingOffset)")
+            if followingMagic.isEnabled && followingMagic.pendingOffset > 0 {
+                let inflated = currentProfile.followingCount + followingMagic.pendingOffset
+                magicFollowingText = formatFollowing(inflated)
+                VolumeButtonMonitor.shared.startMonitoring()
+                print("🎩 [MAGIC] Showing inflated following: \(inflated) (real: \(currentProfile.followingCount) + offset: \(followingMagic.pendingOffset))")
+            }
+        }
+        .onDisappear {
+            countdownTimer?.invalidate()
+            countdownTimer = nil
+            VolumeButtonMonitor.shared.stopMonitoring()
+            magicFollowingText = nil
+            followingMagic.clear()
         }
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
+        }
+        .onChange(of: volumeMonitor.triggerCount) { _ in
+            guard followingMagic.pendingOffset > 0 && !isCountingDown && !showGlitch else { return }
+            let delay = followingMagic.triggerDelay
+            if delay > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(delay)) {
+                    guard followingMagic.pendingOffset > 0 && !isCountingDown && !showGlitch else { return }
+                    launchGlitchOrCountdown()
+                }
+            } else {
+                launchGlitchOrCountdown()
+            }
         }
     }
 
@@ -343,6 +386,53 @@ struct UserProfileView: View {
             selectedTab = dx < 0
                 ? min(2, selectedTab + 1)
                 : max(0, selectedTab - 1)
+        }
+    }
+
+    // MARK: - Following Counter Magic
+
+    /// Always returns a raw integer string so the countdown is visible
+    /// even when the real count is in the K/M range (e.g. 7212 not "7.2K").
+    private func formatFollowing(_ count: Int) -> String {
+        return "\(count)"
+    }
+
+    private func launchGlitchOrCountdown() {
+        if followingMagic.glitchEnabled {
+            showGlitch = true
+            // Countdown starts via GlitchOverlayView.onComplete
+        } else {
+            startMagicCountdown()
+        }
+    }
+
+    private func startMagicCountdown() {
+        guard followingMagic.pendingOffset > 0 else { return }
+        isCountingDown = true
+
+        let target = currentProfile.followingCount
+        let steps = followingMagic.pendingOffset          // one decrement per step
+        let totalMs = followingMagic.countdownDuration * 1000
+        let intervalMs = max(16, totalMs / steps)         // ≥60fps, spread over chosen duration
+        var current = target + steps
+
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
+            current -= 1
+            magicFollowingText = formatFollowing(current)
+
+            if current <= target {
+                timer.invalidate()
+                countdownTimer = nil
+                // Snap to real count and clean up
+                magicFollowingText = nil
+                isCountingDown = false
+                followingMagic.clear()
+                VolumeButtonMonitor.shared.stopMonitoring()
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                print("🎩 [MAGIC] Countdown complete — showing real following count: \(target)")
+            }
         }
     }
 

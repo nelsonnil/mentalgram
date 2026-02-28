@@ -775,6 +775,10 @@ struct SettingsView: View {
 
                     ForceNumberRevealSettingsCard()
 
+                    // MARK: - Following Counter Magic
+
+                    FollowingMagicSettingsCard()
+
                     // MARK: - Secret Input
                     
                     VaultCard {
@@ -1526,9 +1530,9 @@ struct ForceReelSettingsCard: View {
 // MARK: - Force Number Reveal Settings Card
 
 struct ForceNumberRevealSettingsCard: View {
-    @ObservedObject private var settings = ForceNumberRevealSettings.shared
+    @ObservedObject private var settings        = ForceNumberRevealSettings.shared
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
-    @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var dataManager     = DataManager.shared
 
     private var activeNumberSet: PhotoSet? {
         guard let id = activeSetSettings.activeNumberSetId else { return nil }
@@ -1538,6 +1542,8 @@ struct ForceNumberRevealSettingsCard: View {
     var body: some View {
         VaultCard {
             VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+
+                // ── Header ───────────────────────────────────────────────
                 HStack(spacing: VaultTheme.Spacing.sm) {
                     Image(systemName: "number.circle.fill")
                         .foregroundColor(VaultTheme.Colors.secondary)
@@ -1554,6 +1560,8 @@ struct ForceNumberRevealSettingsCard: View {
 
                 if settings.isEnabled {
                     Divider()
+
+                    // ── Active set info ───────────────────────────────────
                     if let set = activeNumberSet {
                         HStack(spacing: VaultTheme.Spacing.sm) {
                             Image(systemName: "checkmark.circle.fill")
@@ -1575,6 +1583,180 @@ struct ForceNumberRevealSettingsCard: View {
                             Text("No active number set selected. Go to your sets and mark one as active.")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                    }
+
+                    Divider()
+
+                    // ── Auto Re-archive ───────────────────────────────────
+                    HStack(spacing: VaultTheme.Spacing.sm) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .foregroundColor(VaultTheme.Colors.primary)
+                        Text("Auto Re-archive")
+                            .font(VaultTheme.Typography.body())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Spacer()
+                        Toggle("", isOn: $settings.autoReArchiveEnabled)
+                            .labelsHidden()
+                    }
+
+                    if settings.autoReArchiveEnabled {
+                        Text("After the reveal, photos are automatically re-archived one by one with random delays to avoid detection.")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                        // Time picker
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            Text("Re-archive after")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(ForceNumberRevealSettings.timeOptions, id: \.self) { minutes in
+                                        let isSelected = settings.autoReArchiveMinutes == minutes
+                                        Button(action: { settings.autoReArchiveMinutes = minutes }) {
+                                            Text("\(minutes) min")
+                                                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                                .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                                .cornerRadius(20)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Pending re-archive indicator
+                        if settings.reArchiveScheduledAt != nil {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                Text("Re-archive pending…")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                                Spacer()
+                                Button("Cancel") {
+                                    settings.cancelPendingReArchive()
+                                }
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.error)
+                            }
+                            .padding(.top, 2)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Following Counter Magic Settings Card
+
+struct FollowingMagicSettingsCard: View {
+    @ObservedObject private var settings = FollowingMagicSettings.shared
+
+    var body: some View {
+        VaultCard {
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+
+                // ── Header ───────────────────────────────────────────────
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "person.2.fill")
+                        .foregroundColor(VaultTheme.Colors.primary)
+                    Text("Following Counter Magic")
+                        .font(VaultTheme.Typography.titleSmall())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settings.isEnabled)
+                        .labelsHidden()
+                }
+                Text("Swipe the grid to secretly build a number (1–100), then open Explore. When you visit an audience member's profile their \"Following\" count appears inflated. Press a volume button to start the countdown back to the real number.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                if settings.isEnabled {
+                    Divider()
+
+                    // ── Glitch effect ─────────────────────────────────────
+                    HStack(spacing: VaultTheme.Spacing.sm) {
+                        Image(systemName: "bolt.fill")
+                            .foregroundColor(VaultTheme.Colors.warning)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Signal interference")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Text("Full-screen glitch effect plays just before the countdown.")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $settings.glitchEnabled)
+                            .labelsHidden()
+                    }
+
+                    Divider()
+
+                    // ── Trigger delay ─────────────────────────────────────
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        HStack {
+                            Text("Delay before countdown")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                            Spacer()
+                            Text(settings.triggerDelay == 0 ? "Instant" : "\(settings.triggerDelay)s")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.primary)
+                        }
+                        Text("Time between pressing the volume button and the numbers starting to decrease.")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(FollowingMagicSettings.delayOptions, id: \.self) { seconds in
+                                    let isSelected = settings.triggerDelay == seconds
+                                    Button(action: { settings.triggerDelay = seconds }) {
+                                        Text(seconds == 0 ? "0s" : "\(seconds)s")
+                                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                            .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                            .cornerRadius(20)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // ── Countdown duration ────────────────────────────────
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        HStack {
+                            Text("Countdown duration")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                            Spacer()
+                            Text("\(settings.countdownDuration)s")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.primary)
+                        }
+                        HStack(spacing: 8) {
+                            ForEach(FollowingMagicSettings.durationOptions, id: \.self) { seconds in
+                                let isSelected = settings.countdownDuration == seconds
+                                Button(action: { settings.countdownDuration = seconds }) {
+                                    Text("\(seconds)s")
+                                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                        .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                        .cornerRadius(20)
+                                }
+                            }
                         }
                     }
                 }
