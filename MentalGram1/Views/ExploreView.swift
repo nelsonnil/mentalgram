@@ -19,6 +19,10 @@ struct ExploreView: View {
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
     @State private var lastProfileLoadTime: Date = .distantPast // Anti-bot cooldown for profile loads
+
+    // Post detail (fullscreen Instagram-style post viewer)
+    @State private var showingPostDetail = false
+    @State private var selectedDetailIndex = 0
     
     // Secret Input Masking
     @State private var secretInputBuffer: String = ""  // Real typed letters (what the magician types)
@@ -142,7 +146,13 @@ struct ExploreView: View {
                             ExploreGridView(
                                 mediaItems: exploreManager.exploreMediaWithForce(),
                                 cachedImages: exploreManager.cachedImages,
-                                exploreManager: exploreManager
+                                exploreManager: exploreManager,
+                                onTapMedia: { index in
+                                    selectedDetailIndex = index
+                                    withAnimation(.easeInOut(duration: 0.22)) {
+                                        showingPostDetail = true
+                                    }
+                                }
                             )
                             .padding(.bottom, 65)
                         }
@@ -202,6 +212,22 @@ struct ExploreView: View {
                 }
             )
             
+            // Post Detail overlay (fullscreen Instagram-style viewer)
+            if showingPostDetail {
+                PostDetailView(
+                    mediaItems: exploreManager.exploreMediaWithForce(),
+                    startIndex: selectedDetailIndex,
+                    cachedImages: exploreManager.cachedImages,
+                    onClose: {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            showingPostDetail = false
+                        }
+                    }
+                )
+                .transition(.move(edge: .bottom))
+                .zIndex(999)
+            }
+
             // User Profile overlay (full screen on top)
             if showingUserProfile, let profile = searchedProfile {
                 UserProfileView(profile: profile, onClose: {
@@ -669,7 +695,8 @@ struct ExploreGridView: View {
     let mediaItems: [InstagramMediaItem]
     let cachedImages: [String: UIImage]
     @ObservedObject var exploreManager = ExploreManager.shared
-    
+    var onTapMedia: (Int) -> Void = { _ in }
+
     var body: some View {
         LazyVStack(spacing: 2) {
             // Create rows of 3 items
@@ -682,6 +709,9 @@ struct ExploreGridView: View {
                                 media: mediaItems[index],
                                 cachedImage: cachedImages[mediaItems[index].imageURL]
                             )
+                            .onTapGesture {
+                                onTapMedia(index)
+                            }
                             .onAppear {
                                 // Trigger load more when this item appears
                                 exploreManager.loadMoreIfNeeded(currentItem: mediaItems[index])

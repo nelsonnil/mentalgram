@@ -15,7 +15,7 @@ struct InstagramProfileSkeleton: View {
                         Button(action: onPlusPress) {
                             Image(systemName: "plus.app")
                                 .font(.system(size: 24))
-                                .foregroundColor(.primary)
+                                .foregroundColor(.black)
                         }
                     } else {
                         SkeletonBox(width: 24, height: 24)
@@ -115,12 +115,12 @@ struct InstagramProfileSkeleton: View {
                     ForEach(["square.grid.3x3", "play.rectangle", "person.crop.square"], id: \.self) { icon in
                         Image(systemName: icon)
                             .font(.system(size: 24))
-                            .foregroundColor(icon == "square.grid.3x3" ? .primary : .secondary)
+                            .foregroundColor(icon == "square.grid.3x3" ? .black : Color(white: 0.56))
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
                             .overlay(
                                 Rectangle()
-                                    .fill(icon == "square.grid.3x3" ? Color.primary : Color.clear)
+                                    .fill(icon == "square.grid.3x3" ? Color.black : Color.clear)
                                     .frame(height: 1),
                                 alignment: .bottom
                             )

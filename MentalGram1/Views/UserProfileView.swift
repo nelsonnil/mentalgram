@@ -32,6 +32,10 @@ struct UserProfileView: View {
     @State private var isCountingDown = false
     @State private var countdownTimer: Timer? = nil
     @State private var showGlitch = false
+
+    // Date Force ("El Oráculo Social")
+    @ObservedObject private var dateForce = DateForceSettings.shared
+    @State private var dateForceCancelled = false  // Tap on profile pic = cancel this profile
     
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
@@ -135,7 +139,11 @@ struct UserProfileView: View {
                             }
                             .padding(.leading, UIScreen.main.bounds.width * 0.04)
                             .onTapGesture {
-                                performIntelligentRefresh()
+                                if dateForce.isEnabled {
+                                    cancelDateForceSpectator()
+                                } else {
+                                    performIntelligentRefresh()
+                                }
                             }
                             
                             Spacer(minLength: 8)
@@ -347,6 +355,19 @@ struct UserProfileView: View {
             VolumeButtonMonitor.shared.stopMonitoring()
             magicFollowingText = nil
             followingMagic.clear()
+
+            // Date Force: auto-register on close unless cancelled by tapping profile pic
+            if dateForce.isEnabled {
+                if dateForceCancelled {
+                    print("🎯 [DATE FORCE] Profile @\(currentProfile.username) cancelled — not registered")
+                } else {
+                    // Don't register the forced reel profile or duplicates
+                    let isAlreadyRegistered = dateForce.spectators.contains { $0.username == currentProfile.username }
+                    if !isAlreadyRegistered {
+                        dateForce.addSpectator(username: currentProfile.username, followingCount: currentProfile.followingCount)
+                    }
+                }
+            }
         }
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
@@ -442,6 +463,14 @@ struct UserProfileView: View {
         } else {
             followingOverride = secretManager.followingDisplayString(originalCount: currentProfile.followingCount)
         }
+    }
+
+    // MARK: - Date Force (El Oráculo Social)
+
+    private func cancelDateForceSpectator() {
+        dateForceCancelled = true
+        print("🎯 [DATE FORCE] @\(currentProfile.username) marked as cancelled")
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
     }
 
     private func loadImages(from profileToLoad: InstagramProfile? = nil) {
@@ -750,10 +779,13 @@ private struct UserStatView: View {
     private func formatCount(_ count: Int) -> String {
         if count >= 1_000_000 {
             return String(format: "%.1fM", Double(count) / 1_000_000)
-        } else if count >= 1_000 {
-            return String(format: "%.1fK", Double(count) / 1_000)
+        } else if count >= 10_000 {
+            return String(format: "%.0fK", Double(count) / 1_000)
         } else {
-            return "\(count)"
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.locale = Locale(identifier: "en_US")
+            return formatter.string(from: NSNumber(value: count)) ?? "\(count)"
         }
     }
 }

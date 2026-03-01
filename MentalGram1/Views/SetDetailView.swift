@@ -1923,8 +1923,10 @@ struct SetDetailView: View {
                     print("   Using fallback delay: \(delaySeconds)s")
                 }
                 
-                // UPDATE PHASE: Waiting with countdown
+                // Persist the absolute end-time so background/kill doesn't lose it
+                let endTime = Date().addingTimeInterval(Double(delaySeconds))
                 await MainActor.run {
+                    uploadManager.persistWait(endTime: endTime, nextPhotoIndex: index + 2)
                     uploadManager.uploadPhase = .waiting(nextPhoto: index + 2, remainingSeconds: delaySeconds)
                     uploadManager.currentPhaseDescription = "Next photo in \(delaySeconds / 60):\(String(format: "%02d", delaySeconds % 60))"
                     uploadManager.nextPhotoCountdown = delaySeconds
@@ -1932,25 +1934,33 @@ struct SetDetailView: View {
                     uploadManager.nextPhotoTimer?.invalidate()
                     uploadManager.nextPhotoTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak uploadManager] _ in
                         guard let um = uploadManager else { return }
-                        if um.nextPhotoCountdown > 0 {
-                            um.nextPhotoCountdown -= 1
-                            um.uploadPhase = .waiting(nextPhoto: index + 2, remainingSeconds: um.nextPhotoCountdown)
-                            um.currentPhaseDescription = "Next photo in \(um.nextPhotoCountdown / 60):\(String(format: "%02d", um.nextPhotoCountdown % 60))"
-                        } else {
+                        let r = um.remainingWaitSeconds()
+                        um.nextPhotoCountdown = r
+                        um.uploadPhase = .waiting(nextPhoto: index + 2, remainingSeconds: r)
+                        um.currentPhaseDescription = "Next photo in \(r / 60):\(String(format: "%02d", r % 60))"
+                        if r <= 0 {
                             um.nextPhotoTimer?.invalidate()
                             um.nextPhotoTimer = nil
                         }
                     }
                 }
                 
-                // Split sleep into 1-second chunks to check pause
-                for _ in 0..<delaySeconds {
+                // Allow screen to sleep during the wait (user can lock phone)
+                await MainActor.run {
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+                
+                // Wait using persisted timestamp — survives background
+                while true {
+                    let remaining = uploadManager.remainingWaitSeconds()
+                    if remaining <= 0 { break }
                     if uploadManager.requestPause {
                         print("⏸️ [UPLOAD] Paused by user during delay")
                         await MainActor.run {
                             uploadManager.requestPause = false
                             uploadManager.nextPhotoTimer?.invalidate()
                             uploadManager.nextPhotoTimer = nil
+                            uploadManager.clearWaitPersistence()
                             UIApplication.shared.isIdleTimerDisabled = false
                             uploadManager.uploadPhase = .paused
                             uploadManager.currentPhaseDescription = "Upload Paused"
@@ -1963,9 +1973,12 @@ struct SetDetailView: View {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
                 
+                // Wait finished — re-enable screen lock prevention for the upload
                 await MainActor.run {
+                    UIApplication.shared.isIdleTimerDisabled = true
                     uploadManager.nextPhotoTimer?.invalidate()
                     uploadManager.nextPhotoTimer = nil
+                    uploadManager.clearWaitPersistence()
                 }
             }
         } // end for (photos loop)

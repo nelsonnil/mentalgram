@@ -779,6 +779,10 @@ struct SettingsView: View {
 
                     FollowingMagicSettingsCard()
 
+                    // MARK: - Date Force (El Oráculo Social)
+
+                    DateForceSettingsCard()
+
                     // MARK: - Secret Input
                     
                     VaultCard {
@@ -789,12 +793,17 @@ struct SettingsView: View {
                                 Text("Secret Input")
                                     .font(VaultTheme.Typography.titleSmall())
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Spacer()
+                                Toggle("", isOn: $secretInputSettings.isEnabled)
+                                    .labelsHidden()
                             }
                             
-                            Text("Secret Input is used in Performance mode to hide your input from spectators")
+                            Text("Masks what you type in Explore so spectators see a different word. Pressing SPACE triggers the word reveal (unarchive).")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                                 .padding(.bottom, VaultTheme.Spacing.xs)
+
+                            if secretInputSettings.isEnabled {
                             
                             // Mode selector
                             VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
@@ -945,6 +954,7 @@ struct SettingsView: View {
                             Text("Used in Performance mode to secretly type words that get auto-revealed from your Word Reveal sets.")
                                 .font(VaultTheme.Typography.captionSmall())
                                 .foregroundColor(VaultTheme.Colors.textTertiary)
+                            } // end if isEnabled
                         }
                     }
                     
@@ -1755,6 +1765,242 @@ struct FollowingMagicSettingsCard: View {
                                         .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
                                         .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
                                         .cornerRadius(20)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Date Force Settings Card (El Oráculo Social)
+
+struct DateForceSettingsCard: View {
+    @ObservedObject private var settings = DateForceSettings.shared
+
+    var body: some View {
+        VaultCard {
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+
+                // Header
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "calendar.badge.clock")
+                        .foregroundColor(VaultTheme.Colors.primary)
+                    Text("Date Force")
+                        .font(VaultTheme.Typography.titleSmall())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settings.isEnabled)
+                        .labelsHidden()
+                }
+                Text("Search spectators in Explore, tap their profile pic to register. Then any Explore post shows forced followers/following that subtract to today's date & time.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                if settings.isEnabled {
+                    Divider()
+
+                    // Date format selector
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        Text("Date format")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                        HStack(spacing: 8) {
+                            ForEach(DateForceFormat.allCases, id: \.rawValue) { fmt in
+                                let isSelected = settings.dateFormat == fmt
+                                Button(action: { settings.dateFormat = fmt }) {
+                                    Text(fmt.displayName)
+                                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                        .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                        .cornerRadius(20)
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // Mode selector
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        Text("Mode")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                        HStack(spacing: 8) {
+                            let modes: [(DateForceMode, String)] = [
+                                (.simple, "Simple"),
+                                (.dual, "Dual")
+                            ]
+                            ForEach(modes, id: \.0.rawValue) { mode, label in
+                                let isSelected = settings.mode == mode
+                                Button(action: { settings.mode = mode }) {
+                                    Text(label)
+                                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                        .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                        .cornerRadius(20)
+                                }
+                            }
+                        }
+                        Text(settings.mode == .simple
+                             ? "All spectators → date. Time shows directly on Explore post."
+                             : "First group → date, second group → time. Both use subtraction.")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+
+                    if settings.mode == .dual {
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            HStack {
+                                Text("Spectators for date")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Spacer()
+                                Text("\(settings.dateGroupSize)")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                            }
+                            HStack(spacing: 8) {
+                                ForEach(2...5, id: \.self) { n in
+                                    let isSelected = settings.dateGroupSize == n
+                                    Button(action: { settings.dateGroupSize = n }) {
+                                        Text("\(n)")
+                                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 6)
+                                            .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                            .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                            .cornerRadius(20)
+                                    }
+                                }
+                            }
+                            Text("Remaining spectators go to the time group.")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                    }
+
+                    Divider()
+
+                    // Time offset
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        HStack {
+                            Text("Add minutes to time")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                            Spacer()
+                            Text(settings.timeOffsetMinutes == 0 ? "Off" : "+\(settings.timeOffsetMinutes) min")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.primary)
+                        }
+                        Text("Adds minutes to the calculated time so the reveal matches the clock after the dramatic build-up.")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(0...5, id: \.self) { n in
+                                    let isSelected = settings.timeOffsetMinutes == n
+                                    Button(action: { settings.timeOffsetMinutes = n }) {
+                                        Text(n == 0 ? "Off" : "+\(n)m")
+                                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 6)
+                                            .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                            .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                            .cornerRadius(20)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // Live preview
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        Text("Live preview")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+
+                        HStack(spacing: 16) {
+                            VStack(spacing: 2) {
+                                Text("Target")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Text("\(settings.previewDateString) \(settings.previewTimeString)")
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                            }
+
+                            VStack(spacing: 2) {
+                                Text("Followers")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Text(DateForceSettings.formatExact(settings.overrideFollowers))
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                            }
+
+                            VStack(spacing: 2) {
+                                Text("Following")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Text(DateForceSettings.formatExact(settings.overrideFollowing))
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(VaultTheme.Colors.backgroundSecondary)
+                        .cornerRadius(8)
+                    }
+
+                    // Registered spectators list
+                    if !settings.spectators.isEmpty {
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            HStack {
+                                Text("Spectators (\(settings.spectators.count))")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Spacer()
+                                Button(action: { settings.resetSpectators() }) {
+                                    Text("Reset")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(VaultTheme.Colors.error)
+                                }
+                            }
+
+                            ForEach(settings.spectators) { spec in
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(spec.group == .date ? Color.blue.opacity(0.2) : Color.orange.opacity(0.2))
+                                        .frame(width: 8, height: 8)
+                                    Text("@\(spec.username)")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    Spacer()
+                                    Text("\(spec.rawFollowingCount)")
+                                        .font(.system(size: 12, design: .monospaced))
+                                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                                    Image(systemName: "arrow.right")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                                    Text("\(spec.effectiveValue)")
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(VaultTheme.Colors.primary)
+                                    Text(spec.group == .date ? "📅" : "🕐")
+                                        .font(.system(size: 12))
                                 }
                             }
                         }

@@ -12,6 +12,7 @@ import Combine
 @main
 struct MentalGram1App: App {
     @ObservedObject var instagram = InstagramService.shared
+    @Environment(\.scenePhase) private var scenePhase
     
     init() {
         requestNotificationPermission()
@@ -19,7 +20,7 @@ struct MentalGram1App: App {
     
     var body: some Scene {
         WindowGroup {
-            HomeView()
+                HomeView()
                 .overlay {
                     if instagram.isLocked {
                         LockdownView()
@@ -27,6 +28,18 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: instagram.isLocked)
+        }
+        .onChange(of: scenePhase) { phase in
+            let um = UploadManager.shared
+            switch phase {
+            case .background:
+                um.beginBackgroundWork()
+            case .active:
+                um.endBackgroundWork()
+                um.restoreTimersIfNeeded()
+            default:
+                break
+            }
         }
     }
     

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UserNotifications
 
 // MARK: - Upload Manager (Singleton)
 // Single source of truth for all upload state.
@@ -25,6 +26,20 @@ class UploadManager: ObservableObject {
     
     // MARK: - Active Upload Task (to detect orphaned states)
     var activeTask: Task<Void, Never>? = nil
+    
+    // MARK: - Background / Foreground persistence
+    /// Absolute timestamp when the current wait/cooldown ends (persisted to UserDefaults).
+    var waitEndTime: Date? {
+        get { UserDefaults.standard.object(forKey: "upload_waitEndTime") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_waitEndTime") }
+    }
+    /// Index of the next photo to upload after the wait (persisted).
+    var waitNextPhotoIndex: Int {
+        get { UserDefaults.standard.integer(forKey: "upload_waitNextPhotoIndex") }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_waitNextPhotoIndex") }
+    }
+    /// Background task identifier for finishing in-flight uploads.
+    var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
     
     // MARK: - Computed Properties (derived from uploadPhase)
     var isUploading: Bool {
@@ -111,7 +126,7 @@ class UploadManager: ObservableObject {
         requestPause = false
         activeTask?.cancel()
         activeTask = nil
-        
+        clearWaitPersistence()
         invalidateAllTimers()
     }
     
@@ -231,8 +246,35 @@ class UploadManager: ObservableObject {
             }
         }
         
-        // Restore nextPhoto countdown timer
-        if case .waiting(let nextPhoto, _) = uploadPhase, nextPhotoCountdown > 0 {
+        // Restore nextPhoto countdown from persisted timestamp (survives background/kill)
+        if let endTime = waitEndTime {
+            let remaining = max(0, Int(endTime.timeIntervalSinceNow))
+            let nextPhoto = waitNextPhotoIndex
+
+            if remaining > 0 {
+                nextPhotoCountdown = remaining
+                uploadPhase = .waiting(nextPhoto: nextPhoto, remainingSeconds: remaining)
+                currentPhaseDescription = "Next photo in \(remaining / 60):\(String(format: "%02d", remaining % 60))"
+
+                nextPhotoTimer?.invalidate()
+                nextPhotoTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                    guard let self else { return }
+                    let r = self.remainingWaitSeconds()
+                    self.nextPhotoCountdown = r
+                    self.uploadPhase = .waiting(nextPhoto: nextPhoto, remainingSeconds: r)
+                    self.currentPhaseDescription = "Next photo in \(r / 60):\(String(format: "%02d", r % 60))"
+                    if r <= 0 {
+                        self.nextPhotoTimer?.invalidate()
+                        self.nextPhotoTimer = nil
+                    }
+                }
+            } else {
+                // Wait already elapsed while in background — ready immediately
+                nextPhotoCountdown = 0
+                clearWaitPersistence()
+            }
+        } else if case .waiting(let nextPhoto, _) = uploadPhase, nextPhotoCountdown > 0 {
+            // Fallback for old in-memory countdown (no persisted timestamp)
             nextPhotoTimer?.invalidate()
             nextPhotoTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
                 guard let self = self else { return }
@@ -268,5 +310,74 @@ class UploadManager: ObservableObject {
             uploadPhase = .completed
             currentPhaseDescription = "Upload Completed"
         }
+    }
+
+    // MARK: - Timestamp-based wait persistence
+
+    /// Save the absolute end-time so background/kill doesn't lose it.
+    func persistWait(endTime: Date, nextPhotoIndex: Int) {
+        waitEndTime = endTime
+        waitNextPhotoIndex = nextPhotoIndex
+        scheduleUploadReadyNotification(at: endTime)
+    }
+
+    func clearWaitPersistence() {
+        waitEndTime = nil
+        waitNextPhotoIndex = 0
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["uploadReady"])
+    }
+
+    /// Returns how many seconds remain until the persisted wait ends.
+    /// Negative or zero means the wait already elapsed.
+    func remainingWaitSeconds() -> Int {
+        guard let end = waitEndTime else { return 0 }
+        return max(0, Int(end.timeIntervalSinceNow))
+    }
+
+    // MARK: - Local notification
+
+    private func scheduleUploadReadyNotification(at endTime: Date) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["uploadReady"])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Upload Ready"
+        content.body = "Next photo is ready to upload. Open the app to continue."
+        content.sound = .default
+
+        // Fire 5 seconds before the cooldown ends (or immediately if <5s left)
+        let fireDate = endTime.addingTimeInterval(-5)
+        let delay = max(1, fireDate.timeIntervalSinceNow)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
+
+        let request = UNNotificationRequest(identifier: "uploadReady", content: content, trigger: trigger)
+        center.add(request) { error in
+            if let error {
+                print("⚠️ [NOTIF] Failed to schedule: \(error.localizedDescription)")
+            } else {
+                print("🔔 [NOTIF] Upload-ready notification scheduled in \(Int(delay))s")
+            }
+        }
+    }
+
+    // MARK: - Background task
+
+    /// Call when the app enters background to finish an in-flight upload/archive.
+    func beginBackgroundWork() {
+        guard isUploading else { return }
+        guard backgroundTaskId == .invalid else { return }
+
+        backgroundTaskId = UIApplication.shared.beginBackgroundTask(withName: "FinishUpload") { [weak self] in
+            self?.endBackgroundWork()
+        }
+        print("🌙 [BG] Background task started (id: \(backgroundTaskId.rawValue))")
+    }
+
+    /// Call when the app returns to foreground or when background work finishes.
+    func endBackgroundWork() {
+        guard backgroundTaskId != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskId)
+        print("☀️ [BG] Background task ended")
+        backgroundTaskId = .invalid
     }
 }

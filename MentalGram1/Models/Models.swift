@@ -506,7 +506,11 @@ enum MaskInputMode: String, Codable, CaseIterable {
 
 class SecretInputSettings: ObservableObject {
     static let shared = SecretInputSettings()
-    
+
+    @Published var isEnabled: Bool {
+        didSet { UserDefaults.standard.set(isEnabled, forKey: "secretInputEnabled") }
+    }
+
     @Published var mode: MaskInputMode {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "secretInputMode")
@@ -520,6 +524,9 @@ class SecretInputSettings: ObservableObject {
     }
     
     private init() {
+        let savedEnabled = UserDefaults.standard.object(forKey: "secretInputEnabled") as? Bool
+        self.isEnabled = savedEnabled ?? true
+
         if let savedMode = UserDefaults.standard.string(forKey: "secretInputMode"),
            let mode = MaskInputMode(rawValue: savedMode) {
             self.mode = mode
@@ -530,8 +537,9 @@ class SecretInputSettings: ObservableObject {
         self.customUsername = UserDefaults.standard.string(forKey: "secretInputCustomUsername") ?? ""
     }
     
-    /// Get the mask text based on current mode
+    /// Get the mask text based on current mode. Returns empty string when disabled.
     func getMaskText(latestFollowerUsername: String?) -> String {
+        guard isEnabled else { return "" }
         switch mode {
         case .latestFollower:
             return latestFollowerUsername?.lowercased() ?? "user"

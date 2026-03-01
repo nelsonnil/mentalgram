@@ -682,7 +682,7 @@ struct InstagramProfileView: View {
                         Spacer(minLength: 8)
                         
                         // Stats
-                        HStack(spacing: 0) {
+                        HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
                             StatView(number: profile.mediaCount, label: "publicaciones")
                             StatView(number: profile.followerCount, label: "seguidores")
                             StatView(number: profile.followingCount, label: "seguidos",
@@ -695,10 +695,12 @@ struct InstagramProfileView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(profile.fullName)
                             .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.black)
                         
                         if !profile.biography.isEmpty {
                             Text(profile.biography)
                                 .font(.system(size: 14))
+                                .foregroundColor(.black)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         
@@ -724,8 +726,8 @@ struct InstagramProfileView: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 32)
-                                .background(Color(uiColor: .systemGray5))
-                                .foregroundColor(.primary)
+                                .background(Color(red: 0.898, green: 0.898, blue: 0.918))
+                                .foregroundColor(.black)
                                 .cornerRadius(8)
                         }
                         
@@ -734,8 +736,8 @@ struct InstagramProfileView: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 32)
-                                .background(Color(uiColor: .systemGray5))
-                                .foregroundColor(.primary)
+                                .background(Color(red: 0.898, green: 0.898, blue: 0.918))
+                                .foregroundColor(.black)
                                 .cornerRadius(8)
                         }
                         
@@ -743,8 +745,8 @@ struct InstagramProfileView: View {
                             Image(systemName: "person.badge.plus")
                                 .font(.system(size: 16))
                                 .frame(width: 32, height: 32)
-                                .background(Color(uiColor: .systemGray5))
-                                .foregroundColor(.primary)
+                                .background(Color(red: 0.898, green: 0.898, blue: 0.918))
+                                .foregroundColor(.black)
                                 .cornerRadius(8)
                         }
                     }
@@ -760,11 +762,11 @@ struct InstagramProfileView: View {
                                     .frame(width: 64, height: 64)
                                     .overlay(
                                         Image(systemName: "plus")
-                                            .foregroundColor(.primary)
+                                            .foregroundColor(.black)
                                     )
                                 Text("Nuevo")
                                     .font(.system(size: 12))
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(.black)
                             }
 
                             if profile.cachedHighlights.isEmpty {
@@ -1062,7 +1064,7 @@ struct InstagramHeaderView: View {
             Button(action: onPlusPress) {
                 Image(systemName: "plus.app")
                     .font(.system(size: 24))
-                    .foregroundColor(.primary)
+                    .foregroundColor(.black)
             }
             
             Spacer()
@@ -1076,14 +1078,15 @@ struct InstagramHeaderView: View {
                 }
                 Text(username)
                     .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.black)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.black)
             }
             
             Spacer()
             
             HStack(spacing: 20) {
-                // At symbol button (refresh) — debounced to 10 s between taps
                 Button(action: {
                     let now = Date()
                     guard now.timeIntervalSince(lastRefreshTap) > 10 else {
@@ -1095,14 +1098,13 @@ struct InstagramHeaderView: View {
                 }) {
                     Image(systemName: "at")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.primary)
+                        .foregroundColor(.black)
                 }
                 
-                // Menu button
                 Button(action: {}) {
                     Image(systemName: "line.3.horizontal")
                         .font(.system(size: 22))
-                        .foregroundColor(.primary)
+                        .foregroundColor(.black)
                 }
             }
         }
@@ -1117,28 +1119,33 @@ struct InstagramHeaderView: View {
 struct StatView: View {
     let number: Int
     let label: String
-    /// When set, displayed instead of the formatted number (used for secret digit feedback)
     var overrideText: String? = nil
+
+    private static let textBlack = Color.black
+    private static let textGray = Color(white: 0.56)
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(overrideText ?? formatNumber(number))
+            Text(overrideText ?? formatCount(number))
                 .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(Self.textBlack)
                 .monospacedDigit()
             Text(label)
                 .font(.system(size: 13))
-                .foregroundColor(.secondary)
+                .foregroundColor(Self.textGray)
         }
-        .frame(width: 100)
     }
 
-    private func formatNumber(_ num: Int) -> String {
-        if num >= 1_000_000 {
-            return String(format: "%.1f M", Double(num) / 1_000_000).replacingOccurrences(of: ".", with: ",")
-        } else if num >= 1_000 {
-            return String(format: "%.1f K", Double(num) / 1_000).replacingOccurrences(of: ".", with: ",")
+    private func formatCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        } else if count >= 10_000 {
+            return String(format: "%.0fK", Double(count) / 1_000)
         } else {
-            return "\(num)"
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.locale = Locale(identifier: "en_US")
+            return formatter.string(from: NSNumber(value: count)) ?? "\(count)"
         }
     }
 }
@@ -1208,7 +1215,7 @@ struct FollowedByView: View {
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 20, height: 20)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
+                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
                     }
                 }
             }
@@ -1217,22 +1224,22 @@ struct FollowedByView: View {
             if followers.count >= 2 {
                 Text("Seguido/a por ")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(white: 0.56))
                 + Text(followers[0].username)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.primary)
+                    .foregroundColor(.black)
                 + Text(", ")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(white: 0.56))
                 + Text(followers[1].username)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.primary)
+                    .foregroundColor(.black)
                 + Text(" y ")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(white: 0.56))
                 + Text("\(max(0, followers.count - 2)) más")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.primary)
+                    .foregroundColor(.black)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1250,12 +1257,12 @@ struct TabButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 24))
-                .foregroundColor(isSelected ? .primary : .secondary)
+                .foregroundColor(isSelected ? .black : Color(white: 0.56))
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .overlay(
                     Rectangle()
-                        .fill(isSelected ? Color.primary : Color.clear)
+                        .fill(isSelected ? Color.black : Color.clear)
                         .frame(height: 1),
                     alignment: .bottom
                 )
