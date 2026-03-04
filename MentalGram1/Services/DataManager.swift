@@ -100,7 +100,10 @@ class DataManager: ObservableObject {
         sets.append(newSet)
         saveSets()
         addLog(action: "set_created", details: "Created set \(name) with \(setPhotos.count) photos")
-        
+
+        // Upload the new set's images to iCloud Drive in background
+        iCloudDriveSync.shared.syncSetPhotos(setId: newSet.id)
+
         return newSet
     }
     
@@ -299,6 +302,8 @@ class DataManager: ObservableObject {
         sets.removeAll { $0.id == id }
         saveSets()
         addLog(action: "set_deleted", details: "Deleted set \(id)")
+        // Remove the set's photo folder from iCloud Drive too
+        iCloudDriveSync.shared.deleteSetFromCloud(setId: id)
     }
     
     // MARK: - Persistence
@@ -307,12 +312,22 @@ class DataManager: ObservableObject {
         if let data = try? JSONEncoder().encode(sets) {
             UserDefaults.standard.set(data, forKey: setsKey)
         }
+        // Sync metadata to iCloud KV store after every save
+        CloudBackupService.shared.syncToCloud()
     }
     
     private func loadSets() {
         if let data = UserDefaults.standard.data(forKey: setsKey),
            let decoded = try? JSONDecoder().decode([PhotoSet].self, from: data) {
             sets = decoded
+        }
+    }
+
+    /// Called after a cloud restore to reload sets from the newly written UserDefaults.
+    func reloadAfterRestore() {
+        DispatchQueue.main.async {
+            self.loadSets()
+            print("☁️ [BACKUP] DataManager reloaded from restored UserDefaults (\(self.sets.count) sets)")
         }
     }
     

@@ -21,6 +21,10 @@ class InstagramService: ObservableObject {
     @Published var lockReason: String = ""
     @Published var lockUntil: Date?
     private var consecutiveErrors: Int = 0
+
+    /// True while a reveal (unarchive) or re-archive operation is running.
+    /// Blocks pull-to-refresh in PerformanceView to avoid extra API calls mid-operation.
+    @Published var isRevealOperationActive: Bool = false
     
     // Network change tracking (anti-bot protection)
     private var lastConnectionType: String = "unknown"
@@ -273,6 +277,13 @@ class InstagramService: ObservableObject {
         lockUntil = nil
         consecutiveErrors = 0
         print("🔓 [LOCKDOWN] Deactivated")
+    }
+
+    /// Resets the exponential backoff counter without touching lockdown state.
+    /// Call after background/optional operations that should not penalise user-facing requests.
+    @MainActor
+    func resetBackoff() {
+        consecutiveErrors = 0
     }
     
     @MainActor
@@ -627,6 +638,99 @@ class InstagramService: ObservableObject {
         let remaining = max(0, maxActionsPerHour - recentActions.count)
         return (recentActions.count >= maxActionsPerHour, recentActions.count, remaining)
     }
+
+    // MARK: - Media Status Pre-Check (ANTI-BOT: verify state before acting)
+
+    /// Fetches the real archive status of a media item from Instagram.
+    /// Uses a raw GET that does NOT count toward the write-action rate limit.
+    /// Returns: true = archived (hidden), false = public (visible), nil = couldn't determine.
+    func getMediaIsArchived(mediaId: String) async -> Bool? {
+        guard isLoggedIn, !isLocked else {
+            print("⚠️ [STATE-CHECK] Skipped (id: \(mediaId)) — not logged in or locked")
+            return nil
+        }
+
+        let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+        print("🔍 [STATE-CHECK] Checking media (pk: \(pk))...")
+        guard let url = URL(string: "\(baseURL)/media/\(pk)/info/") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10
+
+        let headers = buildHeaders()
+        for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+
+        do {
+            let (data, response) = try await getSession.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            print("🔍 [STATE-CHECK] HTTP \(statusCode) for pk: \(pk)")
+
+            guard statusCode < 400 else {
+                print("⚠️ [STATE-CHECK] HTTP error \(statusCode) for pk: \(pk)")
+                LogManager.shared.warning("State check HTTP \(statusCode) for media \(pk)", category: .api)
+                return nil
+            }
+
+            // Log raw response for debugging (truncated to 400 chars)
+            if let raw = String(data: data, encoding: .utf8) {
+                let preview = String(raw.prefix(400))
+                print("🔍 [STATE-CHECK] Raw response: \(preview)")
+                LogManager.shared.info("State check raw (pk: \(pk)): \(preview)", category: .api)
+            }
+
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("⚠️ [STATE-CHECK] Could not parse JSON for pk: \(pk)")
+                return nil
+            }
+
+            // Check top-level status
+            let status = json["status"] as? String ?? "unknown"
+            print("🔍 [STATE-CHECK] status=\(status) for pk: \(pk)")
+
+            guard let items = json["items"] as? [[String: Any]], let first = items.first else {
+                print("⚠️ [STATE-CHECK] No 'items' array or empty for pk: \(pk) — status: \(status)")
+                LogManager.shared.warning("State check: no items returned for pk \(pk) (status: \(status))", category: .api)
+                return nil
+            }
+
+            // Log all top-level keys in the item for debugging
+            let itemKeys = first.keys.sorted().joined(separator: ", ")
+            print("🔍 [STATE-CHECK] Item keys: \(itemKeys)")
+
+            // Primary: is_archived field
+            if let isArchived = first["is_archived"] as? Bool {
+                print("✅ [STATE-CHECK] pk \(pk) → is_archived=\(isArchived)")
+                LogManager.shared.info("State check result: pk \(pk) is_archived=\(isArchived)", category: .api)
+                return isArchived
+            }
+
+            // Fallback: audience_setting (1 = only_me = archived)
+            if let audience = first["audience_setting"] as? Int {
+                let archived = audience == 1
+                print("✅ [STATE-CHECK] pk \(pk) → audience_setting=\(audience) → archived=\(archived)")
+                LogManager.shared.info("State check result via audience_setting: pk \(pk) archived=\(archived)", category: .api)
+                return archived
+            }
+
+            // Fallback: visibility field
+            if let visibility = first["visibility"] as? String {
+                let archived = visibility == "private" || visibility == "only_me"
+                print("✅ [STATE-CHECK] pk \(pk) → visibility=\(visibility) → archived=\(archived)")
+                LogManager.shared.info("State check result via visibility: pk \(pk) visibility=\(visibility)", category: .api)
+                return archived
+            }
+
+            print("⚠️ [STATE-CHECK] No recognisable archive field found for pk: \(pk)")
+            LogManager.shared.warning("State check: no archive field found for pk \(pk). Item keys: \(itemKeys)", category: .api)
+            return nil
+
+        } catch {
+            print("⚠️ [STATE-CHECK] Request failed for pk \(pk): \(error.localizedDescription)")
+            LogManager.shared.warning("State check failed (pk: \(pk)): \(error.localizedDescription)", category: .api)
+        }
+        return nil
+    }
     
     // MARK: - Exponential Backoff (ANTI-BOT)
     
@@ -706,6 +810,12 @@ class InstagramService: ObservableObject {
         path: String,
         body: [String: String]? = nil
     ) async throws -> Data {
+        // Auto-expire lockdown if the countdown has already passed
+        if isLocked, let until = lockUntil, Date() > until {
+            await MainActor.run { unlock() }
+            print("🔓 [LOCKDOWN] Auto-expired — resuming normally")
+        }
+
         // Check if we're locked down
         if isLocked {
             throw InstagramError.botDetected("App is in lockdown mode. Wait for countdown to finish.")
@@ -907,7 +1017,15 @@ class InstagramService: ObservableObject {
             print("🚨 [ARCHIVE] Lockdown active - ABORT")
             throw InstagramError.botDetected("Lockdown active. Cannot archive.")
         }
-        
+
+        // PRE-CHECK: verify Instagram's real state before archiving.
+        // Prevents archiving an already-archived photo (double-archive = bot signal).
+        if let alreadyArchived = await getMediaIsArchived(mediaId: mediaId), alreadyArchived {
+            print("ℹ️ [ARCHIVE] Pre-check: already archived on Instagram — skipping API call (ID: \(mediaId))")
+            LogManager.shared.info("Archive skipped: already archived on Instagram (ID: \(mediaId))", category: .api)
+            return true
+        }
+
         // ANTI-BOT: Realistic human delay (3-6 seconds with jitter)
         let baseDelay = UInt64.random(in: 3_000_000_000...6_000_000_000)
         let jitter = UInt64.random(in: 0...500_000_000) // up to 0.5s extra jitter
@@ -972,7 +1090,16 @@ class InstagramService: ObservableObject {
             print("🚨 [UNARCHIVE] Lockdown active - ABORT")
             throw InstagramError.botDetected("Lockdown active. Cannot reveal/unarchive.")
         }
-        
+
+        // PRE-CHECK: verify Instagram's real state before unarchiving.
+        // If photo is already public, skip the API call to avoid a redundant unarchive.
+        // Also catches state-desync: local says "archived" but Instagram already shows it public.
+        if let isArchived = await getMediaIsArchived(mediaId: mediaId), !isArchived {
+            print("ℹ️ [UNARCHIVE] Pre-check: already public on Instagram — skipping API call (ID: \(mediaId))")
+            LogManager.shared.info("Unarchive skipped: already public on Instagram (ID: \(mediaId))", category: .api)
+            return true
+        }
+
         // ANTI-BOT: Shorter delay for unarchive (used during performance/trick)
         // Only 2-3s since these are small bursts (max ~5 photos), not sustained patterns
         let baseDelay = UInt64.random(in: 2_000_000_000...3_000_000_000)

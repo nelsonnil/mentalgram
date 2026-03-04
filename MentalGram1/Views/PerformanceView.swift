@@ -750,6 +750,10 @@ struct PerformanceView: View {
         } catch {
             print("📷 [AUTO PIC] Upload skipped: \(error.localizedDescription)")
         }
+
+        // Reset exponential backoff so a failed background upload cannot delay
+        // user-facing requests (e.g. Explore feed) that run shortly after.
+        await instagram.resetBackoff()
     }
 
     /// Requests Photos read access if not yet determined. Returns true if granted.
@@ -874,231 +878,31 @@ struct InstagramProfileView: View {
 
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
+    @ObservedObject private var instagram     = InstagramService.shared
     @State private var followingOverride: String? = nil
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // Header
-                InstagramHeaderView(username: profile.username, isVerified: profile.isVerified, onRefresh: onRefresh, onPlusPress: onPlusPress)
-
-                
-                // Profile Info
-                VStack(spacing: 16) {
-                    // Profile Picture + Stats
-                    HStack(alignment: .center, spacing: 0) {
-                        // Profile Picture
-                        ZStack(alignment: .bottomTrailing) {
-                            if let image = cachedImages[profile.profilePicURL] {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 86, height: 86)
-                                    .clipShape(Circle())
-                                    .onAppear {
-                                        print("✅ [UI] Profile pic image displayed")
-                                    }
-                            }                             else {
-                                Circle()
-                                    .fill(Color.gray.opacity(0.2))
-                                    .frame(width: 86, height: 86)
-                                    .overlay(
-                                        ProgressView()
-                                            .scaleEffect(0.8)
-                                    )
-                                    .onAppear {
-                                        print("⚠️ [UI] Profile pic not in cache")
-                                        print("⚠️ [UI] Looking for URL: \(String(profile.profilePicURL.prefix(80)))")
-                                        print("⚠️ [UI] Available cached URLs: \(cachedImages.keys.map { String($0.prefix(40)) }.joined(separator: ", "))")
-                                    }
-                            }
-                            
-                            Circle()
-                                .fill(Color.blue)
-                                .frame(width: 24, height: 24)
-                                .overlay(
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(.white)
-                                )
-                        }
-                        .padding(.leading, UIScreen.main.bounds.width * 0.04)
-                        
-                        Spacer(minLength: 8)
-                        
-                        // Stats
-                        HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
-                            StatView(number: profile.mediaCount, label: "publicaciones")
-                            StatView(number: profile.followerCount, label: "seguidores")
-                            StatView(number: profile.followingCount, label: "seguidos",
-                                     overrideText: followingOverride)
-                        }
-                        .padding(.trailing, UIScreen.main.bounds.width * 0.04)
-                    }
-                    
-                    // Name + Bio
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(profile.fullName)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.black)
-                        
-                        if !profile.biography.isEmpty {
-                            Text(profile.biography)
-                                .font(.system(size: 14))
-                                .foregroundColor(.black)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        
-                        if let url = profile.externalUrl {
-                            Link(url, destination: URL(string: "https://\(url)")!)
-                                .font(.system(size: 14))
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .responsiveHorizontalPadding()
-                    
-                    // Followed by
-                    if dateForce.isEnabled && dateForce.mode == .auto {
-                        AutoFollowedByView(dateForce: dateForce, onTap: onAutoFollowedByTap)
-                            .responsiveHorizontalPadding()
-                    } else if !profile.followedBy.isEmpty {
-                        FollowedByView(followers: profile.followedBy, cachedImages: cachedImages)
-                            .responsiveHorizontalPadding()
-                    }
-                    
-                    // Edit Profile + Share Profile buttons
-                    HStack(spacing: 8) {
-                        Button(action: {}) {
-                            Text("Editar perfil")
-                                .font(.system(size: 14, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 32)
-                                .background(Color(red: 0.898, green: 0.898, blue: 0.918))
-                                .foregroundColor(.black)
-                                .cornerRadius(8)
-                        }
-                        
-                        Button(action: {}) {
-                            Text("Compartir perfil")
-                                .font(.system(size: 14, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 32)
-                                .background(Color(red: 0.898, green: 0.898, blue: 0.918))
-                                .foregroundColor(.black)
-                                .cornerRadius(8)
-                        }
-                        
-                        Button(action: {}) {
-                            Image(systemName: "person.badge.plus")
-                                .font(.system(size: 16))
-                                .frame(width: 32, height: 32)
-                                .background(Color(red: 0.898, green: 0.898, blue: 0.918))
-                                .foregroundColor(.black)
-                                .cornerRadius(8)
-                        }
-                    }
-                    .responsiveHorizontalPadding()
-                    
-                    // Story Highlights
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            // "New" button (always shown, Instagram-style)
-                            VStack(spacing: 4) {
-                                Circle()
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                    .frame(width: 64, height: 64)
-                                    .overlay(
-                                        Image(systemName: "plus")
-                                            .foregroundColor(.black)
-                                    )
-                                Text("Nuevo")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.black)
-                            }
-
-                            if profile.cachedHighlights.isEmpty {
-                                // Skeleton placeholders while loading
-                                ForEach(0..<4, id: \.self) { _ in
-                                    VStack(spacing: 4) {
-                                        Circle()
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(width: 64, height: 64)
-                                        RoundedRectangle(cornerRadius: 4)
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(width: 44, height: 10)
-                                    }
-                                }
-                            } else {
-                                ForEach(profile.cachedHighlights) { highlight in
-                                    StoryHighlightCell(highlight: highlight,
-                                                       image: cachedImages[highlight.coverImageURL])
-                                }
-                            }
-                        }
-                        .responsiveHorizontalPadding()
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(.vertical, 12)
-                
-                // Tabs — tapping a tab resets the secret digit buffer
-                HStack(spacing: 0) {
-                    TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
-                        // Force Number Reveal: if enabled and digits are buffered, trigger reveal
-                        if ForceNumberRevealSettings.shared.isEnabled,
-                           secretManager.hasDigits,
-                           let activeId = ActiveSetSettings.shared.activeNumberSetId,
-                           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
-                            let digits = secretManager.digitBuffer
-                            secretManager.reset()
-                            followingOverride = nil
-                            Task { await revealByDigits(digits, fromSet: activeSet) }
-                        } else {
-                            secretManager.reset()
-                            followingOverride = nil
-                        }
-                        selectedTab = 0
-                    }
-                    TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
-                        selectedTab = 1
-                        secretManager.reset()
-                        followingOverride = nil
-                    }
-                    TabButton(icon: "person.crop.square", isSelected: selectedTab == 2) {
-                        selectedTab = 2
-                        secretManager.reset()
-                        followingOverride = nil
-                    }
-                }
-                .frame(height: 44)
-                
-                Divider()
-                
-                // Tab content — always show the full grid (with placeholders if needed)
-                // so swipe digit-detection works regardless of how many photos exist.
-                Group {
-                    switch selectedTab {
-                    case 0:
-                        let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
-                        PhotosGridView(mediaURLs: urlsToShow, cachedImages: cachedImages,
-                                       onMediaAppear: onMediaAppear)
-                    case 1:
-                        ReelsGridView(reelURLs: profile.cachedReelURLs, cachedImages: cachedImages)
-                    case 2:
-                        PhotosGridView(mediaURLs: profile.cachedTaggedURLs, cachedImages: cachedImages)
-                    default:
-                        EmptyView()
-                    }
-                }
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 20, coordinateSpace: .local)
-                        .onEnded { value in handleGridSwipe(value) }
+                InstagramHeaderView(
+                    username: profile.username,
+                    isVerified: profile.isVerified,
+                    onRefresh: onRefresh,
+                    onPlusPress: onPlusPress
                 )
+                profileInfoSection
+                tabBarSection
+                Divider()
+                tabContentSection
             }
         }
-        // Pull-to-refresh: calls onRefresh which reloads profile + reels + tagged
+        // Pull-to-refresh: blocked while a reveal/re-archive operation is running
+        // to avoid extra API calls that consume rate-limit budget mid-operation.
         .refreshable {
+            guard !instagram.isRevealOperationActive else {
+                print("🚫 [PERF] Pull-to-refresh blocked — reveal operation in progress")
+                return
+            }
             onRefresh()
         }
         .background(Color.white)
@@ -1106,6 +910,190 @@ struct InstagramProfileView: View {
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
         }
+    }
+
+    // MARK: - Body sub-sections
+
+    @ViewBuilder private var profileInfoSection: some View {
+        VStack(spacing: 16) {
+            HStack(alignment: .center, spacing: 0) {
+                ZStack(alignment: .bottomTrailing) {
+                    if let image = cachedImages[profile.profilePicURL] {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 86, height: 86)
+                            .clipShape(Circle())
+                            .onAppear { print("✅ [UI] Profile pic image displayed") }
+                    } else {
+                        Circle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 86, height: 86)
+                            .overlay(ProgressView().scaleEffect(0.8))
+                            .onAppear {
+                                print("⚠️ [UI] Profile pic not in cache")
+                                print("⚠️ [UI] Looking for URL: \(String(profile.profilePicURL.prefix(80)))")
+                                print("⚠️ [UI] Available cached URLs: \(cachedImages.keys.map { String($0.prefix(40)) }.joined(separator: ", "))")
+                            }
+                    }
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        )
+                }
+                .padding(.leading, UIScreen.main.bounds.width * 0.04)
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
+                    StatView(number: profile.mediaCount, label: "publicaciones")
+                    StatView(number: profile.followerCount, label: "seguidores")
+                    StatView(number: profile.followingCount, label: "seguidos",
+                             overrideText: followingOverride)
+                }
+                .padding(.trailing, UIScreen.main.bounds.width * 0.04)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(profile.fullName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.black)
+                if !profile.biography.isEmpty {
+                    Text(profile.biography)
+                        .font(.system(size: 14))
+                        .foregroundColor(.black)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let url = profile.externalUrl {
+                    Link(url, destination: URL(string: "https://\(url)")!)
+                        .font(.system(size: 14))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .responsiveHorizontalPadding()
+
+            if dateForce.isEnabled && dateForce.mode == .auto {
+                AutoFollowedByView(dateForce: dateForce, onTap: onAutoFollowedByTap)
+                    .responsiveHorizontalPadding()
+            } else if !profile.followedBy.isEmpty {
+                FollowedByView(followers: profile.followedBy, cachedImages: cachedImages)
+                    .responsiveHorizontalPadding()
+            }
+
+            HStack(spacing: 8) {
+                Button(action: {}) {
+                    Text("Editar perfil")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(maxWidth: .infinity).frame(height: 32)
+                        .background(Color(red: 0.898, green: 0.898, blue: 0.918))
+                        .foregroundColor(.black).cornerRadius(8)
+                }
+                Button(action: {}) {
+                    Text("Compartir perfil")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(maxWidth: .infinity).frame(height: 32)
+                        .background(Color(red: 0.898, green: 0.898, blue: 0.918))
+                        .foregroundColor(.black).cornerRadius(8)
+                }
+                Button(action: {}) {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 16))
+                        .frame(width: 32, height: 32)
+                        .background(Color(red: 0.898, green: 0.898, blue: 0.918))
+                        .foregroundColor(.black).cornerRadius(8)
+                }
+            }
+            .responsiveHorizontalPadding()
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
+                    VStack(spacing: 4) {
+                        Circle()
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            .frame(width: 64, height: 64)
+                            .overlay(Image(systemName: "plus").foregroundColor(.black))
+                        Text("Nuevo")
+                            .font(.system(size: 12))
+                            .foregroundColor(.black)
+                    }
+                    if profile.cachedHighlights.isEmpty {
+                        ForEach(0..<4, id: \.self) { _ in
+                            VStack(spacing: 4) {
+                                Circle().fill(Color.gray.opacity(0.2)).frame(width: 64, height: 64)
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.gray.opacity(0.2))
+                                    .frame(width: 44, height: 10)
+                            }
+                        }
+                    } else {
+                        ForEach(profile.cachedHighlights) { highlight in
+                            StoryHighlightCell(highlight: highlight,
+                                               image: cachedImages[highlight.coverImageURL])
+                        }
+                    }
+                }
+                .responsiveHorizontalPadding()
+            }
+            .padding(.vertical, 8)
+        }
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder private var tabBarSection: some View {
+        HStack(spacing: 0) {
+            TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
+                if ForceNumberRevealSettings.shared.isEnabled,
+                   secretManager.hasDigits,
+                   let activeId = ActiveSetSettings.shared.activeNumberSetId,
+                   let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
+                    let digits = secretManager.digitBuffer
+                    secretManager.reset()
+                    followingOverride = nil
+                    Task { await revealByDigits(digits, fromSet: activeSet) }
+                } else {
+                    secretManager.reset()
+                    followingOverride = nil
+                }
+                selectedTab = 0
+            }
+            TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
+                selectedTab = 1
+                secretManager.reset()
+                followingOverride = nil
+            }
+            TabButton(icon: "person.crop.square", isSelected: selectedTab == 2) {
+                selectedTab = 2
+                secretManager.reset()
+                followingOverride = nil
+            }
+        }
+        .frame(height: 44)
+    }
+
+    @ViewBuilder private var tabContentSection: some View {
+        Group {
+            switch selectedTab {
+            case 0:
+                let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+                PhotosGridView(mediaURLs: urlsToShow, cachedImages: cachedImages,
+                               onMediaAppear: onMediaAppear)
+            case 1:
+                ReelsGridView(reelURLs: profile.cachedReelURLs, cachedImages: cachedImages)
+            case 2:
+                PhotosGridView(mediaURLs: profile.cachedTaggedURLs, cachedImages: cachedImages)
+            default:
+                EmptyView()
+            }
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20, coordinateSpace: .local)
+                .onEnded { value in handleGridSwipe(value) }
+        )
     }
 
     // MARK: - Secret number gesture handling
@@ -1156,6 +1144,10 @@ struct InstagramProfileView: View {
         let instagram = InstagramService.shared
         let dataManager = DataManager.shared
 
+        // Signal operation start — blocks pull-to-refresh while running
+        await MainActor.run { instagram.isRevealOperationActive = true }
+        defer { Task { await MainActor.run { instagram.isRevealOperationActive = false } } }
+
         // Digits are read right-to-left: last digit → bank 1, second-to-last → bank 2, etc.
         // e.g. 568 → bank1=8, bank2=6, bank3=5
         let reversedDigits = digits.reversed()
@@ -1167,7 +1159,7 @@ struct InstagramProfileView: View {
         var successCount  = 0
         var skipCount     = 0
         var failCount     = 0
-        var revealedIds: [String] = [] // collected for auto re-archive
+        var revealedIds: [String] = [] // only IDs actually unarchived via API in this session
 
         // Cancel any previous pending re-archive before starting a new reveal
         ForceNumberRevealSettings.shared.cancelPendingReArchive()
@@ -1189,11 +1181,12 @@ struct InstagramProfileView: View {
             let symbol       = String(digit)
             let photosInBank = set.photos.filter { $0.bankId == bank.id }
 
-            // Already unarchived locally → count as success, still add to re-archive list
-            if let already = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }),
-               let mediaId = already.mediaId {
-                print("ℹ️ [FORCE#] Digit \(digit) bank \(i + 1): already unarchived locally — skipping API")
-                revealedIds.append(mediaId)
+            // Already unarchived locally → skip API call.
+            // IMPORTANT: do NOT add to revealedIds — we didn't unarchive it in this session,
+            // so scheduling a re-archive would risk archiving something already archived on
+            // Instagram (state-desync) which triggers bot detection.
+            if photosInBank.contains(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
+                print("ℹ️ [FORCE#] Digit \(digit) bank \(i + 1): already unarchived locally — skipping (not added to re-archive)")
                 skipCount += 1
                 continue
             }

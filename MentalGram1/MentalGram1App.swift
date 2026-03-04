@@ -11,16 +11,19 @@ import Combine
 
 @main
 struct MentalGram1App: App {
-    @ObservedObject var instagram = InstagramService.shared
+    @ObservedObject var instagram  = InstagramService.shared
+    @ObservedObject var backup     = CloudBackupService.shared
     @Environment(\.scenePhase) private var scenePhase
-    
+
+    @State private var showRestoreBanner = false
+
     init() {
         requestNotificationPermission()
     }
-    
+
     var body: some Scene {
         WindowGroup {
-                HomeView()
+            HomeView()
                 .overlay {
                     if instagram.isLocked {
                         LockdownView()
@@ -28,17 +31,57 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: instagram.isLocked)
+                // Restore banner — shown once after auto-restore on first install
+                .overlay(alignment: .top) {
+                    if showRestoreBanner {
+                        RestoreBanner()
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .padding(.top, 60)
+                            .onTapGesture { withAnimation { showRestoreBanner = false } }
+                    }
+                }
+                .animation(.spring(response: 0.4), value: showRestoreBanner)
+                .onAppear {
+                    handleFirstLaunch()
+                }
         }
         .onChange(of: scenePhase) { phase in
             let um = UploadManager.shared
             switch phase {
             case .background:
                 um.beginBackgroundWork()
+                // Sync settings to iCloud whenever the app goes to background
+                CloudBackupService.shared.syncToCloud()
             case .active:
                 um.endBackgroundWork()
                 um.restoreTimersIfNeeded()
             default:
                 break
+            }
+        }
+    }
+
+    // MARK: - First-launch restore
+
+    private func handleFirstLaunch() {
+        let backup = CloudBackupService.shared
+        guard backup.needsCloudRestore else { return }
+
+        print("☁️ [BACKUP] Fresh install detected with existing cloud backup — restoring...")
+        let restored = backup.restoreFromCloud()
+        backup.markInstallComplete()
+
+        if restored {
+            // Reload DataManager so the restored sets JSON is picked up
+            DataManager.shared.reloadAfterRestore()
+            // Download set images from iCloud Drive in background
+            iCloudDriveSync.shared.downloadAllPhotosFromCloud { count in
+                print("☁️ [BACKUP] Restore complete: \(count) photo files downloaded")
+            }
+            withAnimation { showRestoreBanner = true }
+            // Auto-hide after 4 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                withAnimation { showRestoreBanner = false }
             }
         }
     }

@@ -377,7 +377,8 @@ struct ActivityLogView: View {
 // MARK: - Settings View
 
 struct SettingsView: View {
-    @ObservedObject var instagram = InstagramService.shared
+    @ObservedObject var instagram      = InstagramService.shared
+    @ObservedObject var backup         = CloudBackupService.shared
     @State private var showingLogoutAlert = false
     @State private var showingResetDeviceAlert = false
     @State private var showingFollowerData = false
@@ -562,6 +563,9 @@ struct SettingsView: View {
                         }
                     }
                     
+                    // MARK: - iCloud Backup
+                    BackupCard(backup: backup)
+
                     // Profile Picture Change
                     VaultCard {
                         VStack(alignment: .leading, spacing: VaultTheme.Spacing.lg) {
@@ -2079,6 +2083,106 @@ struct DateForceSettingsCard: View {
         }
         .sheet(isPresented: $showingHelp) {
             DateForceHelpView(onClose: { showingHelp = false })
+        }
+    }
+}
+
+// MARK: - Backup Card
+
+private struct BackupCard: View {
+    @ObservedObject var backup: CloudBackupService
+
+    private var lastBackupText: String {
+        guard let date = backup.lastBackupDate else {
+            return "Never"
+        }
+        let diff = Date().timeIntervalSince(date)
+        if diff < 60 { return "Just now" }
+        if diff < 3600 {
+            let m = Int(diff / 60)
+            return "\(m) min ago"
+        }
+        if diff < 86400 {
+            let h = Int(diff / 3600)
+            return "\(h) h ago"
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    var body: some View {
+        VaultCard {
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                HStack(spacing: 8) {
+                    Image(systemName: "icloud.fill")
+                        .foregroundColor(.blue)
+                    Text("iCloud Backup")
+                        .font(VaultTheme.Typography.titleSmall())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    if !backup.iCloudAvailable {
+                        Text("Not available")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.orange.opacity(0.12))
+                            .cornerRadius(6)
+                    }
+                }
+
+                HStack {
+                    Text("Last backup")
+                        .font(VaultTheme.Typography.body())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Text(lastBackupText)
+                        .font(VaultTheme.Typography.body())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+
+                HStack {
+                    Text("Status")
+                        .font(VaultTheme.Typography.body())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(backup.iCloudAvailable ? Color.green : Color.gray)
+                            .frame(width: 7, height: 7)
+                        Text(backup.iCloudAvailable ? "Active" : "Inactive")
+                            .font(VaultTheme.Typography.body())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                }
+
+                Button(action: { backup.syncToCloud() }) {
+                    HStack {
+                        if backup.isSyncing {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.85)
+                        } else {
+                            Image(systemName: "arrow.clockwise.icloud")
+                        }
+                        Text(backup.isSyncing ? "Saving…" : "Back up now")
+                            .font(VaultTheme.Typography.body().weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(backup.iCloudAvailable ? Color.blue : Color.gray.opacity(0.4))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .disabled(!backup.iCloudAvailable || backup.isSyncing)
+
+                Text("Backup runs automatically when the app is closed. Includes all your sets and images.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }

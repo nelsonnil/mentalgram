@@ -10,6 +10,8 @@ class ExploreManager: ObservableObject {
     @Published var cachedImages: [String: UIImage] = [:]
     @Published var isLoading = false
     @Published var isLoadingMore = false
+    @Published var loadError: String? = nil
+    @Published var isBackgroundRefreshing = false
     
     private var nextMaxId: String?
     private var hasPreloaded = false
@@ -45,11 +47,28 @@ class ExploreManager: ObservableObject {
         guard !isLoading else { return }
         
         isLoading = true
-        
+        loadError = nil
+
         Task {
             await loadExploreInternal()
             await MainActor.run {
                 isLoading = false
+            }
+        }
+    }
+
+    /// Silently fetches fresh data from the API while already showing cached content.
+    /// Does NOT touch isLoading — the grid stays visible and URLs are refreshed in place.
+    func backgroundRefresh() {
+        guard !isLoading, !isBackgroundRefreshing else { return }
+        isBackgroundRefreshing = true
+        print("🔄 [EXPLORE] Background refresh started (keeping cached content visible)...")
+
+        Task {
+            await loadExploreInternal()
+            await MainActor.run {
+                self.isBackgroundRefreshing = false
+                print("✅ [EXPLORE] Background refresh complete")
             }
         }
     }
@@ -75,28 +94,31 @@ class ExploreManager: ObservableObject {
                 print("🔍 [EXPLORE] Buffering \(itemsToBuffer.count) extra items for next load")
             }
             
+            // Clear old thumbnails BEFORE saving new ones so stale files don't pile up
+            clearPermanentThumbnails()
+
             await MainActor.run {
                 self.exploreMedia = itemsToShow
                 self.itemBuffer = itemsToBuffer
                 self.nextMaxId = maxId
                 self.hasMorePages = maxId != nil
-                
-                // Save to cache
+
+                // Save item list permanently
                 saveToCache()
-                
+
                 print("✅ [EXPLORE] Loaded \(itemsToShow.count) items into UI")
                 print("🔍 [EXPLORE] Has more pages: \(self.hasMorePages)")
             }
-            
-            // Download thumbnails in background
+
+            // Download and permanently store all thumbnails
             await downloadThumbnails(items: itemsToShow)
             
         } catch {
             print("❌ [EXPLORE] Error loading: \(error)")
             await MainActor.run {
-                // Try loading from cache on error
                 if self.exploreMedia.isEmpty {
-                    print("🔍 [EXPLORE] Trying to load from cache after error...")
+                    print("🔍 [EXPLORE] No items in cache after error — showing retry UI")
+                    self.loadError = error.localizedDescription
                 }
             }
         }
@@ -106,28 +128,44 @@ class ExploreManager: ObservableObject {
     
     private func downloadThumbnails(items: [InstagramMediaItem]) async {
         print("🖼️ [EXPLORE] Downloading \(items.count) thumbnails...")
-        
+
+        var successCount = 0
+        var failCount = 0
+
         for (index, item) in items.enumerated() {
             guard !item.imageURL.isEmpty else { continue }
-            
-            // Check if already cached
+
             if cachedImages[item.imageURL] != nil {
+                successCount += 1
                 continue
             }
-            
+
             if let image = await downloadImage(from: item.imageURL) {
+                // Save permanently to Application Support (survives iOS cache clearing)
+                saveThumbnailPermanently(image, forURL: item.imageURL)
                 await MainActor.run {
                     cachedImages[item.imageURL] = image
-                    ProfileCacheService.shared.saveImage(image, forURL: item.imageURL)
                 }
-                
+                successCount += 1
                 if (index + 1) % 10 == 0 {
-                    print("🖼️ [EXPLORE] Downloaded \(index + 1)/\(items.count)")
+                    print("🖼️ [EXPLORE] Downloaded \(successCount)/\(items.count)")
                 }
+            } else {
+                failCount += 1
+                print("⚠️ [EXPLORE] Thumbnail download failed (\(failCount) so far): \(item.imageURL.prefix(80))")
             }
         }
-        
-        print("✅ [EXPLORE] All thumbnails downloaded")
+
+        if failCount == 0 {
+            print("✅ [EXPLORE] All \(successCount) thumbnails downloaded successfully")
+        } else {
+            print("⚠️ [EXPLORE] Thumbnails done: \(successCount) OK, \(failCount) FAILED (likely expired CDN URLs)")
+            // If most downloads failed, the cache is stale — clear it so next open forces a fresh API fetch
+            if failCount > items.count / 2 {
+                print("🗑️ [EXPLORE] >50% failed — clearing stale cache")
+                await MainActor.run { clearCache() }
+            }
+        }
     }
     
     private func downloadImage(from urlString: String) async -> UIImage? {
@@ -139,54 +177,124 @@ class ExploreManager: ObservableObject {
         }
         return image
     }
-    
-    // MARK: - Cache Management
-    
-    private func saveToCache() {
-        let encoder = JSONEncoder()
-        if let data = try? encoder.encode(exploreMedia),
-           let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            let fileURL = cacheDir.appendingPathComponent("explore_cache.json")
-            try? data.write(to: fileURL)
-            print("💾 [EXPLORE] Saved to cache")
-        }
+
+    // MARK: - Permanent Storage (Application Support — never cleared by iOS)
+
+    /// Root directory for all Explore persistent data.
+    private static var permanentDir: URL? {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("ExplorePermanent", isDirectory: true)
     }
-    
+
+    /// Sub-directory holding one JPEG per thumbnail URL.
+    private static var thumbnailDir: URL? {
+        permanentDir?.appendingPathComponent("Thumbnails", isDirectory: true)
+    }
+
+    private static func ensureDirs() {
+        [permanentDir, thumbnailDir]
+            .compactMap { $0 }
+            .forEach { try? FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true) }
+    }
+
+    /// Stable filename derived from the URL (avoids special characters in filenames).
+    private static func thumbnailFilename(for urlString: String) -> String {
+        // Use a simple DJB2 hash — short, collision-resistant enough for ~100 files
+        var hash: UInt64 = 5381
+        for char in urlString.unicodeScalars {
+            hash = (hash &* 31) &+ UInt64(char.value)
+        }
+        return String(format: "%016llx.jpg", hash)
+    }
+
+    private func saveThumbnailPermanently(_ image: UIImage, forURL urlString: String) {
+        Self.ensureDirs()
+        guard let dir = Self.thumbnailDir,
+              let data = image.jpegData(compressionQuality: 0.85) else { return }
+        let fileURL = dir.appendingPathComponent(Self.thumbnailFilename(for: urlString))
+        try? data.write(to: fileURL, options: .atomic)
+    }
+
+    private func loadThumbnailPermanently(forURL urlString: String) -> UIImage? {
+        guard let dir = Self.thumbnailDir else { return nil }
+        let fileURL = dir.appendingPathComponent(Self.thumbnailFilename(for: urlString))
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return UIImage(data: data)
+    }
+
+    /// Deletes all stored thumbnails (call before saving a new batch so old ones don't pile up).
+    private func clearPermanentThumbnails() {
+        guard let dir = Self.thumbnailDir else { return }
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil)) ?? []
+        files.forEach { try? FileManager.default.removeItem(at: $0) }
+        print("🗑️ [EXPLORE] Permanent thumbnails cleared (\(files.count) files)")
+    }
+
+    // MARK: - Cache Management (JSON stored in Application Support too)
+
+    private func saveToCache() {
+        Self.ensureDirs()
+        guard let dir = Self.permanentDir,
+              let data = try? JSONEncoder().encode(exploreMedia) else { return }
+        let fileURL = dir.appendingPathComponent("explore_items.json")
+        try? data.write(to: fileURL, options: .atomic)
+        print("💾 [EXPLORE] Items saved permanently")
+    }
+
     private func loadFromCache() {
-        guard let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+        Self.ensureDirs()
+
+        // --- Try permanent location first ---
+        var items: [InstagramMediaItem]? = nil
+
+        if let dir = Self.permanentDir {
+            let fileURL = dir.appendingPathComponent("explore_items.json")
+            if let data = try? Data(contentsOf: fileURL),
+               let decoded = try? JSONDecoder().decode([InstagramMediaItem].self, from: data) {
+                items = decoded
+            }
+        }
+
+        // --- Legacy fallback: old cachesDirectory file ---
+        if items == nil,
+           let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            let legacyURL = cacheDir.appendingPathComponent("explore_cache.json")
+            if let data = try? Data(contentsOf: legacyURL),
+               let decoded = try? JSONDecoder().decode([InstagramMediaItem].self, from: data) {
+                items = decoded
+                // Migrate to permanent location
+                try? FileManager.default.removeItem(at: legacyURL)
+                print("📦 [EXPLORE] Migrated legacy cache to permanent storage")
+            }
+        }
+
+        guard let loadedItems = items else {
+            print("📦 [EXPLORE] No cached items found")
             return
         }
-        
-        let fileURL = cacheDir.appendingPathComponent("explore_cache.json")
-        
-        guard let data = try? Data(contentsOf: fileURL) else {
-            print("📦 [EXPLORE] No cache found")
-            return
+
+        self.exploreMedia = loadedItems
+        print("✅ [EXPLORE] Loaded \(loadedItems.count) items from permanent storage")
+
+        // Load thumbnails from permanent storage; collect any missing ones
+        var missingItems: [InstagramMediaItem] = []
+        for item in loadedItems {
+            guard !item.imageURL.isEmpty,
+                  item.imageURL != ForceReelSettings.localCacheKey else { continue }
+            if let image = loadThumbnailPermanently(forURL: item.imageURL) {
+                cachedImages[item.imageURL] = image
+            } else {
+                missingItems.append(item)
+            }
         }
-        
-        let decoder = JSONDecoder()
-        if let items = try? decoder.decode([InstagramMediaItem].self, from: data) {
-            self.exploreMedia = items
-            print("✅ [EXPLORE] Loaded \(items.count) items from cache")
-            
-            // Load cached images + detect missing ones
-            var missingItems: [InstagramMediaItem] = []
-            for item in items {
-                if let image = ProfileCacheService.shared.loadImage(forURL: item.imageURL) {
-                    cachedImages[item.imageURL] = image
-                } else if !item.imageURL.isEmpty {
-                    missingItems.append(item)
-                }
-            }
-            
-            print("📦 [EXPLORE] Loaded \(cachedImages.count) images from cache, \(missingItems.count) missing")
-            
-            // Download missing thumbnails in background
-            if !missingItems.isEmpty {
-                Task {
-                    await downloadThumbnails(items: missingItems)
-                }
-            }
+
+        print("📦 [EXPLORE] Loaded \(cachedImages.count) thumbnails from disk, \(missingItems.count) missing")
+
+        if !missingItems.isEmpty {
+            Task { await downloadThumbnails(items: missingItems) }
         }
     }
     
@@ -313,19 +421,29 @@ class ExploreManager: ObservableObject {
             return exploreMedia
         }
 
-        let pos = forceSettings.pendingPosition          // 1-based
-        let insertIndex = min(pos - 1, exploreMedia.count)   // clamp to array bounds
+        let pos = forceSettings.pendingPosition
+        let insertIndex = min(pos - 1, exploreMedia.count)
 
         var result = exploreMedia
         result.insert(forcedItem, at: insertIndex)
 
-        // Pre-cache the forced reel thumbnail so it shows immediately
-        if cachedImages[forcedItem.imageURL] == nil {
-            Task {
-                if let url = URL(string: forcedItem.imageURL),
-                   let (data, _) = try? await URLSession.shared.data(from: url),
-                   let img = UIImage(data: data) {
-                    await MainActor.run { cachedImages[forcedItem.imageURL] = img }
+        // Always inject the locally saved thumbnail into cachedImages using the stable key.
+        // This image was saved permanently when the reel was selected — it never expires.
+        let localKey = ForceReelSettings.localCacheKey
+        if cachedImages[localKey] == nil {
+            if let localImage = forceSettings.localThumbnailImage {
+                // Use local permanent copy — no network call needed
+                cachedImages[localKey] = localImage
+                print("🎭 [FORCE] Forced reel thumbnail loaded from local storage (no CDN needed)")
+            } else if !forceSettings.thumbnailURL.isEmpty {
+                // Fallback: CDN URL (only used if local file was somehow lost)
+                Task {
+                    if let url = URL(string: forceSettings.thumbnailURL),
+                       let (data, _) = try? await URLSession.shared.data(from: url),
+                       let img = UIImage(data: data) {
+                        await MainActor.run { self.cachedImages[localKey] = img }
+                        print("🎭 [FORCE] Forced reel thumbnail loaded from CDN (fallback)")
+                    }
                 }
             }
         }
@@ -341,12 +459,20 @@ class ExploreManager: ObservableObject {
         hasPreloaded = false
         hasMorePages = true
         nextMaxId = nil
-        
-        if let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            let fileURL = cacheDir.appendingPathComponent("explore_cache.json")
-            try? FileManager.default.removeItem(at: fileURL)
+
+        // Delete permanent items JSON
+        if let dir = Self.permanentDir {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("explore_items.json"))
         }
-        
-        print("🗑️ [EXPLORE] Cache cleared")
+
+        // Delete permanent thumbnails
+        clearPermanentThumbnails()
+
+        // Also remove legacy cache file if it still exists
+        if let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            try? FileManager.default.removeItem(at: cacheDir.appendingPathComponent("explore_cache.json"))
+        }
+
+        print("🗑️ [EXPLORE] Cache cleared (permanent + legacy)")
     }
 }

@@ -90,9 +90,34 @@ struct SetDetailView: View {
     @State private var showSlotSourcePicker = false
     @State private var slotSourcePickerSymbol: String? = nil
     @State private var showGalleryPickerSheet = false
-    
+
+    // VERIFY & SYNC state
+    @State private var isSyncing = false
+    @State private var syncProgress = 0
+    @State private var syncTotal = 0
+    @State private var syncFixedCount = 0
+    @State private var syncUnknownCount = 0          // couldn't check (nil response)
+    @State private var syncTrulyVisibleIds: [String] = []  // confirmed public by Instagram
+    @State private var syncCompleted = false
+
+    // ARCHIVE ALL state (post-sync)
+    @State private var isArchivingAll = false
+    @State private var archiveAllProgress = 0
+    @State private var archiveAllTotal = 0
+    @State private var archiveAllCompleted = false
+
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
+    }
+
+    /// Photos that are locally marked as visible (isArchived=false) AND fully uploaded.
+    /// These are candidates for a state desync with Instagram's real archive status.
+    private var visibleUploadedPhotos: [SetPhoto] {
+        currentSet.photos.filter {
+            $0.mediaId != nil &&
+            $0.uploadStatus == .completed &&
+            !$0.isArchived
+        }
     }
     
     var body: some View {
@@ -104,7 +129,10 @@ struct SetDetailView: View {
                 VStack(spacing: VaultTheme.Spacing.lg) {
                 // Header Stats
                 statsSection
-                
+
+                // Verify & Sync banner (shown when visible uploaded photos exist)
+                verifySyncSection
+
                 // Status & Actions (only when logged in)
                 if instagram.isLoggedIn {
                     statusSection
@@ -239,6 +267,339 @@ struct SetDetailView: View {
     
     // MARK: - Stats Section
     
+    // MARK: - Verify & Sync Section
+
+    /// Banner visible only when logged in and there are locally-visible uploaded photos
+    /// that could be desynced from Instagram's real archive state.
+    @ViewBuilder
+    private var verifySyncSection: some View {
+        if instagram.isLoggedIn {
+            VStack(spacing: 8) {
+
+                // ── 1. Sync running ────────────────────────────────────
+                if isSyncing {
+                    HStack(spacing: 10) {
+                        ProgressView().scaleEffect(0.85)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Verifying (\(syncProgress)/\(syncTotal))...")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.primary)
+                            Text("Checking real state on Instagram")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.blue.opacity(0.09))
+                    .cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.2), lineWidth: 1))
+
+                // ── 2. Sync result banner ──────────────────────────────
+                } else if syncCompleted {
+                    // Summary line
+                    HStack(spacing: 10) {
+                        Image(systemName: syncFixedCount > 0 ? "checkmark.circle.fill" : "info.circle.fill")
+                            .foregroundColor(syncFixedCount > 0 ? .green : .blue)
+                            .font(.system(size: 18))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(syncResultTitle)
+                                .font(.subheadline.bold())
+                                .foregroundColor(syncFixedCount > 0 ? .green : .primary)
+                            if syncUnknownCount > 0 {
+                                Text("\(syncUnknownCount) photo\(syncUnknownCount > 1 ? "s" : "") couldn't be checked (API returned no data)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(syncFixedCount > 0 ? Color.green.opacity(0.09) : Color.blue.opacity(0.07))
+                    .cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(
+                        syncFixedCount > 0 ? Color.green.opacity(0.2) : Color.blue.opacity(0.2),
+                        lineWidth: 1
+                    ))
+
+                    // Archive All panel (only when Instagram confirmed truly-visible photos)
+                    if !syncTrulyVisibleIds.isEmpty {
+                        if isArchivingAll {
+                            // ── Archive All running ────────────────────
+                            HStack(spacing: 10) {
+                                ProgressView().scaleEffect(0.85)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Archiving (\(archiveAllProgress)/\(archiveAllTotal))...")
+                                        .font(.subheadline.bold())
+                                        .foregroundColor(.primary)
+                                    Text("Waiting between each call to avoid bot detection")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(12)
+                            .background(Color.purple.opacity(0.09))
+                            .cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.2), lineWidth: 1))
+
+                        } else if archiveAllCompleted {
+                            // ── Archive All done ───────────────────────
+                            HStack(spacing: 10) {
+                                Image(systemName: "archivebox.fill")
+                                    .foregroundColor(.green)
+                                    .font(.system(size: 16))
+                                Text("Archived \(archiveAllProgress)/\(archiveAllTotal) photos ✓")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.green)
+                                Spacer()
+                            }
+                            .padding(12)
+                            .background(Color.green.opacity(0.09))
+                            .cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.green.opacity(0.2), lineWidth: 1))
+
+                        } else {
+                            // ── Archive All prompt ─────────────────────
+                            Button(action: { Task { await archiveAllVisible() } }) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "archivebox.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.purple)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Archive All (\(syncTrulyVisibleIds.count) visible)")
+                                            .font(.subheadline.bold())
+                                            .foregroundColor(.primary)
+                                        Text("Instagram confirmed these are public — archive with safe delays")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(12)
+                                .background(Color.purple.opacity(0.08))
+                                .cornerRadius(10)
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.25), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isArchivingAll)
+                        }
+                    }
+
+                // ── 3. Prompt to start sync (only when not syncing and not in post-sync state) ──
+                } else if !visibleUploadedPhotos.isEmpty {
+                    Button(action: {
+                        guard !isSyncing else { return }  // hard guard against double-tap race
+                        Task { await verifySyncAll() }
+                    }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 16))
+                                .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(visibleUploadedPhotos.count) photo\(visibleUploadedPhotos.count > 1 ? "s" : "") showing as Visible")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.primary)
+                                Text("Tap to verify real state on Instagram")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(12)
+                        .background(Color.orange.opacity(0.08))
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.25), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSyncing)  // extra layer: SwiftUI-level disable
+                }
+            }
+        }
+    }
+
+    private var syncResultTitle: String {
+        var parts: [String] = []
+        if syncFixedCount > 0 {
+            parts.append("Fixed \(syncFixedCount) desync\(syncFixedCount > 1 ? "s" : "")")
+        }
+        if !syncTrulyVisibleIds.isEmpty {
+            parts.append("\(syncTrulyVisibleIds.count) confirmed public")
+        }
+        if parts.isEmpty {
+            if syncUnknownCount == syncTotal {
+                return "API returned no data — check logs"
+            }
+            return "All photos in sync ✓"
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Checks each locally-visible uploaded photo against Instagram's real archive status.
+    /// Outcome per photo:
+    ///  - Instagram says archived  → fix local state (no write API call) [fixed]
+    ///  - Instagram says visible   → truly public, candidate for Archive All [trulyVisible]
+    ///  - Instagram returns nil    → couldn't determine, skip [unknown]
+    /// Uses 1.5s delay between GETs to avoid rapid-request patterns.
+    private func verifySyncAll() async {
+        let photos = visibleUploadedPhotos
+        guard !photos.isEmpty, !isSyncing else {
+            print("⚠️ [SYNC] verifySyncAll called but already running or no photos")
+            return
+        }
+
+        print("🔄 [SYNC] Starting verify for \(photos.count) photo(s)")
+        LogManager.shared.info("State sync started: \(photos.count) visible photos to check", category: .general)
+
+        await MainActor.run {
+            isSyncing = true
+            syncProgress = 0
+            syncTotal = photos.count
+            syncFixedCount = 0
+            syncUnknownCount = 0
+            syncTrulyVisibleIds = []
+            syncCompleted = false
+            archiveAllCompleted = false
+        }
+
+        var fixed = 0
+        var unknown = 0
+        var trulyVisible: [String] = []
+
+        for (index, photo) in photos.enumerated() {
+            guard let mediaId = photo.mediaId else {
+                print("⚠️ [SYNC] Photo index \(index) has no mediaId — skipping")
+                unknown += 1
+                continue
+            }
+
+            // Anti-bot gap: 1.5s between GET requests (skip before first)
+            if index > 0 {
+                print("⏳ [SYNC] Waiting 1.5s before next check...")
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+
+            await MainActor.run { syncProgress = index + 1 }
+            print("🔍 [SYNC] Checking photo \(index + 1)/\(photos.count) — mediaId: \(mediaId)")
+
+            let result = await instagram.getMediaIsArchived(mediaId: mediaId)
+
+            switch result {
+            case .some(true):
+                // Desync: Instagram says archived, local says visible → fix local silently
+                await MainActor.run {
+                    dataManager.updatePhoto(
+                        photoId: photo.id,
+                        mediaId: mediaId,
+                        isArchived: true,
+                        uploadStatus: .completed,
+                        errorMessage: nil
+                    )
+                    fixed += 1
+                }
+                print("🔄 [SYNC] ✅ FIXED desync: \(mediaId) → set local to archived")
+                LogManager.shared.info(
+                    "State sync: fixed desync for \(mediaId) (local visible → Instagram archived)",
+                    category: .general
+                )
+
+            case .some(false):
+                // Truly public on Instagram
+                trulyVisible.append(mediaId)
+                print("🔍 [SYNC] ℹ️ Truly visible: \(mediaId) — Instagram confirms it's public")
+                LogManager.shared.info("State sync: \(mediaId) confirmed public on Instagram", category: .general)
+
+            case .none:
+                // Couldn't determine — API returned nil (no 'is_archived' field or error)
+                unknown += 1
+                print("⚠️ [SYNC] ❓ Unknown state for: \(mediaId) — API returned nil, skipping")
+                LogManager.shared.warning("State sync: could not determine state for \(mediaId)", category: .general)
+            }
+        }
+
+        print("🔄 [SYNC] Done — fixed: \(fixed), trulyVisible: \(trulyVisible.count), unknown: \(unknown)")
+        LogManager.shared.info(
+            "State sync complete: fixed=\(fixed), trulyVisible=\(trulyVisible.count), unknown=\(unknown)",
+            category: .general
+        )
+
+        await MainActor.run {
+            syncFixedCount = fixed
+            syncUnknownCount = unknown
+            syncTrulyVisibleIds = trulyVisible
+            isSyncing = false
+            syncCompleted = true
+        }
+
+        // Auto-hide result banner only when there's nothing actionable
+        if trulyVisible.isEmpty {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            await MainActor.run { syncCompleted = false }
+        }
+    }
+
+    /// Archives all confirmed-visible photos sequentially with anti-bot delays.
+    private func archiveAllVisible() async {
+        let ids = syncTrulyVisibleIds
+        guard !ids.isEmpty, !isArchivingAll else { return }
+
+        print("📦 [ARCHIVE-ALL] Starting archive for \(ids.count) confirmed-visible photo(s)")
+        LogManager.shared.info("Archive All started: \(ids.count) photo(s)", category: .general)
+
+        await MainActor.run {
+            isArchivingAll = true
+            archiveAllProgress = 0
+            archiveAllTotal = ids.count
+            archiveAllCompleted = false
+        }
+
+        for (index, mediaId) in ids.enumerated() {
+            // Human-like delay before each archive: 3–6s
+            let delaySeconds = Double.random(in: 3.0...6.0)
+            print("⏳ [ARCHIVE-ALL] Waiting \(String(format: "%.1f", delaySeconds))s before archiving \(index + 1)/\(ids.count)...")
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+
+            // Check rate limit before each call (synchronous — no await needed)
+            let rateLimit = instagram.checkRateLimit()
+            print("🔒 [ARCHIVE-ALL] Rate limit: used=\(rateLimit.actionsUsed), remaining=\(rateLimit.remaining)")
+            if rateLimit.limited || rateLimit.remaining < 2 {
+                print("⛔️ [ARCHIVE-ALL] Rate limit reached — stopping at \(index)/\(ids.count)")
+                LogManager.shared.warning("Archive All stopped: rate limit reached (used: \(rateLimit.actionsUsed))", category: .api)
+                break
+            }
+
+            print("📦 [ARCHIVE-ALL] Archiving \(index + 1)/\(ids.count): \(mediaId)")
+            let success = (try? await instagram.archivePhoto(mediaId: mediaId)) ?? false
+            print("📦 [ARCHIVE-ALL] Result for \(mediaId): \(success ? "✅ archived" : "❌ failed")")
+
+            if success {
+                await MainActor.run {
+                    archiveAllProgress = index + 1
+                    // Remove from trulyVisible list so UI updates
+                    syncTrulyVisibleIds.removeAll { $0 == mediaId }
+                }
+            } else {
+                LogManager.shared.warning("Archive All: failed to archive \(mediaId)", category: .api)
+            }
+        }
+
+        print("📦 [ARCHIVE-ALL] Finished — archived \(archiveAllProgress)/\(archiveAllTotal)")
+        LogManager.shared.info("Archive All complete: \(archiveAllProgress)/\(archiveAllTotal)", category: .general)
+
+        await MainActor.run {
+            isArchivingAll = false
+            archiveAllCompleted = true
+        }
+    }
+
+    // MARK: - Stats Section
+
     private var statsSection: some View {
         HStack(spacing: VaultTheme.Spacing.xl) {
             StatCard(title: "Total", value: "\(currentSet.totalPhotos)", icon: "photo.stack")
@@ -560,6 +921,7 @@ struct SetDetailView: View {
                         .background(VaultTheme.Colors.success)
                         .cornerRadius(VaultTheme.CornerRadius.md)
                 }
+                .disabled(uploadManager.isActive || uploadManager.activeTask != nil)
             }
         }
     }
@@ -1356,14 +1718,20 @@ struct SetDetailView: View {
     // MARK: - Upload Controls
     
     private func startUpload() {
-        // Clear any previous stuck state
+        // Guard against double-launch: rapid double-tap or duplicate SwiftUI renders
+        guard uploadManager.activeTask == nil, !uploadManager.isActive else {
+            print("⚠️ [UPLOAD] Ignored duplicate startUpload() call — already active (phase: \(uploadManager.uploadPhase))")
+            return
+        }
+
+        // Safe to reset: no active task exists at this point
         uploadManager.resetAllState()
-        
+
         uploadManager.activeSetId = currentSet.id
         uploadManager.requestPause = false
         uploadManager.uploadPhase = .uploading(photoNumber: 1)
         uploadManager.currentPhaseDescription = "Starting upload..."
-        
+
         let task = Task {
             await uploadAllPhotos()
         }

@@ -137,10 +137,36 @@ struct ExploreView: View {
                     .background(Color.white)
                 } else {
                     // Grid of explore content
-                    if exploreManager.isLoading || exploreManager.exploreMedia.isEmpty {
+                    if exploreManager.isLoading {
                         // Show skeleton UI (like Instagram real)
                         ExploreGridSkeleton()
                             .padding(.bottom, 65)
+                    } else if exploreManager.exploreMedia.isEmpty {
+                        // Failed to load — show retry option
+                        if exploreManager.loadError != nil {
+                            VStack(spacing: 20) {
+                                Image(systemName: "wifi.exclamationmark")
+                                    .font(.system(size: 44))
+                                    .foregroundColor(.secondary)
+                                Text("No se pudo cargar el contenido")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                Button(action: { exploreManager.loadExplore() }) {
+                                    Text("Reintentar")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 28)
+                                        .padding(.vertical, 10)
+                                        .background(Color.black)
+                                        .cornerRadius(8)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.bottom, 65)
+                        } else {
+                            ExploreGridSkeleton()
+                                .padding(.bottom, 65)
+                        }
                     } else {
                         ScrollView {
                             ExploreGridView(
@@ -245,16 +271,20 @@ struct ExploreView: View {
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .preferredColorScheme(.light) // CRITICAL: Explore must look exactly like Instagram (light mode)
         .onAppear {
-            // Auto-load Explore feed on appear (like Instagram real)
-            // If cache has old count (not multiple of 3), clear and reload
+            // If cache has old count (not multiple of 3), clear and force full reload
             let currentCount = exploreManager.exploreMedia.count
             if currentCount > 0 && currentCount % 3 != 0 {
                 print("🗑️ [EXPLORE] Cache has \(currentCount) items (not multiple of 3), clearing...")
                 exploreManager.clearCache()
             }
-            
+
             if exploreManager.exploreMedia.isEmpty {
+                // No cache — show skeleton and load from API
                 exploreManager.loadExplore()
+            } else {
+                // Cache present — show immediately, but always refresh in background
+                // to get fresh CDN URLs (Instagram CDN URLs expire within hours)
+                exploreManager.backgroundRefresh()
             }
         }
     }
@@ -827,7 +857,19 @@ struct ExploreMediaCell: View {
                 ZStack(alignment: .topTrailing) {
                     // Content fills the entire 4:5 cell
                     if media.mediaType == .video, let videoURL = media.videoURL {
-                        GridVideoPlayer(videoURL: videoURL)
+                        ZStack {
+                            // Always show thumbnail as poster — visible immediately even before
+                            // the video streams. Also works as fallback for expired video URLs.
+                            if let image = cachedImage {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.3))
+                            }
+                            GridVideoPlayer(videoURL: videoURL)
+                        }
                     } else if let image = cachedImage {
                         Image(uiImage: image)
                             .resizable()
@@ -840,7 +882,22 @@ struct ExploreMediaCell: View {
                                     .scaleEffect(0.8)
                             )
                     }
-                    
+
+                    // Reel / video indicator (bottom-left, like real Instagram)
+                    if media.mediaType == .video {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.leading, 6)
+                                    .padding(.bottom, 6)
+                                Spacer()
+                            }
+                        }
+                    }
+
                     // Carousel indicator
                     if media.mediaType == .carousel {
                         Image(systemName: "square.on.square")

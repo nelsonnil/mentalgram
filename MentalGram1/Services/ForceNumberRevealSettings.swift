@@ -91,6 +91,29 @@ class ForceNumberRevealSettings: ObservableObject {
 
         reArchiveScheduledAt = nil
 
+        // RATE LIMIT GUARD: ensure we have enough budget before starting.
+        // Each archive call uses 1 action. Reserve 3 extra as safety margin.
+        let rateCheck = instagram.checkRateLimit()
+        let needed = mediaIds.count + 3
+        if rateCheck.remaining < needed {
+            let postponeMin = autoReArchiveMinutes
+            print("⚠️ [RE-ARCHIVE] Rate limit too low (\(rateCheck.remaining) remaining, need \(needed)) — postponing \(postponeMin) min")
+            LogManager.shared.warning(
+                "Auto re-archive postponed: only \(rateCheck.remaining) actions remaining (need \(needed)) — rescheduling in \(postponeMin) min",
+                category: .upload
+            )
+            let fireDate = Date().addingTimeInterval(Double(postponeMin) * 60)
+            reArchiveScheduledAt = fireDate
+            reArchiveTask = Task.detached(priority: .background) { [weak self] in
+                guard let self else { return }
+                let ns = UInt64(postponeMin) * 60 * 1_000_000_000
+                try? await Task.sleep(nanoseconds: ns)
+                guard !Task.isCancelled else { return }
+                await self.executeReArchive(mediaIds: mediaIds)
+            }
+            return
+        }
+
         var successCount = 0
         var failCount    = 0
 
@@ -101,6 +124,14 @@ class ForceNumberRevealSettings: ObservableObject {
                 break
             }
             guard !Task.isCancelled else { break }
+
+            // Re-check rate limit before each individual call (operations take time)
+            let midCheck = instagram.checkRateLimit()
+            if midCheck.remaining < 2 {
+                print("⚠️ [RE-ARCHIVE] Rate limit reached mid-operation — stopping (will retry remaining \(mediaIds.count - successCount - failCount) later)")
+                LogManager.shared.warning("Re-archive stopped mid-run: rate limit reached", category: .upload)
+                break
+            }
 
             // Anti-bot: random human-like delay between each archive call
             let delay = UInt64.random(in: 800_000_000...2_200_000_000)
