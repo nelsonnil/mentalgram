@@ -8,6 +8,7 @@ import Combine
 enum DateForceMode: String, CaseIterable {
     case simple = "simple"  // All spectators → date group; time comes directly
     case dual   = "dual"    // First N → date group, rest → time group
+    case auto   = "auto"    // Followers captured automatically when PerformanceView opens
 }
 
 enum DateForceFormat: String, CaseIterable {
@@ -60,9 +61,23 @@ class DateForceSettings: ObservableObject {
         didSet { UserDefaults.standard.set(timeOffsetMinutes, forKey: "dateForce_timeOffset") }
     }
 
+    /// Number of most-recent followers to capture in Auto mode (2–6).
+    @Published var autoMaxFollowers: Int {
+        didSet { UserDefaults.standard.set(autoMaxFollowers, forKey: "dateForce_autoMax") }
+    }
+
     // MARK: - Runtime (not persisted)
 
     @Published private(set) var spectators: [DateForceSpectator] = []
+
+    /// Auto mode: which group is currently displayed in PerformanceView (date or time).
+    @Published var autoDisplayGroup: DateForceGroup = .date
+
+    /// Auto mode: true while fetching recent followers + their following counts.
+    @Published var isAutoLoading: Bool = false
+
+    /// Auto mode: total expected spectators (used to pre-assign groups during progressive load).
+    private var autoExpectedTotal: Int = 0
 
     // MARK: - Init
 
@@ -80,6 +95,9 @@ class DateForceSettings: ObservableObject {
 
         let savedOffset = UserDefaults.standard.object(forKey: "dateForce_timeOffset") as? Int
         self.timeOffsetMinutes = savedOffset ?? 0
+
+        let savedAutoMax = UserDefaults.standard.object(forKey: "dateForce_autoMax") as? Int
+        self.autoMaxFollowers = savedAutoMax ?? 6
     }
 
     // MARK: - Spectator Management
@@ -109,14 +127,47 @@ class DateForceSettings: ObservableObject {
 
     func resetSpectators() {
         spectators.removeAll()
+        autoDisplayGroup = .date
         print("🎯 [DATE FORCE] All spectators reset")
+    }
+
+    /// Prepares the auto mode for progressive loading.
+    /// Call before starting to fetch followers one by one.
+    /// totalExpected = autoMaxFollowers (pre-calculated group split).
+    func beginAutoLoad(totalExpected: Int) {
+        spectators.removeAll()
+        autoDisplayGroup = .date
+        autoExpectedTotal = totalExpected
+        print("🤖 [AUTO] Begin progressive load — expecting \(totalExpected) spectators (date: \((totalExpected + 1) / 2), time: \(totalExpected / 2))")
+    }
+
+    /// Adds one spectator progressively during auto loading.
+    /// Group is assigned by position (index 0-based relative to expected total).
+    func appendAutoSpectator(username: String, followingCount: Int) {
+        let index = spectators.count
+        let dateCount = (autoExpectedTotal + 1) / 2
+        let group: DateForceGroup = index < dateCount ? .date : .time
+        let effective = Self.effectiveValue(from: followingCount)
+        let s = DateForceSpectator(
+            username: username,
+            rawFollowingCount: followingCount,
+            effectiveValue: effective,
+            group: group
+        )
+        spectators.append(s)
+        print("🤖 [AUTO] [\(index + 1)/\(autoExpectedTotal)] @\(username) following=\(followingCount) effective=\(effective) → \(group.rawValue)")
+    }
+
+    /// Toggle between date/time display in PerformanceView auto state.
+    func toggleAutoDisplayGroup() {
+        autoDisplayGroup = autoDisplayGroup == .date ? .time : .date
     }
 
     // MARK: - Group Assignment
 
     private func nextGroup() -> DateForceGroup {
         switch mode {
-        case .simple:
+        case .simple, .auto:
             return .date
         case .dual:
             let dateCount = spectators.filter { $0.group == .date }.count
@@ -183,8 +234,8 @@ class DateForceSettings: ObservableObject {
     /// In simple mode: targetTime directly (no audience math for time)
     var overrideFollowing: Int {
         switch mode {
-        case .simple: return targetTime
-        case .dual:   return targetTime + sumTime
+        case .simple:        return targetTime
+        case .dual, .auto:  return targetTime + sumTime
         }
     }
 

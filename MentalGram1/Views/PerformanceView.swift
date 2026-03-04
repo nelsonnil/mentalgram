@@ -1,9 +1,13 @@
 import SwiftUI
+import Photos
 
 // MARK: - Performance View (Instagram Profile Replica)
 
 struct PerformanceView: View {
     @ObservedObject var instagram = InstagramService.shared
+    @ObservedObject private var dateForce = DateForceSettings.shared
+    @ObservedObject private var profileCache = ProfileCacheService.shared
+    @AppStorage("autoProfilePicOnPerformance") private var autoProfilePicOnPerformance = false
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
@@ -37,7 +41,13 @@ struct PerformanceView: View {
                             selectedTab = 1
                         },
                         mediaURLs: allMediaURLs,
-                        onMediaAppear: loadMoreIfNeeded
+                        onMediaAppear: loadMoreIfNeeded,
+                        onAutoFollowedByTap: {
+                            handleAutoFollowedByTap()
+                        },
+                        onRevealComplete: {
+                            Task { await refreshMediaGridSilently() }
+                        }
                     )
                 } else {
                     // Show skeleton UI (like Instagram real)
@@ -104,6 +114,21 @@ struct PerformanceView: View {
                 SecretNumberManager.shared.reset()
             }
         }
+        // React to local profile cache changes (archive/unarchive, etc.)
+        // without making any extra API call.
+        .onChange(of: profileCache.cachedProfile?.cachedMediaURLs) { newURLs in
+            guard let newURLs else { return }
+            // Only sync if the change came from somewhere else (not from our own full reload)
+            guard !isLoading else { return }
+            let currentSet = Set(allMediaURLs)
+            let newSet = Set(newURLs)
+            guard currentSet != newSet else { return }
+            allMediaURLs = newURLs
+            // Download thumbnails for any new URLs not yet cached
+            let missing = newURLs.filter { cachedImages[$0] == nil }
+            if !missing.isEmpty { downloadImagesForURLs(missing) }
+            print("🔄 [PERF] Grid updated locally — \(newURLs.count) items (no API call)")
+        }
         .onAppear {
             // CRITICAL: Keep screen on during performance (magic trick needs screen always on)
             UIApplication.shared.isIdleTimerDisabled = true
@@ -113,6 +138,10 @@ struct PerformanceView: View {
                 VolumeButtonMonitor.shared.prepareVolume()
             }
             checkAndLoadProfile()
+            // Auto profile pic: run silently in background, no UI disruption
+            if autoProfilePicOnPerformance {
+                Task { await autoUploadLatestGalleryPhoto() }
+            }
         }
         .onDisappear {
             // Re-enable sleep when leaving Performance
@@ -612,6 +641,215 @@ struct PerformanceView: View {
         LogManager.shared.info("Magician accessed debug info during performance lockdown", category: .general)
         showingMagicianDebug = true
     }
+
+    // MARK: - Silent Media Grid Refresh (after Force Number Reveal unarchive)
+
+    /// Fetches only the first page of media and updates the grid locally.
+    /// Does NOT touch profile stats, bio, follower count, etc. — zero visible disruption.
+    @MainActor
+    private func refreshMediaGridSilently() async {
+        guard !instagram.isLocked, let userId = profile?.userId else { return }
+        print("🔄 [PERF] Silent media refresh after unarchive…")
+        do {
+            let (items, _) = try await instagram.getUserMediaItems(userId: userId, amount: 21, maxId: nil)
+            let newURLs = items.map { $0.imageURL }
+            guard !newURLs.isEmpty else { return }
+
+            // Merge: new first-page items + tail items not in the new page
+            let existingTail = allMediaURLs.filter { !newURLs.contains($0) }
+            let merged = newURLs + existingTail
+            allMediaURLs = merged
+
+            ProfileCacheService.shared.updateMediaURLs(merged)
+
+            let missing = newURLs.filter { cachedImages[$0] == nil }
+            if !missing.isEmpty { downloadImagesForURLs(missing) }
+
+            print("🔄 [PERF] Silent refresh done — \(merged.count) items")
+        } catch {
+            print("⚠️ [PERF] Silent media refresh failed (non-critical): \(error)")
+        }
+    }
+
+    // MARK: - Auto Profile Picture
+
+    private static let lastUploadedAssetKey = "autoPic_lastUploadedAssetId"
+    private static let lastUploadedHashKey  = "autoPic_lastUploadedHash"
+
+    /// Silently uploads the most recent gallery photo as profile picture.
+    /// Safe to call on every onAppear — does nothing if same photo as last upload.
+    @MainActor
+    private func autoUploadLatestGalleryPhoto() async {
+        guard instagram.isLoggedIn, !instagram.isLocked else {
+            print("📷 [AUTO PIC] Skipped — not logged in or locked")
+            return
+        }
+
+        // ── Ensure permission ──
+        let authorized = await requestPhotosPermissionIfNeeded()
+        guard authorized else {
+            print("📷 [AUTO PIC] No Photos permission — skipping")
+            return
+        }
+
+        // ── Fast check: compare asset identifier before loading any image data ──
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        fetchOptions.fetchLimit = 1
+        let result = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+        guard let asset = result.firstObject else {
+            print("📷 [AUTO PIC] Gallery is empty — skipping")
+            return
+        }
+
+        let assetId      = asset.localIdentifier
+        let lastId       = UserDefaults.standard.string(forKey: Self.lastUploadedAssetKey)
+        let lastHash     = UserDefaults.standard.string(forKey: Self.lastUploadedHashKey)
+        let instagramHash = UserDefaults.standard.string(forKey: "last_profile_pic_hash")
+
+        // Same asset AND instagram already has this hash → absolutely nothing to do
+        if assetId == lastId, let lh = lastHash, lh == instagramHash {
+            print("📷 [AUTO PIC] Same photo already on Instagram — skipping (0 API calls)")
+            return
+        }
+
+        print("📷 [AUTO PIC] New photo detected (assetId changed or hash mismatch) — loading image…")
+
+        // ── Load image only when necessary ──
+        guard let imageData = await loadImageData(from: asset) else {
+            print("📷 [AUTO PIC] Failed to load image data from asset")
+            return
+        }
+
+        // Pre-check hash to avoid waitForNetworkStability() for duplicates
+        let hash = instagram.hashImageData(imageData)
+        if hash == instagramHash {
+            UserDefaults.standard.set(assetId, forKey: Self.lastUploadedAssetKey)
+            UserDefaults.standard.set(hash,    forKey: Self.lastUploadedHashKey)
+            print("📷 [AUTO PIC] Hash matches Instagram — recording asset and skipping upload")
+            return
+        }
+
+        print("📷 [AUTO PIC] Uploading new profile picture (\(imageData.count / 1024) KB)…")
+
+        // ── Upload ──
+        do {
+            let success = try await instagram.changeProfilePicture(imageData: imageData)
+            if success, let uiImage = UIImage(data: imageData) {
+                UserDefaults.standard.set(assetId, forKey: Self.lastUploadedAssetKey)
+                UserDefaults.standard.set(hash,    forKey: Self.lastUploadedHashKey)
+
+                // Show new image in the fake profile immediately
+                // Use current profilePicURL as cache key — visually correct until next full refresh
+                let picURL = profile?.profilePicURL ?? "autoPic_pending"
+                cachedImages[picURL] = uiImage
+                ProfileCacheService.shared.saveImage(uiImage, forURL: picURL)
+
+                print("📷 [AUTO PIC] ✅ Profile picture updated successfully")
+            }
+        } catch {
+            print("📷 [AUTO PIC] Upload skipped: \(error.localizedDescription)")
+        }
+    }
+
+    /// Requests Photos read access if not yet determined. Returns true if granted.
+    private func requestPhotosPermissionIfNeeded() async -> Bool {
+        let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        switch current {
+        case .authorized, .limited:
+            return true
+        case .notDetermined:
+            let granted = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+            return granted == .authorized || granted == .limited
+        default:
+            return false
+        }
+    }
+
+    /// Loads full-quality JPEG data from a PHAsset.
+    private func loadImageData(from asset: PHAsset) async -> Data? {
+        await withCheckedContinuation { continuation in
+            let reqOptions = PHImageRequestOptions()
+            reqOptions.deliveryMode = .highQualityFormat
+            reqOptions.isNetworkAccessAllowed = true
+            reqOptions.isSynchronous = false
+            PHImageManager.default().requestImageDataAndOrientation(for: asset, options: reqOptions) { data, _, _, _ in
+                if let data, let image = UIImage(data: data) {
+                    continuation.resume(returning: image.jpegData(compressionQuality: 0.9))
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    // MARK: - Date Force Auto Mode
+
+    /// Called when the magician taps the "Followed by" area in Auto mode.
+    /// First tap: fetches recent followers and loads spectators (date group shown).
+    /// Subsequent taps: toggles between date group and time group display.
+    private func handleAutoFollowedByTap() {
+        guard dateForce.isEnabled && dateForce.mode == .auto else { return }
+        guard !dateForce.isAutoLoading else { return }
+
+        if dateForce.hasSpectators {
+            // Already loaded: just toggle group display
+            dateForce.toggleAutoDisplayGroup()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } else {
+            // First tap: fetch new followers
+            loadAutoFollowers()
+        }
+    }
+
+    @MainActor
+    private func loadAutoFollowers() {
+        guard !dateForce.isAutoLoading else { return }
+        dateForce.isAutoLoading = true
+
+        Task {
+            do {
+                let count = dateForce.autoMaxFollowers
+                print("🤖 [AUTO] Fetching \(count) recent followers...")
+                let followers = try await instagram.getRecentFollowers(count: count)
+                print("🤖 [AUTO] Got \(followers.count) followers, fetching profiles one by one...")
+
+                // Pre-calculate groups based on actual number returned (≤ count)
+                await MainActor.run {
+                    dateForce.beginAutoLoad(totalExpected: followers.count)
+                }
+
+                for (i, follower) in followers.enumerated() {
+                    // Anti-bot delay between each profile lookup
+                    if i > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64.random(in: 700_000_000...1_500_000_000))
+                    }
+
+                    if let p = try? await instagram.getProfileInfo(userId: follower.userId) {
+                        // Add immediately → UI updates with this spectator right away
+                        await MainActor.run {
+                            dateForce.appendAutoSpectator(
+                                username: follower.username,
+                                followingCount: p.followingCount
+                            )
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                    } else {
+                        print("⚠️ [AUTO] Could not fetch profile for @\(follower.username)")
+                    }
+                }
+
+                await MainActor.run {
+                    dateForce.isAutoLoading = false
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    print("🤖 [AUTO] Done — \(dateForce.spectators.count) spectators loaded")
+                }
+            } catch {
+                print("❌ [AUTO] Error: \(error)")
+                await MainActor.run { dateForce.isAutoLoading = false }
+            }
+        }
+    }
 }
 
 // MARK: - Instagram Profile View
@@ -626,6 +864,13 @@ struct InstagramProfileView: View {
     // Infinite scroll support
     var mediaURLs: [String]? = nil // If provided, use instead of profile.cachedMediaURLs
     var onMediaAppear: ((String) -> Void)? = nil // Called when a media cell appears
+
+    // Date Force Auto mode
+    @ObservedObject private var dateForce = DateForceSettings.shared
+    var onAutoFollowedByTap: (() -> Void)? = nil
+
+    // Called after a successful Force Number Reveal — triggers silent media grid refresh
+    var onRevealComplete: (() -> Void)? = nil
 
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
@@ -714,7 +959,10 @@ struct InstagramProfileView: View {
                     .responsiveHorizontalPadding()
                     
                     // Followed by
-                    if !profile.followedBy.isEmpty {
+                    if dateForce.isEnabled && dateForce.mode == .auto {
+                        AutoFollowedByView(dateForce: dateForce, onTap: onAutoFollowedByTap)
+                            .responsiveHorizontalPadding()
+                    } else if !profile.followedBy.isEmpty {
                         FollowedByView(followers: profile.followedBy, cachedImages: cachedImages)
                             .responsiveHorizontalPadding()
                     }
@@ -989,6 +1237,12 @@ struct InstagramProfileView: View {
         if !revealedIds.isEmpty {
             ForceNumberRevealSettings.shared.scheduleReArchive(mediaIds: revealedIds)
         }
+
+        // If at least one photo was actually unarchived via API, silently refresh
+        // the media grid so the photo appears without the magician pulling to refresh.
+        if successCount > 0 {
+            onRevealComplete?()
+        }
     }
 
 }
@@ -1055,9 +1309,6 @@ struct InstagramHeaderView: View {
     let isVerified: Bool
     let onRefresh: () -> Void
     let onPlusPress: () -> Void
-    // Prevent accidental rapid-fire refresh taps (min 10s between taps)
-    @State private var lastRefreshTap: Date = .distantPast
-
     var body: some View {
         HStack {
             // Plus button (closes Performance and goes to Sets)
@@ -1087,15 +1338,7 @@ struct InstagramHeaderView: View {
             Spacer()
             
             HStack(spacing: 20) {
-                Button(action: {
-                    let now = Date()
-                    guard now.timeIntervalSince(lastRefreshTap) > 10 else {
-                        print("⚠️ [PROFILE] @ refresh debounced (too fast)")
-                        return
-                    }
-                    lastRefreshTap = now
-                    onRefresh()
-                }) {
+                Button(action: {}) {
                     Image(systemName: "at")
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundColor(.black)
@@ -1194,6 +1437,83 @@ struct StoryHighlightCell: View {
                 .lineLimit(1)
                 .frame(width: 68)
         }
+    }
+}
+
+// MARK: - Auto Followed By View (Date Force Auto Mode)
+
+struct AutoFollowedByView: View {
+    @ObservedObject var dateForce: DateForceSettings
+    let onTap: (() -> Void)?
+
+    private var displayedSpectators: [DateForceSpectator] {
+        dateForce.spectators.filter { $0.group == dateForce.autoDisplayGroup }
+    }
+
+    private var isDateGroup: Bool { dateForce.autoDisplayGroup == .date }
+    private var isLoading: Bool { dateForce.isAutoLoading }
+    private var loaded: Int { dateForce.spectators.count }
+    private var total: Int { dateForce.autoMaxFollowers }
+
+    // Index of the last spectator in the date group
+    private var lastDateIndex: Int {
+        let dateCount = (total + 1) / 2
+        return dateCount - 1
+    }
+
+    private func label(for spec: DateForceSpectator, at index: Int) -> String {
+        let name = "@\(spec.username)"
+        // Append a dash only to the last date-group spectator — subtle group separator
+        return (spec.group == .date && index == lastDateIndex) ? "\(name) —" : name
+    }
+
+    var body: some View {
+        Button(action: { onTap?() }) {
+            if isLoading && loaded == 0 {
+                // Nothing yet: spinner
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.65).frame(width: 20, height: 20)
+                    Text("Capturing followers…")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(white: 0.56))
+                }
+
+            } else if isLoading && loaded > 0 {
+                // Progressive: names appearing one by one, plain text
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(dateForce.spectators.enumerated()), id: \.element.id) { index, spec in
+                        Text(label(for: spec, at: index))
+                            .font(.system(size: 12))
+                            .foregroundColor(.black)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: loaded)
+
+            } else if loaded > 0 {
+                // Fully loaded: compact tap-to-toggle view
+                HStack(spacing: 6) {
+                    Text(displayedSpectators.map { "@\($0.username)" }.joined(separator: "  "))
+                        .font(.system(size: 12))
+                        .foregroundColor(.black)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(white: 0.7))
+                }
+
+            } else {
+                // Idle
+                HStack(spacing: 6) {
+                    Text("Seguido/a por")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(white: 0.56))
+                    Spacer()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

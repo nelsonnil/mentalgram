@@ -391,6 +391,7 @@ struct SettingsView: View {
     @State private var isUploadingProfilePic = false
     @State private var uploadMessage: String?
     @State private var showingUploadAlert = false
+    @AppStorage("autoProfilePicOnPerformance") private var autoProfilePicOnPerformance = false
     
     // Instagram Notes
     @State private var noteText: String = ""
@@ -567,7 +568,27 @@ struct SettingsView: View {
                             Text("Profile Picture")
                                 .font(VaultTheme.Typography.titleSmall())
                                 .foregroundColor(VaultTheme.Colors.textPrimary)
-                            
+
+                            // Auto upload toggle
+                            HStack(spacing: VaultTheme.Spacing.sm) {
+                                Image(systemName: "wand.and.stars")
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Auto on Performance")
+                                        .font(VaultTheme.Typography.body())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    Text("Uploads the latest gallery photo as profile picture each time you open Performance.")
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                }
+                                Spacer()
+                                Toggle("", isOn: $autoProfilePicOnPerformance)
+                                    .labelsHidden()
+                            }
+
+                            Divider()
+
                             VStack(spacing: VaultTheme.Spacing.lg) {
                                 // Preview
                                 if let imageData = selectedImageData, let uiImage = UIImage(data: imageData) {
@@ -1779,6 +1800,7 @@ struct FollowingMagicSettingsCard: View {
 
 struct DateForceSettingsCard: View {
     @ObservedObject private var settings = DateForceSettings.shared
+    @State private var showingHelp = false
 
     var body: some View {
         VaultCard {
@@ -1792,6 +1814,11 @@ struct DateForceSettingsCard: View {
                         .font(VaultTheme.Typography.titleSmall())
                         .foregroundColor(VaultTheme.Colors.textPrimary)
                     Spacer()
+                    Button(action: { showingHelp = true }) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 18))
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                    }
                     Toggle("", isOn: $settings.isEnabled)
                         .labelsHidden()
                 }
@@ -1802,22 +1829,54 @@ struct DateForceSettingsCard: View {
                 if settings.isEnabled {
                     Divider()
 
-                    // Date format selector
-                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                        Text("Date format")
-                            .font(VaultTheme.Typography.captionSmall())
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-                        HStack(spacing: 8) {
-                            ForEach(DateForceFormat.allCases, id: \.rawValue) { fmt in
-                                let isSelected = settings.dateFormat == fmt
-                                Button(action: { settings.dateFormat = fmt }) {
-                                    Text(fmt.displayName)
-                                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 6)
-                                        .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
-                                        .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
-                                        .cornerRadius(20)
+                    // Date format + time offset (grouped together — both affect the target numbers)
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                        // Date format
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            Text("Date format")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                            HStack(spacing: 8) {
+                                ForEach(DateForceFormat.allCases, id: \.rawValue) { fmt in
+                                    let isSelected = settings.dateFormat == fmt
+                                    Button(action: { settings.dateFormat = fmt }) {
+                                        Text(fmt.displayName)
+                                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 6)
+                                            .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                            .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                            .cornerRadius(20)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Time offset
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            HStack {
+                                Text("Add minutes to time")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Spacer()
+                                Text(settings.timeOffsetMinutes == 0 ? "Off" : "+\(settings.timeOffsetMinutes) min")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                            }
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(0...5, id: \.self) { n in
+                                        let isSelected = settings.timeOffsetMinutes == n
+                                        Button(action: { settings.timeOffsetMinutes = n }) {
+                                            Text(n == 0 ? "Off" : "+\(n)m")
+                                                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 6)
+                                                .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
+                                                .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
+                                                .cornerRadius(20)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1833,7 +1892,8 @@ struct DateForceSettingsCard: View {
                         HStack(spacing: 8) {
                             let modes: [(DateForceMode, String)] = [
                                 (.simple, "Simple"),
-                                (.dual, "Dual")
+                                (.dual, "Dual"),
+                                (.auto, "Auto")
                             ]
                             ForEach(modes, id: \.0.rawValue) { mode, label in
                                 let isSelected = settings.mode == mode
@@ -1848,11 +1908,18 @@ struct DateForceSettingsCard: View {
                                 }
                             }
                         }
-                        Text(settings.mode == .simple
-                             ? "All spectators → date. Time shows directly on Explore post."
-                             : "First group → date, second group → time. Both use subtraction.")
-                            .font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        Group {
+                            switch settings.mode {
+                            case .simple:
+                                Text("All spectators → date. Time shows directly on Explore post.")
+                            case .dual:
+                                Text("First group → date, second group → time. Both use subtraction.")
+                            case .auto:
+                                Text("In Performance, tap the 'Followed by' area to auto-capture the latest followers. Tap again to toggle between date/time groups.")
+                            }
+                        }
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
                     }
 
                     if settings.mode == .dual {
@@ -1888,28 +1955,24 @@ struct DateForceSettingsCard: View {
                         }
                     }
 
-                    Divider()
+                    if settings.mode == .auto {
+                        Divider()
 
-                    // Time offset
-                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                        HStack {
-                            Text("Add minutes to time")
-                                .font(VaultTheme.Typography.captionSmall())
-                                .foregroundColor(VaultTheme.Colors.textTertiary)
-                            Spacer()
-                            Text(settings.timeOffsetMinutes == 0 ? "Off" : "+\(settings.timeOffsetMinutes) min")
-                                .font(VaultTheme.Typography.captionSmall())
-                                .foregroundColor(VaultTheme.Colors.primary)
-                        }
-                        Text("Adds minutes to the calculated time so the reveal matches the clock after the dramatic build-up.")
-                            .font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                        ScrollView(.horizontal, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            HStack {
+                                Text("Max followers to capture")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Spacer()
+                                Text("\(settings.autoMaxFollowers)")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                            }
                             HStack(spacing: 8) {
-                                ForEach(0...5, id: \.self) { n in
-                                    let isSelected = settings.timeOffsetMinutes == n
-                                    Button(action: { settings.timeOffsetMinutes = n }) {
-                                        Text(n == 0 ? "Off" : "+\(n)m")
+                                ForEach(2...6, id: \.self) { n in
+                                    let isSelected = settings.autoMaxFollowers == n
+                                    Button(action: { settings.autoMaxFollowers = n }) {
+                                        Text("\(n)")
                                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                                             .padding(.horizontal, 14)
                                             .padding(.vertical, 6)
@@ -1919,6 +1982,12 @@ struct DateForceSettingsCard: View {
                                     }
                                 }
                             }
+                            let total = settings.autoMaxFollowers
+                            let dateCount = (total + 1) / 2
+                            let timeCount = total / 2
+                            Text("Date group: \(dateCount) follower\(dateCount == 1 ? "" : "s")  ·  Time group: \(timeCount) follower\(timeCount == 1 ? "" : "s")")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
                     }
 
@@ -2007,6 +2076,9 @@ struct DateForceSettingsCard: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showingHelp) {
+            DateForceHelpView(onClose: { showingHelp = false })
         }
     }
 }

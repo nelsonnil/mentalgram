@@ -1236,7 +1236,47 @@ class InstagramService: ObservableObject {
         print("❌ [FOLLOWER] No followers found or failed to parse")
         return nil
     }
-    
+
+    /// Returns the most recent N followers (ordered newest first).
+    /// Used by Date Force Auto mode to capture show participants.
+    func getRecentFollowers(count: Int) async throws -> [InstagramFollower] {
+        print("👥 [FOLLOWERS] Fetching latest \(count) followers...")
+
+        if isLocked {
+            throw InstagramError.botDetected("Lockdown active.")
+        }
+
+        let data = try await apiRequest(
+            method: "GET",
+            path: "/friendships/\(session.userId)/followers/?count=\(count)"
+        )
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let users = json["users"] as? [[String: Any]] else {
+            print("❌ [FOLLOWERS] Failed to parse")
+            return []
+        }
+
+        var followers: [InstagramFollower] = []
+        for user in users.prefix(count) {
+            let userId: String
+            if let s = user["pk"] as? String { userId = s }
+            else if let i = user["pk"] as? Int64 { userId = String(i) }
+            else if let i = user["pk"] as? Int { userId = String(i) }
+            else { continue }
+
+            followers.append(InstagramFollower(
+                userId: userId,
+                username: user["username"] as? String ?? "",
+                fullName: user["full_name"] as? String ?? "",
+                profilePicURL: user["profile_pic_url"] as? String
+            ))
+        }
+
+        print("✅ [FOLLOWERS] Got \(followers.count) followers")
+        return followers
+    }
+
     // MARK: - Get User Full Info (with followers count, following, posts, etc.)
     
     func getUserFullInfo(userId: String) async throws -> [String: Any]? {
@@ -2692,7 +2732,7 @@ class InstagramService: ObservableObject {
     }
     
     /// Hash image data to detect duplicates
-    private func hashImageData(_ data: Data) -> String {
+    func hashImageData(_ data: Data) -> String {
         var hash = 0
         for byte in data {
             hash = (hash &* 31) &+ Int(byte)
