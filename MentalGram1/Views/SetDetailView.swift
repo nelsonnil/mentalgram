@@ -392,20 +392,21 @@ struct SetDetailView: View {
                 // ── 3. Prompt to start sync (only when not syncing and not in post-sync state) ──
                 } else if !visibleUploadedPhotos.isEmpty {
                     Button(action: {
-                        guard !isSyncing else { return }  // hard guard against double-tap race
+                        guard !isSyncing else { return }
                         Task { await verifySyncAll() }
                     }) {
                         HStack(spacing: 10) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 16))
+                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                .font(.system(size: 22))
                                 .foregroundColor(.orange)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(visibleUploadedPhotos.count) photo\(visibleUploadedPhotos.count > 1 ? "s" : "") showing as Visible")
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Verify & Archive \(visibleUploadedPhotos.count) visible photo\(visibleUploadedPhotos.count > 1 ? "s" : "")")
                                     .font(.subheadline.bold())
                                     .foregroundColor(.primary)
-                                Text("Tap to verify real state on Instagram")
+                                Text("Checks real state on Instagram · archives desynced ones one by one")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                                    .lineLimit(2)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -418,7 +419,7 @@ struct SetDetailView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.25), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .disabled(isSyncing)  // extra layer: SwiftUI-level disable
+                    .disabled(isSyncing)
                 }
             }
         }

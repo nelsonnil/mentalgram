@@ -50,11 +50,12 @@ struct MentalGram1App: App {
             switch phase {
             case .background:
                 um.beginBackgroundWork()
-                // Sync settings to iCloud whenever the app goes to background
                 CloudBackupService.shared.syncToCloud()
             case .active:
                 um.endBackgroundWork()
                 um.restoreTimersIfNeeded()
+                // Resume any interrupted auto re-archive (accounts for time elapsed while killed)
+                ForceNumberRevealSettings.shared.restoreIfNeeded()
             default:
                 break
             }

@@ -18,11 +18,14 @@ struct PerformanceView: View {
     @Binding var showingExplore: Bool
     
     // MARK: - Infinite Scroll State
-    @State private var allMediaURLs: [String] = [] // All loaded media URLs
+    @State private var allMediaURLs: [String] = []
     @State private var nextMaxId: String? = nil
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
-    private let maxPhotosOwnProfile = 100 // Anti-bot limit for own profile
+    private let maxPhotosOwnProfile = 100
+
+    // MARK: - Upload conflict alert (reveal blocked while upload is active)
+    @State private var showUploadConflictAlert = false
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -600,6 +603,11 @@ struct PerformanceView: View {
             }
             .padding(40)
         }
+        .alert("Upload in progress", isPresented: $showUploadConflictAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("A photo upload is currently running. Wait for it to finish before revealing numbers — both actions share the same hourly Instagram limit and triggering both together can cause bot detection.")
+        }
         .alert("🔓 Debug Info (Magician Only)", isPresented: $showingMagicianDebug) {
             Button("Close", role: .cancel) { }
         } message: {
@@ -1054,7 +1062,15 @@ struct InstagramProfileView: View {
                     let digits = secretManager.digitBuffer
                     secretManager.reset()
                     followingOverride = nil
-                    Task { await revealByDigits(digits, fromSet: activeSet) }
+
+                    // Block reveal if an upload is active — they share the same hourly rate limit
+                    if UploadManager.shared.isActive {
+                        print("⚠️ [FORCE#] Reveal blocked: upload is active (shared rate limit)")
+                        LogManager.shared.warning("Force reveal blocked: upload in progress — try after upload completes", category: .general)
+                        showUploadConflictAlert = true
+                    } else {
+                        Task { await revealByDigits(digits, fromSet: activeSet) }
+                    }
                 } else {
                     secretManager.reset()
                     followingOverride = nil
@@ -1147,6 +1163,13 @@ struct InstagramProfileView: View {
         // Signal operation start — blocks pull-to-refresh while running
         await MainActor.run { instagram.isRevealOperationActive = true }
         defer { Task { await MainActor.run { instagram.isRevealOperationActive = false } } }
+
+        // Secondary guard: block if upload became active between button tap and Task execution
+        if UploadManager.shared.isActive {
+            print("⚠️ [FORCE#] Reveal aborted inside task: upload became active (shared rate limit)")
+            LogManager.shared.warning("Force reveal aborted: upload became active after tap", category: .general)
+            return
+        }
 
         // Digits are read right-to-left: last digit → bank 1, second-to-last → bank 2, etc.
         // e.g. 568 → bank1=8, bank2=6, bank3=5
