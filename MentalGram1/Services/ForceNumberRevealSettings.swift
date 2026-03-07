@@ -33,12 +33,15 @@ class ForceNumberRevealSettings: ObservableObject {
 
     private let pendingIdsKey  = "reArchive_pendingIds"
     private let deadlineKey    = "reArchive_deadline"
-    private let maxOverdueSecs = 3600.0  // discard if overdue >1h
 
     // MARK: - Runtime state
 
     /// Tracks the pending re-archive task so it can be cancelled if a new reveal fires first
     private var reArchiveTask: Task<Void, Never>?
+
+    /// Prevents restoreIfNeeded from creating duplicate tasks when called
+    /// multiple times (init + scenePhase .active + rapid app switches).
+    private var restoreAlreadyScheduled = false
 
     /// When the scheduled re-archive will fire (used for UI countdown)
     @Published private(set) var reArchiveScheduledAt: Date? = nil
@@ -50,9 +53,7 @@ class ForceNumberRevealSettings: ObservableObject {
         autoReArchiveEnabled = UserDefaults.standard.bool(forKey: "forceNumberAutoReArchiveEnabled")
         let savedMinutes     = UserDefaults.standard.integer(forKey: "forceNumberAutoReArchiveMinutes")
         autoReArchiveMinutes = savedMinutes > 0 ? savedMinutes : 15
-
-        // Restore any interrupted re-archive from a previous session
-        restoreIfNeeded()
+        // restoreIfNeeded is called from scenePhase .active on first launch — no need here
     }
 
     // MARK: - Schedule re-archive (call after successful reveal)
@@ -90,11 +91,12 @@ class ForceNumberRevealSettings: ObservableObject {
     // MARK: - Restore after app restart / wake from kill
 
     /// Checks if there was an interrupted re-archive and resumes it.
-    /// Safe to call multiple times — exits immediately if a task is already running.
+    /// Safe to call multiple times (init, scenePhase .active, rapid app switches) —
+    /// double-guarded by both `restoreAlreadyScheduled` flag and `reArchiveTask != nil`.
     func restoreIfNeeded() {
-        // Prevent double-restore: if a task is already scheduled/running, do nothing
-        guard reArchiveTask == nil else {
-            print("⏱️ [RE-ARCHIVE] restoreIfNeeded: task already active — skipping duplicate call")
+        // Primary guard: flag prevents re-entry even on concurrent/rapid calls
+        guard !restoreAlreadyScheduled, reArchiveTask == nil else {
+            print("⏱️ [RE-ARCHIVE] restoreIfNeeded skipped (already scheduled or running)")
             return
         }
 
@@ -140,6 +142,7 @@ class ForceNumberRevealSettings: ObservableObject {
     private let maxOverdueStecs_: TimeInterval = 3600.0
 
     private func scheduleTask(ids: [String], afterSeconds: TimeInterval, deadline: Date) {
+        restoreAlreadyScheduled = true  // block any further restoreIfNeeded calls
         reArchiveTask = Task.detached(priority: .background) { [weak self] in
             guard let self else { return }
             try? await Task.sleep(nanoseconds: UInt64(max(0, afterSeconds) * 1_000_000_000))
@@ -168,6 +171,8 @@ class ForceNumberRevealSettings: ObservableObject {
     private func clearPersisted() {
         UserDefaults.standard.removeObject(forKey: pendingIdsKey)
         UserDefaults.standard.removeObject(forKey: deadlineKey)
+        restoreAlreadyScheduled = false  // allow future restores after a clean slate
+        reArchiveTask = nil
     }
 
     // MARK: - Execute re-archive

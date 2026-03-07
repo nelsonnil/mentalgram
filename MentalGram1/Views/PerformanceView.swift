@@ -26,6 +26,10 @@ struct PerformanceView: View {
 
     // MARK: - Upload conflict alert (reveal blocked while upload is active)
     @State private var showUploadConflictAlert = false
+
+    // MARK: - Refresh throttle (prevent rapid consecutive API calls)
+    @State private var lastRefreshDate: Date? = nil
+    private let minRefreshInterval: TimeInterval = 30
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -226,7 +230,26 @@ struct PerformanceView: View {
     @MainActor
     private func loadProfile() async {
         guard instagram.isLoggedIn else { return }
-        
+
+        // Prevent concurrent loads (double swipe-to-refresh)
+        guard !isLoading else {
+            print("🚫 [PERF] loadProfile skipped — already loading")
+            LogManager.shared.warning("loadProfile skipped: already loading", category: .general)
+            return
+        }
+
+        // Throttle: block refreshes faster than minRefreshInterval
+        if let last = lastRefreshDate, Date().timeIntervalSince(last) < minRefreshInterval {
+            let waited = Int(Date().timeIntervalSince(last))
+            print("🚫 [PERF] loadProfile throttled — \(waited)s since last refresh (min \(Int(minRefreshInterval))s)")
+            LogManager.shared.warning("loadProfile throttled: \(waited)s since last refresh", category: .general)
+            return
+        }
+        lastRefreshDate = Date()
+
+        print("🔄 [PERF] loadProfile starting — full profile refresh")
+        LogManager.shared.info("Profile refresh started", category: .general)
+
         isLoading = true
         
         // Clear old cache first
@@ -656,12 +679,28 @@ struct PerformanceView: View {
     /// Does NOT touch profile stats, bio, follower count, etc. — zero visible disruption.
     @MainActor
     private func refreshMediaGridSilently() async {
-        guard !instagram.isLocked, let userId = profile?.userId else { return }
-        print("🔄 [PERF] Silent media refresh after unarchive…")
+        guard !instagram.isLocked, let userId = profile?.userId else {
+            print("⚠️ [PERF] Silent refresh skipped — locked or no profile")
+            return
+        }
+
+        // Wait for Instagram to propagate the unarchive to its CDN
+        // (without this delay the GET may still return the old list)
+        print("🔄 [PERF] Silent refresh: waiting 2s for Instagram propagation…")
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+        print("🔄 [PERF] Silent refresh: fetching updated media grid…")
+        LogManager.shared.info("Silent media refresh triggered after reveal", category: .general)
+
         do {
             let (items, _) = try await instagram.getUserMediaItems(userId: userId, amount: 21, maxId: nil)
             let newURLs = items.map { $0.imageURL }
-            guard !newURLs.isEmpty else { return }
+            guard !newURLs.isEmpty else {
+                print("⚠️ [PERF] Silent refresh: empty response from Instagram")
+                return
+            }
+
+            let newCount = newURLs.filter { !allMediaURLs.contains($0) }.count
 
             // Merge: new first-page items + tail items not in the new page
             let existingTail = allMediaURLs.filter { !newURLs.contains($0) }
@@ -670,12 +709,18 @@ struct PerformanceView: View {
 
             ProfileCacheService.shared.updateMediaURLs(merged)
 
+            // Download any images not yet cached (new unarchived photos)
             let missing = newURLs.filter { cachedImages[$0] == nil }
-            if !missing.isEmpty { downloadImagesForURLs(missing) }
+            if !missing.isEmpty {
+                print("🔄 [PERF] Silent refresh: downloading \(missing.count) new image(s)…")
+                downloadImagesForURLs(missing)
+            }
 
-            print("🔄 [PERF] Silent refresh done — \(merged.count) items")
+            print("🔄 [PERF] Silent refresh done — \(merged.count) total, \(newCount) newly visible")
+            LogManager.shared.info("Silent refresh done: \(merged.count) items, \(newCount) new", category: .general)
         } catch {
-            print("⚠️ [PERF] Silent media refresh failed (non-critical): \(error)")
+            print("⚠️ [PERF] Silent media refresh failed: \(error.localizedDescription)")
+            LogManager.shared.warning("Silent refresh failed: \(error.localizedDescription)", category: .general)
         }
     }
 
@@ -904,11 +949,32 @@ struct InstagramProfileView: View {
                 tabContentSection
             }
         }
-        // Pull-to-refresh: blocked while a reveal/re-archive operation is running
-        // to avoid extra API calls that consume rate-limit budget mid-operation.
+        // Pull-to-refresh: blocked if ANY API activity is ongoing
         .refreshable {
-            guard !instagram.isRevealOperationActive else {
-                print("🚫 [PERF] Pull-to-refresh blocked — reveal operation in progress")
+            let uploadActive  = UploadManager.shared.isActive
+            let revealActive  = instagram.isRevealOperationActive
+            let alreadyLoading = isLoading
+            let tooSoon = lastRefreshDate.map { Date().timeIntervalSince($0) < minRefreshInterval } ?? false
+
+            if uploadActive {
+                print("🚫 [PERF] Pull-to-refresh blocked — upload in progress")
+                LogManager.shared.warning("Pull-to-refresh blocked: upload active", category: .general)
+                return
+            }
+            if revealActive {
+                print("🚫 [PERF] Pull-to-refresh blocked — reveal/archive operation in progress")
+                LogManager.shared.warning("Pull-to-refresh blocked: reveal operation active", category: .general)
+                return
+            }
+            if alreadyLoading {
+                print("🚫 [PERF] Pull-to-refresh blocked — already loading")
+                LogManager.shared.warning("Pull-to-refresh blocked: already loading", category: .general)
+                return
+            }
+            if tooSoon {
+                let waited = Int(Date().timeIntervalSince(lastRefreshDate!))
+                print("🚫 [PERF] Pull-to-refresh blocked — too soon (\(waited)s since last refresh, min \(Int(minRefreshInterval))s)")
+                LogManager.shared.warning("Pull-to-refresh blocked: \(waited)s since last refresh (min \(Int(minRefreshInterval))s)", category: .general)
                 return
             }
             onRefresh()
