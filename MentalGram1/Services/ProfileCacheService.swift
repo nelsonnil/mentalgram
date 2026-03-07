@@ -11,6 +11,12 @@ class ProfileCacheService: ObservableObject {
     /// Updated whenever saveProfile / updateMediaURLs is called.
     @Published private(set) var cachedProfile: InstagramProfile?
 
+    /// Local UIImage set immediately after a successful profile-picture upload.
+    /// PerformanceView observes this to show the new pic instantly, without waiting
+    /// for Instagram to return the new CDN URL on the next profile refresh.
+    /// Cleared automatically once a real profile refresh completes.
+    @Published var pendingProfilePic: UIImage?
+
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
     

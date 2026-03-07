@@ -399,6 +399,17 @@ struct SettingsView: View {
     @State private var isSendingNote = false
     @State private var noteMessage: String?
     @State private var showingNoteAlert = false
+
+    // Clipboard auto-mode: "" = off, "note" = send as note, "bio" = update biography
+    // Only one can be active at a time.
+    @AppStorage("clipboardAutoMode") private var clipboardAutoMode: String = ""
+
+    // Biography
+    @State private var bioText: String = ""
+    @State private var isSendingBio = false
+    @State private var bioMessage: String?
+    @State private var showingBioAlert = false
+    @FocusState private var bioFieldFocused: Bool
     
     // Hidden Login (easter egg)
     @State private var showingLogin = false
@@ -783,6 +794,28 @@ struct SettingsView: View {
                                             .foregroundColor(VaultTheme.Colors.textSecondary)
                                     }
                                 }
+
+                                Divider()
+
+                                // Clipboard auto-mode toggle (mutually exclusive with Bio)
+                                HStack(spacing: VaultTheme.Spacing.sm) {
+                                    Image(systemName: "doc.on.clipboard")
+                                        .foregroundColor(VaultTheme.Colors.primary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Auto-Note from clipboard")
+                                            .font(VaultTheme.Typography.bodyBold())
+                                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                                        Text("On Performance open, reads clipboard and sends it as a Note automatically")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    }
+                                    Spacer()
+                                    Toggle("", isOn: Binding(
+                                        get: { clipboardAutoMode == "note" },
+                                        set: { clipboardAutoMode = $0 ? "note" : "" }
+                                    ))
+                                    .labelsHidden()
+                                }
                             }
                         }
                     }
@@ -791,7 +824,130 @@ struct SettingsView: View {
                     } message: {
                         Text(noteMessage ?? "")
                     }
-                    
+
+                    // MARK: - Biography
+                    VaultCard {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                            Text("Biography")
+                                .font(VaultTheme.Typography.titleSmall())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+
+                            VStack(spacing: VaultTheme.Spacing.md) {
+                                HStack(spacing: VaultTheme.Spacing.sm) {
+                                    Image(systemName: "text.alignleft")
+                                        .foregroundColor(VaultTheme.Colors.primary)
+                                    Text("Appears on your Instagram profile page")
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                }
+
+                                // Show current biography from cache as placeholder
+                                let currentBio = ProfileCacheService.shared.cachedProfile?.biography ?? ""
+
+                                VStack(alignment: .trailing, spacing: VaultTheme.Spacing.xs) {
+                                    ZStack(alignment: .topLeading) {
+                                        if bioText.isEmpty {
+                                            Text(currentBio.isEmpty ? "Write your biography…" : currentBio)
+                                                .font(VaultTheme.Typography.body())
+                                                .foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.6))
+                                                .padding(.horizontal, VaultTheme.Spacing.md)
+                                                .padding(.vertical, VaultTheme.Spacing.md)
+                                                .allowsHitTesting(false)
+                                        }
+                                        TextEditor(text: $bioText)
+                                            .font(VaultTheme.Typography.body())
+                                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                                            .frame(minHeight: 80, maxHeight: 120)
+                                            .padding(.horizontal, VaultTheme.Spacing.sm)
+                                            .padding(.vertical, VaultTheme.Spacing.xs)
+                                            .scrollContentBackground(.hidden)
+                                            .background(Color.clear)
+                                            .focused($bioFieldFocused)
+                                            .disabled(isSendingBio)
+                                            .onChange(of: bioText) { newValue in
+                                                if newValue.count > 150 {
+                                                    bioText = String(newValue.prefix(150))
+                                                }
+                                            }
+                                    }
+                                    .background(VaultTheme.Colors.backgroundSecondary)
+                                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.sm)
+                                            .stroke(VaultTheme.Colors.cardBorder, lineWidth: 1)
+                                    )
+
+                                    Text("\(bioText.count)/150")
+                                        .font(VaultTheme.Typography.captionSmall())
+                                        .foregroundColor(bioText.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                                }
+
+                                Button(action: {
+                                    bioFieldFocused = false
+                                    sendBiography()
+                                }) {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        if isSendingBio {
+                                            ProgressView()
+                                                .scaleEffect(0.8)
+                                                .tint(.white)
+                                            Text("Updating…")
+                                        } else {
+                                            Image(systemName: "checkmark.circle.fill")
+                                            Text("Update Biography")
+                                        }
+                                    }
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, VaultTheme.Spacing.md)
+                                    .background(bioText.isEmpty || isSendingBio || instagram.isLocked
+                                                ? VaultTheme.Colors.textDisabled
+                                                : VaultTheme.Colors.primary)
+                                    .cornerRadius(VaultTheme.CornerRadius.md)
+                                }
+                                .disabled(bioText.isEmpty || isSendingBio || instagram.isLocked)
+
+                                if instagram.isLocked {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(VaultTheme.Colors.error)
+                                        Text("Lockdown active")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.error)
+                                    }
+                                }
+
+                                Divider()
+
+                                // Clipboard auto-mode toggle (mutually exclusive with Note)
+                                HStack(spacing: VaultTheme.Spacing.sm) {
+                                    Image(systemName: "doc.on.clipboard")
+                                        .foregroundColor(VaultTheme.Colors.primary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Auto-Bio from clipboard")
+                                            .font(VaultTheme.Typography.bodyBold())
+                                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                                        Text("On Performance open, reads clipboard and updates Biography automatically")
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    }
+                                    Spacer()
+                                    Toggle("", isOn: Binding(
+                                        get: { clipboardAutoMode == "bio" },
+                                        set: { clipboardAutoMode = $0 ? "bio" : "" }
+                                    ))
+                                    .labelsHidden()
+                                }
+                            }
+                        }
+                    }
+                    .alert(bioMessage ?? "", isPresented: $showingBioAlert) {
+                        Button("OK") { bioMessage = nil }
+                    } message: {
+                        Text(bioMessage ?? "")
+                    }
+
                     // MARK: - Force Reel
 
                     ForceReelSettingsCard()
@@ -1157,6 +1313,34 @@ struct SettingsView: View {
         }
     }
     
+    // MARK: - Biography
+
+    private func sendBiography() {
+        guard !bioText.isEmpty else { return }
+        isSendingBio = true
+        let textToSend = bioText
+
+        Task {
+            do {
+                let success = try await instagram.changeBiography(text: textToSend)
+                await MainActor.run {
+                    isSendingBio = false
+                    if success {
+                        bioMessage = "✅ Biography updated!\n\nYour Instagram profile now shows:\n\"\(textToSend)\""
+                        showingBioAlert = true
+                        bioText = ""
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isSendingBio = false
+                    bioMessage = "❌ Failed to update biography\n\n\(error.localizedDescription)"
+                    showingBioAlert = true
+                }
+            }
+        }
+    }
+
     // MARK: - Profile Picture Upload
     
     private func uploadProfilePicture() {
@@ -1175,6 +1359,12 @@ struct SettingsView: View {
                     isUploadingProfilePic = false
                     
                     if success {
+                        // Show new profile pic instantly in the fake Instagram view —
+                        // no need to wait for Instagram's CDN URL from the next refresh.
+                        if let image = UIImage(data: imageData) {
+                            ProfileCacheService.shared.pendingProfilePic = image
+                            print("⚡️ [UI] Profile pic override set — will appear instantly in Performance view")
+                        }
                         uploadMessage = "✅ Profile picture updated successfully!\n\nYour Instagram profile picture has been changed. Wait 5 minutes before changing again."
                         showingUploadAlert = true
                         selectedImageData = nil // Clear selection

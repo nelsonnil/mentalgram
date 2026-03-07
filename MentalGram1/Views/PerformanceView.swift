@@ -8,6 +8,9 @@ struct PerformanceView: View {
     @ObservedObject private var dateForce = DateForceSettings.shared
     @ObservedObject private var profileCache = ProfileCacheService.shared
     @AppStorage("autoProfilePicOnPerformance") private var autoProfilePicOnPerformance = false
+    @AppStorage("clipboardAutoMode") private var clipboardAutoMode: String = ""
+    // Last clipboard text sent — avoids re-sending the same text on repeated opens.
+    @AppStorage("clipboardAutoLastSent") private var clipboardAutoLastSent: String = ""
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
@@ -52,9 +55,25 @@ struct PerformanceView: View {
                         onAutoFollowedByTap: {
                             handleAutoFollowedByTap()
                         },
-                        onRevealComplete: {
+                        onRevealComplete: { revealedPhotos in
+                            // Insert local images immediately — no GET to Instagram needed.
+                            for item in revealedPhotos {
+                                if let image = item.image {
+                                    cachedImages[item.pseudoURL] = image
+                                }
+                                if !allMediaURLs.contains(item.pseudoURL) {
+                                    allMediaURLs.insert(item.pseudoURL, at: 0)
+                                }
+                            }
+                            print("⚡️ [PERF] \(revealedPhotos.count) photo(s) inserted into grid from local storage — 0 GET calls")
+                            LogManager.shared.info("Grid updated instantly from local images: \(revealedPhotos.count) photo(s)", category: .general)
+                            // Background sync: replace pseudo-URLs with real CDN URLs
                             Task { await refreshMediaGridSilently() }
-                        }
+                        },
+                        isLoading: isLoading,
+                        lastRefreshDate: lastRefreshDate,
+                        minRefreshInterval: minRefreshInterval,
+                        onUploadConflict: { showUploadConflictAlert = true }
                     )
                 } else {
                     // Show skeleton UI (like Instagram real)
@@ -121,6 +140,36 @@ struct PerformanceView: View {
                 SecretNumberManager.shared.reset()
             }
         }
+        // Instantly show a newly uploaded profile picture without waiting for a CDN URL.
+        // HomeView sets this override right after a successful upload; we mirror it into
+        // cachedImages under the current profilePicURL key so the header and bottom bar
+        // update immediately. The override is cleared on the next full profile refresh.
+        .onChange(of: profileCache.pendingProfilePic) { newPic in
+            guard let pic = newPic, let url = profile?.profilePicURL, !url.isEmpty else { return }
+            cachedImages[url] = pic
+            print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
+            LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
+        }
+        // Instantly reflect a biography update in the fake Instagram profile view.
+        // changeBiography() saves to ProfileCacheService on success; we pick it up here.
+        .onChange(of: profileCache.cachedProfile?.biography) { newBio in
+            guard let newBio, !isLoading else { return }
+            guard let current = profile, current.biography != newBio else { return }
+            profile = InstagramProfile(
+                userId: current.userId, username: current.username,
+                fullName: current.fullName, biography: newBio,
+                externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
+                isVerified: current.isVerified, isPrivate: current.isPrivate,
+                followerCount: current.followerCount, followingCount: current.followingCount,
+                mediaCount: current.mediaCount, followedBy: current.followedBy,
+                isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+                cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                cachedHighlights: current.cachedHighlights
+            )
+            print("⚡️ [PERF] Biography updated instantly in fake profile (no GET needed)")
+            LogManager.shared.info("Biography updated instantly in profile view", category: .general)
+        }
         // React to local profile cache changes (archive/unarchive, etc.)
         // without making any extra API call.
         .onChange(of: profileCache.cachedProfile?.cachedMediaURLs) { newURLs in
@@ -149,6 +198,10 @@ struct PerformanceView: View {
             if autoProfilePicOnPerformance {
                 Task { await autoUploadLatestGalleryPhoto() }
             }
+            // Clipboard auto-mode: send clipboard text as Note or Biography on open
+            if clipboardAutoMode != "" {
+                Task { await applyClipboardAutoMode() }
+            }
         }
         .onDisappear {
             // Re-enable sleep when leaving Performance
@@ -157,6 +210,75 @@ struct PerformanceView: View {
         }
     }
     
+    // MARK: - Clipboard Auto-Mode
+
+    private func applyClipboardAutoMode() async {
+        guard clipboardAutoMode == "note" || clipboardAutoMode == "bio" else { return }
+        guard !instagram.isLocked else {
+            print("🚫 [CLIPBOARD] Lockdown active — skipping clipboard auto-mode")
+            return
+        }
+
+        // Read clipboard text
+        guard let text = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            print("📋 [CLIPBOARD] Clipboard is empty — nothing to send")
+            return
+        }
+
+        // Avoid re-sending the same text on repeated Performance opens
+        guard text != clipboardAutoLastSent else {
+            print("📋 [CLIPBOARD] Same text as last send — skipping (\"\(text.prefix(30))…\")")
+            return
+        }
+
+        print("📋 [CLIPBOARD] Auto-mode=\(clipboardAutoMode), text=\"\(text.prefix(40))\"")
+        LogManager.shared.info("Clipboard auto-mode triggered (\(clipboardAutoMode)): \"\(text.prefix(40))\"", category: .general)
+
+        do {
+            if clipboardAutoMode == "note" {
+                let final = truncateAtWordBoundary(text, limit: 60)
+                if final.count < text.count {
+                    print("✂️ [CLIPBOARD] Note truncated at word boundary: \(text.count)→\(final.count) chars")
+                }
+                let ok = try await instagram.createNote(text: final)
+                if ok {
+                    clipboardAutoLastSent = text  // track original to avoid re-sends
+                    print("✅ [CLIPBOARD] Note sent from clipboard")
+                    LogManager.shared.success("Auto-note sent from clipboard (\(final.count) chars)", category: .general)
+                }
+            } else {
+                let final = truncateAtWordBoundary(text, limit: 150)
+                if final.count < text.count {
+                    print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(text.count)→\(final.count) chars")
+                }
+                let ok = try await instagram.changeBiography(text: final)
+                if ok {
+                    clipboardAutoLastSent = text  // track original to avoid re-sends
+                    print("✅ [CLIPBOARD] Biography updated from clipboard")
+                    LogManager.shared.success("Auto-bio updated from clipboard (\(final.count) chars)", category: .general)
+                }
+            }
+        } catch {
+            print("⚠️ [CLIPBOARD] Auto-mode error: \(error.localizedDescription)")
+            LogManager.shared.warning("Clipboard auto-mode failed: \(error.localizedDescription)", category: .general)
+        }
+    }
+
+    /// Truncates `text` to `limit` characters, cutting at the last whitespace
+    /// within the limit so no word is split. Returns the original string unchanged
+    /// if it is already within the limit.
+    private func truncateAtWordBoundary(_ text: String, limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let truncated = String(text.prefix(limit))
+        // Find the last whitespace to avoid splitting a word
+        if let lastSpace = truncated.lastIndex(of: " ") {
+            return String(truncated[truncated.startIndex..<lastSpace])
+        }
+        // No space found — the whole text is one long word; hard-truncate
+        return truncated
+    }
+
     private func checkAndLoadProfile() {
         // ALWAYS try to load from cache first (anti-bot: no automatic requests)
         if let cached = ProfileCacheService.shared.loadProfile() {
@@ -268,6 +390,8 @@ struct PerformanceView: View {
                 self.allMediaURLs = fetchedProfile.cachedMediaURLs
                 self.hasMorePages = fetchedProfile.cachedMediaURLs.count >= 18
                 ProfileCacheService.shared.saveProfile(fetchedProfile)
+                // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
+                ProfileCacheService.shared.pendingProfilePic = nil
                 downloadAndCacheImages(profile: fetchedProfile)
             }
             isLoading = false
@@ -684,12 +808,9 @@ struct PerformanceView: View {
             return
         }
 
-        // Wait for Instagram to propagate the unarchive to its CDN
-        // (without this delay the GET may still return the old list)
-        print("🔄 [PERF] Silent refresh: waiting 2s for Instagram propagation…")
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-
-        print("🔄 [PERF] Silent refresh: fetching updated media grid…")
+        // No delay needed: the grid already shows local images via pseudo-URLs.
+        // This GET only replaces pseudo-URLs with real CDN URLs in the background.
+        print("🔄 [PERF] Silent refresh: fetching updated media grid (no delay — local images shown already)…")
         LogManager.shared.info("Silent media refresh triggered after reveal", category: .general)
 
         do {
@@ -700,10 +821,14 @@ struct PerformanceView: View {
                 return
             }
 
-            let newCount = newURLs.filter { !allMediaURLs.contains($0) }.count
+            // Strip pseudo-URLs (reveal://) inserted as instant placeholders.
+            // Real CDN URLs from this response will replace them.
+            let cleanedExisting = allMediaURLs.filter { !$0.hasPrefix("reveal://") }
+
+            let newCount = newURLs.filter { !cleanedExisting.contains($0) }.count
 
             // Merge: new first-page items + tail items not in the new page
-            let existingTail = allMediaURLs.filter { !newURLs.contains($0) }
+            let existingTail = cleanedExisting.filter { !newURLs.contains($0) }
             let merged = newURLs + existingTail
             allMediaURLs = merged
 
@@ -926,8 +1051,17 @@ struct InstagramProfileView: View {
     @ObservedObject private var dateForce = DateForceSettings.shared
     var onAutoFollowedByTap: (() -> Void)? = nil
 
-    // Called after a successful Force Number Reveal — triggers silent media grid refresh
-    var onRevealComplete: (() -> Void)? = nil
+    // Called after a successful Force Number Reveal with local images already loaded.
+    // Each element: pseudo-URL key + optional UIImage from local storage.
+    // PerformanceView inserts them into the grid immediately (no GET needed).
+    var onRevealComplete: (([(pseudoURL: String, image: UIImage?)]) -> Void)? = nil
+
+    // Passed from PerformanceView so the pull-to-refresh guard can check them.
+    var isLoading: Bool = false
+    var lastRefreshDate: Date? = nil
+    var minRefreshInterval: TimeInterval = 30
+    // Called when reveal is blocked because an upload is active.
+    var onUploadConflict: (() -> Void)? = nil
 
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
@@ -1133,7 +1267,7 @@ struct InstagramProfileView: View {
                     if UploadManager.shared.isActive {
                         print("⚠️ [FORCE#] Reveal blocked: upload is active (shared rate limit)")
                         LogManager.shared.warning("Force reveal blocked: upload in progress — try after upload completes", category: .general)
-                        showUploadConflictAlert = true
+                        onUploadConflict?()
                     } else {
                         Task { await revealByDigits(digits, fromSet: activeSet) }
                     }
@@ -1248,7 +1382,8 @@ struct InstagramProfileView: View {
         var successCount  = 0
         var skipCount     = 0
         var failCount     = 0
-        var revealedIds: [String] = [] // only IDs actually unarchived via API in this session
+        var revealedIds: [String] = []           // only IDs actually unarchived via API in this session
+        var revealedPhotos: [(pseudoURL: String, image: UIImage?)] = [] // for instant grid update
 
         // Cancel any previous pending re-archive before starting a new reveal
         ForceNumberRevealSettings.shared.cancelPendingReArchive()
@@ -1301,6 +1436,11 @@ struct InstagramProfileView: View {
                     LogManager.shared.success("Force reveal digit \(digit) bank \(i + 1) (ID: \(mediaId))", category: .general)
                     revealedIds.append(mediaId)
                     successCount += 1
+
+                    // Load local image so PerformanceView can insert it instantly (no GET needed)
+                    let localImage: UIImage? = photo.imageData.flatMap { UIImage(data: $0) }
+                    revealedPhotos.append((pseudoURL: "reveal://\(mediaId)", image: localImage))
+                    print("🖼️ [FORCE#] Local image \(localImage != nil ? "loaded" : "not found") for \(mediaId)")
                 } else {
                     print("⚠️ [FORCE#] Digit \(digit) bank \(i + 1): unarchive returned false")
                     failCount += 1
@@ -1320,10 +1460,10 @@ struct InstagramProfileView: View {
             ForceNumberRevealSettings.shared.scheduleReArchive(mediaIds: revealedIds)
         }
 
-        // If at least one photo was actually unarchived via API, silently refresh
-        // the media grid so the photo appears without the magician pulling to refresh.
+        // If at least one photo was actually unarchived via API, pass local images
+        // to PerformanceView for an immediate grid update — no GET call needed.
         if successCount > 0 {
-            onRevealComplete?()
+            onRevealComplete?(revealedPhotos)
         }
     }
 

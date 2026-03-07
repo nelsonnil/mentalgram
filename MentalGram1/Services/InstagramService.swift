@@ -2711,6 +2711,144 @@ class InstagramService: ObservableObject {
         return false
     }
     
+    // MARK: - Change Biography
+
+    /// Updates the Instagram biography text via /accounts/edit_profile/.
+    /// Preserves all existing profile fields — only `biography` is modified.
+    func changeBiography(text: String) async throws -> Bool {
+        print("📝 [BIO] Changing biography to: \"\(text)\"")
+
+        guard text.count <= 150 else {
+            throw InstagramError.apiError("Biography must be 150 characters or less (\(text.count) given).")
+        }
+
+        if isLocked {
+            print("🚨 [BIO] Lockdown active — ABORT")
+            throw InstagramError.apiError("Lockdown active. Wait before editing biography.")
+        }
+
+        // ANTI-BOT: Duplicate check
+        if let lastBio = UserDefaults.standard.string(forKey: "last_biography_text"),
+           lastBio == text {
+            throw InstagramError.apiError("This is already your current biography. Please write something different.")
+        }
+
+        // ANTI-BOT: Cooldown between consecutive edits (120 s)
+        if let cooldownUntil = UserDefaults.standard.object(forKey: "biography_cooldown_until") as? Date,
+           cooldownUntil > Date() {
+            let remaining = Int(cooldownUntil.timeIntervalSinceNow)
+            throw InstagramError.apiError("Please wait \(remaining)s before editing biography again.")
+        }
+
+        try await waitForNetworkStability()
+
+        // ANTI-BOT: Human delay (1–2 s)
+        let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
+        print("   Waiting \(delay / 1_000_000_000)s (human delay)…")
+        try await Task.sleep(nanoseconds: delay)
+
+        // Build body with ALL required fields — Instagram will 400 if any are missing.
+        // email, phone, gender and birthday are not stored in InstagramProfile, so we
+        // cache them in UserDefaults after the first successful fetch and reuse them.
+        var email       = UserDefaults.standard.string(forKey: "ig_edit_email")    ?? ""
+        var phone       = UserDefaults.standard.string(forKey: "ig_edit_phone")    ?? ""
+        var gender      = UserDefaults.standard.string(forKey: "ig_edit_gender")   ?? ""
+        var birthday    = UserDefaults.standard.string(forKey: "ig_edit_birthday") ?? ""
+        var externalUrl = ProfileCacheService.shared.cachedProfile?.externalUrl    ?? ""
+        var username    = ProfileCacheService.shared.cachedProfile?.username       ?? ""
+        var firstName   = ProfileCacheService.shared.cachedProfile?.fullName       ?? ""
+
+        // If we don't have cached edit-fields yet, fetch them once from Instagram.
+        let missingEditFields = email.isEmpty && phone.isEmpty && gender.isEmpty
+        if missingEditFields {
+            print("📝 [BIO] No cached edit-fields — fetching from /accounts/current_user/ (one-time)…")
+            if let currentUserData = try? await apiRequest(
+                method: "GET",
+                path:   "/accounts/current_user/?edit=true"
+            ),
+               let userJson = try? JSONSerialization.jsonObject(with: currentUserData) as? [String: Any],
+               let user = userJson["user"] as? [String: Any] {
+                email       = user["email"]        as? String ?? ""
+                phone       = user["phone_number"] as? String ?? ""
+                gender      = String(user["gender"] as? Int ?? 1)
+                birthday    = user["birthday"]     as? String ?? ""
+                externalUrl = user["external_url"] as? String ?? externalUrl
+                username    = user["username"]     as? String ?? username
+                firstName   = user["full_name"]    as? String ?? firstName
+
+                // Cache for future calls — no GET needed next time
+                UserDefaults.standard.set(email,    forKey: "ig_edit_email")
+                UserDefaults.standard.set(phone,    forKey: "ig_edit_phone")
+                UserDefaults.standard.set(gender,   forKey: "ig_edit_gender")
+                UserDefaults.standard.set(birthday, forKey: "ig_edit_birthday")
+                print("   ✅ Edit-fields cached. email=\(email.isEmpty ? "(empty)" : "***"), phone=\(phone.isEmpty ? "(empty)" : "***"), gender=\(gender)")
+            } else {
+                print("   ⚠️ [BIO] Could not fetch edit-fields — proceeding with empty email/phone (may fail)")
+            }
+        } else {
+            print("📝 [BIO] Using cached edit-fields (no GET needed). gender=\(gender)")
+        }
+
+        let body: [String: String] = [
+            "_csrftoken":   session.csrfToken,
+            "_uid":         session.userId,
+            "_uuid":        clientUUID,
+            "device_id":    deviceId,
+            "biography":    text,
+            "email":        email,
+            "phone_number": phone,
+            "gender":       gender,
+            "birthday":     birthday,
+            "external_url": externalUrl,
+            "username":     username,
+            "first_name":   firstName
+        ]
+
+        let data = try await apiRequest(
+            method: "POST",
+            path:   "/accounts/edit_profile/",
+            body:   body
+        )
+
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let status = json["status"] as? String, status == "ok" {
+                print("✅ [BIO] Biography updated successfully")
+                LogManager.shared.success("Biography updated", category: .api)
+
+                // Persist to prevent duplicates and start cooldown
+                UserDefaults.standard.set(text, forKey: "last_biography_text")
+                let cooldownUntil = Date().addingTimeInterval(120)
+                UserDefaults.standard.set(cooldownUntil, forKey: "biography_cooldown_until")
+
+                // Update in-memory cache so PerformanceView shows it instantly
+                if let cached = ProfileCacheService.shared.cachedProfile {
+                    let updated = InstagramProfile(
+                        userId: cached.userId, username: cached.username,
+                        fullName: cached.fullName, biography: text,
+                        externalUrl: cached.externalUrl, profilePicURL: cached.profilePicURL,
+                        isVerified: cached.isVerified, isPrivate: cached.isPrivate,
+                        followerCount: cached.followerCount, followingCount: cached.followingCount,
+                        mediaCount: cached.mediaCount, followedBy: cached.followedBy,
+                        isFollowing: cached.isFollowing, isFollowRequested: cached.isFollowRequested,
+                        cachedAt: cached.cachedAt, cachedMediaURLs: cached.cachedMediaURLs,
+                        cachedReelURLs: cached.cachedReelURLs, cachedTaggedURLs: cached.cachedTaggedURLs,
+                        cachedHighlights: cached.cachedHighlights
+                    )
+                    ProfileCacheService.shared.saveProfile(updated)
+                }
+
+                return true
+            }
+
+            let message = json["message"] as? String ?? "Unknown error"
+            print("❌ [BIO] Failed: \(message)")
+            throw InstagramError.apiError("Biography update failed: \(message)")
+        }
+
+        print("❌ [BIO] Could not parse response")
+        throw InstagramError.apiError("Biography update failed: could not parse Instagram response.")
+    }
+
     // MARK: - Change Profile Picture
     
     /// Changes Instagram profile picture
