@@ -10,9 +10,22 @@
 		200E7F302F3893500061C768 /* MentalGram1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MentalGram1.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		207C8BBC2F5DB56E009CA8FF /* Exceptions for "MentalGram1" folder in "MentalGram1" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 200E7F2F2F3893500061C768 /* MentalGram1 */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		200E7F322F3893500061C768 /* MentalGram1 */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				207C8BBC2F5DB56E009CA8FF /* Exceptions for "MentalGram1" folder in "MentalGram1" target */,
+			);
 			path = MentalGram1;
 			sourceTree = "<group>";
 		};
@@ -254,6 +267,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MentalGram1/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vault;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need access to your photos";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -304,6 +318,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MentalGram1/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vault;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need access to your photos";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;

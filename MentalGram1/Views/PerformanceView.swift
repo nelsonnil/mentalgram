@@ -11,6 +11,7 @@ struct PerformanceView: View {
     @AppStorage("clipboardAutoMode") private var clipboardAutoMode: String = ""
     // Last clipboard text sent — avoids re-sending the same text on repeated opens.
     @AppStorage("clipboardAutoLastSent") private var clipboardAutoLastSent: String = ""
+    @ObservedObject private var urlAction = URLActionManager.shared
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
@@ -198,8 +199,15 @@ struct PerformanceView: View {
             if autoProfilePicOnPerformance {
                 Task { await autoUploadLatestGalleryPhoto() }
             }
-            // Clipboard auto-mode: send clipboard text as Note or Biography on open
-            if clipboardAutoMode != "" {
+            // URL scheme action (takes priority over clipboard auto-mode)
+            if let action = urlAction.consume() {
+                if action.mode.hasPrefix("profilepic") {
+                    Task { await applyURLProfilePicAction(mode: action.mode, data: action.text) }
+                } else {
+                    Task { await applyURLAction(mode: action.mode, text: action.text) }
+                }
+            } else if clipboardAutoMode != "" {
+                // Clipboard auto-mode: send clipboard text as Note or Biography on open
                 Task { await applyClipboardAutoMode() }
             }
         }
@@ -210,6 +218,136 @@ struct PerformanceView: View {
         }
     }
     
+    // MARK: - URL Scheme Profile Pic Action
+
+    /// Handles vault://profilepic in its three variants.
+    private func applyURLProfilePicAction(mode: String, data: String) async {
+        guard instagram.isLoggedIn, !instagram.isLocked else {
+            print("🚫 [URL PIC] Not logged in or lockdown active — skipping")
+            return
+        }
+
+        print("📲 [URL PIC] Handling mode=\(mode)")
+        LogManager.shared.info("URL scheme profile pic action: \(mode)", category: .general)
+
+        var imageData: Data?
+
+        switch mode {
+        case "profilepic_last":
+            // Reuse existing logic but force upload (ignore asset-ID duplicate check)
+            let authorized = await requestPhotosPermissionIfNeeded()
+            guard authorized else {
+                print("📷 [URL PIC] No Photos permission")
+                return
+            }
+            let fetchOptions = PHFetchOptions()
+            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            fetchOptions.fetchLimit = 1
+            guard let asset = PHAsset.fetchAssets(with: .image, options: fetchOptions).firstObject else {
+                print("📷 [URL PIC] Gallery empty")
+                return
+            }
+            imageData = await loadImageData(from: asset)
+
+        case "profilepic_clipboard":
+            guard let clipImage = UIPasteboard.general.image else {
+                print("📋 [URL PIC] No image in clipboard")
+                return
+            }
+            imageData = resizeAndCompress(clipImage, maxDimension: 512, quality: 0.75)
+
+        case "profilepic_base64":
+            guard !data.isEmpty,
+                  let decoded = Data(base64Encoded: data, options: .ignoreUnknownCharacters),
+                  let img = UIImage(data: decoded) else {
+                print("❌ [URL PIC] Invalid base64 image data")
+                return
+            }
+            // Vault handles resize + compress — the sender doesn't need to do anything
+            imageData = resizeAndCompress(img, maxDimension: 512, quality: 0.75)
+            print("📲 [URL PIC] Base64 decoded: \(decoded.count / 1024) KB → \((imageData?.count ?? 0) / 1024) KB after resize")
+
+        default:
+            print("⚠️ [URL PIC] Unknown mode: \(mode)")
+            return
+        }
+
+        guard let finalData = imageData else {
+            print("❌ [URL PIC] Could not prepare image data")
+            return
+        }
+
+        do {
+            let success = try await instagram.changeProfilePicture(imageData: finalData)
+            if success, let uiImage = UIImage(data: finalData) {
+                let picURL = profile?.profilePicURL ?? "urlpic_pending"
+                await MainActor.run {
+                    cachedImages[picURL] = uiImage
+                    ProfileCacheService.shared.pendingProfilePic = uiImage
+                }
+                print("✅ [URL PIC] Profile picture updated via URL scheme (\(mode))")
+                LogManager.shared.success("Profile pic updated via URL scheme (\(mode))", category: .general)
+            }
+        } catch {
+            print("⚠️ [URL PIC] Upload failed: \(error.localizedDescription)")
+            LogManager.shared.warning("URL scheme profile pic failed: \(error.localizedDescription)", category: .general)
+        }
+    }
+
+    /// Resizes a UIImage to fit within maxDimension×maxDimension and compresses to JPEG.
+    private func resizeAndCompress(_ image: UIImage, maxDimension: CGFloat, quality: CGFloat) -> Data? {
+        let size = image.size
+        let scale: CGFloat
+        if size.width > maxDimension || size.height > maxDimension {
+            scale = maxDimension / max(size.width, size.height)
+        } else {
+            scale = 1.0
+        }
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let resized  = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
+        return resized.jpegData(compressionQuality: quality)
+    }
+
+    // MARK: - URL Scheme Action
+
+    private func applyURLAction(mode: String, text: String) async {
+        guard !instagram.isLocked else {
+            print("🚫 [URL] Lockdown active — skipping URL action")
+            return
+        }
+        print("📲 [URL] Executing action=\(mode), text=\"\(text.prefix(40))\"")
+        LogManager.shared.info("URL scheme action: \(mode) — \"\(text.prefix(40))\"", category: .general)
+
+        do {
+            if mode == "note" {
+                let final = truncateAtWordBoundary(text, limit: 60)
+                if final.count < text.count {
+                    print("✂️ [URL] Note truncated: \(text.count)→\(final.count) chars")
+                }
+                let ok = try await instagram.createNote(text: final)
+                if ok {
+                    print("✅ [URL] Note sent via URL scheme")
+                    LogManager.shared.success("Note sent via URL scheme (\(final.count) chars)", category: .general)
+                }
+            } else if mode == "bio" {
+                let final = truncateAtWordBoundary(text, limit: 150)
+                if final.count < text.count {
+                    print("✂️ [URL] Bio truncated: \(text.count)→\(final.count) chars")
+                }
+                let ok = try await instagram.changeBiography(text: final)
+                if ok {
+                    print("✅ [URL] Biography updated via URL scheme")
+                    LogManager.shared.success("Biography updated via URL scheme (\(final.count) chars)", category: .general)
+                }
+            }
+        } catch {
+            print("⚠️ [URL] Action failed: \(error.localizedDescription)")
+            LogManager.shared.warning("URL scheme action failed: \(error.localizedDescription)", category: .general)
+        }
+    }
+
     // MARK: - Clipboard Auto-Mode
 
     private func applyClipboardAutoMode() async {

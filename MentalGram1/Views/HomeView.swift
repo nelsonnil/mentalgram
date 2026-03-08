@@ -5,6 +5,7 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var instagram = InstagramService.shared
     @ObservedObject var dataManager = DataManager.shared
+    @ObservedObject private var urlAction = URLActionManager.shared
     @State private var selectedTab = 1 // Start on Sets tab
     @State private var showingCreateSet = false
     @State private var showingExplore = false
@@ -47,11 +48,15 @@ struct HomeView: View {
         }
         .accentColor(selectedTab == 0 ? .primary : VaultTheme.Colors.primary)
         .onChange(of: selectedTab) { newTab in
-            // Dynamically update tab bar appearance based on selected tab
             updateTabBarAppearance(forTab: newTab)
         }
+        // When a URL scheme action arrives, switch to Performance tab immediately
+        .onChange(of: urlAction.pendingMode) { mode in
+            guard !mode.isEmpty else { return }
+            print("📲 [URL] Switching to Performance tab for action: \(mode)")
+            selectedTab = 0
+        }
         .onAppear {
-            // Set initial tab bar appearance
             updateTabBarAppearance(forTab: selectedTab)
         }
         .fullScreenCover(isPresented: $showingExplore) {
@@ -380,7 +385,6 @@ struct SettingsView: View {
     @ObservedObject var instagram      = InstagramService.shared
     @ObservedObject var backup         = CloudBackupService.shared
     @State private var showingLogoutAlert = false
-    @State private var showingResetDeviceAlert = false
     @State private var showingFollowerData = false
     @State private var latestFollower: InstagramFollower?
     @State private var followerFullInfo: [String: Any]?
@@ -419,8 +423,6 @@ struct SettingsView: View {
     @ObservedObject var secretInputSettings = SecretInputSettings.shared
     
     // TEST: Archive access
-    @State private var isTestingArchive = false
-    @State private var archiveTestResult: String?
     
     private var exampleMaskOutput: String {
         let word = "coche"
@@ -517,35 +519,6 @@ struct SettingsView: View {
                                 .padding(.vertical, VaultTheme.Spacing.sm)
                             }
                             
-                            // TEST BUTTON: Check if we can access archived photos
-                            Button(action: { testArchiveAccess() }) {
-                                HStack {
-                                    Image(systemName: "archivebox.circle.fill")
-                                        .foregroundColor(.orange)
-                                        .frame(width: 24)
-                                    Text("TEST: Check Archived Photos")
-                                        .font(VaultTheme.Typography.body())
-                                        .foregroundColor(VaultTheme.Colors.textPrimary)
-                                    Spacer()
-                                    if isTestingArchive {
-                                        ProgressView()
-                                            .tint(.orange)
-                                    } else {
-                                        Image(systemName: "play.circle.fill")
-                                            .font(VaultTheme.Typography.caption())
-                                            .foregroundColor(.orange)
-                                    }
-                                }
-                                .padding(.vertical, VaultTheme.Spacing.sm)
-                            }
-                            .disabled(isTestingArchive)
-                            
-                            if let testResult = archiveTestResult {
-                                Text(testResult)
-                                    .font(VaultTheme.Typography.caption())
-                                    .foregroundColor(testResult.contains("✅") ? .green : .red)
-                                    .padding(.top, 4)
-                            }
                         }
                     }
                     
@@ -629,6 +602,10 @@ struct SettingsView: View {
                                     action: { showingImagePicker = true },
                                     isEnabled: !isUploadingProfilePic
                                 )
+
+                                Divider()
+
+                                profilePicURLSchemesContent
                                 
                                 // Upload Button (only show if image selected)
                                 if selectedImageData != nil {
@@ -816,6 +793,16 @@ struct SettingsView: View {
                                     ))
                                     .labelsHidden()
                                 }
+
+                                Divider()
+                                urlSchemeRow(
+                                    icon:   "link",
+                                    title:  "URL Scheme",
+                                    detail: "Open this URL to send a note automatically when Performance opens",
+                                    url:    noteText.isEmpty
+                                                ? "vault://note?text=<tu texto>"
+                                                : URLActionManager.buildURL(mode: "note", text: noteText)
+                                )
                             }
                         }
                     }
@@ -939,6 +926,16 @@ struct SettingsView: View {
                                     ))
                                     .labelsHidden()
                                 }
+
+                                Divider()
+                                urlSchemeRow(
+                                    icon:   "link",
+                                    title:  "URL Scheme",
+                                    detail: "Open this URL to update the biography automatically when Performance opens",
+                                    url:    bioText.isEmpty
+                                                ? "vault://bio?text=<tu texto>"
+                                                : URLActionManager.buildURL(mode: "bio", text: bioText)
+                                )
                             }
                         }
                     }
@@ -1170,12 +1167,6 @@ struct SettingsView: View {
                             .disabled(isLoadingFollower)
                             .buttonStyle(.plain)
                             
-                            GradientButton(
-                                title: "Reset Device ID (Emergency)",
-                                icon: "exclamationmark.triangle.fill",
-                                action: { showingResetDeviceAlert = true },
-                                style: .destructive
-                            )
                         }
                     }
                 }
@@ -1196,15 +1187,6 @@ struct SettingsView: View {
             }
         } message: {
             Text("Are you sure you want to logout?")
-        }
-        .alert("Reset Device ID", isPresented: $showingResetDeviceAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Reset & Logout", role: .destructive) {
-                instagram.resetDeviceIdentifiers()
-                instagram.logout()
-            }
-        } message: {
-            Text("Esto reseteará tu Device ID y cerrará sesión. Úsalo SOLO si tu cuenta fue bloqueada por cambio de dispositivo. Tendrás que volver a hacer login.")
         }
         .sheet(isPresented: $showingFollowerData) {
             FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
@@ -1243,6 +1225,108 @@ struct SettingsView: View {
         }
     }
     
+    // MARK: - URL Scheme Helper Views
+
+    @ViewBuilder
+    private var profilePicURLSchemesContent: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            HStack(spacing: VaultTheme.Spacing.sm) {
+                Image(systemName: "link.circle.fill")
+                    .foregroundColor(VaultTheme.Colors.primary)
+                Text("URL Schemes")
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+            }
+            Text("Use these URLs in iOS Shortcuts to update your profile picture automatically when Performance opens.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+
+            urlSchemeRow(
+                icon:   "photo.on.rectangle",
+                title:  "Last gallery photo",
+                detail: "Uploads the most recent photo from your camera roll",
+                url:    URLActionManager.profilePicLastURL
+            )
+            Divider()
+            urlSchemeRow(
+                icon:   "doc.on.clipboard",
+                title:  "Image from clipboard",
+                detail: "Copy an image in any app, then open this URL",
+                url:    URLActionManager.profilePicClipboardURL
+            )
+            Divider()
+            profilePicBase64Row
+        }
+    }
+
+    @ViewBuilder
+    private var profilePicBase64Row: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            HStack(spacing: VaultTheme.Spacing.sm) {
+                Image(systemName: "externaldrive.connected.to.line.below")
+                    .foregroundColor(VaultTheme.Colors.primary)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Base64 from external app")
+                        .font(VaultTheme.Typography.bodyBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Another app sends the image as base64. Vault handles resize and compression automatically.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+            }
+            Text("vault://profilepic?data=<base64>")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .padding(.horizontal, VaultTheme.Spacing.sm)
+                .padding(.vertical, 4)
+                .background(VaultTheme.Colors.backgroundSecondary)
+                .cornerRadius(VaultTheme.CornerRadius.sm)
+        }
+    }
+
+    @ViewBuilder
+    private func urlSchemeRow(icon: String, title: String, detail: String, url: String) -> some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+            HStack(spacing: VaultTheme.Spacing.sm) {
+                Image(systemName: icon)
+                    .foregroundColor(VaultTheme.Colors.primary)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(VaultTheme.Typography.bodyBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text(detail)
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = url
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link")
+                        Text("Copy")
+                    }
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, VaultTheme.Spacing.sm)
+                    .padding(.vertical, 6)
+                    .background(VaultTheme.Colors.primary)
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                }
+            }
+            Text(url)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .lineLimit(2)
+                .padding(.horizontal, VaultTheme.Spacing.sm)
+                .padding(.vertical, 4)
+                .background(VaultTheme.Colors.backgroundSecondary)
+                .cornerRadius(VaultTheme.CornerRadius.sm)
+        }
+    }
+
     // MARK: - Profile Picture Upload Helpers
     
     private func canUpload() -> Bool {
@@ -1393,41 +1477,6 @@ struct SettingsView: View {
         }
     }
     
-    // MARK: - TEST Archive Access
-    
-    private func testArchiveAccess() {
-        // Warn if upload is active - API calls could trigger rate limiting
-        if UploadManager.shared.isUploading {
-            archiveTestResult = "⚠️ Cannot test while upload is active. Pause upload first."
-            return
-        }
-        
-        isTestingArchive = true
-        archiveTestResult = nil
-        
-        Task {
-            do {
-                let archivedPhotos = try await instagram.testGetArchivedPhotos()
-                
-                await MainActor.run {
-                    isTestingArchive = false
-                    archiveTestResult = "✅ Found \(archivedPhotos.count) archived photos!\nCheck logs for details."
-                    LogManager.shared.success("Archive test: Found \(archivedPhotos.count) photos", category: .api)
-                    
-                    // Log first 5 for preview
-                    for (index, photo) in archivedPhotos.prefix(5).enumerated() {
-                        LogManager.shared.info("Archived #\(index + 1): ID=\(photo.mediaId), Date=\(photo.timestamp?.description ?? "unknown")", category: .api)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isTestingArchive = false
-                    archiveTestResult = "❌ Could not access archived photos\n\(error.localizedDescription)\nCheck logs for details."
-                    LogManager.shared.error("Archive test failed: \(error.localizedDescription)", category: .api)
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Follower Data Sheet

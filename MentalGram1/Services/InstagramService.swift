@@ -721,9 +721,12 @@ class InstagramService: ObservableObject {
                 return archived
             }
 
-            print("⚠️ [STATE-CHECK] No recognisable archive field found for pk: \(pk)")
-            LogManager.shared.warning("State check: no archive field found for pk \(pk). Item keys: \(itemKeys)", category: .api)
-            return nil
+            // No archive field present → Instagram only adds visibility/is_archived
+            // to posts that are archived. A public post simply omits these fields.
+            // Treat absence of archive indicator as: not archived (visible).
+            print("✅ [STATE-CHECK] pk \(pk) → no archive field = public/visible (not archived)")
+            LogManager.shared.info("State check result: pk \(pk) has no archive field → treated as visible", category: .api)
+            return false
 
         } catch {
             print("⚠️ [STATE-CHECK] Request failed for pk \(pk): \(error.localizedDescription)")

@@ -41,6 +41,9 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.spring(response: 0.4), value: showRestoreBanner)
+                .onOpenURL { url in
+                    URLActionManager.shared.handleURL(url)
+                }
                 .onAppear {
                     handleFirstLaunch()
                 }

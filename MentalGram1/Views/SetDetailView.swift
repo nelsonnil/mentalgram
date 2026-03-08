@@ -582,8 +582,17 @@ struct SetDetailView: View {
             if success {
                 await MainActor.run {
                     archiveAllProgress = index + 1
-                    // Remove from trulyVisible list so UI updates
                     syncTrulyVisibleIds.removeAll { $0 == mediaId }
+                    // Update local state so the photo disappears from the visible grid
+                    if let photo = currentSet.photos.first(where: { $0.mediaId == mediaId }) {
+                        dataManager.updatePhoto(
+                            photoId: photo.id,
+                            mediaId: mediaId,
+                            isArchived: true,
+                            uploadStatus: .completed,
+                            errorMessage: nil
+                        )
+                    }
                 }
             } else {
                 LogManager.shared.warning("Archive All: failed to archive \(mediaId)", category: .api)
