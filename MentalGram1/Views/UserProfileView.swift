@@ -16,10 +16,15 @@ struct UserProfileView: View {
     
     // MARK: - Infinite Scroll State
     @State private var allMediaURLs: [String] = []
+    @State private var mediaItemsByURL: [String: InstagramMediaItem] = [:]
     @State private var nextMaxId: String? = nil
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
     private let maxPhotosOtherProfile = 50 // Anti-bot limit for other profiles
+
+    // Post viewer state
+    @State private var showingPostViewer = false
+    @State private var selectedPostIndex = 0
 
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
@@ -45,8 +50,9 @@ struct UserProfileView: View {
         self._currentProfile = State(initialValue: profile)
         self._allMediaURLs = State(initialValue: profile.cachedMediaURLs)
         self._hasMorePages = State(initialValue: profile.cachedMediaURLs.count >= 18)
-        self._allMediaURLs = State(initialValue: profile.cachedMediaURLs)
-        self._hasMorePages = State(initialValue: profile.cachedMediaURLs.count >= 18)
+        var initialItems: [String: InstagramMediaItem] = [:]
+        for item in profile.cachedMediaItems { initialItems[item.imageURL] = item }
+        self._mediaItemsByURL = State(initialValue: initialItems)
     }
     
     var body: some View {
@@ -308,7 +314,11 @@ struct UserProfileView: View {
                             PhotosGridView(
                                 mediaURLs: allMediaURLs,
                                 cachedImages: cachedImages,
-                                onMediaAppear: loadMoreIfNeeded
+                                onMediaAppear: loadMoreIfNeeded,
+                                onTapIndex: { index in
+                                    selectedPostIndex = index
+                                    showingPostViewer = true
+                                }
                             )
                         case 1:
                             ReelsGridView(reelURLs: currentProfile.cachedReelURLs, cachedImages: cachedImages)
@@ -322,6 +332,17 @@ struct UserProfileView: View {
                         DragGesture(minimumDistance: 20, coordinateSpace: .local)
                             .onEnded { value in handleGridSwipe(value) }
                     )
+                    .fullScreenCover(isPresented: $showingPostViewer) {
+                        PostScrollView(
+                            mediaURLs: allMediaURLs,
+                            mediaItemsByURL: mediaItemsByURL,
+                            cachedImages: cachedImages,
+                            initialIndex: selectedPostIndex,
+                            username: currentProfile.username,
+                            profileImage: cachedImages[currentProfile.profilePicURL],
+                            userId: currentProfile.userId
+                        )
+                    }
                 }
             }
         }
@@ -553,8 +574,9 @@ struct UserProfileView: View {
                     // Calculate how many we can add without exceeding limit
                     let remainingSlots = maxPhotosOtherProfile - allMediaURLs.count
                     let itemsToAdd = min(mediaItems.count, remainingSlots)
-                    
-                    let newURLs = mediaItems.prefix(itemsToAdd).map { $0.imageURL }
+                    let newItems = Array(mediaItems.prefix(itemsToAdd))
+                    for item in newItems { mediaItemsByURL[item.imageURL] = item }
+                    let newURLs = newItems.map { $0.imageURL }
                     
                     // Filter to multiples of 3 to avoid UI gaps
                     let totalAfterAdd = allMediaURLs.count + newURLs.count

@@ -23,6 +23,7 @@ struct PerformanceView: View {
     
     // MARK: - Infinite Scroll State
     @State private var allMediaURLs: [String] = []
+    @State private var mediaItemsByURL: [String: InstagramMediaItem] = [:]
     @State private var nextMaxId: String? = nil
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
@@ -71,6 +72,7 @@ struct PerformanceView: View {
                             // Background sync: replace pseudo-URLs with real CDN URLs
                             Task { await refreshMediaGridSilently() }
                         },
+                        mediaItemsByURL: mediaItemsByURL,
                         isLoading: isLoading,
                         lastRefreshDate: lastRefreshDate,
                         minRefreshInterval: minRefreshInterval,
@@ -424,13 +426,8 @@ struct PerformanceView: View {
             self.profile = cached
             self.allMediaURLs = cached.cachedMediaURLs
             self.hasMorePages = cached.cachedMediaURLs.count >= 18
+            for item in cached.cachedMediaItems { mediaItemsByURL[item.imageURL] = item }
             loadCachedImages()
-            
-            // If supplementary data is missing from old cache, fetch silently in background
-            if cached.cachedReelURLs.isEmpty || cached.cachedTaggedURLs.isEmpty || cached.cachedHighlights.isEmpty {
-                print("📦 [CACHE] Supplementary data missing from cache — fetching in background...")
-                Task { await fetchAndUpdateReelsTagged(for: cached) }
-            }
         } else {
             print("📦 [CACHE] No cached profile found, loading fresh")
             loadProfileSync()
@@ -441,14 +438,27 @@ struct PerformanceView: View {
     @MainActor
     private func fetchAndUpdateReelsTagged(for cached: InstagramProfile) async {
         guard instagram.isLoggedIn else { return }
-        do {
-            async let reelsTask      = instagram.getUserReels(userId: cached.userId, amount: 18)
-            async let taggedTask     = instagram.getUserTagged(userId: cached.userId, amount: 18)
-            async let highlightsTask = instagram.getUserHighlights(userId: cached.userId)
 
-            let reels      = try await reelsTask
-            let tagged     = try await taggedTask
-            let highlights = (try? await highlightsTask) ?? cached.cachedHighlights
+        // Anti-bot: delay 5s so this doesn't compete with Explore background refresh at startup
+        try? await Task.sleep(nanoseconds: 5_000_000_000)
+
+        // Re-check after delay
+        guard !instagram.isLocked else {
+            print("🚫 [CACHE] Supplementary fetch skipped — lockdown active after startup delay")
+            return
+        }
+
+        do {
+            // Sequential instead of parallel — avoids 3 simultaneous API calls
+            let reels      = try await instagram.getUserReels(userId: cached.userId, amount: 18)
+            guard !instagram.isLocked else { return }
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
+
+            let tagged     = try await instagram.getUserTagged(userId: cached.userId, amount: 18)
+            guard !instagram.isLocked else { return }
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
+
+            let highlights = (try? await instagram.getUserHighlights(userId: cached.userId)) ?? cached.cachedHighlights
 
             let reelURLs     = reels.map { $0.imageURL }
             let taggedURLs   = tagged.map { $0.imageURL }
@@ -516,6 +526,7 @@ struct PerformanceView: View {
         print("🗑️ [CACHE] Clearing old cache before fresh load")
         ProfileCacheService.shared.clearAll()
         cachedImages.removeAll()
+        mediaItemsByURL.removeAll()
         
         do {
             // ANTI-BOT: Wait if network changed recently
@@ -527,6 +538,10 @@ struct PerformanceView: View {
                 self.profile = fetchedProfile
                 self.allMediaURLs = fetchedProfile.cachedMediaURLs
                 self.hasMorePages = fetchedProfile.cachedMediaURLs.count >= 18
+                // Populate post viewer data (likes/comments already in items, 0 extra API calls)
+                for item in fetchedProfile.cachedMediaItems {
+                    mediaItemsByURL[item.imageURL] = item
+                }
                 ProfileCacheService.shared.saveProfile(fetchedProfile)
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
                 ProfileCacheService.shared.pendingProfilePic = nil
@@ -768,8 +783,12 @@ struct PerformanceView: View {
                     let remainingSlots = maxPhotosOwnProfile - allMediaURLs.count
                     let itemsToAdd = min(mediaItems.count, remainingSlots)
                     
-                    let newURLs = mediaItems.prefix(itemsToAdd).map { $0.imageURL }
-                    
+                    let newItems = Array(mediaItems.prefix(itemsToAdd))
+                    let newURLs = newItems.map { $0.imageURL }
+
+                    // Store items for post viewer (likes/comments already included)
+                    for item in newItems { mediaItemsByURL[item.imageURL] = item }
+
                     // Filter to multiples of 3 to avoid UI gaps
                     let totalAfterAdd = allMediaURLs.count + newURLs.count
                     let remainder = totalAfterAdd % 3
@@ -1194,12 +1213,19 @@ struct InstagramProfileView: View {
     // PerformanceView inserts them into the grid immediately (no GET needed).
     var onRevealComplete: (([(pseudoURL: String, image: UIImage?)]) -> Void)? = nil
 
+    // Media items dictionary for post viewer (keyed by imageURL)
+    var mediaItemsByURL: [String: InstagramMediaItem] = [:]
+
     // Passed from PerformanceView so the pull-to-refresh guard can check them.
     var isLoading: Bool = false
     var lastRefreshDate: Date? = nil
     var minRefreshInterval: TimeInterval = 30
     // Called when reveal is blocked because an upload is active.
     var onUploadConflict: (() -> Void)? = nil
+
+    // Post viewer state
+    @State private var showingPostViewer = false
+    @State private var selectedPostIndex = 0
 
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
@@ -1434,8 +1460,15 @@ struct InstagramProfileView: View {
             switch selectedTab {
             case 0:
                 let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
-                PhotosGridView(mediaURLs: urlsToShow, cachedImages: cachedImages,
-                               onMediaAppear: onMediaAppear)
+                PhotosGridView(
+                    mediaURLs: urlsToShow,
+                    cachedImages: cachedImages,
+                    onMediaAppear: onMediaAppear,
+                    onTapIndex: { index in
+                        selectedPostIndex = index
+                        showingPostViewer = true
+                    }
+                )
             case 1:
                 ReelsGridView(reelURLs: profile.cachedReelURLs, cachedImages: cachedImages)
             case 2:
@@ -1448,6 +1481,18 @@ struct InstagramProfileView: View {
             DragGesture(minimumDistance: 20, coordinateSpace: .local)
                 .onEnded { value in handleGridSwipe(value) }
         )
+        .fullScreenCover(isPresented: $showingPostViewer) {
+            let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+            PostScrollView(
+                mediaURLs: urlsToShow,
+                mediaItemsByURL: mediaItemsByURL,
+                cachedImages: cachedImages,
+                initialIndex: selectedPostIndex,
+                username: profile.username,
+                profileImage: cachedImages[profile.profilePicURL],
+                userId: profile.userId
+            )
+        }
     }
 
     // MARK: - Secret number gesture handling
@@ -1956,6 +2001,7 @@ struct PhotosGridView: View {
     let mediaURLs: [String]
     let cachedImages: [String: UIImage]
     var onMediaAppear: ((String) -> Void)? = nil
+    var onTapIndex: ((Int) -> Void)? = nil
     /// Always render at least this many cells so swipe digit-detection works
     /// even on tabs with few or no photos. 12 = 4 rows (row 4 maps to digit 0).
     var minCells: Int = 12
@@ -1969,19 +2015,21 @@ struct PhotosGridView: View {
     var body: some View {
         let placeholderCount = max(0, minCells - mediaURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
-            ForEach(mediaURLs, id: \.self) { url in
-                if let image = cachedImages[url] {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(4/5, contentMode: .fill)
-                        .clipped()
-                        .onAppear { onMediaAppear?(url) }
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .aspectRatio(4/5, contentMode: .fill)
-                        .onAppear { onMediaAppear?(url) }
+            ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
+                Group {
+                    if let image = cachedImages[url] {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(4/5, contentMode: .fill)
+                            .clipped()
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .aspectRatio(4/5, contentMode: .fill)
+                    }
                 }
+                .onAppear { onMediaAppear?(url) }
+                .onTapGesture { onTapIndex?(index) }
             }
             // Placeholder cells — look like loading skeletons, enable digit-detection anywhere
             if placeholderCount > 0 {
@@ -1992,6 +2040,225 @@ struct PhotosGridView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Post Scroll Viewer (Instagram "Posts" style)
+
+struct PostScrollView: View {
+    let mediaURLs: [String]
+    let mediaItemsByURL: [String: InstagramMediaItem]
+    let cachedImages: [String: UIImage]
+    let initialIndex: Int
+    let username: String
+    let profileImage: UIImage?
+    let userId: String
+
+    @Environment(\.dismiss) private var dismiss
+    // Local resolved items — starts with what we have, updated if a background fetch runs
+    @State private var resolvedItems: [String: InstagramMediaItem] = [:]
+
+    private func postID(_ index: Int) -> String { "post_\(index)" }
+
+    var body: some View {
+        NavigationView {
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
+                            PostCardView(
+                                url: url,
+                                item: resolvedItems[url],
+                                cachedImage: cachedImages[url],
+                                username: username,
+                                profileImage: profileImage
+                            )
+                            .id(postID(index))
+                            Divider().background(Color(white: 0.9))
+                        }
+                    }
+                }
+                .onAppear {
+                    resolvedItems = mediaItemsByURL
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        proxy.scrollTo(postID(initialIndex), anchor: .top)
+                    }
+                    // If items are missing (old cache), fetch them silently
+                    let missingCount = mediaURLs.filter { mediaItemsByURL[$0] == nil }.count
+                    if missingCount > 0 {
+                        Task { await fetchMissingItems() }
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.black)
+                            .fontWeight(.semibold)
+                    }
+                }
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 1) {
+                        Text("Posts")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text(username)
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .background(Color.white)
+        }
+        .navigationViewStyle(.stack)
+    }
+
+    @MainActor
+    private func fetchMissingItems() async {
+        // Anti-bot: never fetch during lockdown
+        guard !InstagramService.shared.isLocked else {
+            print("🚫 [POSTS] Item fetch skipped — lockdown active")
+            return
+        }
+        do {
+            let (items, _) = try await InstagramService.shared.getUserMediaItems(
+                userId: userId, amount: 18, maxId: nil
+            )
+            for item in items { resolvedItems[item.imageURL] = item }
+        } catch {
+            print("⚠️ [POSTS] Background item fetch failed: \(error)")
+        }
+    }
+}
+
+// MARK: - Individual Post Card
+
+private struct PostCardView: View {
+    let url: String
+    let item: InstagramMediaItem?
+    let cachedImage: UIImage?
+    let username: String
+    let profileImage: UIImage?
+
+    private static let numberFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return f
+    }()
+
+    private func formatted(_ n: Int) -> String {
+        Self.numberFormatter.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: avatar + username + "..." menu
+            HStack(spacing: 10) {
+                if let pic = profileImage {
+                    Image(uiImage: pic)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 32, height: 32)
+                        .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 32, height: 32)
+                }
+                Text(username)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Image(systemName: "ellipsis")
+                    .foregroundColor(.black)
+                    .font(.system(size: 16))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            // Media
+            if let image = cachedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.15))
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .overlay(ProgressView().tint(.gray))
+            }
+
+            // Action bar with counts (like real Instagram)
+            HStack(spacing: 4) {
+                actionIcon("heart", count: item?.likeCount)
+                actionIcon("message", count: item?.commentCount)
+                    .padding(.leading, 8)
+                actionIcon("arrowshape.turn.up.right", count: nil)
+                    .padding(.leading, 8)
+                actionIcon("paperplane", count: nil)
+                    .padding(.leading, 8)
+                Spacer()
+                Image(systemName: "bookmark")
+                    .font(.system(size: 22))
+                    .foregroundColor(.black)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+
+            // Caption: username bold + text inline (like real Instagram)
+            if let caption = item?.caption, !caption.isEmpty {
+                captionView(caption)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 4)
+            }
+
+            // Date
+            if let date = item?.takenAt {
+                Text(date, style: .date)
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(white: 0.45))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+            } else {
+                Spacer().frame(height: 12)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actionIcon(_ systemName: String, count: Int?) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemName)
+                .font(.system(size: 22))
+                .foregroundColor(.black)
+            if let c = count, c > 0 {
+                Text(formatted(c))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.black)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func captionView(_ caption: String) -> some View {
+        // Username bold + caption inline using attributed text — flows naturally like Instagram
+        let attributed = attributedCaption(caption)
+        Text(attributed)
+            .font(.system(size: 13))
+            .lineLimit(3)
+            .foregroundColor(.black)
+    }
+
+    private func attributedCaption(_ caption: String) -> AttributedString {
+        var user = AttributedString(username + " ")
+        user.font = .system(size: 13, weight: .semibold)
+        var text = AttributedString(caption)
+        text.font = .system(size: 13)
+        return user + text
     }
 }
 

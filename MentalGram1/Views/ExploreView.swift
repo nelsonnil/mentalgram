@@ -182,6 +182,10 @@ struct ExploreView: View {
                             )
                             .padding(.bottom, 65)
                         }
+                        .refreshable {
+                            guard !InstagramService.shared.isLocked else { return }
+                            await exploreManager.refreshAsync()
+                        }
                     }
                 }
             }
@@ -281,11 +285,9 @@ struct ExploreView: View {
             if exploreManager.exploreMedia.isEmpty {
                 // No cache — show skeleton and load from API
                 exploreManager.loadExplore()
-            } else {
-                // Cache present — show immediately, but always refresh in background
-                // to get fresh CDN URLs (Instagram CDN URLs expire within hours)
-                exploreManager.backgroundRefresh()
             }
+            // Cache present → show as-is, no background refresh.
+            // User can pull-to-refresh manually if needed.
         }
     }
     

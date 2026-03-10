@@ -17,6 +17,9 @@ class ExploreManager: ObservableObject {
     private var hasPreloaded = false
     private var hasMorePages = true
     private var itemBuffer: [InstagramMediaItem] = [] // Buffer para items que no caben en grid de 3
+    private var lastBackgroundRefresh: Date? = nil
+    private static let backgroundRefreshMinInterval: TimeInterval = 30 * 60 // 30 min
+    private static let startupDelay: TimeInterval = 12 // seconds to wait after app start
     
     private init() {
         // Load from cache on init
@@ -59,12 +62,41 @@ class ExploreManager: ObservableObject {
 
     /// Silently fetches fresh data from the API while already showing cached content.
     /// Does NOT touch isLoading — the grid stays visible and URLs are refreshed in place.
+    /// Throttled to once per 30 minutes. Delayed 12s after startup to avoid competing
+    /// with profile supplementary fetch.
     func backgroundRefresh() {
         guard !isLoading, !isBackgroundRefreshing else { return }
+
+        // Anti-bot: check lockdown
+        guard !InstagramService.shared.isLocked else {
+            print("🚫 [EXPLORE] Background refresh skipped — lockdown active")
+            return
+        }
+
+        // Anti-bot: throttle — no refresh if done recently
+        if let last = lastBackgroundRefresh,
+           Date().timeIntervalSince(last) < ExploreManager.backgroundRefreshMinInterval {
+            let waited = Int(Date().timeIntervalSince(last) / 60)
+            print("🚫 [EXPLORE] Background refresh throttled — last refresh \(waited)m ago (min 30m)")
+            return
+        }
+
         isBackgroundRefreshing = true
-        print("🔄 [EXPLORE] Background refresh started (keeping cached content visible)...")
+        print("🔄 [EXPLORE] Background refresh queued (12s startup delay)...")
 
         Task {
+            // Anti-bot: delay startup burst — wait for profile supplementary fetch to finish
+            try? await Task.sleep(nanoseconds: UInt64(ExploreManager.startupDelay * 1_000_000_000))
+
+            // Re-check lockdown after delay
+            guard !InstagramService.shared.isLocked else {
+                await MainActor.run { self.isBackgroundRefreshing = false }
+                print("🚫 [EXPLORE] Background refresh cancelled — lockdown activated during delay")
+                return
+            }
+
+            await MainActor.run { self.lastBackgroundRefresh = Date() }
+            print("🔄 [EXPLORE] Background refresh started (keeping cached content visible)...")
             await loadExploreInternal()
             await MainActor.run {
                 self.isBackgroundRefreshing = false
@@ -73,6 +105,15 @@ class ExploreManager: ObservableObject {
         }
     }
     
+    /// Async entry point for pull-to-refresh (awaitable by SwiftUI .refreshable)
+    func refreshAsync() async {
+        guard !isLoading, !isBackgroundRefreshing else { return }
+        guard !InstagramService.shared.isLocked else { return }
+        await MainActor.run { isLoading = true }
+        await loadExploreInternal()
+        await MainActor.run { isLoading = false }
+    }
+
     private func loadExploreInternal() async {
         do {
             // ANTI-BOT: Wait if network changed recently

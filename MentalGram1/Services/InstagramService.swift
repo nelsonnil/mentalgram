@@ -1548,7 +1548,7 @@ class InstagramService: ObservableObject {
         var mediaURLs: [String] = []
         var reelURLs: [String] = []
         var taggedURLs: [String] = []
-        
+        var initialMediaItems: [InstagramMediaItem] = []
         var highlights: [InstagramHighlight] = []
 
         if shouldFetchProtectedData {
@@ -1564,6 +1564,7 @@ class InstagramService: ObservableObject {
             followedBy = try await followersTask
             let (mediaItems, _) = try await mediaTask
             mediaURLs = mediaItems.map { $0.imageURL }
+            initialMediaItems = mediaItems
 
             // Non-critical — silent failures
             do { reelURLs   = try await reelsTask.map { $0.imageURL } }
@@ -1580,7 +1581,7 @@ class InstagramService: ObservableObject {
             print("⚠️ [PROFILE] Skipping data fetch (private profile, not following)")
         }
 
-        let profile = InstagramProfile(
+        var profile = InstagramProfile(
             userId: extractedUserId,
             username: user["username"] as? String ?? "",
             fullName: user["full_name"] as? String ?? "",
@@ -1601,7 +1602,8 @@ class InstagramService: ObservableObject {
             cachedTaggedURLs: taggedURLs,
             cachedHighlights: highlights
         )
-        
+        profile.cachedMediaItems = initialMediaItems
+
         print("✅ [PROFILE] Profile loaded for @\(profile.username)")
         print("📊 [PROFILE] Profile pic URL: \(profile.profilePicURL.isEmpty ? "EMPTY" : String(profile.profilePicURL.prefix(80)))")
         return profile

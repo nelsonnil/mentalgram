@@ -84,13 +84,14 @@ struct InstagramProfile: Codable {
     var cachedReelURLs: [String]            // Reels tab thumbnails
     var cachedTaggedURLs: [String]          // Tagged tab thumbnails
     var cachedHighlights: [InstagramHighlight] // Story highlights (title + cover image)
+    var cachedMediaItems: [InstagramMediaItem] // Full items for post viewer (likes, date, caption)
 
     // Backward-compatible decoding (old cache files won't have newer fields)
     enum CodingKeys: String, CodingKey {
         case userId, username, fullName, biography, externalUrl, profilePicURL
         case isVerified, isPrivate, followerCount, followingCount, mediaCount
         case followedBy, isFollowing, isFollowRequested, cachedAt
-        case cachedMediaURLs, cachedReelURLs, cachedTaggedURLs, cachedHighlights
+        case cachedMediaURLs, cachedReelURLs, cachedTaggedURLs, cachedHighlights, cachedMediaItems
     }
 
     init(from decoder: Decoder) throws {
@@ -114,6 +115,7 @@ struct InstagramProfile: Codable {
         cachedReelURLs     = try c.decodeIfPresent([String].self, forKey: .cachedReelURLs) ?? []
         cachedTaggedURLs   = try c.decodeIfPresent([String].self, forKey: .cachedTaggedURLs) ?? []
         cachedHighlights   = try c.decodeIfPresent([InstagramHighlight].self, forKey: .cachedHighlights) ?? []
+        cachedMediaItems   = try c.decodeIfPresent([InstagramMediaItem].self, forKey: .cachedMediaItems) ?? []
     }
 
     init(userId: String, username: String, fullName: String, biography: String,
@@ -122,7 +124,8 @@ struct InstagramProfile: Codable {
          followedBy: [InstagramFollower], isFollowing: Bool, isFollowRequested: Bool,
          cachedAt: Date, cachedMediaURLs: [String],
          cachedReelURLs: [String] = [], cachedTaggedURLs: [String] = [],
-         cachedHighlights: [InstagramHighlight] = []) {
+         cachedHighlights: [InstagramHighlight] = [],
+         cachedMediaItems: [InstagramMediaItem] = []) {
         self.userId = userId; self.username = username; self.fullName = fullName
         self.biography = biography; self.externalUrl = externalUrl
         self.profilePicURL = profilePicURL; self.isVerified = isVerified
@@ -133,6 +136,7 @@ struct InstagramProfile: Codable {
         self.cachedMediaURLs = cachedMediaURLs
         self.cachedReelURLs = cachedReelURLs; self.cachedTaggedURLs = cachedTaggedURLs
         self.cachedHighlights = cachedHighlights
+        self.cachedMediaItems = cachedMediaItems
     }
 }
 
