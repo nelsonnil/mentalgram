@@ -2053,29 +2053,51 @@ struct PostScrollView: View {
     let username: String
     let profileImage: UIImage?
     let userId: String
+    var forcePostURL: String? = nil
 
     @Environment(\.dismiss) private var dismiss
-    // Local resolved items — starts with what we have, updated if a background fetch runs
     @State private var resolvedItems: [String: InstagramMediaItem] = [:]
+    @State private var hasForceActivated: Bool = false
+
+    private var isForceActive: Bool { forcePostURL != nil }
+    private var forcedPostIndex: Int {
+        guard let url = forcePostURL else { return 0 }
+        return mediaURLs.firstIndex(of: url) ?? 0
+    }
 
     private func postID(_ index: Int) -> String { "post_\(index)" }
 
     var body: some View {
         NavigationView {
             ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
-                            PostCardView(
-                                url: url,
-                                item: resolvedItems[url],
-                                cachedImage: cachedImages[url],
-                                username: username,
-                                profileImage: profileImage
-                            )
-                            .id(postID(index))
-                            Divider().background(Color(white: 0.9))
+                ZStack {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        // VStack (not Lazy) ensures all cards are in the view hierarchy
+                        // so the forced card's exact frame is always measurable.
+                        VStack(spacing: 0) {
+                            ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
+                                PostCardView(
+                                    url: url,
+                                    item: resolvedItems[url],
+                                    cachedImage: cachedImages[url],
+                                    username: username,
+                                    profileImage: profileImage
+                                )
+                                .id(postID(index))
+                                .accessibilityIdentifier(url == forcePostURL ? "forced_post_card" : "")
+                                Divider().background(Color(white: 0.9))
+                            }
                         }
+                    }
+
+                    if isForceActive {
+                        ScrollViewInterceptor(
+                            forcedIndex: forcedPostIndex,
+                            totalPostCount: mediaURLs.count,
+                            hasActivated: $hasForceActivated,
+                            isActive: isForceActive
+                        )
+                        .frame(width: 0, height: 0)
                     }
                 }
                 .onAppear {
@@ -2083,7 +2105,6 @@ struct PostScrollView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         proxy.scrollTo(postID(initialIndex), anchor: .top)
                     }
-                    // If items are missing (old cache), fetch them silently
                     let missingCount = mediaURLs.filter { mediaItemsByURL[$0] == nil }.count
                     if missingCount > 0 {
                         Task { await fetchMissingItems() }
@@ -2116,7 +2137,6 @@ struct PostScrollView: View {
 
     @MainActor
     private func fetchMissingItems() async {
-        // Anti-bot: never fetch during lockdown
         guard !InstagramService.shared.isLocked else {
             print("🚫 [POSTS] Item fetch skipped — lockdown active")
             return

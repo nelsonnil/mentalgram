@@ -570,6 +570,8 @@ struct SettingsView: View {
         settingsSectionLabel("TRICKS", icon: "wand.and.stars")
         ForceReelSettingsCard()
         Spacer().frame(height: 12)
+        ForcePostSettingsCard()
+        Spacer().frame(height: 12)
         ForceNumberRevealSettingsCard()
         Spacer().frame(height: 12)
         FollowingMagicSettingsCard()
@@ -1400,6 +1402,96 @@ struct DataRow: View {
 
 // MARK: - Force Reel Settings Card
 
+// MARK: - Force Post Settings Card
+
+struct ForcePostSettingsCard: View {
+    @ObservedObject private var settings = ForcePostSettings.shared
+    @State private var showingPicker = false
+
+    var body: some View {
+        VaultCard {
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "square.grid.2x2")
+                        .foregroundColor(VaultTheme.Colors.primary)
+                    Text("Force Post")
+                        .font(VaultTheme.Typography.titleSmall())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settings.isEnabled)
+                        .labelsHidden()
+                }
+
+                Text("Pre-select a post from any profile. During performance, the spectator scrolls through their posts and the scroll always stops on the forced image.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                if settings.isEnabled {
+                    Divider()
+
+                    if settings.hasPost {
+                        HStack(spacing: VaultTheme.Spacing.md) {
+                            if let img = settings.localThumbnailImage {
+                                Image(uiImage: img)
+                                    .resizable()
+                                    .aspectRatio(1, contentMode: .fill)
+                                    .frame(width: 64, height: 64)
+                                    .clipped()
+                                    .cornerRadius(8)
+                            } else {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.gray.opacity(0.25))
+                                    .frame(width: 64, height: 64)
+                                    .overlay(ProgressView().scaleEffect(0.7))
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Post selected")
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("from @\(settings.targetUsername)")
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                                Text("ID: \(String(settings.forcedMediaId.prefix(16)))…")
+                                    .font(.system(size: 10).monospaced())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Button(action: { showingPicker = true }) {
+                                Label("Change Post", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(VaultTheme.Typography.body())
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(role: .destructive, action: { settings.clearPost() }) {
+                                Label("Remove", systemImage: "trash")
+                                    .font(VaultTheme.Typography.body())
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.red)
+                        }
+                    } else {
+                        Button(action: { showingPicker = true }) {
+                            Label("Select Post", systemImage: "photo.on.rectangle.angled")
+                                .font(VaultTheme.Typography.body())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, VaultTheme.Spacing.sm)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingPicker) {
+            ForcePostPickerView()
+        }
+    }
+}
+
 struct ForceReelSettingsCard: View {
     @ObservedObject private var settings = ForceReelSettings.shared
     @State private var showingPicker = false
@@ -1534,7 +1626,7 @@ struct ForceNumberRevealSettingsCard: View {
                 HStack(spacing: VaultTheme.Spacing.sm) {
                     Image(systemName: "number.circle.fill")
                         .foregroundColor(VaultTheme.Colors.secondary)
-                    Text("Force Number Reveal")
+                    Text("Post Prediction")
                         .font(VaultTheme.Typography.titleSmall())
                         .foregroundColor(VaultTheme.Colors.textPrimary)
                     Spacer()

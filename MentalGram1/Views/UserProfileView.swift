@@ -41,6 +41,9 @@ struct UserProfileView: View {
     // Date Force ("El Oráculo Social")
     @ObservedObject private var dateForce = DateForceSettings.shared
     @State private var dateForceCancelled = false  // Tap on profile pic = cancel this profile
+
+    // Force Post
+    @ObservedObject private var forcePost = ForcePostSettings.shared
     
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
@@ -54,7 +57,78 @@ struct UserProfileView: View {
         for item in profile.cachedMediaItems { initialItems[item.imageURL] = item }
         self._mediaItemsByURL = State(initialValue: initialItems)
     }
-    
+
+    // MARK: - Force Post computed helpers
+
+    private var isForcePostTarget: Bool {
+        guard forcePost.isEnabled, !forcePost.forcedMediaURL.isEmpty else { return false }
+        // Compare numerically to handle cases where one ID has leading zeros or different format
+        return forcePost.targetUserId == currentProfile.userId
+            || forcePost.targetUsername.lowercased() == currentProfile.username.lowercased()
+    }
+
+    private var forcePostActiveURL: String? {
+        isForcePostTarget ? forcePost.forcedMediaURL : nil
+    }
+
+    /// Grid URLs with the forced post removed (spectator doesn't see it in grid)
+    private var gridURLsForDisplay: [String] {
+        guard isForcePostTarget else { return allMediaURLs }
+        let filtered = allMediaURLs.filter { !urlMatchesForced($0) }
+        print("🎯 [FORCE] Grid: \(allMediaURLs.count) → \(filtered.count) (removed forced post)")
+        return filtered
+    }
+
+    /// Checks whether a media URL belongs to the forced post.
+    /// CDN URLs expire and change between sessions, so we match by mediaId
+    /// which is stable and embedded in the URL path (e.g. /t51.../3849022646_...).
+    /// We also try direct equality and path equality as fallbacks.
+    private func urlMatchesForced(_ url: String) -> Bool {
+        let forced = forcePost.forcedMediaURL
+        let mediaId = forcePost.forcedMediaId
+        if url == forced { return true }
+        // Match by mediaId — the numeric ID appears in CDN URL paths
+        if !mediaId.isEmpty && (url.contains(mediaId) || forced.contains(mediaId)) {
+            return url.contains(mediaId)
+        }
+        // Compare path component only (strips CDN query params)
+        guard let u1 = URL(string: url), let u2 = URL(string: forced) else { return false }
+        return u1.path == u2.path
+    }
+
+    /// Post viewer URLs with the forced post inserted at the middle
+    private var postViewerURLs: [String] {
+        guard isForcePostTarget else { return allMediaURLs }
+        var urls = allMediaURLs.filter { !urlMatchesForced($0) }
+        let insertAt = min(urls.count / 2, urls.count)
+        urls.insert(forcePost.forcedMediaURL, at: insertAt)
+        return urls
+    }
+
+    /// Media items dict enriched with the forced post's metadata
+    private var postViewerItems: [String: InstagramMediaItem] {
+        guard isForcePostTarget, let item = forcePost.forcedMediaItem else { return mediaItemsByURL }
+        var items = mediaItemsByURL
+        items[forcePost.forcedMediaURL] = item
+        return items
+    }
+
+    /// Cached images enriched with the forced post's thumbnail
+    private var postViewerCachedImages: [String: UIImage] {
+        guard isForcePostTarget, let img = forcePost.localThumbnailImage else { return cachedImages }
+        var images = cachedImages
+        images[forcePost.forcedMediaURL] = img
+        return images
+    }
+
+    /// Maps a grid index to the correct post viewer index (accounting for the inserted forced post)
+    private func mappedPostViewerIndex(_ gridIndex: Int) -> Int {
+        guard isForcePostTarget else { return gridIndex }
+        let filteredURLs = gridURLsForDisplay
+        let insertAt = min(filteredURLs.count / 2, filteredURLs.count)
+        return gridIndex >= insertAt ? gridIndex + 1 : gridIndex
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.white.ignoresSafeArea()
@@ -312,7 +386,7 @@ struct UserProfileView: View {
                         switch selectedTab {
                         case 0:
                             PhotosGridView(
-                                mediaURLs: allMediaURLs,
+                                mediaURLs: gridURLsForDisplay,
                                 cachedImages: cachedImages,
                                 onMediaAppear: loadMoreIfNeeded,
                                 onTapIndex: { index in
@@ -334,13 +408,14 @@ struct UserProfileView: View {
                     )
                     .fullScreenCover(isPresented: $showingPostViewer) {
                         PostScrollView(
-                            mediaURLs: allMediaURLs,
-                            mediaItemsByURL: mediaItemsByURL,
-                            cachedImages: cachedImages,
-                            initialIndex: selectedPostIndex,
+                            mediaURLs: postViewerURLs,
+                            mediaItemsByURL: postViewerItems,
+                            cachedImages: postViewerCachedImages,
+                            initialIndex: mappedPostViewerIndex(selectedPostIndex),
                             username: currentProfile.username,
                             profileImage: cachedImages[currentProfile.profilePicURL],
-                            userId: currentProfile.userId
+                            userId: currentProfile.userId,
+                            forcePostURL: forcePostActiveURL
                         )
                     }
                 }
