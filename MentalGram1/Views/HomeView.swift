@@ -384,6 +384,7 @@ struct ActivityLogView: View {
 struct SettingsView: View {
     @ObservedObject var instagram      = InstagramService.shared
     @ObservedObject var backup         = CloudBackupService.shared
+    @ObservedObject private var integrations = IntegrationsSettings.shared
     @State private var showingLogoutAlert = false
     @State private var showingFollowerData = false
     @State private var latestFollower: InstagramFollower?
@@ -451,6 +452,7 @@ struct SettingsView: View {
                     accountSection
                     instagramProfileSection
                     tricksSection
+                    integrationsSection
                     dataSection
                 }
             }
@@ -582,6 +584,25 @@ struct SettingsView: View {
         Spacer().frame(height: 28)
     }
 
+    // MARK: - Section: Integrations
+
+    @ViewBuilder private var integrationsSection: some View {
+        settingsSectionLabel("INTEGRATIONS", icon: "bolt.horizontal.fill")
+        modernCard {
+            VStack(spacing: 0) {
+                NavigationLink(destination: IntegrationsSettingsView()) {
+                    modernRow(icon: "bolt.horizontal.fill", iconColor: .yellow,
+                              title: "Magic API",
+                              trailing: Text("Inject & Custom APIs")
+                                  .font(VaultTheme.Typography.caption())
+                                  .foregroundColor(VaultTheme.Colors.textSecondary))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        Spacer().frame(height: 28)
+    }
+
     // MARK: - Section: Data
 
     @ViewBuilder private var dataSection: some View {
@@ -681,8 +702,15 @@ struct SettingsView: View {
                 modernToggleRow(icon: "doc.on.clipboard", iconColor: .cyan,
                                 title: "Auto-send from clipboard",
                                 detail: "On Performance open, reads clipboard and sends it as a Note",
-                                isOn: Binding(get: { clipboardAutoMode == "note" },
-                                              set: { clipboardAutoMode = $0 ? "note" : "" }))
+                                isOn: Binding(
+                                    get: { clipboardAutoMode == "note" },
+                                    set: {
+                                        clipboardAutoMode = $0 ? "note" : ""
+                                        if $0 { integrations.noteApiSource = .none }
+                                    }))
+                modernDivider()
+                apiSourceRow(target: "Note", source: $integrations.noteApiSource,
+                             onSelect: { clipboardAutoMode = "" })
                 modernDivider()
                 urlSchemeRow(icon: "link", title: "URL Scheme",
                              detail: "Open this URL to send a note when Performance opens",
@@ -732,8 +760,15 @@ struct SettingsView: View {
                 modernToggleRow(icon: "doc.on.clipboard", iconColor: .orange,
                                 title: "Auto-update from clipboard",
                                 detail: "On Performance open, reads clipboard and updates Biography",
-                                isOn: Binding(get: { clipboardAutoMode == "bio" },
-                                              set: { clipboardAutoMode = $0 ? "bio" : "" }))
+                                isOn: Binding(
+                                    get: { clipboardAutoMode == "bio" },
+                                    set: {
+                                        clipboardAutoMode = $0 ? "bio" : ""
+                                        if $0 { integrations.bioApiSource = .none }
+                                    }))
+                modernDivider()
+                apiSourceRow(target: "Biography", source: $integrations.bioApiSource,
+                             onSelect: { clipboardAutoMode = "" })
                 modernDivider()
                 urlSchemeRow(icon: "link", title: "URL Scheme",
                              detail: "Open this URL to update biography when Performance opens",
@@ -860,6 +895,43 @@ struct SettingsView: View {
         HStack(spacing: VaultTheme.Spacing.sm) {
             Image(systemName: icon).foregroundColor(color)
             Text(message).font(VaultTheme.Typography.caption()).foregroundColor(color)
+        }
+    }
+
+    /// Compact API source picker for Note / Biography cards
+    @ViewBuilder
+    private func apiSourceRow(target: String, source: Binding<ApiSource>, onSelect: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6).fill(Color.yellow.opacity(0.15)).frame(width: 28, height: 28)
+                    Image(systemName: "bolt.fill").font(.system(size: 13)).foregroundColor(.yellow)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Magic API source")
+                        .font(VaultTheme.Typography.body())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Fetch text from Inject or Custom API when Performance opens")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+            }
+            HStack(spacing: 6) {
+                ForEach(ApiSource.allCases, id: \.rawValue) { apiSource in
+                    Button {
+                        source.wrappedValue = apiSource
+                        if apiSource != .none { onSelect() }
+                    } label: {
+                        Text(apiSource == .none ? "Off" : apiSource.displayName.replacingOccurrences(of: "Custom API ", with: "API "))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(source.wrappedValue == apiSource ? .white : VaultTheme.Colors.textSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(source.wrappedValue == apiSource ? VaultTheme.Colors.primary : Color(hex: "#2C2C2E"))
+                            .cornerRadius(6)
+                    }
+                }
+            }
         }
     }
 

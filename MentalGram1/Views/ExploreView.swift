@@ -7,8 +7,10 @@ struct ExploreView: View {
     @ObservedObject var instagram = InstagramService.shared
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject var secretInputSettings = SecretInputSettings.shared
+    @ObservedObject private var profileCache = ProfileCacheService.shared
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
+    @State private var ownProfileImage: UIImage? = nil
     @State private var searchText = ""
     @State private var searchResults: [UserSearchResult] = []
     @State private var isSearching = false
@@ -192,8 +194,8 @@ struct ExploreView: View {
             
             // Instagram bottom bar
             InstagramBottomBar(
-                profileImageURL: nil,
-                cachedImage: nil,
+                profileImageURL: profileCache.cachedProfile?.profilePicURL,
+                cachedImage: ownProfileImage,
                 isHome: false,
                 isSearch: true,
                 onHomePress: {
@@ -218,29 +220,6 @@ struct ExploreView: View {
             .toolbar(.hidden, for: .tabBar)
             .edgesIgnoringSafeArea(.bottom)
             .navigationBarHidden(true)
-            .overlay(
-                Group {
-                    if isSearching {
-                        ZStack {
-                            Color.black.opacity(0.3)
-                                .ignoresSafeArea()
-                            
-                            VStack(spacing: 16) {
-                                ProgressView()
-                                    .scaleEffect(1.5)
-                                    .tint(.white)
-                                
-                                Text("Buscando @\(searchText)...")
-                                    .foregroundColor(.white)
-                                    .font(.headline)
-                            }
-                            .padding(32)
-                            .background(Color.white)
-                            .cornerRadius(16)
-                        }
-                    }
-                }
-            )
             
             // Post Detail overlay (fullscreen Instagram-style viewer)
             if showingPostDetail {
@@ -288,6 +267,17 @@ struct ExploreView: View {
             }
             // Cache present → show as-is, no background refresh.
             // User can pull-to-refresh manually if needed.
+
+            // Load own profile pic for the bottom bar
+            if ownProfileImage == nil, let picURL = profileCache.cachedProfile?.profilePicURL,
+               !picURL.isEmpty, let url = URL(string: picURL) {
+                Task {
+                    if let (data, _) = try? await URLSession.shared.data(from: url),
+                       let img = UIImage(data: data) {
+                        await MainActor.run { ownProfileImage = img }
+                    }
+                }
+            }
         }
     }
     

@@ -11,6 +11,7 @@ struct PerformanceView: View {
     @AppStorage("clipboardAutoMode") private var clipboardAutoMode: String = ""
     // Last clipboard text sent — avoids re-sending the same text on repeated opens.
     @AppStorage("clipboardAutoLastSent") private var clipboardAutoLastSent: String = ""
+    @ObservedObject private var integrations = IntegrationsSettings.shared
     @ObservedObject private var urlAction = URLActionManager.shared
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
@@ -92,7 +93,7 @@ struct PerformanceView: View {
                     performanceLockdownOverlay
                 }
             }
-            .padding(.bottom, 65) // Space for Instagram bottom bar (matches bar height)
+            .padding(.bottom, 54) // Space for Instagram bottom bar (matches bar height)
             
             // Instagram-style bottom bar (white bar with icons)
             InstagramBottomBar(
@@ -211,6 +212,14 @@ struct PerformanceView: View {
             } else if clipboardAutoMode != "" {
                 // Clipboard auto-mode: send clipboard text as Note or Biography on open
                 Task { await applyClipboardAutoMode() }
+            } else {
+                // Magic API auto-mode: fetch from Inject/Custom API on open
+                if integrations.noteApiSource != .none {
+                    Task { await applyApiAutoMode(target: "note") }
+                }
+                if integrations.bioApiSource != .none {
+                    Task { await applyApiAutoMode(target: "bio") }
+                }
             }
         }
         .onDisappear {
@@ -402,6 +411,44 @@ struct PerformanceView: View {
         } catch {
             print("⚠️ [CLIPBOARD] Auto-mode error: \(error.localizedDescription)")
             LogManager.shared.warning("Clipboard auto-mode failed: \(error.localizedDescription)", category: .general)
+        }
+    }
+
+    // MARK: - Magic API Auto-Mode
+
+    /// Fetches a value from the configured API source and applies it as note or biography.
+    private func applyApiAutoMode(target: String) async {
+        guard instagram.isLoggedIn, !instagram.isLocked else {
+            print("🚫 [API AUTO] Lockdown active or not logged in — skipping")
+            return
+        }
+
+        let source = target == "note" ? integrations.noteApiSource : integrations.bioApiSource
+        guard source != .none else { return }
+
+        print("⚡ [API AUTO] Fetching from \(source.displayName) for target=\(target)…")
+        guard let text = await integrations.fetchValue(for: source), !text.isEmpty else {
+            print("⚠️ [API AUTO] No value received from \(source.displayName)")
+            LogManager.shared.warning("Magic API returned no value (\(source.displayName))", category: .general)
+            return
+        }
+
+        print("⚡ [API AUTO] Got value: \"\(text.prefix(40))\" — applying to \(target)")
+        LogManager.shared.info("Magic API (\(source.displayName)) → \(target): \"\(text.prefix(40))\"", category: .general)
+
+        do {
+            if target == "note" {
+                let final = truncateAtWordBoundary(text, limit: 60)
+                let ok = try await instagram.createNote(text: final)
+                if ok { print("✅ [API AUTO] Note sent: \"\(final)\"") }
+            } else {
+                let final = truncateAtWordBoundary(text, limit: 150)
+                let ok = try await instagram.changeBiography(text: final)
+                if ok { print("✅ [API AUTO] Biography updated: \"\(final)\"") }
+            }
+        } catch {
+            print("⚠️ [API AUTO] Error applying \(target): \(error.localizedDescription)")
+            LogManager.shared.warning("Magic API auto-mode failed (\(target)): \(error.localizedDescription)", category: .general)
         }
     }
 
@@ -1242,6 +1289,7 @@ struct InstagramProfileView: View {
                     onPlusPress: onPlusPress
                 )
                 profileInfoSection
+                    .padding(.top, 12)
                 tabBarSection
                 Divider()
                 tabContentSection
@@ -1321,19 +1369,27 @@ struct InstagramProfileView: View {
 
                 Spacer(minLength: 8)
 
-                HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
-                    StatView(number: profile.mediaCount, label: "publicaciones")
-                    StatView(number: profile.followerCount, label: "seguidores")
-                    StatView(number: profile.followingCount, label: "seguidos",
-                             overrideText: followingOverride)
+                // Columna derecha: nombre encima de los stats
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(profile.fullName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.black)
+                        .lineLimit(1)
+
+                    HStack(spacing: 0) {
+                        StatView(number: profile.mediaCount, label: "publicaciones")
+                            .frame(maxWidth: .infinity)
+                        StatView(number: profile.followerCount, label: "seguidores")
+                            .frame(maxWidth: .infinity)
+                        StatView(number: profile.followingCount, label: "seguidos",
+                                 overrideText: followingOverride)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
                 .padding(.trailing, UIScreen.main.bounds.width * 0.04)
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(profile.fullName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.black)
                 if !profile.biography.isEmpty {
                     Text(profile.biography)
                         .font(.system(size: 14))
@@ -1733,7 +1789,7 @@ struct InstagramHeaderView: View {
                         .foregroundColor(.blue)
                 }
                 Text(username)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundColor(.black)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 12, weight: .semibold))
@@ -1769,18 +1825,17 @@ struct StatView: View {
     let label: String
     var overrideText: String? = nil
 
-    private static let textBlack = Color.black
-    private static let textGray = Color(white: 0.56)
-
     var body: some View {
-        VStack(spacing: 2) {
+        // alignment: .leading → número y label alineados al mismo borde izquierdo.
+        // El primer dígito y la primera letra quedan exactamente en la misma columna.
+        VStack(alignment: .leading, spacing: 1) {
             Text(overrideText ?? formatCount(number))
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(Self.textBlack)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.black)
                 .monospacedDigit()
             Text(label)
-                .font(.system(size: 13))
-                .foregroundColor(Self.textGray)
+                .font(.system(size: 14))
+                .foregroundColor(.black)
         }
     }
 
@@ -2302,7 +2357,7 @@ struct InstagramBottomBar: View {
                 .fill(Color.white)
                 .shadow(color: Color.black.opacity(0.15), radius: 0, x: 0, y: -0.33)
             
-            // Icons aligned to top
+            // Icons pinned to top with bottom padding to expand the bar
             HStack(spacing: 0) {
                 // Home button (house outline)
                 Button(action: onHomePress) {
@@ -2311,16 +2366,8 @@ struct InstagramBottomBar: View {
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
                 }
-                .padding(.top, 8)
-                
-                // Search button (magnifying glass)
-                Button(action: onSearchPress) {
-                    Image(systemName: isSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
-                        .font(.system(size: 24, weight: .regular))
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 44)
                 
                 // Reels button (play in rounded rectangle)
                 Button(action: onReelsPress) {
@@ -2329,7 +2376,8 @@ struct InstagramBottomBar: View {
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
                 }
-                .padding(.top, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 44)
                 
                 // Messages button (paper plane with red dot)
                 Button(action: onMessagesPress) {
@@ -2346,7 +2394,18 @@ struct InstagramBottomBar: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .padding(.top, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 44)
+                
+                // Search button (magnifying glass)
+                Button(action: onSearchPress) {
+                    Image(systemName: isSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                        .font(.system(size: 24, weight: .regular))
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 44)
                 
                 // Profile button (circular profile pic)
                 Button(action: onProfilePress) {
@@ -2367,10 +2426,10 @@ struct InstagramBottomBar: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 44)
             }
-            .frame(height: 65) // Taller bar
         }
-        .frame(height: 65)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

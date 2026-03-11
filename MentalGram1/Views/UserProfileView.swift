@@ -135,39 +135,29 @@ struct UserProfileView: View {
             
             VStack(spacing: 0) {
                 // Header (igual que Instagram)
-                HStack {
+                HStack(spacing: 8) {
                     Button(action: onClose) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 24))
                             .foregroundColor(.primary)
                     }
                     
-                    Spacer()
-                    
-                    // Username con candado si es privado
+                    // Username con candado si es privado — pegado al botón de retroceso
                     HStack(spacing: 4) {
                         if profile.isPrivate {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 12))
                         }
                         Text(profile.username)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
                     }
                     
                     Spacer()
                     
-                    HStack(spacing: 20) {
-                        Button(action: {}) {
-                            Image(systemName: "bell")
-                                .font(.system(size: 24))
-                                .foregroundColor(.primary)
-                        }
-                        
-                        Button(action: {}) {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 24))
-                                .foregroundColor(.primary)
-                        }
+                    Button(action: {}) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 24))
+                            .foregroundColor(.primary)
                     }
                 }
                 .responsiveHorizontalPadding()
@@ -197,9 +187,9 @@ struct UserProfileView: View {
                                                         startPoint: .topLeading,
                                                         endPoint: .bottomTrailing
                                                     ),
-                                                    lineWidth: 2
+                                                    lineWidth: 3.5
                                                 )
-                                                .padding(-2)
+                                                .padding(-3.5)
                                         )
                                 } else {
                                     Circle()
@@ -207,15 +197,6 @@ struct UserProfileView: View {
                                         .frame(width: 86, height: 86)
                                 }
                                 
-                                // Plus button azul
-                                Circle()
-                                    .fill(Color.blue)
-                                    .frame(width: 24, height: 24)
-                                    .overlay(
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(.white)
-                                    )
                             }
                             .padding(.leading, UIScreen.main.bounds.width * 0.04)
                             .onTapGesture {
@@ -226,43 +207,41 @@ struct UserProfileView: View {
                                 }
                             }
                             
-                            Spacer(minLength: 8)
-                            
-                            // Stats (con más espacio entre números)
-                            HStack(spacing: UIScreen.main.bounds.width < 400 ? 20 : 40) {
-                                UserStatView(number: currentProfile.mediaCount, label: "posts")
-                                UserStatView(number: currentProfile.followerCount, label: "followers")
-                                UserStatView(number: currentProfile.followingCount, label: "following",
+                            Spacer(minLength: 4)
+
+                            // Columna derecha: nombre encima de los stats
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(profile.fullName)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.black)
+                                    .lineLimit(1)
+
+                                HStack(spacing: 0) {
+                                    StatView(number: currentProfile.mediaCount, label: "posts")
+                                        .frame(maxWidth: .infinity)
+                                    StatView(number: currentProfile.followerCount, label: "followers")
+                                        .frame(maxWidth: .infinity)
+                                    StatView(number: currentProfile.followingCount, label: "following",
                                              overrideText: magicFollowingText ?? followingOverride)
+                                        .frame(maxWidth: .infinity)
+                                }
                             }
                             .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                         }
-                        
-                        // Name + Bio
+
+                        // Bio
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(profile.fullName)
-                                .font(.system(size: 14, weight: .semibold))
-                            
                             if !profile.biography.isEmpty {
                                 Text(profile.biography)
                                     .font(.system(size: 14))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
-                            
+
                             if let url = profile.externalUrl, !url.isEmpty {
                                 Link(url, destination: URL(string: "https://\(url)")!)
                                     .font(.system(size: 14))
                                     .lineLimit(1)
                             }
-                            
-                            // "@" + Name badge
-                            HStack(spacing: 4) {
-                                Image(systemName: "at.circle.fill")
-                                    .font(.system(size: 12))
-                                Text(profile.fullName)
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .padding(.top, 4)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .responsiveHorizontalPadding()
@@ -857,32 +836,3 @@ struct UserProfileView: View {
     }
 }
 
-private struct UserStatView: View {
-    let number: Int
-    let label: String
-    var overrideText: String? = nil
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(overrideText ?? formatCount(number))
-                .font(.system(size: 16, weight: .semibold))
-                .monospacedDigit()
-            Text(label)
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
-        }
-    }
-
-    private func formatCount(_ count: Int) -> String {
-        if count >= 1_000_000 {
-            return String(format: "%.1fM", Double(count) / 1_000_000)
-        } else if count >= 10_000 {
-            return String(format: "%.0fK", Double(count) / 1_000)
-        } else {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .decimal
-            formatter.locale = Locale(identifier: "en_US")
-            return formatter.string(from: NSNumber(value: count)) ?? "\(count)"
-        }
-    }
-}
