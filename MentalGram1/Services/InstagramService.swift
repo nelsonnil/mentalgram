@@ -2651,6 +2651,8 @@ class InstagramService: ObservableObject {
                 
                 // ANTI-BOT: Save text to prevent duplicates
                 UserDefaults.standard.set(text, forKey: "last_note_text")
+                // Track when note was sent (notes expire after 24h on Instagram)
+                UserDefaults.standard.set(Date(), forKey: "last_note_sent_date")
                 
                 // ANTI-BOT: Set cooldown (60 seconds between notes)
                 let cooldownUntil = Date().addingTimeInterval(60)

@@ -1,6 +1,33 @@
 import Foundation
 import Combine
 
+// MARK: - Auto Input Mode
+
+enum AutoInputMode: String, CaseIterable {
+    case off       = "off"
+    case clipboard = "clipboard"
+    case api       = "api"
+    case ocr       = "ocr"
+
+    var displayName: String {
+        switch self {
+        case .off:       return "Off"
+        case .clipboard: return "Clipboard"
+        case .api:       return "API"
+        case .ocr:       return "OCR"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .off:       return "minus.circle"
+        case .clipboard: return "doc.on.clipboard"
+        case .api:       return "bolt.fill"
+        case .ocr:       return "camera.viewfinder"
+        }
+    }
+}
+
 // MARK: - API Source
 
 enum ApiSource: Int, CaseIterable {

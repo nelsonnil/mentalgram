@@ -35,7 +35,7 @@ struct GlitchOverlayView: View {
     @State private var tintBands: [TintBand] = []
 
     private let stripCount = 40
-    private let totalDuration: Double = 3.0
+    private let totalDuration: Double = 1.5
     private let frameInterval: Double = 1.0 / 18.0
 
     // MARK: - Body

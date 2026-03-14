@@ -360,6 +360,32 @@ class UploadManager: ObservableObject {
         }
     }
 
+    // MARK: - Session expired notification
+
+    /// Fires an immediate local notification telling the user to re-login.
+    /// Safe to call from any thread. No-op if the app is in the foreground
+    /// and the user is already looking at the screen, but still useful when
+    /// the app is in the background or the user is away.
+    func sendSessionExpiredNotification() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["sessionExpired"])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Re-login required"
+        content.body = "Your Instagram session has expired. Open the app and log in again to continue."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(identifier: "sessionExpired", content: content, trigger: trigger)
+        center.add(request) { error in
+            if let error {
+                print("⚠️ [NOTIF] Failed to schedule session-expired notification: \(error.localizedDescription)")
+            } else {
+                print("🔔 [NOTIF] Session-expired notification sent")
+            }
+        }
+    }
+
     // MARK: - Background task
 
     /// Call when the app enters background to finish an in-flight upload/archive.

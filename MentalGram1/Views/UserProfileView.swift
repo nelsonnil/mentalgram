@@ -495,6 +495,7 @@ struct UserProfileView: View {
 
     private func launchGlitchOrCountdown() {
         if followingMagic.glitchEnabled {
+            GlitchSoundPlayer.shared.play(style: .electricBuzz)
             showGlitch = true
             // Countdown starts via GlitchOverlayView.onComplete
         } else {

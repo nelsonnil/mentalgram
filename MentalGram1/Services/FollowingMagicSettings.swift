@@ -8,10 +8,8 @@ class FollowingMagicSettings: ObservableObject {
         didSet { UserDefaults.standard.set(isEnabled, forKey: "followingMagicEnabled") }
     }
 
-    /// Duration of the countdown animation in seconds (2, 3, 4, or 5).
-    @Published var countdownDuration: Int {
-        didSet { UserDefaults.standard.set(countdownDuration, forKey: "followingMagicDuration") }
-    }
+    /// Duration of the countdown animation in seconds (fixed at 6).
+    let countdownDuration: Int = 6
 
     /// Delay in seconds between the volume button press and the countdown starting (0–10).
     @Published var triggerDelay: Int {
@@ -23,6 +21,11 @@ class FollowingMagicSettings: ObservableObject {
         didSet { UserDefaults.standard.set(glitchEnabled, forKey: "followingMagicGlitch") }
     }
 
+    /// When true, the glitch effect targets the "seguidores" (followers) stat instead of "seguidos" (following).
+    @Published var targetFollowers: Bool {
+        didSet { UserDefaults.standard.set(targetFollowers, forKey: "followingMagicTargetFollowers") }
+    }
+
     static let durationOptions = [2, 3, 4, 5]
     static let delayOptions = Array(0...10)
 
@@ -32,12 +35,12 @@ class FollowingMagicSettings: ObservableObject {
 
     private init() {
         self.isEnabled = UserDefaults.standard.bool(forKey: "followingMagicEnabled")
-        let savedDuration = UserDefaults.standard.integer(forKey: "followingMagicDuration")
-        self.countdownDuration = savedDuration > 0 ? savedDuration : 3
         let savedDelay = UserDefaults.standard.object(forKey: "followingMagicTriggerDelay") as? Int
         self.triggerDelay = savedDelay ?? 0
         let savedGlitch = UserDefaults.standard.object(forKey: "followingMagicGlitch") as? Bool
         self.glitchEnabled = savedGlitch ?? true
+        let savedTarget = UserDefaults.standard.object(forKey: "followingMagicTargetFollowers") as? Bool
+        self.targetFollowers = savedTarget ?? false
     }
 
     /// Captures the current digit buffer as the pending offset and resets the buffer.

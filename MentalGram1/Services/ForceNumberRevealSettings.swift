@@ -18,6 +18,12 @@ class ForceNumberRevealSettings: ObservableObject {
         didSet { UserDefaults.standard.set(isEnabled, forKey: "forceNumberRevealEnabled") }
     }
 
+    /// When enabled, OCR camera starts on Performance open and auto-reveals
+    /// the recognized word (word set) or number (number set).
+    @Published var ocrEnabled: Bool {
+        didSet { UserDefaults.standard.set(ocrEnabled, forKey: "forceNumberRevealOcrEnabled") }
+    }
+
     @Published var autoReArchiveEnabled: Bool {
         didSet { UserDefaults.standard.set(autoReArchiveEnabled, forKey: "forceNumberAutoReArchiveEnabled") }
     }
@@ -50,6 +56,7 @@ class ForceNumberRevealSettings: ObservableObject {
 
     private init() {
         isEnabled            = UserDefaults.standard.bool(forKey: "forceNumberRevealEnabled")
+        ocrEnabled           = UserDefaults.standard.bool(forKey: "forceNumberRevealOcrEnabled")
         autoReArchiveEnabled = UserDefaults.standard.bool(forKey: "forceNumberAutoReArchiveEnabled")
         let savedMinutes     = UserDefaults.standard.integer(forKey: "forceNumberAutoReArchiveMinutes")
         autoReArchiveMinutes = savedMinutes > 0 ? savedMinutes : 15
@@ -310,6 +317,10 @@ class ForceNumberRevealSettings: ObservableObject {
                 print("❌ [RE-ARCHIVE] Error (\(mediaId)): \(error)")
                 LogManager.shared.error("Auto re-archive error (\(mediaId)): \(error.localizedDescription)", category: .upload)
                 failCount += 1
+                let msg = error.localizedDescription.lowercased()
+                if msg.contains("session expired") || msg.contains("login_required") || msg.contains("please login again") {
+                    UploadManager.shared.sendSessionExpiredNotification()
+                }
             }
         }
 

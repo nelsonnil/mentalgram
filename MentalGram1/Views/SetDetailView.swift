@@ -2039,10 +2039,6 @@ struct SetDetailView: View {
                 }
                 
                 do {
-                    // Upload photo
-                    let sizeKB = imageData.count / 1024
-                    LogManager.shared.upload("Starting upload: Photo #\(index + 1) (\(sizeKB)KB)")
-                    
                     // ANTI-BOT: Allow duplicates for Word/Number Reveal sets
                     let allowDuplicates = (currentSet.type == .word || currentSet.type == .number)
                     let mediaId = try await instagram.uploadPhoto(
@@ -2054,7 +2050,6 @@ struct SetDetailView: View {
                     
                     if let mediaId = mediaId {
                         print("✅ [UPLOAD] Photo #\(index + 1) uploaded. Media ID: \(mediaId)")
-                        LogManager.shared.success("Photo #\(index + 1) uploaded successfully (ID: \(mediaId))", category: .upload)
                         
                         // Update status: uploaded (waiting for archive)
                         dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .uploaded, errorMessage: nil)
@@ -2124,15 +2119,16 @@ struct SetDetailView: View {
                     
                     // ===== CLASSIFY ERROR =====
                     
-                    // SESSION EXPIRED - STOP, no retry
+                    // SESSION EXPIRED - STOP, prompt re-login (NOT bot lockdown)
                     let isSessionExpired = errorDescription.contains("session expired") ||
                                            errorDescription.contains("session invalid") ||
-                                           errorDescription.contains("please login again")
-                    
+                                           errorDescription.contains("please login again") ||
+                                           errorDescription.contains("login_required")
+
                     // BOT DETECTION - STOP, lockdown
-                    let isBotError = errorDescription.contains("challenge") || 
-                                     errorDescription.contains("spam") || 
-                                     errorDescription.contains("login_required") ||
+                    // Note: login_required is intentionally excluded — it means session expired, not bot
+                    let isBotError = errorDescription.contains("challenge") ||
+                                     errorDescription.contains("spam") ||
                                      errorDescription.contains("checkpoint") ||
                                      errorDescription.contains("bot")
                     
@@ -2161,6 +2157,7 @@ struct SetDetailView: View {
                             uploadManager.currentPhaseDescription = "Session Expired - Re-login Required"
                             dataManager.updateSetStatus(id: currentSet.id, status: .error)
                             uploadManager.activeTask = nil
+                            uploadManager.sendSessionExpiredNotification()
                         }
                         return
                         

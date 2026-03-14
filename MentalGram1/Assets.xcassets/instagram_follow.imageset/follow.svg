@@ -1,0 +1,7 @@
+<!-- Instagram Follow / Add Person Icon -->
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M16 11c1.657 0 3-1.343 3-3s-1.343-3-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M18 20c0-2.21-2.686-4-6-4s-6 1.79-6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M8 8a4 4 0 1 0 8 0 4 4 0 0 0-8 0Z" stroke="currentColor" stroke-width="2"/>
+  <path d="M20 14v6M23 17h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+</svg>
