@@ -19,7 +19,7 @@ final class OCRManager: NSObject {
     private lazy var textRequest: VNRecognizeTextRequest = {
         let r = VNRecognizeTextRequest(completionHandler: handleDetectedText)
         r.recognitionLevel = .accurate
-        r.usesLanguageCorrection = true
+        r.usesLanguageCorrection = false
         return r
     }()
 
@@ -33,6 +33,7 @@ final class OCRManager: NSObject {
     func configure(with config: OCRConfiguration) {
         configuration = config
         textRequest.recognitionLanguages = [config.language]
+        textRequest.usesLanguageCorrection = config.useLanguageCorrection
     }
 
     /// Call this when Performance view appears. Camera starts silently in background.
@@ -119,14 +120,17 @@ extension OCRManager {
             guard let obs = result as? VNRecognizedTextObservation,
                   let top = obs.topCandidates(1).first else { continue }
 
-            let text = top.string.replacingOccurrences(of: " ", with: "")
+            let raw  = top.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = raw.replacingOccurrences(of: " ", with: "")
             guard text.count >= configuration.minimumWordSize else { continue }
 
-            let count = (occurrencesMap[text] ?? 0) + 1
-            occurrencesMap[text] = count
+            // Normalise to lowercase so "ACE", "Ace", "ace" all accumulate together
+            let key = text.lowercased()
+            let count = (occurrencesMap[key] ?? 0) + 1
+            occurrencesMap[key] = count
 
             if count >= configuration.occurrences {
-                finalize(text: text)
+                finalize(text: key)
                 return
             }
         }
@@ -167,6 +171,7 @@ final class OCRCoordinator: NSObject, ObservableObject, OCRDelegate {
 
     @Published var recognizedText: String? = nil
     @Published var recognizedType: OCRStringType? = nil
+    @Published private(set) var isRunning: Bool = false
 
     let manager = OCRManager()
 
@@ -178,18 +183,21 @@ final class OCRCoordinator: NSObject, ObservableObject, OCRDelegate {
     func start(config: OCRConfiguration) {
         manager.configure(with: config)
         manager.start()
+        isRunning = true
     }
 
     func stop() {
         manager.stop()
         recognizedText = nil
         recognizedType = nil
+        isRunning = false
     }
 
     func ocrDidRecognize(text: String, type: OCRStringType) {
         DispatchQueue.main.async {
             self.recognizedText = text
             self.recognizedType = type
+            self.isRunning = false  // camera stopped after recognition
         }
     }
 }

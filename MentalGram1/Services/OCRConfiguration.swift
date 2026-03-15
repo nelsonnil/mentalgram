@@ -6,9 +6,11 @@ struct OCRConfiguration {
     /// Camera position. Persisted to UserDefaults key "ocr_camera" (0=back, 1=front).
     var cameraPosition: AVCaptureDevice.Position = .back
     /// Minimum character count for a candidate to be considered valid.
-    var minimumWordSize: Int = 4
+    var minimumWordSize: Int = 2
     /// Times the same text must appear consecutively to be confirmed.
     var occurrences: Int = 3
+    /// Whether to apply Vision language correction (disable for exact word/number recognition).
+    var useLanguageCorrection: Bool = false
 
     // MARK: - Supported languages
 

@@ -23,6 +23,11 @@ class UploadManager: ObservableObject {
     
     // MARK: - Pause Request (checked by upload loop)
     @Published var requestPause = false
+
+    // MARK: - Sync & Archive lock
+    // True while the unified syncThenArchiveAll operation is running.
+    // Auto re-archive checks this flag and defers if active.
+    @Published var isSyncArchiveActive: Bool = false
     
     // MARK: - Active Upload Task (to detect orphaned states)
     var activeTask: Task<Void, Never>? = nil
@@ -32,6 +37,11 @@ class UploadManager: ObservableObject {
     var waitEndTime: Date? {
         get { UserDefaults.standard.object(forKey: "upload_waitEndTime") as? Date }
         set { UserDefaults.standard.set(newValue, forKey: "upload_waitEndTime") }
+    }
+    /// Absolute timestamp when the escalated pause ends (persisted to UserDefaults).
+    var escalatedPauseEndTime: Date? {
+        get { UserDefaults.standard.object(forKey: "upload_escalatedPauseEndTime") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_escalatedPauseEndTime") }
     }
     /// Index of the next photo to upload after the wait (persisted).
     var waitNextPhotoIndex: Int {
@@ -111,6 +121,7 @@ class UploadManager: ObservableObject {
         escalatedPauseTimer?.invalidate()
         escalatedPauseTimer = nil
         escalatedPauseCountdown = 0
+        escalatedPauseEndTime = nil
     }
     
     // MARK: - Reset All State (when upload completes or is cancelled)
@@ -204,22 +215,37 @@ class UploadManager: ObservableObject {
             }
         }
         
-        // Restore escalated pause timer
-        if case .escalatedPause(let seconds) = uploadPhase, seconds > 0 {
-            escalatedPauseCountdown = seconds
-            escalatedPauseTimer?.invalidate()
-            escalatedPauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                guard let self = self else { return }
-                if self.escalatedPauseCountdown > 0 {
-                    self.escalatedPauseCountdown -= 1
-                    self.uploadPhase = .escalatedPause(remainingSeconds: self.escalatedPauseCountdown)
-                    self.currentPhaseDescription = "Multiple errors - Cooling down"
-                    if self.escalatedPauseCountdown <= 0 {
+        // Restore escalated pause timer using absolute timestamp
+        if let pauseEnd = escalatedPauseEndTime {
+            let remaining = Int(pauseEnd.timeIntervalSinceNow)
+            if remaining > 0 {
+                escalatedPauseCountdown = remaining
+                uploadPhase = .escalatedPause(remainingSeconds: remaining)
+                currentPhaseDescription = "Multiple errors - Cooling down"
+                escalatedPauseTimer?.invalidate()
+                escalatedPauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                    guard let self = self else { return }
+                    let left = Int((self.escalatedPauseEndTime ?? Date()).timeIntervalSinceNow)
+                    if left > 0 {
+                        self.escalatedPauseCountdown = left
+                        self.uploadPhase = .escalatedPause(remainingSeconds: left)
+                        self.currentPhaseDescription = "Multiple errors - Cooling down"
+                    } else {
                         self.escalatedPauseTimer?.invalidate()
                         self.escalatedPauseTimer = nil
+                        self.escalatedPauseEndTime = nil
+                        self.escalatedPauseCountdown = 0
                         self.uploadPhase = .paused
                         self.currentPhaseDescription = "Upload Paused - Ready to Resume"
                     }
+                }
+            } else {
+                // Pause already elapsed while in background - go directly to paused
+                escalatedPauseEndTime = nil
+                escalatedPauseCountdown = 0
+                if case .escalatedPause = uploadPhase {
+                    uploadPhase = .paused
+                    currentPhaseDescription = "Upload Paused - Ready to Resume"
                 }
             }
         }

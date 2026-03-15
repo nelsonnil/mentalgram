@@ -418,10 +418,20 @@ struct UserProfileView: View {
             // Start Following Counter Magic if a secret offset was captured
             print("🎩 [MAGIC] enabled=\(followingMagic.isEnabled) offset=\(followingMagic.pendingOffset)")
             if followingMagic.isEnabled && followingMagic.pendingOffset > 0 {
-                let inflated = currentProfile.followingCount + followingMagic.pendingOffset
-                magicFollowingText = formatFollowing(inflated)
+                let realCount = followingMagic.targetFollowers
+                    ? currentProfile.followerCount
+                    : currentProfile.followingCount
+                if followingMagic.transferEnabled {
+                    // Show deflated count immediately so it's visible before volume press
+                    let deflated = realCount - followingMagic.pendingOffset
+                    magicFollowingText = formatFollowing(max(0, deflated))
+                    print("🎩 [TRANSFER] Showing deflated count: \(deflated) (real: \(realCount) - offset: \(followingMagic.pendingOffset))")
+                } else {
+                    let inflated = realCount + followingMagic.pendingOffset
+                    magicFollowingText = formatFollowing(inflated)
+                    print("🎩 [MAGIC] Showing inflated count: \(inflated) (real: \(realCount) + offset: \(followingMagic.pendingOffset))")
+                }
                 VolumeButtonMonitor.shared.startMonitoring()
-                print("🎩 [MAGIC] Showing inflated following: \(inflated) (real: \(currentProfile.followingCount) + offset: \(followingMagic.pendingOffset))")
             }
         }
         .onDisappear {
@@ -507,28 +517,57 @@ struct UserProfileView: View {
         guard followingMagic.pendingOffset > 0 else { return }
         isCountingDown = true
 
-        let target = currentProfile.followingCount
-        let steps = followingMagic.pendingOffset          // one decrement per step
+        let steps = followingMagic.pendingOffset
         let totalMs = followingMagic.countdownDuration * 1000
-        let intervalMs = max(16, totalMs / steps)         // ≥60fps, spread over chosen duration
-        var current = target + steps
+        let intervalMs = max(16, totalMs / steps)
 
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
-            current -= 1
-            magicFollowingText = formatFollowing(current)
+        if followingMagic.transferEnabled {
+            // Transfer illusion: DEFLATE the searched profile (count - offset → count)
+            let realCount = followingMagic.targetFollowers
+                ? currentProfile.followerCount
+                : currentProfile.followingCount
+            var current = realCount - steps
 
-            if current <= target {
-                timer.invalidate()
-                countdownTimer = nil
-                // Snap to real count and clean up
-                magicFollowingText = nil
-                isCountingDown = false
-                followingMagic.clear()
-                VolumeButtonMonitor.shared.stopMonitoring()
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                print("🎩 [MAGIC] Countdown complete — showing real following count: \(target)")
+            countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
+                current += 1
+                magicFollowingText = formatFollowing(current)
+
+                if current >= realCount {
+                    timer.invalidate()
+                    countdownTimer = nil
+                    magicFollowingText = nil
+                    isCountingDown = false
+                    // Save offset so own profile can inflate by the same amount
+                    followingMagic.transferOffset = steps
+                    followingMagic.clear()
+                    VolumeButtonMonitor.shared.stopMonitoring()
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    print("🎩 [TRANSFER] Deflation complete — offset \(steps) saved for own profile")
+                }
+            }
+        } else {
+            // Classic mode: INFLATE then count down to real count
+            let target = followingMagic.targetFollowers
+                ? currentProfile.followerCount
+                : currentProfile.followingCount
+            var current = target + steps
+
+            countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
+                current -= 1
+                magicFollowingText = formatFollowing(current)
+
+                if current <= target {
+                    timer.invalidate()
+                    countdownTimer = nil
+                    magicFollowingText = nil
+                    isCountingDown = false
+                    followingMagic.clear()
+                    VolumeButtonMonitor.shared.stopMonitoring()
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    print("🎩 [MAGIC] Countdown complete — showing real count: \(target)")
+                }
             }
         }
     }

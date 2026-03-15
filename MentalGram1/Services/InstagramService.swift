@@ -22,6 +22,10 @@ class InstagramService: ObservableObject {
     @Published var lockUntil: Date?
     private var consecutiveErrors: Int = 0
 
+    // Session expiry — set true when any API call returns 403/401
+    // Cleared automatically on successful login
+    @Published var isSessionExpired: Bool = false
+
     /// True while a reveal (unarchive) or re-archive operation is running.
     /// Blocks pull-to-refresh in PerformanceView to avoid extra API calls mid-operation.
     @Published var isRevealOperationActive: Bool = false
@@ -381,12 +385,14 @@ class InstagramService: ObservableObject {
                 await MainActor.run {
                     self.session.username = username
                     self.isLoggedIn = true
+                    self.isSessionExpired = false   // clear on successful login
                     KeychainService.shared.saveSession(self.session)
                     print("✅ Logged in as @\(username)")
                 }
             } else {
                 await MainActor.run {
                     self.isLoggedIn = true
+                    self.isSessionExpired = false   // clear on successful login
                     KeychainService.shared.saveSession(self.session)
                 }
             }
@@ -644,7 +650,7 @@ class InstagramService: ObservableObject {
     /// Fetches the real archive status of a media item from Instagram.
     /// Uses a raw GET that does NOT count toward the write-action rate limit.
     /// Returns: true = archived (hidden), false = public (visible), nil = couldn't determine.
-    func getMediaIsArchived(mediaId: String) async -> Bool? {
+    func getMediaIsArchived(mediaId: String) async throws -> Bool? {
         guard isLoggedIn, !isLocked else {
             print("⚠️ [STATE-CHECK] Skipped (id: \(mediaId)) — not logged in or locked")
             return nil
@@ -669,6 +675,10 @@ class InstagramService: ObservableObject {
             guard statusCode < 400 else {
                 print("⚠️ [STATE-CHECK] HTTP error \(statusCode) for pk: \(pk)")
                 LogManager.shared.warning("State check HTTP \(statusCode) for media \(pk)", category: .api)
+                if statusCode == 403 || statusCode == 401 {
+                    await MainActor.run { self.isSessionExpired = true }
+                    throw InstagramError.sessionExpired
+                }
                 return nil
             }
 
@@ -899,6 +909,7 @@ class InstagramService: ObservableObject {
         }
         
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            await MainActor.run { self.isSessionExpired = true }
             throw InstagramError.sessionExpired
         }
         
@@ -1012,8 +1023,11 @@ class InstagramService: ObservableObject {
     
     // MARK: - Archive Photo
     
-    func archivePhoto(mediaId: String) async throws -> Bool {
-        print("📦 [ARCHIVE] Starting archive for media ID: \(mediaId)")
+    /// Archives a photo on Instagram.
+    /// - Parameter skipPreCheck: Pass `true` when the caller already verified the photo
+    ///   is public (e.g. right after `getMediaIsArchived`). Avoids a redundant GET.
+    func archivePhoto(mediaId: String, skipPreCheck: Bool = false) async throws -> Bool {
+        print("📦 [ARCHIVE] Starting archive for media ID: \(mediaId) (skipPreCheck: \(skipPreCheck))")
         
         // ANTI-BOT: Check lockdown IMMEDIATELY (don't waste time on delay)
         if isLocked {
@@ -1021,12 +1035,14 @@ class InstagramService: ObservableObject {
             throw InstagramError.botDetected("Lockdown active. Cannot archive.")
         }
 
-        // PRE-CHECK: verify Instagram's real state before archiving.
-        // Prevents archiving an already-archived photo (double-archive = bot signal).
-        if let alreadyArchived = await getMediaIsArchived(mediaId: mediaId), alreadyArchived {
-            print("ℹ️ [ARCHIVE] Pre-check: already archived on Instagram — skipping API call (ID: \(mediaId))")
-            LogManager.shared.info("Archive skipped: already archived on Instagram (ID: \(mediaId))", category: .api)
-            return true
+        // PRE-CHECK: only run when the caller hasn't already verified state.
+        // Skipping prevents duplicate GETs when called right after syncThenArchiveAll.
+        if !skipPreCheck {
+            if let alreadyArchived = try await getMediaIsArchived(mediaId: mediaId), alreadyArchived {
+                print("ℹ️ [ARCHIVE] Pre-check: already archived on Instagram — skipping API call (ID: \(mediaId))")
+                LogManager.shared.info("Archive skipped: already archived on Instagram (ID: \(mediaId))", category: .api)
+                return true
+            }
         }
 
         // ANTI-BOT: Realistic human delay (3-6 seconds with jitter)
@@ -1097,7 +1113,7 @@ class InstagramService: ObservableObject {
         // PRE-CHECK: verify Instagram's real state before unarchiving.
         // If photo is already public, skip the API call to avoid a redundant unarchive.
         // Also catches state-desync: local says "archived" but Instagram already shows it public.
-        if let isArchived = await getMediaIsArchived(mediaId: mediaId), !isArchived {
+        if let isArchived = try await getMediaIsArchived(mediaId: mediaId), !isArchived {
             print("ℹ️ [UNARCHIVE] Pre-check: already public on Instagram — skipping API call (ID: \(mediaId))")
             LogManager.shared.info("Unarchive skipped: already public on Instagram (ID: \(mediaId))", category: .api)
             return true

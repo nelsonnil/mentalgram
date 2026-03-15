@@ -105,6 +105,10 @@ struct SetDetailView: View {
     @State private var archiveAllProgress = 0
     @State private var archiveAllTotal = 0
     @State private var archiveAllCompleted = false
+    /// True during the human-gap pause between Phase 1 (verify) and Phase 2 (archive).
+    @State private var isPausingBeforeArchive = false
+    /// Seconds remaining in the current pause or inter-archive cooldown (shown as countdown).
+    @State private var saCountdownSeconds: Int = 0
 
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
@@ -129,6 +133,28 @@ struct SetDetailView: View {
                 VStack(spacing: VaultTheme.Spacing.lg) {
                 // Header Stats
                 statsSection
+
+                // Session expired banner
+                if instagram.isSessionExpired {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.lock.fill")
+                            .foregroundColor(.white)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Session expired")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                            Text("Log out and log in again to continue uploading.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.red)
+                    .cornerRadius(10)
+                    .padding(.horizontal, 16)
+                }
 
                 // Verify & Sync banner (shown when visible uploaded photos exist)
                 verifySyncSection
@@ -273,15 +299,17 @@ struct SetDetailView: View {
     /// that could be desynced from Instagram's real archive state.
     @ViewBuilder
     private var verifySyncSection: some View {
-        if instagram.isLoggedIn {
+        if instagram.isLoggedIn && !visibleUploadedPhotos.isEmpty {
             VStack(spacing: 8) {
 
-                // ── 1. Sync running ────────────────────────────────────
+                // ── Phase 1 running: verifying ─────────────────────────
                 if isSyncing {
                     HStack(spacing: 10) {
                         ProgressView().scaleEffect(0.85)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Verifying (\(syncProgress)/\(syncTotal))...")
+                            Text(uploadManager.isSyncArchiveActive
+                                 ? "Sync & Archive — verifying (\(syncProgress)/\(syncTotal))…"
+                                 : "Verifying (\(syncProgress)/\(syncTotal))…")
                                 .font(.subheadline.bold())
                                 .foregroundColor(.primary)
                             Text("Checking real state on Instagram")
@@ -295,19 +323,51 @@ struct SetDetailView: View {
                     .cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.2), lineWidth: 1))
 
-                // ── 2. Sync result banner ──────────────────────────────
-                } else if syncCompleted {
-                    // Summary line
+                // ── Pause between Phase 1 and Phase 2 ─────────────────
+                } else if isPausingBeforeArchive {
                     HStack(spacing: 10) {
-                        Image(systemName: syncFixedCount > 0 ? "checkmark.circle.fill" : "info.circle.fill")
-                            .foregroundColor(syncFixedCount > 0 ? .green : .blue)
-                            .font(.system(size: 18))
+                        ProgressView().scaleEffect(0.85)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(syncResultTitle)
+                            Text("Preparing to archive… \(saCountdownSeconds)s")
                                 .font(.subheadline.bold())
-                                .foregroundColor(syncFixedCount > 0 ? .green : .primary)
-                            if syncUnknownCount > 0 {
-                                Text("\(syncUnknownCount) photo\(syncUnknownCount > 1 ? "s" : "") couldn't be checked (API returned no data)")
+                                .foregroundColor(.primary)
+                            Text("Short pause before sending archive requests")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.orange.opacity(0.09))
+                    .cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.2), lineWidth: 1))
+
+                // ── Phase 2 running: archiving ─────────────────────────
+                } else if isArchivingAll {
+                    HStack(spacing: 10) {
+                        if saCountdownSeconds > 0 {
+                            // During inter-archive cooldown: show countdown
+                            Image(systemName: "clock.arrow.circlepath")
+                                .foregroundColor(.purple)
+                                .font(.system(size: 16))
+                        } else {
+                            ProgressView().scaleEffect(0.85)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Archiving (\(archiveAllProgress)/\(archiveAllTotal))")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.primary)
+                            if saCountdownSeconds > 0 {
+                                let m = saCountdownSeconds / 60
+                                let s = saCountdownSeconds % 60
+                                Text(m > 0
+                                     ? "Next archive in \(m)m \(s)s — do not close the app"
+                                     : "Next archive in \(s)s — do not close the app")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .monospacedDigit()
+                            } else {
+                                Text("Archiving… do not close the app")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -315,95 +375,64 @@ struct SetDetailView: View {
                         Spacer()
                     }
                     .padding(12)
-                    .background(syncFixedCount > 0 ? Color.green.opacity(0.09) : Color.blue.opacity(0.07))
+                    .background(Color.purple.opacity(0.09))
                     .cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(
-                        syncFixedCount > 0 ? Color.green.opacity(0.2) : Color.blue.opacity(0.2),
-                        lineWidth: 1
-                    ))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.2), lineWidth: 1))
 
-                    // Archive All panel (only when Instagram confirmed truly-visible photos)
-                    if !syncTrulyVisibleIds.isEmpty {
-                        if isArchivingAll {
-                            // ── Archive All running ────────────────────
-                            HStack(spacing: 10) {
-                                ProgressView().scaleEffect(0.85)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Archiving (\(archiveAllProgress)/\(archiveAllTotal))...")
-                                        .font(.subheadline.bold())
-                                        .foregroundColor(.primary)
-                                    Text("Waiting between each call to avoid bot detection")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .padding(12)
-                            .background(Color.purple.opacity(0.09))
-                            .cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.2), lineWidth: 1))
-
-                        } else if archiveAllCompleted {
-                            // ── Archive All done ───────────────────────
-                            HStack(spacing: 10) {
-                                Image(systemName: "archivebox.fill")
-                                    .foregroundColor(.green)
-                                    .font(.system(size: 16))
-                                Text("Archived \(archiveAllProgress)/\(archiveAllTotal) photos ✓")
-                                    .font(.subheadline.bold())
-                                    .foregroundColor(.green)
-                                Spacer()
-                            }
-                            .padding(12)
-                            .background(Color.green.opacity(0.09))
-                            .cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.green.opacity(0.2), lineWidth: 1))
-
-                        } else {
-                            // ── Archive All prompt ─────────────────────
-                            Button(action: { Task { await archiveAllVisible() } }) {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "archivebox.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.purple)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Archive All (\(syncTrulyVisibleIds.count) visible)")
-                                            .font(.subheadline.bold())
-                                            .foregroundColor(.primary)
-                                        Text("Instagram confirmed these are public — archive with safe delays")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(12)
-                                .background(Color.purple.opacity(0.08))
-                                .cornerRadius(10)
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.25), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(isArchivingAll)
-                        }
+                // ── All done ───────────────────────────────────────────
+                } else if archiveAllCompleted {
+                    HStack(spacing: 10) {
+                        Image(systemName: "archivebox.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 16))
+                        Text("Archived \(archiveAllProgress)/\(archiveAllTotal) photos ✓")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.green)
+                        Spacer()
                     }
+                    .padding(12)
+                    .background(Color.green.opacity(0.09))
+                    .cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.green.opacity(0.2), lineWidth: 1))
 
-                // ── 3. Prompt to start sync (only when not syncing and not in post-sync state) ──
-                } else if !visibleUploadedPhotos.isEmpty {
+                // ── Sync-only result (verify ran, no archive started yet) ──
+                } else if syncCompleted && !syncTrulyVisibleIds.isEmpty {
+                    HStack(spacing: 10) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 18))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(syncResultTitle)
+                                .font(.subheadline.bold())
+                            if syncUnknownCount > 0 {
+                                Text("\(syncUnknownCount) photo\(syncUnknownCount > 1 ? "s" : "") couldn't be checked")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.blue.opacity(0.07))
+                    .cornerRadius(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.2), lineWidth: 1))
+
+                // ── Idle: main action button ───────────────────────────
+                } else {
+                    // PRIMARY: Sync & Archive (single safe action)
                     Button(action: {
-                        guard !isSyncing else { return }
-                        Task { await verifySyncAll() }
+                        guard !isSyncing, !isArchivingAll else { return }
+                        Task { await syncThenArchiveAll() }
                     }) {
                         HStack(spacing: 10) {
-                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                            Image(systemName: "archivebox.circle.fill")
                                 .font(.system(size: 22))
-                                .foregroundColor(.orange)
+                                .foregroundColor(.purple)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Verify & Archive \(visibleUploadedPhotos.count) visible photo\(visibleUploadedPhotos.count > 1 ? "s" : "")")
+                                Text("Sync & Archive (\(visibleUploadedPhotos.count) visible)")
                                     .font(.subheadline.bold())
                                     .foregroundColor(.primary)
-                                Text("Checks real state on Instagram · archives desynced ones one by one")
+                                Text("Verifies state · then archives with safe delays · no duplicate API calls")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(2)
@@ -414,12 +443,33 @@ struct SetDetailView: View {
                                 .foregroundColor(.secondary)
                         }
                         .padding(12)
-                        .background(Color.orange.opacity(0.08))
+                        .background(Color.purple.opacity(0.08))
                         .cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.25), lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.25), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .disabled(isSyncing)
+                    .disabled(isSyncing || isArchivingAll || uploadManager.isSyncArchiveActive)
+
+                    // SECONDARY: Verify only (read-only, no archive)
+                    Button(action: {
+                        guard !isSyncing else { return }
+                        Task { await verifySyncAll() }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.triangle.2.circlepath.circle")
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                            Text("Verify only")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.gray.opacity(0.08))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSyncing || isArchivingAll)
                 }
             }
         }
@@ -489,38 +539,52 @@ struct SetDetailView: View {
             await MainActor.run { syncProgress = index + 1 }
             print("🔍 [SYNC] Checking photo \(index + 1)/\(photos.count) — mediaId: \(mediaId)")
 
-            let result = await instagram.getMediaIsArchived(mediaId: mediaId)
+            do {
+                let result = try await instagram.getMediaIsArchived(mediaId: mediaId)
 
-            switch result {
-            case .some(true):
-                // Desync: Instagram says archived, local says visible → fix local silently
-                await MainActor.run {
-                    dataManager.updatePhoto(
-                        photoId: photo.id,
-                        mediaId: mediaId,
-                        isArchived: true,
-                        uploadStatus: .completed,
-                        errorMessage: nil
+                switch result {
+                case .some(true):
+                    // Desync: Instagram says archived, local says visible → fix local silently
+                    await MainActor.run {
+                        dataManager.updatePhoto(
+                            photoId: photo.id,
+                            mediaId: mediaId,
+                            isArchived: true,
+                            uploadStatus: .completed,
+                            errorMessage: nil
+                        )
+                        fixed += 1
+                    }
+                    print("🔄 [SYNC] ✅ FIXED desync: \(mediaId) → set local to archived")
+                    LogManager.shared.info(
+                        "State sync: fixed desync for \(mediaId) (local visible → Instagram archived)",
+                        category: .general
                     )
-                    fixed += 1
+
+                case .some(false):
+                    // Truly public on Instagram
+                    trulyVisible.append(mediaId)
+                    print("🔍 [SYNC] ℹ️ Truly visible: \(mediaId) — Instagram confirms it's public")
+                    LogManager.shared.info("State sync: \(mediaId) confirmed public on Instagram", category: .general)
+
+                case .none:
+                    // Couldn't determine — API returned nil (no 'is_archived' field or error)
+                    unknown += 1
+                    print("⚠️ [SYNC] ❓ Unknown state for: \(mediaId) — API returned nil, skipping")
+                    LogManager.shared.warning("State sync: could not determine state for \(mediaId)", category: .general)
                 }
-                print("🔄 [SYNC] ✅ FIXED desync: \(mediaId) → set local to archived")
-                LogManager.shared.info(
-                    "State sync: fixed desync for \(mediaId) (local visible → Instagram archived)",
-                    category: .general
-                )
-
-            case .some(false):
-                // Truly public on Instagram
-                trulyVisible.append(mediaId)
-                print("🔍 [SYNC] ℹ️ Truly visible: \(mediaId) — Instagram confirms it's public")
-                LogManager.shared.info("State sync: \(mediaId) confirmed public on Instagram", category: .general)
-
-            case .none:
-                // Couldn't determine — API returned nil (no 'is_archived' field or error)
-                unknown += 1
-                print("⚠️ [SYNC] ❓ Unknown state for: \(mediaId) — API returned nil, skipping")
-                LogManager.shared.warning("State sync: could not determine state for \(mediaId)", category: .general)
+            } catch {
+                // Session expired (403/401) → abort entire sync, show re-login prompt
+                let msg = error.localizedDescription
+                print("🚫 [SYNC] Session error — aborting sync: \(msg)")
+                LogManager.shared.warning("State sync aborted: session error — \(msg)", category: .api)
+                UploadManager.shared.sendSessionExpiredNotification()
+                await MainActor.run {
+                    isSyncing = false
+                    syncCompleted = false
+                    syncUnknownCount = photos.count
+                }
+                return
             }
         }
 
@@ -605,6 +669,196 @@ struct SetDetailView: View {
         await MainActor.run {
             isArchivingAll = false
             archiveAllCompleted = true
+        }
+    }
+
+    // MARK: - Sync & Archive (unified, bot-safe)
+
+    /// Single action that verifies visible photos then archives them without duplicate GETs.
+    ///
+    /// Phase 1 – VERIFY (GET only, 1.5s between each)
+    ///   Determines which photos are truly public. Fixes desync locally.
+    ///
+    /// Pause – 8–15s randomised gap (simulates human reading results before acting)
+    ///
+    /// Phase 2 – ARCHIVE (POST only, skipPreCheck=true, cooldown 160–215s between)
+    ///   Archives each confirmed-public photo without repeating the GET.
+    private func syncThenArchiveAll() async {
+        let photos = visibleUploadedPhotos
+        guard !photos.isEmpty, !isSyncing, !isArchivingAll else {
+            print("⚠️ [S&A] Already running or no photos")
+            return
+        }
+
+        // Lock out auto re-archive for the duration
+        await MainActor.run {
+            uploadManager.isSyncArchiveActive = true
+            isSyncing = true
+            syncProgress = 0
+            syncTotal = photos.count
+            syncFixedCount = 0
+            syncUnknownCount = 0
+            syncTrulyVisibleIds = []
+            syncCompleted = false
+            archiveAllCompleted = false
+            isPausingBeforeArchive = false
+            saCountdownSeconds = 0
+        }
+
+        // ── PHASE 1: VERIFY ──────────────────────────────────────────────
+        print("🔄 [S&A] Phase 1: verifying \(photos.count) photo(s)")
+        LogManager.shared.info("State sync started: \(photos.count) visible photos to check", category: .general)
+
+        var confirmedToArchive: [String] = []
+        var fixed = 0
+        var unknown = 0
+
+        for (index, photo) in photos.enumerated() {
+            guard let mediaId = photo.mediaId else {
+                unknown += 1
+                continue
+            }
+
+            if index > 0 {
+                try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s anti-bot gap
+            }
+
+            await MainActor.run { syncProgress = index + 1 }
+
+            do {
+                let result = try await instagram.getMediaIsArchived(mediaId: mediaId)
+                switch result {
+                case .some(true):
+                    // Already archived on Instagram — fix local desync
+                    await MainActor.run {
+                        dataManager.updatePhoto(
+                            photoId: photo.id,
+                            mediaId: mediaId,
+                            isArchived: true,
+                            uploadStatus: .completed,
+                            errorMessage: nil
+                        )
+                        fixed += 1
+                    }
+                    LogManager.shared.info("State sync: fixed desync for \(mediaId)", category: .general)
+
+                case .some(false):
+                    // Truly public — queue for archive
+                    confirmedToArchive.append(mediaId)
+                    LogManager.shared.info("State sync: \(mediaId) confirmed public on Instagram", category: .general)
+
+                case .none:
+                    unknown += 1
+                    LogManager.shared.warning("State sync: could not determine state for \(mediaId)", category: .general)
+                }
+            } catch {
+                // Session error — abort entirely
+                LogManager.shared.warning("S&A sync aborted: session error — \(error.localizedDescription)", category: .api)
+                UploadManager.shared.sendSessionExpiredNotification()
+                await MainActor.run {
+                    isSyncing = false
+                    uploadManager.isSyncArchiveActive = false
+                }
+                return
+            }
+        }
+
+        let syncSummary = "fixed=\(fixed), toArchive=\(confirmedToArchive.count), unknown=\(unknown)"
+        print("🔄 [S&A] Phase 1 done — \(syncSummary)")
+        LogManager.shared.info("State sync complete: \(syncSummary)", category: .general)
+
+        await MainActor.run {
+            syncFixedCount = fixed
+            syncUnknownCount = unknown
+            syncTrulyVisibleIds = confirmedToArchive
+            isSyncing = false
+            syncCompleted = true
+        }
+
+        // If nothing to archive, finish here
+        guard !confirmedToArchive.isEmpty else {
+            await MainActor.run { uploadManager.isSyncArchiveActive = false }
+            if fixed > 0 {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                await MainActor.run { syncCompleted = false }
+            }
+            return
+        }
+
+        // ── PAUSE: human gap between last GET and first POST ─────────────
+        let pauseSeconds = Int.random(in: 8...15)
+        print("⏸️ [S&A] Pause \(pauseSeconds)s before archiving...")
+        await MainActor.run { isPausingBeforeArchive = true; saCountdownSeconds = pauseSeconds }
+        for remaining in stride(from: pauseSeconds, through: 1, by: -1) {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await MainActor.run { saCountdownSeconds = remaining - 1 }
+        }
+        await MainActor.run { isPausingBeforeArchive = false; saCountdownSeconds = 0 }
+
+        // ── PHASE 2: ARCHIVE ──────────────────────────────────────────────
+        print("📦 [S&A] Phase 2: archiving \(confirmedToArchive.count) photo(s) (no pre-check GET)")
+        LogManager.shared.info("Archive All started: \(confirmedToArchive.count) photo(s)", category: .general)
+
+        await MainActor.run {
+            isArchivingAll = true
+            archiveAllProgress = 0
+            archiveAllTotal = confirmedToArchive.count
+        }
+
+        var archived = 0
+        for (index, mediaId) in confirmedToArchive.enumerated() {
+            // Rate limit guard
+            let rateLimit = instagram.checkRateLimit()
+            if rateLimit.limited || rateLimit.remaining < 2 {
+                LogManager.shared.warning("S&A archive stopped: rate limit (used: \(rateLimit.actionsUsed))", category: .api)
+                break
+            }
+
+            print("📦 [S&A] Archiving \(index + 1)/\(confirmedToArchive.count): \(mediaId)")
+
+            // skipPreCheck=true — we already verified in Phase 1, no duplicate GET
+            let success = (try? await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)) ?? false
+
+            if success {
+                archived += 1
+                await MainActor.run {
+                    archiveAllProgress = archived
+                    syncTrulyVisibleIds.removeAll { $0 == mediaId }
+                    if let photo = currentSet.photos.first(where: { $0.mediaId == mediaId }) {
+                        dataManager.updatePhoto(
+                            photoId: photo.id,
+                            mediaId: mediaId,
+                            isArchived: true,
+                            uploadStatus: .completed,
+                            errorMessage: nil
+                        )
+                    }
+                }
+            } else {
+                LogManager.shared.warning("S&A: failed to archive \(mediaId)", category: .api)
+            }
+
+            // Cooldown between archives (skip after last one)
+            if index < confirmedToArchive.count - 1 {
+                let cooldown = Int.random(in: 160...215)
+                print("⏳ [S&A] Cooldown \(cooldown)s before next archive...")
+                LogManager.shared.info("Cooldown: \(cooldown)s until next upload", category: .upload)
+                await MainActor.run { saCountdownSeconds = cooldown }
+                for remaining in stride(from: cooldown, through: 1, by: -1) {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    await MainActor.run { saCountdownSeconds = remaining - 1 }
+                }
+                await MainActor.run { saCountdownSeconds = 0 }
+            }
+        }
+
+        print("📦 [S&A] Done — \(archived)/\(confirmedToArchive.count) archived")
+        LogManager.shared.info("Archive All complete: \(archived)/\(confirmedToArchive.count)", category: .general)
+
+        await MainActor.run {
+            isArchivingAll = false
+            archiveAllCompleted = true
+            uploadManager.isSyncArchiveActive = false
         }
     }
 
@@ -2457,6 +2711,8 @@ struct SetDetailView: View {
             uploadManager.failedPhotoIndex = photoIndex
             uploadManager.activeTask = nil
             
+            let pauseEndDate = Date().addingTimeInterval(Double(escalationWaitSeconds))
+            uploadManager.escalatedPauseEndTime = pauseEndDate
             uploadManager.escalatedPauseCountdown = escalationWaitSeconds
             uploadManager.uploadPhase = .escalatedPause(remainingSeconds: escalationWaitSeconds)
             uploadManager.currentPhaseDescription = "Multiple errors - Cooling down"
@@ -2466,16 +2722,18 @@ struct SetDetailView: View {
             uploadManager.escalatedPauseTimer?.invalidate()
             uploadManager.escalatedPauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak uploadManager] _ in
                 guard let um = uploadManager else { return }
-                if um.escalatedPauseCountdown > 0 {
-                    um.escalatedPauseCountdown -= 1
-                    um.uploadPhase = .escalatedPause(remainingSeconds: um.escalatedPauseCountdown)
+                let left = Int((um.escalatedPauseEndTime ?? Date()).timeIntervalSinceNow)
+                if left > 0 {
+                    um.escalatedPauseCountdown = left
+                    um.uploadPhase = .escalatedPause(remainingSeconds: left)
                     um.currentPhaseDescription = "Multiple errors - Cooling down"
-                    if um.escalatedPauseCountdown <= 0 {
-                        um.escalatedPauseTimer?.invalidate()
-                        um.escalatedPauseTimer = nil
-                        um.uploadPhase = .paused
-                        um.currentPhaseDescription = "Upload Paused - Ready to Resume"
-                    }
+                } else {
+                    um.escalatedPauseTimer?.invalidate()
+                    um.escalatedPauseTimer = nil
+                    um.escalatedPauseEndTime = nil
+                    um.escalatedPauseCountdown = 0
+                    um.uploadPhase = .paused
+                    um.currentPhaseDescription = "Upload Paused - Ready to Resume"
                 }
             }
         }

@@ -195,6 +195,16 @@ class ForceNumberRevealSettings: ObservableObject {
 
         reArchiveScheduledAt = nil
 
+        // ── SYNC & ARCHIVE LOCK ────────────────────────────────────────────────
+        // Defer if user triggered a unified Sync & Archive operation to avoid parallel API calls.
+        if UploadManager.shared.isSyncArchiveActive {
+            print("⏸️ [RE-ARCHIVE] Sync & Archive is active — deferring auto re-archive by 5 min")
+            LogManager.shared.warning("Auto re-archive deferred: Sync & Archive in progress", category: .upload)
+            let retryDate = Date().addingTimeInterval(5 * 60)
+            reArchiveScheduledAt = retryDate
+            return
+        }
+
         // ── SESSION CHECK ──────────────────────────────────────────────────────
         guard instagram.isLoggedIn else {
             print("⚠️ [RE-ARCHIVE] Session not active — persisting and skipping until next launch")

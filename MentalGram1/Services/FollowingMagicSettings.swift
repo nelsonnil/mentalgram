@@ -16,18 +16,32 @@ class FollowingMagicSettings: ObservableObject {
         didSet { UserDefaults.standard.set(triggerDelay, forKey: "followingMagicTriggerDelay") }
     }
 
-    /// Show full-screen glitch/interference effect before the countdown starts.
-    @Published var glitchEnabled: Bool {
-        didSet { UserDefaults.standard.set(glitchEnabled, forKey: "followingMagicGlitch") }
-    }
+    /// Signal interference always enabled — glitch effect plays before countdown.
+    let glitchEnabled: Bool = true
 
     /// When true, the glitch effect targets the "seguidores" (followers) stat instead of "seguidos" (following).
     @Published var targetFollowers: Bool {
         didSet { UserDefaults.standard.set(targetFollowers, forKey: "followingMagicTargetFollowers") }
     }
 
+    /// When true, enables the "transfer illusion": deflates the searched profile then
+    /// inflates own profile by the same amount when volume is pressed.
+    @Published var transferEnabled: Bool {
+        didSet { UserDefaults.standard.set(transferEnabled, forKey: "followingMagicTransferEnabled") }
+    }
+
+    /// The offset saved after deflating the searched profile, ready to inflate own profile.
+    /// Persisted so it survives navigation back to Performance view.
+    @Published var transferOffset: Int {
+        didSet { UserDefaults.standard.set(transferOffset, forKey: "followingMagicTransferOffset") }
+    }
+
     static let durationOptions = [2, 3, 4, 5]
     static let delayOptions = Array(0...10)
+
+    /// True while the Transfer Effect inflation animation is running.
+    /// Shared so PerformanceView's OCR handler can yield priority to the Transfer Effect.
+    @Published var isTransferCounting: Bool = false
 
     /// The secret offset captured from the digit buffer when the user opens Explore.
     /// Not persisted — runtime only.
@@ -37,10 +51,11 @@ class FollowingMagicSettings: ObservableObject {
         self.isEnabled = UserDefaults.standard.bool(forKey: "followingMagicEnabled")
         let savedDelay = UserDefaults.standard.object(forKey: "followingMagicTriggerDelay") as? Int
         self.triggerDelay = savedDelay ?? 0
-        let savedGlitch = UserDefaults.standard.object(forKey: "followingMagicGlitch") as? Bool
-        self.glitchEnabled = savedGlitch ?? true
         let savedTarget = UserDefaults.standard.object(forKey: "followingMagicTargetFollowers") as? Bool
         self.targetFollowers = savedTarget ?? false
+        let savedTransfer = UserDefaults.standard.object(forKey: "followingMagicTransferEnabled") as? Bool
+        self.transferEnabled = savedTransfer ?? false
+        self.transferOffset = UserDefaults.standard.integer(forKey: "followingMagicTransferOffset")
     }
 
     /// Captures the current digit buffer as the pending offset and resets the buffer.

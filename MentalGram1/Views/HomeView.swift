@@ -428,6 +428,10 @@ struct SettingsView: View {
     @State private var showingLogin = false
     @State private var developerMode = false
 
+    // Other Settings — Fake Home Screen
+    @ObservedObject private var illusionService = HomeScreenIllusionService.shared
+    @State private var showingHomeScreenPicker = false
+
     // Collapsible cards — Instagram Profile section
     @State private var profilePicExpanded = false
     @State private var noteExpanded = false
@@ -435,49 +439,63 @@ struct SettingsView: View {
     // TEST: Archive access
     
     var body: some View {
+        mainScrollView
+            .background(Color(hex: "#0F0F0F"))
+            .navigationTitle("Settings")
+            .toolbarBackground(Color(hex: "#1C1C1E"), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .preferredColorScheme(.dark)
+            .alert("Logout", isPresented: $showingLogoutAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Logout", role: .destructive) { instagram.logout() }
+            } message: { Text("Are you sure you want to logout?") }
+            .alert(uploadMessage ?? "Upload Complete", isPresented: $showingUploadAlert) {
+                Button("OK") { uploadMessage = nil }
+            } message: { Text(uploadMessage ?? "") }
+            .alert(noteMessage ?? "", isPresented: $showingNoteAlert) {
+                Button("OK") { noteMessage = nil }
+            } message: { Text(noteMessage ?? "") }
+            .alert(bioMessage ?? "", isPresented: $showingBioAlert) {
+                Button("OK") { bioMessage = nil }
+            } message: { Text(bioMessage ?? "") }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(selectedImageData: $selectedImageData)
+            }
+            .sheet(isPresented: $showingHomeScreenPicker) {
+                HomeScreenImagePicker { image in
+                    illusionService.save(image)
+                }
+            }
+            .sheet(isPresented: $showingFollowerData) {
+                FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
+            }
+            .sheet(isPresented: $showingLogin) {
+                InstagramWebLoginView(isPresented: $showingLogin)
+            }
+    }
+
+    private var mainScrollView: some View {
         ScrollView {
             VStack(spacing: 0) {
                 if !instagram.isLoggedIn {
                     notLoggedInSection
                 } else {
-                    accountSection
-                    instagramProfileSection
-                    tricksSection
-                    integrationsSection
-                    dataSection
+                    loggedInSections
                 }
             }
             .padding(.horizontal, VaultTheme.Spacing.lg)
             .padding(.vertical, VaultTheme.Spacing.lg)
         }
-        .background(Color(hex: "#0F0F0F"))
-        .navigationTitle("Settings")
-        .toolbarBackground(Color(hex: "#1C1C1E"), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .preferredColorScheme(.dark)
-        .alert("Logout", isPresented: $showingLogoutAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Logout", role: .destructive) { instagram.logout() }
-        } message: { Text("Are you sure you want to logout?") }
-        .alert(uploadMessage ?? "Upload Complete", isPresented: $showingUploadAlert) {
-            Button("OK") { uploadMessage = nil }
-        } message: { Text(uploadMessage ?? "") }
-        .alert(noteMessage ?? "", isPresented: $showingNoteAlert) {
-            Button("OK") { noteMessage = nil }
-        } message: { Text(noteMessage ?? "") }
-        .alert(bioMessage ?? "", isPresented: $showingBioAlert) {
-            Button("OK") { bioMessage = nil }
-        } message: { Text(bioMessage ?? "") }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(selectedImageData: $selectedImageData)
-        }
-        .sheet(isPresented: $showingFollowerData) {
-            FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
-        }
-        .sheet(isPresented: $showingLogin) {
-            InstagramWebLoginView(isPresented: $showingLogin)
-        }
+    }
+
+    @ViewBuilder private var loggedInSections: some View {
+        accountSection
+        instagramProfileSection
+        tricksSection
+        integrationsSection
+        otherSection
+        dataSection
     }
 
     // MARK: - Section: Not Logged In
@@ -594,6 +612,16 @@ struct SettingsView: View {
         Spacer().frame(height: 28)
     }
 
+    // MARK: - Section: Other
+
+    @ViewBuilder private var otherSection: some View {
+        settingsSectionLabel("OTHER", icon: "gearshape.2.fill", color: Self.colorData)
+        accentedSection(color: Self.colorData) {
+            FakeHomeScreenCard(showingPicker: $showingHomeScreenPicker)
+        }
+        Spacer().frame(height: 28)
+    }
+
     // MARK: - Section: Data
 
     @ViewBuilder private var dataSection: some View {
@@ -644,10 +672,6 @@ struct SettingsView: View {
                     Spacer()
                 }
             }
-            OutlineButton(title: selectedImageData == nil ? "Select from Gallery" : "Change Selection",
-                          icon: "photo.on.rectangle.angled",
-                          action: { showingImagePicker = true },
-                          isEnabled: !isUploadingProfilePic)
             if selectedImageData != nil {
                 modernActionButton(title: isUploadingProfilePic ? "Uploading…" : "Upload Profile Picture",
                                    icon: "arrow.up.circle.fill",
@@ -941,18 +965,14 @@ struct SettingsView: View {
 
             // ── Pill row ────────────────────────────────────────────
             HStack(spacing: 8) {
-                ForEach(AutoInputMode.allCases, id: \.rawValue) { mode in
+                ForEach(AutoInputMode.allCases.filter { $0 != .clipboard }, id: \.rawValue) { mode in
                     let isSelected = currentMode == mode
                     let isOcr = mode == .ocr
 
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                             topMode.wrappedValue = mode.rawValue
-                            if mode == .clipboard {
-                                clipboardAutoMode = clipboardKey
-                            } else {
-                                if clipboardAutoMode == clipboardKey { clipboardAutoMode = "" }
-                            }
+                            if clipboardAutoMode == clipboardKey { clipboardAutoMode = "" }
                             if mode != .api { apiSource.wrappedValue = .none }
                             // OCR exclusivity: only one target can use OCR at a time
                             if mode == .ocr {
@@ -2151,7 +2171,7 @@ struct ForceNumberRevealSettingsCard: View {
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
             if settings.ocrEnabled {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     // Active sets summary
                     HStack(spacing: VaultTheme.Spacing.sm) {
                         Image(systemName: "text.cursor")
@@ -2166,30 +2186,66 @@ struct ForceNumberRevealSettingsCard: View {
                                 .foregroundColor(activeNumberSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
                         }
                     }
-                    // Camera & language (shared with Note/Bio OCR)
-                    HStack(spacing: 6) {
-                        Image(systemName: ocrCamera == 0 ? "camera.fill" : "camera.rotate.fill")
-                            .font(.system(size: 11))
+
+                    // Camera selector
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Camera")
+                            .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(VaultTheme.Colors.textSecondary)
-                        Text(ocrCamera == 0 ? "Rear camera" : "Front camera")
-                            .font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                        Text("·")
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-                        Image(systemName: "globe")
-                            .font(.system(size: 11))
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                        Text(OCRConfiguration.displayName(for: ocrLanguage))
-                            .font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                        Spacer()
-                        Text("Shared with Note/Bio OCR")
-                            .font(.system(size: 10))
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                            .textCase(.uppercase)
+                        HStack(spacing: 6) {
+                            ForEach([0, 1], id: \.self) { val in
+                                let sel = ocrCamera == val
+                                Button { ocrCamera = val } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: val == 0 ? "camera.fill" : "camera.rotate.fill")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text(val == 0 ? "Rear" : "Front")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .foregroundColor(sel ? .white : VaultTheme.Colors.textSecondary)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .frame(maxWidth: .infinity)
+                                    .background(sel ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                                    .cornerRadius(8)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                        }
                     }
-                    .padding(8)
-                    .background(Color(hex: "#2C2C2E"))
-                    .cornerRadius(8)
+
+                    // Language selector
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Language")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .textCase(.uppercase)
+                        Menu {
+                            ForEach(OCRConfiguration.supportedLanguages, id: \.code) { lang in
+                                Button { ocrLanguage = lang.code } label: {
+                                    if ocrLanguage == lang.code {
+                                        Label(lang.display, systemImage: "checkmark")
+                                    } else {
+                                        Text(lang.display)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 12))
+                                Text(OCRConfiguration.displayName(for: ocrLanguage))
+                                    .font(.system(size: 12, weight: .semibold))
+                                Spacer()
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 11))
+                            }
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                            .padding(.horizontal, 10).padding(.vertical, 8)
+                            .background(Color(hex: "#2C2C2E"))
+                            .cornerRadius(8)
+                        }
+                    }
                 }
             }
         }
@@ -2254,20 +2310,21 @@ struct FollowingMagicSettingsCard: View {
 
                     Divider()
 
-                    // ── Glitch effect ─────────────────────────────────────
+                    // ── Transfer illusion ─────────────────────────────────
                     HStack(spacing: VaultTheme.Spacing.sm) {
-                        Image(systemName: "bolt.fill")
-                            .foregroundColor(VaultTheme.Colors.warning)
+                        Image(systemName: "arrow.left.arrow.right.circle.fill")
+                            .foregroundColor(SettingsView.colorTricks)
+                            .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Signal interference")
-                                .font(VaultTheme.Typography.body())
+                            Text("Transfer effect")
+                                .font(VaultTheme.Typography.bodyBold())
                                 .foregroundColor(VaultTheme.Colors.textPrimary)
-                            Text("Full-screen glitch effect plays just before the countdown.")
+                            Text("Deflates the searched profile, then inflates yours when you press the volume button.")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $settings.glitchEnabled)
+                        Toggle("", isOn: $settings.transferEnabled)
                             .labelsHidden()
                     }
 
@@ -2692,6 +2749,155 @@ private struct BackupCard: View {
                     .font(VaultTheme.Typography.caption())
                     .foregroundColor(VaultTheme.Colors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+// MARK: - Fake Home Screen Card
+
+struct FakeHomeScreenCard: View {
+    @Binding var showingPicker: Bool
+    @ObservedObject private var illusionService = HomeScreenIllusionService.shared
+    @AppStorage("fakeHomeScreenEnabled") private var fakeHomeScreenEnabled = false
+    @State private var isExpanded = false
+
+    private static let accent = SettingsView.colorData
+
+    var body: some View {
+        CollapsibleCard(
+            icon: "iphone",
+            iconColor: Self.accent,
+            title: "Fake Home Screen",
+            subtitle: "Show a home screen screenshot when Performance opens",
+            isExpanded: $isExpanded
+        ) {
+            toggleRow
+            modernDivider()
+            imagePickerRow
+        }
+    }
+
+    @ViewBuilder private var toggleRow: some View {
+        HStack(spacing: VaultTheme.Spacing.sm) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Self.accent)
+                    .frame(width: 28, height: 28)
+                Image(systemName: "iphone.homebutton")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Enable fake home screen")
+                    .font(VaultTheme.Typography.body())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Text("Tap anywhere to reveal your Instagram profile")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: $fakeHomeScreenEnabled).labelsHidden()
+        }
+    }
+
+    @ViewBuilder private var imagePickerRow: some View {
+        HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
+            thumbnailView
+            VStack(alignment: .leading, spacing: 6) {
+                Text(illusionService.hasImage ? "Screenshot loaded" : "No screenshot")
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Text("Upload a screenshot of your iPhone home screen showing the Instagram icon.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                actionButtons
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder private var thumbnailView: some View {
+        if let img = illusionService.screenshot {
+            Image(uiImage: img)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 52, height: 92)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color(hex: "#3A3A3C"), lineWidth: 1))
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(hex: "#2C2C2E"))
+                .frame(width: 52, height: 92)
+                .overlay(Image(systemName: "iphone")
+                    .font(.system(size: 22))
+                    .foregroundColor(VaultTheme.Colors.textTertiary))
+        }
+    }
+
+    @ViewBuilder private var actionButtons: some View {
+        HStack(spacing: 8) {
+            Button { showingPicker = true } label: {
+                Label(illusionService.hasImage ? "Replace" : "Select screenshot",
+                      systemImage: "photo.on.rectangle.angled")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Self.accent)
+                    .cornerRadius(7)
+            }
+            if illusionService.hasImage {
+                Button { illusionService.delete() } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(VaultTheme.Colors.error)
+                        .padding(6)
+                        .background(VaultTheme.Colors.error.opacity(0.12))
+                        .cornerRadius(7)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func modernDivider() -> some View {
+        Divider().background(Color(hex: "#3A3A3C"))
+    }
+}
+
+// MARK: - Home Screen Image Picker
+
+import PhotosUI
+
+struct HomeScreenImagePicker: UIViewControllerRepresentable {
+    let onPick: (UIImage) -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let onPick: (UIImage) -> Void
+        init(onPick: @escaping (UIImage) -> Void) { self.onPick = onPick }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            guard let provider = results.first?.itemProvider,
+                  provider.canLoadObject(ofClass: UIImage.self) else { return }
+            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+                guard let image = object as? UIImage else { return }
+                DispatchQueue.main.async { self?.onPick(image) }
             }
         }
     }

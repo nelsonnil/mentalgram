@@ -29,7 +29,8 @@ struct InstagramMedia: Identifiable, Codable {
     }
 }
 
-struct InstagramFollower: Codable {
+struct InstagramFollower: Codable, Identifiable, Equatable {
+    var id: String { userId }
     let userId: String
     let username: String
     let fullName: String
