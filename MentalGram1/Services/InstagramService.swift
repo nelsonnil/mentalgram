@@ -978,17 +978,48 @@ class InstagramService: ObservableObject {
         
         let data = try await apiRequest(method: "GET", path: path)
         
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let items = json["items"] as? [[String: Any]] else {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("📷 [MEDIA] Response is not a JSON dictionary")
             return ([], nil)
         }
-        
-        let nextMaxId = json["next_max_id"] as? String
+
+        let items = json["items"] as? [[String: Any]] ?? []
+        print("📷 [MEDIA] Response keys: \(json.keys.sorted().joined(separator: ", "))")
+        print("📷 [MEDIA] items count: \(items.count), more_available: \(json["more_available"] ?? "nil")")
+
+        // next_max_id can come as String or Int depending on API version
+        let nextMaxId: String?
+        if let s = json["next_max_id"] as? String {
+            nextMaxId = s
+        } else if let n = json["next_max_id"] as? NSNumber {
+            nextMaxId = n.stringValue
+        } else {
+            nextMaxId = nil
+        }
+
+        // Log first item's pk type for debugging
+        if let firstItem = items.first {
+            let pkVal = firstItem["pk"]
+            print("📷 [MEDIA] First item pk type: \(type(of: pkVal as Any)), value: \(pkVal ?? "nil")")
+        }
         
         var medias: [InstagramMedia] = []
         
         for item in items {
-            guard let pk = item["pk"] as? Int64 else { continue }
+            // Robust pk extraction: handle Int64, Int, NSNumber, or String
+            let pkString: String
+            if let pk64 = item["pk"] as? Int64 {
+                pkString = String(pk64)
+            } else if let pkInt = item["pk"] as? Int {
+                pkString = String(pkInt)
+            } else if let pkNum = item["pk"] as? NSNumber {
+                pkString = pkNum.stringValue
+            } else if let pkStr = item["pk"] as? String {
+                pkString = pkStr
+            } else {
+                print("📷 [MEDIA] Skipping item — pk not parseable: \(type(of: item["pk"] as Any))")
+                continue
+            }
             
             let caption = (item["caption"] as? [String: Any])?["text"] as? String ?? ""
             
@@ -1008,8 +1039,8 @@ class InstagramService: ObservableObject {
             }
             
             let media = InstagramMedia(
-                id: String(pk),
-                mediaId: String(pk),
+                id: pkString,
+                mediaId: pkString,
                 imageURL: imageUrl,
                 caption: caption,
                 takenAt: takenAt,
@@ -1018,6 +1049,7 @@ class InstagramService: ObservableObject {
             medias.append(media)
         }
         
+        print("📷 [MEDIA] Parsed \(medias.count)/\(items.count) items")
         return (medias, nextMaxId)
     }
     
@@ -1078,13 +1110,15 @@ class InstagramService: ObservableObject {
                 print("✅ [ARCHIVE] Photo archived successfully")
                 LogManager.shared.success("Photo archived (ID: \(mediaId))", category: .api)
                 
-                // ANTI-BOT: Set cooldown AFTER archive completes (not after upload)
-                // This ensures the full cycle upload+archive is finished before starting next
-                let cooldownSeconds = Double.random(in: 160...220)
-                let cooldownUntil = Date().addingTimeInterval(cooldownSeconds)
-                UserDefaults.standard.set(cooldownUntil, forKey: "photo_upload_cooldown_until")
-                print("   ⏳ Cooldown set: \(Int(cooldownSeconds))s after archive")
-                LogManager.shared.info("Cooldown: \(Int(cooldownSeconds))s until next upload", category: .upload)
+                // When called from S&A (skipPreCheck=true), S&A manages its own
+                // inter-archive timing — don't impose an upload cooldown here.
+                if !skipPreCheck {
+                    let cooldownSeconds = Double.random(in: 160...220)
+                    let cooldownUntil = Date().addingTimeInterval(cooldownSeconds)
+                    UserDefaults.standard.set(cooldownUntil, forKey: "photo_upload_cooldown_until")
+                    print("   ⏳ Cooldown set: \(Int(cooldownSeconds))s after archive")
+                    LogManager.shared.info("Cooldown: \(Int(cooldownSeconds))s until next upload", category: .upload)
+                }
                 
                 return true
             } else {

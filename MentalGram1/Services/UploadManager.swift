@@ -28,6 +28,13 @@ class UploadManager: ObservableObject {
     // True while the unified syncThenArchiveAll operation is running.
     // Auto re-archive checks this flag and defers if active.
     @Published var isSyncArchiveActive: Bool = false
+
+    // MARK: - Re-verify state (survives view dismissal)
+    @Published var isReverifying: Bool = false
+    @Published var reverifyProgress: Int = 0
+    @Published var reverifyTotal: Int = 0
+    @Published var reverifyDesynced: Int = 0
+    var reverifyTask: Task<Void, Never>? = nil
     
     // MARK: - Active Upload Task (to detect orphaned states)
     var activeTask: Task<Void, Never>? = nil

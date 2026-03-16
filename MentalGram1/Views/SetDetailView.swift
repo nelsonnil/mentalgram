@@ -123,6 +123,18 @@ struct SetDetailView: View {
             !$0.isArchived
         }
     }
+
+    /// All uploaded photos (including locally-archived) that have a mediaId.
+    /// Used by "Re-verify All" to detect desync where local state says archived
+    /// but Instagram still has the photo as public.
+    private var allUploadedPhotos: [SetPhoto] {
+        currentSet.photos.filter {
+            $0.mediaId != nil &&
+            $0.uploadStatus == .completed
+        }
+    }
+
+    /// isReverifying is now driven by uploadManager.isReverifying (persists across view lifecycle).
     
     var body: some View {
         ZStack {
@@ -158,6 +170,46 @@ struct SetDetailView: View {
 
                 // Verify & Sync banner (shown when visible uploaded photos exist)
                 verifySyncSection
+
+                // Re-verify button — always available when all photos appear archived locally
+                // but might be out of sync with Instagram's real state.
+                if instagram.isLoggedIn && visibleUploadedPhotos.isEmpty && !allUploadedPhotos.isEmpty && !isSyncing && !isArchivingAll {
+                    if uploadManager.isReverifying {
+                        HStack(spacing: 8) {
+                            ProgressView().scaleEffect(0.75)
+                            Text("Re-verifying \(uploadManager.reverifyProgress)/\(uploadManager.reverifyTotal)…")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            if uploadManager.reverifyDesynced > 0 {
+                                Text("(\(uploadManager.reverifyDesynced) desync)")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.gray.opacity(0.08))
+                        .cornerRadius(8)
+                    } else {
+                        Button(action: {
+                            startReverify()
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.secondary)
+                                Text("Re-verify all (\(allUploadedPhotos.count) photos)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.gray.opacity(0.08))
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
 
                 // Status & Actions (only when logged in)
                 if instagram.isLoggedIn {
@@ -382,18 +434,32 @@ struct SetDetailView: View {
                 // ── All done ───────────────────────────────────────────
                 } else if archiveAllCompleted {
                     HStack(spacing: 10) {
-                        Image(systemName: "archivebox.fill")
-                            .foregroundColor(.green)
-                            .font(.system(size: 16))
-                        Text("Archived \(archiveAllProgress)/\(archiveAllTotal) photos ✓")
-                            .font(.subheadline.bold())
-                            .foregroundColor(.green)
+                        if archiveAllProgress == archiveAllTotal {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 16))
+                            Text("All \(archiveAllTotal) photos archived")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.green)
+                        } else {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.system(size: 16))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Archived \(archiveAllProgress)/\(archiveAllTotal) photos")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.orange)
+                                Text("\(archiveAllTotal - archiveAllProgress) failed — tap Sync & Archive to retry")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         Spacer()
                     }
                     .padding(12)
-                    .background(Color.green.opacity(0.09))
+                    .background((archiveAllProgress == archiveAllTotal ? Color.green : Color.orange).opacity(0.09))
                     .cornerRadius(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.green.opacity(0.2), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke((archiveAllProgress == archiveAllTotal ? Color.green : Color.orange).opacity(0.2), lineWidth: 1))
 
                 // ── Sync-only result (verify ran, no archive started yet) ──
                 } else if syncCompleted && !syncTrulyVisibleIds.isEmpty {
@@ -672,6 +738,103 @@ struct SetDetailView: View {
         }
     }
 
+    // MARK: - Re-verify All (detect local↔Instagram desync for archived photos)
+
+    /// Fetches all VISIBLE media from Instagram in 1-2 API calls, then compares
+    /// against local state. Much faster than checking 100+ photos one by one.
+    private func startReverify() {
+        let photos = allUploadedPhotos
+        guard !photos.isEmpty, !uploadManager.isReverifying else { return }
+
+        let photoSnapshots: [(id: UUID, mediaId: String, isArchived: Bool)] = photos.compactMap { p in
+            guard let mid = p.mediaId else { return nil }
+            return (p.id, mid, p.isArchived)
+        }
+
+        let manager = uploadManager
+        let ig = instagram
+        let dm = dataManager
+
+        manager.reverifyTask?.cancel()
+        manager.isReverifying = true
+        manager.reverifyProgress = 0
+        manager.reverifyTotal = photoSnapshots.count
+        manager.reverifyDesynced = 0
+
+        manager.reverifyTask = Task.detached(priority: .utility) {
+            print("🔍 [RE-VERIFY] Fast mode: fetching all visible media from Instagram…")
+
+            // Fetch all visible (non-archived) media IDs from Instagram feed.
+            // Paginate to get the full list (each page ~18 items).
+            var visibleOnIG: Set<String> = []
+            var nextMaxId: String? = nil
+            var page = 0
+
+            do {
+                repeat {
+                    page += 1
+                    let (items, cursor) = try await ig.getUserMedia(maxId: nextMaxId)
+                    for item in items {
+                        visibleOnIG.insert(item.id)
+                    }
+                    nextMaxId = cursor
+                    print("🔍 [RE-VERIFY] Page \(page): got \(items.count) visible items (total: \(visibleOnIG.count))")
+                    // Stop if page returned no items (avoid infinite pagination)
+                    if items.isEmpty { break }
+                    if nextMaxId != nil {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    }
+                } while nextMaxId != nil
+            } catch {
+                print("❌ [RE-VERIFY] Failed to fetch feed: \(error.localizedDescription)")
+                await MainActor.run {
+                    manager.isReverifying = false
+                    manager.reverifyTask = nil
+                }
+                return
+            }
+
+            print("🔍 [RE-VERIFY] Instagram reports \(visibleOnIG.count) visible post(s) — comparing with \(photoSnapshots.count) local photo(s)")
+
+            // Compare: if a photo is locally archived but appears in the visible feed → desync
+            var desynced = 0
+            for (index, snap) in photoSnapshots.enumerated() {
+                let isVisibleOnIG = visibleOnIG.contains(snap.mediaId)
+
+                if isVisibleOnIG && snap.isArchived {
+                    await MainActor.run {
+                        dm.updatePhoto(
+                            photoId: snap.id,
+                            mediaId: snap.mediaId,
+                            isArchived: false,
+                            uploadStatus: .completed,
+                            errorMessage: nil
+                        )
+                    }
+                    desynced += 1
+                    print("⚠️ [RE-VERIFY] Desync: \(snap.mediaId) visible on IG but locally archived")
+                    LogManager.shared.warning("Re-verify desync: \(snap.mediaId) is public on IG, fixed local state", category: .general)
+                }
+
+                await MainActor.run {
+                    manager.reverifyProgress = index + 1
+                    manager.reverifyDesynced = desynced
+                }
+            }
+
+            await MainActor.run {
+                manager.isReverifying = false
+                manager.reverifyTask = nil
+            }
+            print("🔍 [RE-VERIFY] Done — \(desynced) desync(s) found out of \(photoSnapshots.count) photos (used \(page) API call(s))")
+            if desynced > 0 {
+                LogManager.shared.info("Re-verify: fixed \(desynced) desync(s) — S&A button should now appear", category: .general)
+            } else {
+                LogManager.shared.info("Re-verify: all \(photoSnapshots.count) photos confirmed archived (\(page) API calls)", category: .general)
+            }
+        }
+    }
+
     // MARK: - Sync & Archive (unified, bot-safe)
 
     /// Single action that verifies visible photos then archives them without duplicate GETs.
@@ -785,16 +948,6 @@ struct SetDetailView: View {
             return
         }
 
-        // ── PAUSE: human gap between last GET and first POST ─────────────
-        let pauseSeconds = Int.random(in: 8...15)
-        print("⏸️ [S&A] Pause \(pauseSeconds)s before archiving...")
-        await MainActor.run { isPausingBeforeArchive = true; saCountdownSeconds = pauseSeconds }
-        for remaining in stride(from: pauseSeconds, through: 1, by: -1) {
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            await MainActor.run { saCountdownSeconds = remaining - 1 }
-        }
-        await MainActor.run { isPausingBeforeArchive = false; saCountdownSeconds = 0 }
-
         // ── PHASE 2: ARCHIVE ──────────────────────────────────────────────
         print("📦 [S&A] Phase 2: archiving \(confirmedToArchive.count) photo(s) (no pre-check GET)")
         LogManager.shared.info("Archive All started: \(confirmedToArchive.count) photo(s)", category: .general)
@@ -816,8 +969,14 @@ struct SetDetailView: View {
 
             print("📦 [S&A] Archiving \(index + 1)/\(confirmedToArchive.count): \(mediaId)")
 
-            // skipPreCheck=true — we already verified in Phase 1, no duplicate GET
-            let success = (try? await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)) ?? false
+            // skipPreCheck=true — we already verified in Phase 1, no duplicate GET.
+            // Retry once on failure (network hiccups are common).
+            var success = (try? await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)) ?? false
+            if !success {
+                print("⚠️ [S&A] First attempt failed for \(mediaId) — retrying in 5s…")
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                success = (try? await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)) ?? false
+            }
 
             if success {
                 archived += 1
@@ -835,19 +994,17 @@ struct SetDetailView: View {
                     }
                 }
             } else {
-                LogManager.shared.warning("S&A: failed to archive \(mediaId)", category: .api)
+                LogManager.shared.warning("S&A: failed to archive \(mediaId) after retry", category: .api)
             }
 
             // Cooldown between archives (skip after last one)
             if index < confirmedToArchive.count - 1 {
-                let cooldown = Int.random(in: 160...215)
-                print("⏳ [S&A] Cooldown \(cooldown)s before next archive...")
-                LogManager.shared.info("Cooldown: \(cooldown)s until next upload", category: .upload)
-                await MainActor.run { saCountdownSeconds = cooldown }
-                for remaining in stride(from: cooldown, through: 1, by: -1) {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    await MainActor.run { saCountdownSeconds = remaining - 1 }
-                }
+                let cooldownMs = Int.random(in: 1500...3000)
+                let cooldownSec = max(1, cooldownMs / 1000)
+                print("⏳ [S&A] Cooldown \(cooldownMs)ms before next archive...")
+                LogManager.shared.info("Cooldown: \(cooldownMs)ms until next archive", category: .upload)
+                await MainActor.run { saCountdownSeconds = cooldownSec }
+                try? await Task.sleep(nanoseconds: UInt64(cooldownMs) * 1_000_000)
                 await MainActor.run { saCountdownSeconds = 0 }
             }
         }
