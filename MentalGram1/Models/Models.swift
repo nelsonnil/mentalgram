@@ -63,7 +63,8 @@ struct UserSearchResult: Identifiable {
     }
 }
 
-struct InstagramProfile: Codable {
+struct InstagramProfile: Codable, Identifiable {
+    var id: String { userId }
     let userId: String
     let username: String
     let fullName: String

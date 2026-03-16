@@ -69,7 +69,6 @@ struct PerformanceView: View {
             Color.white.ignoresSafeArea()
             profileContent
                 .padding(.bottom, 54)
-            spectatorOverlay
             bottomBar
         }
     }
@@ -87,16 +86,6 @@ struct PerformanceView: View {
     }
 
     @ViewBuilder private var spectatorOverlay: some View {
-        if let sp = spectatorProfile {
-            UserProfileView(profile: sp, onClose: {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    spectatorProfile = nil
-                    selectedSpectator = nil
-                }
-            })
-            .transition(.move(edge: .trailing))
-            .zIndex(900)
-        }
         if isLoadingSpectator {
             Color.white.ignoresSafeArea()
                 .overlay(
@@ -195,7 +184,10 @@ struct PerformanceView: View {
     // MARK: - OCR modifiers (split out to reduce body complexity for the Swift type-checker)
 
     private var ocrModifiers: some View {
-        performanceRoot
+        ZStack {
+            performanceRoot
+            spectatorOverlay
+        }
             .onChange(of: volumeMonitor.upCount) { _ in
                 guard spectatorProfile == nil else {
                     print("📷 [OCR] Blocked — spectator profile is visible")
@@ -261,38 +253,15 @@ struct PerformanceView: View {
             } message: {
                 Text(spectatorLoadError ?? "")
             }
-        .onChange(of: selectedSpectator) { follower in
-            guard let follower else { return }
-            Task {
-                print("👤 [SPECTATOR] Loading profile for @\(follower.username) (id: \(follower.userId))")
-                await MainActor.run { isLoadingSpectator = true }
-                do {
-                    if let p = try await InstagramService.shared.getProfileInfo(userId: follower.userId) {
-                        print("✅ [SPECTATOR] Profile loaded: @\(p.username)")
-                        await MainActor.run {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                spectatorProfile = p
-                                isLoadingSpectator = false
-                            }
-                        }
-                    } else {
-                        print("⚠️ [SPECTATOR] getProfileInfo returned nil for id: \(follower.userId)")
-                        await MainActor.run {
-                            isLoadingSpectator = false
-                            selectedSpectator = nil
-                            spectatorLoadError = "Could not load profile for @\(follower.username)"
-                        }
-                    }
-                } catch {
-                    print("❌ [SPECTATOR] Error loading profile: \(error)")
-                    await MainActor.run {
-                        isLoadingSpectator = false
-                        selectedSpectator = nil
-                        spectatorLoadError = error.localizedDescription
-                    }
-                }
+            // Spectator profile: bound to selectedSpectator to avoid the nil→item race
+            // condition that caused stale profiles when tapping a second follower.
+            .fullScreenCover(item: $selectedSpectator) { follower in
+                SpectatorProfileCover(follower: follower, onClose: {
+                    selectedSpectator = nil
+                })
+                .preferredColorScheme(.light)
             }
-        }
+        // selectedSpectator drives fullScreenCover directly — no extra onChange needed.
         // When Explore closes, reset digit buffer (InstagramProfileView's onChange clears followingOverride)
         .onChange(of: showingExplore) { isOpen in
             if !isOpen {
@@ -353,14 +322,16 @@ struct PerformanceView: View {
                 showingHomeScreenIllusion = true
                 print("🏠 [ILLUSION] Fake home screen active — tap to reveal profile")
             }
-            // Set volume to 50% so volume buttons are always detectable.
-            // Needed for FollowingMagic AND for OCR volume-UP trigger.
+            // Activate volume button detection for FollowingMagic and/or OCR.
+            // prepareVolume() warms up the audio session and slider (must run first).
+            // startMonitoring() registers the KVO observer that increments upCount/downCount.
             let needsVolume = FollowingMagicSettings.shared.isEnabled
                 || noteTopInputMode == "ocr"
                 || bioTopInputMode  == "ocr"
                 || forceRevealSettings.ocrEnabled
             if needsVolume {
                 VolumeButtonMonitor.shared.prepareVolume()
+                VolumeButtonMonitor.shared.startMonitoring()
             }
             checkAndLoadProfile()
             // Auto profile pic: run silently in background, no UI disruption
@@ -393,7 +364,8 @@ struct PerformanceView: View {
             // Re-enable sleep when leaving Performance
             UIApplication.shared.isIdleTimerDisabled = false
             print("🌙 [SCREEN] Screen sleep RE-ENABLED")
-            // Stop OCR if running
+            // Stop volume monitoring and OCR when leaving Performance
+            VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
         }
     }
@@ -2471,11 +2443,26 @@ struct FollowedByView: View {
     let cachedImages: [String: UIImage]
     var onFollowerTap: ((InstagramFollower) -> Void)? = nil
 
+    /// Toggles between first page (0–2) and second page (3–5) when tapping the avatar area.
+    @State private var showingAltPage = false
+
+    /// Followers for the currently visible page (up to 3).
+    private var visibleFollowers: [InstagramFollower] {
+        let start = showingAltPage ? 3 : 0
+        let end   = min(start + 3, followers.count)
+        guard start < end else { return Array(followers.prefix(3)) }
+        return Array(followers[start..<end])
+    }
+
+    /// True if there's a second page to toggle to.
+    private var hasAltPage: Bool { followers.count > 3 }
+
     var body: some View {
         HStack(spacing: 4) {
-            // Profile pictures — each tappable
+            // Avatar circles — tap always toggles page, never opens a profile directly.
+            // Profile opening is only via tapping a name in the text section.
             HStack(spacing: -8) {
-                ForEach(followers.prefix(3), id: \.username) { follower in
+                ForEach(visibleFollowers, id: \.username) { follower in
                     if let picURL = follower.profilePicURL,
                        let image = cachedImages[picURL] {
                         Image(uiImage: image)
@@ -2484,44 +2471,52 @@ struct FollowedByView: View {
                             .frame(width: 20, height: 20)
                             .clipShape(Circle())
                             .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                            .onTapGesture { onFollowerTap?(follower) }
+                    } else {
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 20, height: 20)
+                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
                     }
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard hasAltPage else { return }
+                withAnimation(.easeInOut(duration: 0.2)) { showingAltPage.toggle() }
+            }
 
-            // Text — tapping the first name opens that follower's profile
-            if followers.count >= 2 {
-                (
-                    Text("Seguido/a por ")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(white: 0.56))
-                    + Text(followers[0].username)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.black)
-                    + Text(", ")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(white: 0.56))
-                    + Text(followers[1].username)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.black)
-                    + Text(" y ")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(white: 0.56))
-                    + Text("\(max(0, followers.count - 2)) más")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.black)
-                )
-                .onTapGesture { onFollowerTap?(followers[0]) }
-            } else if followers.count == 1 {
-                Text("Seguido/a por ")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(white: 0.56))
-                + Text(followers[0].username)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.black)
+            // Names — each individually tappable, matches the current page
+            if visibleFollowers.count >= 3 {
+                HStack(spacing: 0) {
+                    Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .onTapGesture { onFollowerTap?(visibleFollowers[0]) }
+                    Text(", ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .onTapGesture { onFollowerTap?(visibleFollowers[1]) }
+                    Text(" y ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text(visibleFollowers[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .onTapGesture { onFollowerTap?(visibleFollowers[2]) }
+                }
+            } else if visibleFollowers.count == 2 {
+                HStack(spacing: 0) {
+                    Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .onTapGesture { onFollowerTap?(visibleFollowers[0]) }
+                    Text(" y ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .onTapGesture { onFollowerTap?(visibleFollowers[1]) }
+                }
+            } else if visibleFollowers.count == 1 {
+                HStack(spacing: 0) {
+                    Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .onTapGesture { onFollowerTap?(visibleFollowers[0]) }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.2), value: showingAltPage)
     }
 }
 
@@ -2954,6 +2949,77 @@ struct NotesBubbleView: View {
         }
         .frame(maxWidth: 120)
         .padding(.bottom, 2)
+    }
+}
+
+// MARK: - Spectator Profile Cover
+
+/// Loads a follower's full profile then presents it as a UserProfileView.
+/// Owned by fullScreenCover(item: $selectedSpectator) so each new follower
+/// gets a fresh presentation context with no stale-item race condition.
+private struct SpectatorProfileCover: View {
+    let follower: InstagramFollower
+    let onClose: () -> Void
+
+    @State private var profile: InstagramProfile? = nil
+    @State private var isLoading = true
+    @State private var errorMessage: String? = nil
+
+    var body: some View {
+        Group {
+            if let profile {
+                UserProfileView(profile: profile, onClose: onClose)
+            } else if isLoading {
+                Color.white.ignoresSafeArea()
+                    .overlay(
+                        VStack(spacing: 12) {
+                            ProgressView().scaleEffect(1.2)
+                            Text("Loading profile…")
+                                .font(.system(size: 13))
+                                .foregroundColor(.secondary)
+                        }
+                    )
+            } else {
+                Color.white.ignoresSafeArea()
+                    .overlay(
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 32))
+                                .foregroundColor(.secondary)
+                            Text(errorMessage ?? "Could not load profile")
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                            Button("Close", action: onClose)
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    )
+            }
+        }
+        .task {
+            print("👤 [SPECTATOR] Loading profile for @\(follower.username)")
+            do {
+                if let p = try await InstagramService.shared.getProfileInfo(userId: follower.userId) {
+                    await MainActor.run {
+                        profile = p
+                        isLoading = false
+                    }
+                    print("✅ [SPECTATOR] Profile loaded: @\(p.username)")
+                } else {
+                    await MainActor.run {
+                        errorMessage = "Could not load profile for @\(follower.username)"
+                        isLoading = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isLoading = false
+                }
+                print("❌ [SPECTATOR] Error: \(error)")
+            }
+        }
     }
 }
 

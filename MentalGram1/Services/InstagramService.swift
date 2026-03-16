@@ -1571,7 +1571,7 @@ class InstagramService: ObservableObject {
             print("✅ [PROFILE] Fetching followers, media, reels, tagged & highlights (profile is accessible)")
 
             // Fetch all in parallel
-            async let followersTask   = getFollowedByUsers(userId: uid, count: 3)
+            async let followersTask   = getFollowedByUsers(userId: uid, count: 6)
             async let mediaTask       = getUserMediaItems(userId: uid, amount: 18)
             async let reelsTask       = getUserReels(userId: uid, amount: 18)
             async let taggedTask      = getUserTagged(userId: uid, amount: 18)
