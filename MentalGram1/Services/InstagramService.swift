@@ -21,6 +21,10 @@ class InstagramService: ObservableObject {
     @Published var lockReason: String = ""
     @Published var lockUntil: Date?
     private var consecutiveErrors: Int = 0
+    /// Counts only API "fail" statuses that indicate real bot-risk signals.
+    /// Network errors, timeouts, and transient GET challenges do NOT increment this.
+    /// Precautionary lockdown fires at 5 consecutive bot-signal fails.
+    private var consecutiveBotSignalErrors: Int = 0
 
     // Session expiry — set true when any API call returns 403/401
     // Cleared automatically on successful login
@@ -29,6 +33,16 @@ class InstagramService: ObservableObject {
     /// True while a reveal (unarchive) or re-archive operation is running.
     /// Blocks pull-to-refresh in PerformanceView to avoid extra API calls mid-operation.
     @Published var isRevealOperationActive: Bool = false
+
+    /// True while a profile picture upload is in progress (autoProfilePicOnPerformance).
+    /// Used to block simultaneous OCR reveal operations (anti-bot: avoid two POST operations at once).
+    @Published var isUploadingProfilePic: Bool = false
+    /// Counts consecutive challenge_required responses (GET or POST).
+    /// After ≥2, UI messages suggest re-login as a solution.
+    @Published var challengeRequiredStreak: Int = 0
+    /// True for ~5 minutes after any challenge_required is detected (GET or POST).
+    /// Views use this to skip non-essential API calls and avoid cascading bot signals.
+    @Published var isSessionChallenged: Bool = false
     
     // Network change tracking (anti-bot protection)
     private var lastConnectionType: String = "unknown"
@@ -195,7 +209,10 @@ class InstagramService: ObservableObject {
     // MARK: - Bot Detection & Lockdown
     
     /// Analyze API response for bot detection signals
-    private func checkForBotSignals(data: Data) async throws {
+    /// `isWriteOperation`: true for POST/PUT/DELETE, false for GET.
+    /// For read-only (GET) requests, challenge_required is treated as a transient
+    /// soft-check — we throw the error but skip the app-wide lockdown screen.
+    private func checkForBotSignals(data: Data, isWriteOperation: Bool = true) async throws {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return // Not JSON, skip check
         }
@@ -204,15 +221,24 @@ class InstagramService: ObservableObject {
         let message = json["message"] as? String ?? ""
         let messageLower = message.lowercased()
         
-        // Level 3: Challenge required - Instagram wants verification
+        // Level 3: Challenge required - Instagram wants verification.
+        // For write operations: full lockdown (real bot-risk event).
+        // For read (GET) operations: throw without lockdown — GET challenge_required is
+        // typically a transient soft-check that clears on its own; no action needed.
         if json["challenge"] != nil || messageLower.contains("challenge_required") {
             print("🚨 BOT DETECTED: Challenge required")
             LogManager.shared.bot("Challenge required - Instagram wants verification")
-            await triggerLockdown(
-                reason: "Instagram is asking for verification (challenge_required). Open Instagram app and complete the verification, then come back.",
-                duration: 600 // 10 minutes
-            )
-            throw InstagramError.botDetected("Challenge required - complete verification in Instagram app")
+            await markSessionChallenged(duration: 60)
+            if isWriteOperation {
+                await triggerLockdown(
+                    reason: "Instagram returned a verification challenge. Open the Instagram app — if you see a verification prompt, complete it. If not, this was likely a transient check and will clear in ~3 minutes.",
+                    duration: 180 // 3 minutes — often transient after network changes / re-login
+                )
+                throw InstagramError.botDetected("Challenge required - complete verification in Instagram app")
+            } else {
+                print("⚠️ [API] challenge_required on GET — transient soft-check, no lockdown")
+                throw InstagramError.challengeRequired
+            }
         }
         
         // Level 4: Login required - session invalidated
@@ -248,16 +274,25 @@ class InstagramService: ObservableObject {
             throw InstagramError.botDetected("Action blocked by Instagram")
         }
         
-        // Track consecutive "fail" statuses
+        // Track consecutive "fail" statuses as potential bot signals.
+        // Only "fail" with messages that are NOT network errors count toward
+        // the precautionary lockdown. This avoids false lockdowns from WiFi drops.
         if status == "fail" {
-            await MainActor.run { consecutiveErrors += 1 }
+            let isNetworkRelated = messageLower.contains("connection")
+                || messageLower.contains("timeout")
+                || messageLower.contains("network")
+                || messageLower.contains("offline")
+            await MainActor.run {
+                consecutiveErrors += 1
+                if !isNetworkRelated { consecutiveBotSignalErrors += 1 }
+            }
             
-            // 3 consecutive fails → precautionary lockdown
-            if consecutiveErrors >= 3 {
-                print("🚨 PRECAUTIONARY LOCKDOWN: 3 consecutive API fails")
-                LogManager.shared.bot("Precautionary lockdown - 3 consecutive API failures")
+            // 5 consecutive bot-signal fails → precautionary lockdown
+            if consecutiveBotSignalErrors >= 5 {
+                print("🚨 PRECAUTIONARY LOCKDOWN: \(consecutiveBotSignalErrors) consecutive bot-signal API fails")
+                LogManager.shared.bot("Precautionary lockdown - \(consecutiveBotSignalErrors) consecutive bot-signal API failures")
                 await triggerLockdown(
-                    reason: "Multiple consecutive errors detected. Pausing all activity as a precaution to avoid triggering bot detection.",
+                    reason: "Multiple consecutive API errors detected. Pausing all activity as a precaution.",
                     duration: 300 // 5 minutes
                 )
             }
@@ -274,12 +309,32 @@ class InstagramService: ObservableObject {
         print("🔒 [LOCKDOWN] Reason: \(reason)")
     }
     
+    /// Marks the session as challenged for `duration` seconds.
+    /// During this window, views skip non-essential API calls (profile loads, profile pic
+    /// auto-upload, explore refreshes) to avoid cascading bot signals. Does NOT block
+    /// uploads/archives, which have their own flow management.
+    /// Default 60s cooldown — enough to prevent cascading calls but not so long
+    /// that the user feels the app is broken. POST operations (archive/unarchive)
+    /// check this flag and abort to avoid triggering a full lockdown.
+    private func markSessionChallenged(duration: TimeInterval = 60) async {
+        await MainActor.run { isSessionChallenged = true }
+        print("⚠️ [SESSION] Marked as challenged — background API calls paused for \(Int(duration))s")
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(duration) * 1_000_000_000)
+            await MainActor.run {
+                self.isSessionChallenged = false
+                print("✅ [SESSION] Challenge window cleared — normal operation resumed")
+            }
+        }
+    }
+
     @MainActor
     func unlock() {
         isLocked = false
         lockReason = ""
         lockUntil = nil
         consecutiveErrors = 0
+        consecutiveBotSignalErrors = 0
         print("🔓 [LOCKDOWN] Deactivated")
     }
 
@@ -288,6 +343,7 @@ class InstagramService: ObservableObject {
     @MainActor
     func resetBackoff() {
         consecutiveErrors = 0
+        consecutiveBotSignalErrors = 0
     }
     
     @MainActor
@@ -679,6 +735,15 @@ class InstagramService: ObservableObject {
                     await MainActor.run { self.isSessionExpired = true }
                     throw InstagramError.sessionExpired
                 }
+                // Detect challenge_required in error body (GET → no lockdown, just mark challenged)
+                if let errJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let msg = (errJson["message"] as? String ?? "").lowercased()
+                    if errJson["challenge"] != nil || msg.contains("challenge_required") {
+                        print("⚠️ [STATE-CHECK] challenge_required on GET (transient) — marking session challenged")
+                        await markSessionChallenged(duration: 60)
+                        throw InstagramError.challengeRequired
+                    }
+                }
                 return nil
             }
 
@@ -693,6 +758,9 @@ class InstagramService: ObservableObject {
                 print("⚠️ [STATE-CHECK] Could not parse JSON for pk: \(pk)")
                 return nil
             }
+
+            // Detect bot signals in 200 body (e.g. challenge in a "status":"ok" response)
+            try await checkForBotSignals(data: data, isWriteOperation: false)
 
             // Check top-level status
             let status = json["status"] as? String ?? "unknown"
@@ -764,6 +832,10 @@ class InstagramService: ObservableObject {
     /// Simulates opening the app and browsing before taking action
     func warmUpSession() async {
         guard isLoggedIn else { return }
+        guard !isLocked, !isSessionChallenged else {
+            print("🚫 [WARMUP] Skipped — locked or session challenged")
+            return
+        }
         
         print("🔥 [WARMUP] Simulating app open behavior...")
         LogManager.shared.info("Session warm-up started", category: .api)
@@ -897,6 +969,8 @@ class InstagramService: ObservableObject {
         // ANTI-BOT: Reset consecutive errors on success
         if httpResponse.statusCode == 200 {
             consecutiveErrors = 0
+            consecutiveBotSignalErrors = 0
+            challengeRequiredStreak = 0
         } else {
             consecutiveErrors += 1
         }
@@ -918,14 +992,32 @@ class InstagramService: ObservableObject {
             if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let message = errorJson["message"] as? String ?? ""
                 
-                // Check for challenge_required - MUST trigger lockdown
+                // Check for challenge_required.
+                // For GET (read-only) endpoints Instagram sometimes returns challenge_required
+                // transiently — no real verification screen appears in the Instagram app.
+                // Triggering a full lockdown for a read-only soft-check is too aggressive;
+                // we throw the error so the caller can show a message and let the user retry.
+                // For POST/write operations the lockdown is still required.
                 if message.contains("challenge_required") {
-                    print("🚨 [API] Instagram requires verification challenge")
-                    print("🚨 [API] Go to Instagram app/website to complete verification")
-                    await triggerLockdown(
-                        reason: "Instagram requires verification (challenge_required). Open Instagram app, complete the verification, then wait 10 minutes before using this app again.",
-                        duration: 600 // 10 minutes
-                    )
+                    await MainActor.run { challengeRequiredStreak += 1 }
+                    if method == "GET" {
+                        // Transient soft-check on read endpoint — no lockdown, no alarm.
+                        // Undo the consecutiveErrors increment done above (HTTP != 200 path)
+                        // so GET soft-checks don't cascade into a precautionary lockdown.
+                        consecutiveErrors = max(0, consecutiveErrors - 1)
+                        print("⚠️ [API] challenge_required on GET (transient) — skipping lockdown (streak: \(challengeRequiredStreak))")
+                        LogManager.shared.warning("GET challenge_required (transient) — no lockdown triggered (streak: \(challengeRequiredStreak))", category: .api)
+                        // Signal other views to pause non-essential API calls for 5 min
+                        await markSessionChallenged(duration: 60)
+                    } else {
+                        print("🚨 [API] Instagram requires verification challenge")
+                        print("🚨 [API] Go to Instagram app/website to complete verification")
+                        await triggerLockdown(
+                            reason: "Instagram returned a verification challenge. Open the Instagram app — if you see a verification prompt, complete it. If not, this was likely a transient check (common after network changes or re-login) and will clear in ~3 minutes.",
+                            duration: 180
+                        )
+                        await markSessionChallenged(duration: 60)
+                    }
                     throw InstagramError.challengeRequired
                 }
                 
@@ -942,11 +1034,15 @@ class InstagramService: ObservableObject {
             throw InstagramError.apiError("HTTP \(httpResponse.statusCode)")
         }
         
-        // Check for bot detection signals in response body
-        try await checkForBotSignals(data: data)
+        // Check for bot detection signals in response body.
+        // Pass isWriteOperation so challenge_required on GET skips the lockdown screen.
+        try await checkForBotSignals(data: data, isWriteOperation: method != "GET")
         
-        // Success - reset consecutive error counter
-        await MainActor.run { consecutiveErrors = 0 }
+        // Success - reset consecutive error counters
+        await MainActor.run {
+            consecutiveErrors = 0
+            consecutiveBotSignalErrors = 0
+        }
         
         return data
     }
@@ -1066,6 +1162,10 @@ class InstagramService: ObservableObject {
             print("🚨 [ARCHIVE] Lockdown active - ABORT")
             throw InstagramError.botDetected("Lockdown active. Cannot archive.")
         }
+        if isSessionChallenged {
+            print("🚨 [ARCHIVE] Session challenged - ABORT (would trigger lockdown)")
+            throw InstagramError.challengeRequired
+        }
 
         // PRE-CHECK: only run when the caller hasn't already verified state.
         // Skipping prevents duplicate GETs when called right after syncThenArchiveAll.
@@ -1142,6 +1242,11 @@ class InstagramService: ObservableObject {
         if isLocked {
             print("🚨 [UNARCHIVE] Lockdown active - ABORT")
             throw InstagramError.botDetected("Lockdown active. Cannot reveal/unarchive.")
+        }
+        // If session was recently challenged, skip the POST — it will just trigger lockdown
+        if isSessionChallenged {
+            print("🚨 [UNARCHIVE] Session challenged - ABORT (would trigger lockdown)")
+            throw InstagramError.challengeRequired
         }
 
         // PRE-CHECK: verify Instagram's real state before unarchiving.
@@ -1289,8 +1394,26 @@ class InstagramService: ObservableObject {
         
         // Check for errors
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-            throw InstagramError.apiError("HTTP \(httpResponse.statusCode)")
+            // Detect challenge_required in error body (POST → full lockdown)
+            if let errJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let msg = (errJson["message"] as? String ?? "").lowercased()
+                let errType = (errJson["error_type"] as? String ?? "").lowercased()
+                if errJson["challenge"] != nil || msg.contains("challenge_required") || errType.contains("checkpoint") {
+                    print("🚨 [COMMENT] checkpoint/challenge_required — triggering lockdown")
+                    LogManager.shared.bot("Comment blocked: challenge_required")
+                    await triggerLockdown(
+                        reason: "Instagram blocked a comment request. Open the Instagram app if a checkpoint appeared.",
+                        duration: 180
+                    )
+                    await markSessionChallenged(duration: 60)
+                    throw InstagramError.botDetected("challenge_required on comment")
+                }
+            }
+            throw InstagramError.apiError("HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
         }
+
+        // Detect bot signals in 200 body
+        try await checkForBotSignals(data: data, isWriteOperation: true)
         
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let comment = json["comment"] as? [String: Any] {
@@ -2421,6 +2544,29 @@ class InstagramService: ObservableObject {
             }
             
             print("❌ [UPLOAD] Failed to get upload_id. Detail: \(errorDetail)")
+
+            // If the upload response contains checkpoint_challenge_required with lock:true,
+            // this is a REAL Instagram checkpoint — not a transient GET soft-check.
+            // Trigger a proper lockdown so the user knows to complete verification.
+            if let uploadJson2 = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] {
+                let msg2 = uploadJson2["message"] as? String ?? ""
+                let errType = uploadJson2["error_type"] as? String ?? ""
+                if msg2.contains("challenge_required") || errType.contains("checkpoint") {
+                    let challengeDict = uploadJson2["challenge"] as? [String: Any]
+                    let challengeURL  = challengeDict?["url"] as? String ?? "https://instagram.com"
+                    let isLocked      = challengeDict?["lock"] as? Bool ?? false
+                    print("🚨 [UPLOAD] checkpoint_challenge_required (lock:\(isLocked)) — triggering lockdown")
+                    print("🚨 [UPLOAD] Complete checkpoint at: \(challengeURL)")
+                    LogManager.shared.bot("Upload blocked: checkpoint_challenge_required (lock:\(isLocked))")
+                    await triggerLockdown(
+                        reason: "Instagram blocked the upload and requires checkpoint verification. Open the Instagram app — if you see a verification prompt complete it, otherwise wait ~5 minutes.",
+                        duration: 300  // 5 minutes; user can unlock early after completing checkpoint
+                    )
+                    await markSessionChallenged(duration: 60)
+                    throw InstagramError.botDetected("checkpoint_challenge_required (lock:\(isLocked))")
+                }
+            }
+
             let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
             LogManager.shared.error("Upload failed: \(photoDesc) - \(errorDetail)", category: .upload)
             throw InstagramError.apiError("Upload failed (\(errorDetail))")
@@ -2915,13 +3061,24 @@ class InstagramService: ObservableObject {
     /// - Image hash is different from last upload
     func changeProfilePicture(imageData: Data) async throws -> Bool {
         print("🖼️ [PROFILE PIC] Starting profile picture change...")
-        
+
         // CRITICAL: Check lockdown
         if isLocked {
             print("🚨 [PROFILE PIC] Lockdown active - ABORT")
             throw InstagramError.apiError("Lockdown active. Wait before changing profile picture.")
         }
-        
+
+        // Prevent re-entrant calls (e.g. auto-pic + manual upload racing)
+        guard !isUploadingProfilePic else {
+            print("⚠️ [PROFILE PIC] Already uploading — skipped re-entrant call")
+            throw InstagramError.apiError("A profile picture upload is already in progress.")
+        }
+
+        // Mark upload in progress globally so other API calls can yield.
+        // defer guarantees the flag is cleared in every exit path (success, throw, or cancel).
+        await MainActor.run { isUploadingProfilePic = true }
+        defer { Task { @MainActor in self.isUploadingProfilePic = false } }
+
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
         
@@ -3005,6 +3162,25 @@ class InstagramService: ObservableObject {
             if let errorText = String(data: uploadData, encoding: .utf8) {
                 print("   Error: \(errorText)")
             }
+
+            // Detect checkpoint_challenge_required (same pattern as uploadPhoto)
+            if let errJson = try? JSONSerialization.jsonObject(with: uploadData) as? [String: Any] {
+                let msg = errJson["message"] as? String ?? ""
+                let errType = errJson["error_type"] as? String ?? ""
+                if msg.contains("challenge_required") || errType.contains("checkpoint") {
+                    let challengeDict = errJson["challenge"] as? [String: Any]
+                    let isLock = challengeDict?["lock"] as? Bool ?? false
+                    print("🚨 [PROFILE PIC] checkpoint_challenge_required (lock:\(isLock)) — triggering lockdown")
+                    LogManager.shared.bot("Profile pic upload blocked: checkpoint_challenge_required (lock:\(isLock))")
+                    await triggerLockdown(
+                        reason: "Instagram blocked the profile pic upload and requires checkpoint verification. Open the Instagram app to complete it.",
+                        duration: 300
+                    )
+                    await markSessionChallenged(duration: 60)
+                    throw InstagramError.botDetected("checkpoint_challenge_required (lock:\(isLock))")
+                }
+            }
+
             throw InstagramError.uploadFailed
         }
         

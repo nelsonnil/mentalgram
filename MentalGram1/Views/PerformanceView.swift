@@ -58,6 +58,12 @@ struct PerformanceView: View {
     @State private var showUploadConflictAlert = false
     @State private var spectatorLoadError: String? = nil
 
+    // MARK: - Anti-bot: auto-pause upload while Performance is visible
+    // True when PerformanceView itself requested the pause (not the user, not an error).
+    // Used in onDisappear to signal SetDetailView to auto-resume.
+    @State private var didAutoPauseUpload = false
+    @ObservedObject private var uploadManager = UploadManager.shared
+
     // MARK: - Refresh throttle (prevent rapid consecutive API calls)
     @State private var lastRefreshDate: Date? = nil
     private let minRefreshInterval: TimeInterval = 10
@@ -320,6 +326,17 @@ struct PerformanceView: View {
                 showingHomeScreenIllusion = true
                 print("🏠 [ILLUSION] Fake home screen active — tap to reveal profile")
             }
+
+            // Anti-bot: if a set upload is actively running, pause it while we're here.
+            // Parallel API calls (upload POSTs + profile GETs / auto-pic POSTs) from the
+            // same session are a strong bot signal.
+            if uploadManager.isUploading {
+                uploadManager.requestPause = true
+                didAutoPauseUpload = true
+                print("⏸️ [PERF] Upload paused — entering Performance view (anti-bot)")
+                LogManager.shared.warning("Upload auto-paused: Performance view opened", category: .general)
+            }
+
             // Activate volume button detection for FollowingMagic and/or OCR.
             // prepareVolume() warms up the audio session and slider (must run first).
             // startMonitoring() registers the KVO observer that increments upCount/downCount.
@@ -332,36 +349,55 @@ struct PerformanceView: View {
                 VolumeButtonMonitor.shared.startMonitoring()
             }
             checkAndLoadProfile()
-            // Auto profile pic: run silently in background, no UI disruption
-            if autoProfilePicOnPerformance {
-                Task { await autoUploadLatestGalleryPhoto() }
-            }
-            // URL scheme action (takes priority over other auto-modes)
-            if let action = urlAction.consume() {
-                if action.mode.hasPrefix("profilepic") {
-                    Task { await applyURLProfilePicAction(mode: action.mode, data: action.text) }
+
+            // Serialize all auto-actions in a single sequential Task.
+            // Running them in parallel creates concurrent API calls from the
+            // same session → strong bot signal (especially POST+GET combos).
+            Task { @MainActor in
+                // 1. Auto profile pic (POST) — wait for loadProfile to finish first
+                if autoProfilePicOnPerformance {
+                    // Brief pause so loadProfile's GET finishes or at least starts
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                        print("📷 [AUTO PIC] Skipped in serial queue — locked or challenged")
+                        return
+                    }
+                    await autoUploadLatestGalleryPhoto()
+                }
+
+                // 2. URL scheme action OR clipboard OR API auto-mode (never more than one)
+                if let action = urlAction.consume() {
+                    if action.mode.hasPrefix("profilepic") {
+                        await applyURLProfilePicAction(mode: action.mode, data: action.text)
+                    } else {
+                        await applyURLAction(mode: action.mode, text: action.text)
+                    }
+                } else if clipboardAutoMode != "" {
+                    await applyClipboardAutoMode()
                 } else {
-                    Task { await applyURLAction(mode: action.mode, text: action.text) }
-                }
-            } else if clipboardAutoMode != "" {
-                Task { await applyClipboardAutoMode() }
-            } else {
-                // Magic API auto-mode
-                if integrations.noteApiSource != .none && noteTopInputMode == "api" {
-                    Task { await applyApiAutoMode(target: "note") }
-                }
-                if integrations.bioApiSource != .none && bioTopInputMode == "api" {
-                    Task { await applyApiAutoMode(target: "bio") }
+                    if integrations.noteApiSource != .none && noteTopInputMode == "api" {
+                        await applyApiAutoMode(target: "note")
+                    }
+                    if integrations.bioApiSource != .none && bioTopInputMode == "api" {
+                        await applyApiAutoMode(target: "bio")
+                    }
                 }
             }
-            // OCR is no longer auto-started here — it starts on volume UP press instead.
-            // Reset per-session OCR lock so entering Performance always allows one reveal.
             ocrUsedInSession = false
         }
         .onDisappear {
             // Stop volume monitoring and OCR when leaving Performance
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
+
+            // Anti-bot: if we auto-paused an upload on appear, signal SetDetailView to resume it.
+            // Only resume if the upload is still in .paused state (user didn't cancel/error).
+            if didAutoPauseUpload && uploadManager.isPaused {
+                uploadManager.autoResumePending = true
+                print("▶️ [PERF] Leaving Performance — signalling upload to auto-resume")
+                LogManager.shared.info("Upload auto-resume pending: leaving Performance view", category: .general)
+            }
+            didAutoPauseUpload = false
         }
     }
     
@@ -695,9 +731,19 @@ struct PerformanceView: View {
         // Anti-bot: delay 5s so this doesn't compete with Explore background refresh at startup
         try? await Task.sleep(nanoseconds: 5_000_000_000)
 
-        // Re-check after delay
+        // Re-check after delay: bail if locked, uploading profile pic, or session challenged
         guard !instagram.isLocked else {
             print("🚫 [CACHE] Supplementary fetch skipped — lockdown active after startup delay")
+            return
+        }
+        guard !instagram.isUploadingProfilePic else {
+            print("🚫 [CACHE] Supplementary fetch skipped — profile pic upload in progress (anti-bot)")
+            LogManager.shared.warning("Supplementary fetch skipped: profile pic upload active", category: .general)
+            return
+        }
+        guard !instagram.isSessionChallenged else {
+            print("🚫 [CACHE] Supplementary fetch skipped — session in challenged state (anti-bot cooldown)")
+            LogManager.shared.warning("Supplementary fetch skipped: session recently challenged", category: .general)
             return
         }
 
@@ -768,6 +814,15 @@ struct PerformanceView: View {
             LogManager.shared.warning("loadProfile throttled: \(waited)s since last refresh", category: .general)
             return
         }
+
+        // Anti-bot: skip if profile-pic POST is running, OR if the session is in a challenged
+        // state (challenge_required detected recently). Making more calls while challenged
+        // escalates bot signals and can cause action_blocked lockdowns.
+        if instagram.isUploadingProfilePic {
+            print("🚫 [PERF] loadProfile skipped — profile pic upload in progress (anti-bot)")
+            LogManager.shared.warning("loadProfile skipped: profile pic upload active", category: .general)
+            return
+        }
         lastRefreshDate = Date()
 
         print("🔄 [PERF] loadProfile starting — full profile refresh")
@@ -804,8 +859,17 @@ struct PerformanceView: View {
         } catch let error as InstagramError {
             print("⚠️ Instagram error detected: \(error)")
             isLoading = false
-            lastError = error
-            showingConnectionError = true
+            switch error {
+            case .challengeRequired:
+                // Transient GET challenge — the session will recover on its own.
+                // Do NOT show the connection error alert; it would confuse the user
+                // since no actual bot detection appears in the Instagram app.
+                print("⚠️ [PERF] loadProfile: transient challenge_required — suppressing connection error alert")
+                LogManager.shared.warning("loadProfile: transient challenge_required — alert suppressed", category: .general)
+            default:
+                lastError = error
+                showingConnectionError = true
+            }
         } catch {
             print("❌ Error loading profile: \(error)")
             isLoading = false
@@ -1217,6 +1281,18 @@ struct PerformanceView: View {
             print("⚠️ [PERF] Silent refresh skipped — locked or no profile")
             return
         }
+        // Anti-bot: skip silent GET if a profile-pic POST is still running, or if the
+        // session is in a challenged state — avoid cascading bot signals.
+        guard !instagram.isUploadingProfilePic else {
+            print("⚠️ [PERF] Silent refresh skipped — profile pic upload in progress (anti-bot)")
+            LogManager.shared.warning("Silent refresh skipped: profile pic upload active", category: .general)
+            return
+        }
+        guard !instagram.isSessionChallenged else {
+            print("⚠️ [PERF] Silent refresh skipped — session in challenged state (anti-bot cooldown)")
+            LogManager.shared.warning("Silent refresh skipped: session recently challenged", category: .general)
+            return
+        }
 
         // No delay needed: the grid already shows local images via pseudo-URLs.
         // This GET only replaces pseudo-URLs with real CDN URLs in the background.
@@ -1318,9 +1394,30 @@ struct PerformanceView: View {
             return
         }
 
-        print("📷 [AUTO PIC] Uploading new profile picture (\(imageData.count / 1024) KB)…")
+        // Anti-bot: block if any sensitive operation is already in progress.
+        // Two concurrent POST operations from the same session is a strong bot signal.
+        guard !instagram.isRevealOperationActive else {
+            print("📷 [AUTO PIC] Skipped — OCR reveal is active (anti-bot)")
+            LogManager.shared.warning("Auto profile pic skipped: OCR reveal active", category: .general)
+            return
+        }
+        // If the session was recently challenged (challenge_required returned for any call),
+        // skip the profile-pic POST — it is the most likely cause of escalating to action_blocked.
+        guard !instagram.isSessionChallenged else {
+            print("📷 [AUTO PIC] Skipped — session in challenged state (anti-bot cooldown)")
+            LogManager.shared.warning("Auto profile pic skipped: session recently challenged", category: .general)
+            return
+        }
+        guard !isLoading else {
+            print("📷 [AUTO PIC] Skipped — profile refresh is in progress (anti-bot)")
+            LogManager.shared.warning("Auto profile pic skipped: profile refresh active", category: .general)
+            return
+        }
 
-        // ── Upload ──
+        print("📷 [AUTO PIC] Uploading new profile picture (\(imageData.count / 1024) KB)…")
+        // NOTE: isUploadingProfilePic flag is now managed inside changeProfilePicture() itself,
+        // so all callers (auto-pic, HomeView manual upload) are covered automatically.
+
         do {
             let success = try await instagram.changeProfilePicture(imageData: imageData)
             if success, let uiImage = UIImage(data: imageData) {
@@ -1547,6 +1644,23 @@ struct InstagramProfileView: View {
             guard ForceNumberRevealSettings.shared.ocrEnabled else { return }
             guard !UploadManager.shared.isActive else {
                 print("⚠️ [OCR-PP] Reveal blocked: upload is active")
+                return
+            }
+            // Anti-bot: if a profile pic upload is running, delay reveal until it finishes.
+            // Two simultaneous POST operations from the same session is a bot signal.
+            guard !InstagramService.shared.isUploadingProfilePic else {
+                print("⚠️ [OCR-PP] Reveal blocked: profile pic upload in progress (anti-bot)")
+                LogManager.shared.warning("OCR reveal blocked: profile pic upload active", category: .general)
+                // Retry once after a short delay to avoid losing the reveal
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s
+                    guard !InstagramService.shared.isUploadingProfilePic else {
+                        print("⚠️ [OCR-PP] Reveal still blocked after 3s wait — aborting")
+                        return
+                    }
+                    // Re-trigger reveal after pic upload finishes
+                    await MainActor.run { pendingOCRWord = word }
+                }
                 return
             }
             let cleaned = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

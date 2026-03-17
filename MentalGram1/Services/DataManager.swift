@@ -297,7 +297,14 @@ class DataManager: ObservableObject {
         let newPosition = (set.banks.map(\.position).max() ?? 0) + 1
         let newBank = Bank(id: UUID(), position: newPosition, name: "Bank \(newPosition)")
 
-        // Get slot symbols from bank 1 (or from the existing slot labels)
+        // Find previous bank to copy images from
+        let prevBank = set.banks.max(by: { $0.position < $1.position })
+        let prevPhotos = prevBank.map { pb in set.photos.filter { $0.bankId == pb.id } } ?? []
+        let prevBySymbol = Dictionary(uniqueKeysWithValues: prevPhotos.compactMap { p -> (String, Data)? in
+            guard let data = p.imageData else { return nil }
+            return (p.symbol, data)
+        })
+
         let slotLabels = set.slotLabels
         var newPhotos: [SetPhoto] = []
         for symbol in slotLabels {
@@ -307,7 +314,7 @@ class DataManager: ObservableObject {
                 bankId: newBank.id,
                 symbol: symbol,
                 filename: "\(symbol.lowercased())_bank\(newPosition).jpg",
-                imageData: nil,
+                imageData: prevBySymbol[symbol],  // copy image from previous bank if available
                 mediaId: nil,
                 isArchived: false,
                 uploadDate: nil,
@@ -321,7 +328,8 @@ class DataManager: ObservableObject {
         sets[setIndex].banks.append(newBank)
         sets[setIndex].photos.append(contentsOf: newPhotos)
         saveSets()
-        print("➕ [BANK] Added bank \(newPosition) to set '\(set.name)' — \(newPhotos.count) slots")
+        let copied = newPhotos.filter { $0.imageData != nil }.count
+        print("➕ [BANK] Added bank \(newPosition) to set '\(set.name)' — \(newPhotos.count) slots, \(copied) images copied from previous bank")
         return newBank
     }
 

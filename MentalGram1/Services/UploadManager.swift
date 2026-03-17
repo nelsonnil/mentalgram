@@ -24,6 +24,10 @@ class UploadManager: ObservableObject {
     // MARK: - Pause Request (checked by upload loop)
     @Published var requestPause = false
 
+    // MARK: - Auto-resume (set by PerformanceView.onDisappear when it auto-paused the upload)
+    // SetDetailView watches this via onChange and calls resumeUpload() when it turns true.
+    @Published var autoResumePending: Bool = false
+
     // MARK: - Sync & Archive lock
     // True while the unified syncThenArchiveAll operation is running.
     // Auto re-archive checks this flag and defers if active.
@@ -34,6 +38,7 @@ class UploadManager: ObservableObject {
     @Published var reverifyProgress: Int = 0
     @Published var reverifyTotal: Int = 0
     @Published var reverifyDesynced: Int = 0
+    @Published var reverifyError: String? = nil   // shown in UI when fetch fails
     var reverifyTask: Task<Void, Never>? = nil
     
     // MARK: - Active Upload Task (to detect orphaned states)
@@ -142,6 +147,7 @@ class UploadManager: ObservableObject {
         nextPhotoCountdown = 0
         cooldownRetryDisabledUntil = nil
         requestPause = false
+        autoResumePending = false
         activeTask?.cancel()
         activeTask = nil
         clearWaitPersistence()

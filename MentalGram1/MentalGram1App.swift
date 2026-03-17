@@ -126,21 +126,37 @@ struct LockdownView: View {
                     .font(.title2.weight(.semibold))
                     .foregroundColor(.primary)
                 
-                Text("Check your connection and try again.")
+                Text(instagram.challengeRequiredStreak >= 2
+                    ? "This keeps happening. Try logging out and back in."
+                    : "Check your connection and try again.")
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                 
-                Button(action: {}) {
-                    Text("Try Again")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(width: 200, height: 44)
-                        .background(Color.blue)
-                        .cornerRadius(10)
+                if instagram.challengeRequiredStreak >= 2 {
+                    Button(action: {
+                        instagram.emergencyLogout()
+                    }) {
+                        Text("Log Out & Retry")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(width: 200, height: 44)
+                            .background(Color.orange)
+                            .cornerRadius(10)
+                    }
+                    .padding(.top, 10)
+                } else {
+                    Button(action: {}) {
+                        Text("Try Again")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(width: 200, height: 44)
+                            .background(Color.blue)
+                            .cornerRadius(10)
+                    }
+                    .padding(.top, 10)
                 }
-                .padding(.top, 10)
                 
                 Spacer()
                 

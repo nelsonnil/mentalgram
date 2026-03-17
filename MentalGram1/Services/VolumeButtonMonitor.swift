@@ -29,10 +29,19 @@ class VolumeButtonMonitor: ObservableObject {
 
     /// Activates the audio session and warms up the volume view.
     /// Call when entering Performance view so the slider is ready before startMonitoring.
+    /// If monitoring is already active this only reactivates the session — it does NOT
+    /// reset the slider (which would cause a spurious KVO and block the next real press).
     func prepareVolume() {
         activateSession()
+        guard volumeObservation == nil else {
+            // Already monitoring: no-op beyond session reactivation.
+            // Resetting the slider here would fire a spurious KVO that temporarily
+            // sets isResetting=true and blocks the next user press for ~0.35s.
+            return
+        }
         setupPersistentVolumeView()
-        // Give the view time to attach, then reset to 50%
+        // Suppress the KVO that fires when we reset the slider below
+        isResetting = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.resetVolume()
         }
@@ -44,7 +53,8 @@ class VolumeButtonMonitor: ObservableObject {
         activateSession()
         if cachedSlider == nil { setupPersistentVolumeView() }
 
-        // Suppress spurious KVO fired during setup
+        // isResetting is already set to true by prepareVolume(); set it again here
+        // in case startMonitoring is called standalone without prepareVolume.
         isResetting = true
 
         volumeObservation = AVAudioSession.sharedInstance()
@@ -65,14 +75,16 @@ class VolumeButtonMonitor: ObservableObject {
                     // Reset immediately using cached slider (no async view creation)
                     self.isResetting = true
                     self.resetVolume()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         self.isResetting = false
                     }
                 }
             }
 
-        // Open the gate after session settles
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        // Open the gate after the prepareVolume reset (0.1s) has settled.
+        // 0.2s is enough: prepareVolume resets at 0.1s → KVO fires → suppressed by isResetting.
+        // Reduced from 0.5s to shrink the startup blind-spot window.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.isResetting = false
         }
     }

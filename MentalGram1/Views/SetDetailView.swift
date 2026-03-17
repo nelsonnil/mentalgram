@@ -187,30 +187,57 @@ struct SetDetailView: View {
 
     @ViewBuilder private var reverifySection: some View {
         if instagram.isLoggedIn && visibleUploadedPhotos.isEmpty && !allUploadedPhotos.isEmpty && !isSyncing && !isArchivingAll {
-            if uploadManager.isReverifying {
-                HStack(spacing: 8) {
-                    ProgressView().scaleEffect(0.75)
-                    Text("Re-verifying \(uploadManager.reverifyProgress)/\(uploadManager.reverifyTotal)…")
-                        .font(.caption).foregroundColor(.secondary)
-                    if uploadManager.reverifyDesynced > 0 {
-                        Text("(\(uploadManager.reverifyDesynced) desync)")
-                            .font(.caption).foregroundColor(.orange)
-                    }
-                }
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(Color.gray.opacity(0.08)).cornerRadius(8)
-            } else {
-                Button { startReverify() } label: {
+            VStack(spacing: 6) {
+                if uploadManager.isReverifying {
                     HStack(spacing: 8) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 13)).foregroundColor(.secondary)
-                        Text("Re-verify all (\(allUploadedPhotos.count) photos)")
+                        ProgressView().scaleEffect(0.75)
+                        Text("Re-verifying \(uploadManager.reverifyProgress)/\(uploadManager.reverifyTotal)…")
                             .font(.caption).foregroundColor(.secondary)
+                        if uploadManager.reverifyDesynced > 0 {
+                            Text("(\(uploadManager.reverifyDesynced) desync)")
+                                .font(.caption).foregroundColor(.orange)
+                        }
                     }
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(Color.gray.opacity(0.08)).cornerRadius(8)
+                } else {
+                    // Error banner — shown when the previous re-verify attempt failed
+                    if let err = uploadManager.reverifyError {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 12)).foregroundColor(.orange)
+                            Text(err)
+                                .font(.caption).foregroundColor(.orange)
+                                .lineLimit(2)
+                            Spacer()
+                            Button {
+                                uploadManager.reverifyError = nil
+                                startReverify()
+                            } label: {
+                                Text("Retry")
+                                    .font(.caption.bold()).foregroundColor(.orange)
+                            }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.08)).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.2), lineWidth: 1))
+                    }
+
+                    Button {
+                        uploadManager.reverifyError = nil
+                        startReverify()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 13)).foregroundColor(.secondary)
+                            Text("Re-verify all (\(allUploadedPhotos.count) photos)")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Color.gray.opacity(0.08)).cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -299,6 +326,45 @@ struct SetDetailView: View {
         .onDisappear {
             // NO invalidar timers aquí - deben seguir corriendo en background
             // Solo los invalidamos cuando el upload termina/pausa/cancela
+        }
+        // Anti-bot: PerformanceView sets autoResumePending when it leaves after having
+        // auto-paused the upload. We react here (onChange fires even after onAppear order issues).
+        .onChange(of: uploadManager.autoResumePending) { pending in
+            guard pending else { return }
+            // Never auto-resume while Sync & Archive is in progress — concurrent POST
+            // calls (upload + archive) from the same session trigger bot detection.
+            guard isThisSetActive && uploadManager.isPaused && !uploadManager.isSyncArchiveActive else {
+                uploadManager.autoResumePending = false
+                return
+            }
+            uploadManager.autoResumePending = false
+            // Brief delay to let Performance view fully dismiss and its API calls settle.
+            // If the session is in a challenged state, wait until it clears before resuming
+            // to avoid firing requests into a temporarily restricted session.
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s safety gap
+
+                // Wait up to 2 min for challenge window to clear (checks every 10s)
+                var challengeWaitLoops = 0
+                while instagram.isSessionChallenged && challengeWaitLoops < 12 {
+                    challengeWaitLoops += 1
+                    print("⏸️ [UPLOAD] Auto-resume waiting — session challenged (\(challengeWaitLoops * 10)s)")
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                }
+
+                // Re-check: S&A might have started during the wait, or lockdown activated
+                guard uploadManager.isPaused && isThisSetActive && !uploadManager.isSyncArchiveActive else {
+                    print("⏸️ [UPLOAD] Auto-resume skipped — S&A active or state changed")
+                    return
+                }
+                guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                    print("⏸️ [UPLOAD] Auto-resume skipped — locked or still challenged")
+                    return
+                }
+                print("▶️ [UPLOAD] Auto-resuming after Performance view — anti-bot gap cleared")
+                LogManager.shared.info("Upload auto-resumed: returned from Performance view", category: .general)
+                await MainActor.run { resumeUpload() }
+            }
         }
         .onChange(of: slotPickerItem) { newItem in
             guard let item = newItem, let symbol = targetSlotSymbol else { return }
@@ -408,7 +474,10 @@ struct SetDetailView: View {
     /// that could be desynced from Instagram's real archive state.
     @ViewBuilder
     private var verifySyncSection: some View {
-        if instagram.isLoggedIn && !visibleUploadedPhotos.isEmpty {
+        // Keep the section visible while any S&A operation is active, even if
+        // visibleUploadedPhotos becomes empty mid-archive (all photos archived).
+        let saIsActive = isSyncing || isArchivingAll || uploadManager.isSyncArchiveActive || archiveAllCompleted
+        if instagram.isLoggedIn && (!visibleUploadedPhotos.isEmpty || saIsActive) {
             VStack(spacing: 8) {
 
                 // ── Phase 1 running: verifying ─────────────────────────
@@ -802,6 +871,11 @@ struct SetDetailView: View {
     private func startReverify() {
         let photos = allUploadedPhotos
         guard !photos.isEmpty, !uploadManager.isReverifying else { return }
+        guard !instagram.isLocked else {
+            uploadManager.reverifyError = "App is in safety lockdown — wait for it to clear."
+            print("⚠️ [RE-VERIFY] Skipped — lockdown active")
+            return
+        }
 
         let photoSnapshots: [(id: UUID, mediaId: String, isArchived: Bool)] = photos.compactMap { p in
             guard let mid = p.mediaId else { return nil }
@@ -828,8 +902,10 @@ struct SetDetailView: View {
             var page = 0
 
             do {
+                await MainActor.run { manager.reverifyError = nil }
                 repeat {
                     page += 1
+                    print("🔍 [RE-VERIFY] Fetching page \(page) from /feed/user/…")
                     let (items, cursor) = try await ig.getUserMedia(maxId: nextMaxId)
                     for item in items {
                         visibleOnIG.insert(item.id)
@@ -842,9 +918,40 @@ struct SetDetailView: View {
                         try? await Task.sleep(nanoseconds: 1_000_000_000)
                     }
                 } while nextMaxId != nil
+            } catch let igErr as InstagramError {
+                let isChallengeOrBot: Bool
+                switch igErr {
+                case .challengeRequired: isChallengeOrBot = true
+                case .botDetected: isChallengeOrBot = true
+                default: isChallengeOrBot = false
+                }
+                if isChallengeOrBot {
+                    let streak = await MainActor.run { InstagramService.shared.challengeRequiredStreak }
+                    let reloginHint = streak >= 2
+                        ? "\n\nThis has happened multiple times. Try logging out and back in (Settings) to refresh the session."
+                        : ""
+                    print("⚠️ [RE-VERIFY] challenge_required on feed fetch — Instagram soft-check (streak: \(streak))")
+                    LogManager.shared.warning("Re-verify: feed returned challenge_required (streak: \(streak))", category: .api)
+                    await MainActor.run {
+                        manager.reverifyError = "Instagram requires a temporary check. Wait a few minutes and try again." + reloginHint
+                        manager.isReverifying = false
+                        manager.reverifyTask = nil
+                    }
+                } else {
+                    print("❌ [RE-VERIFY] Failed to fetch feed: \(igErr.localizedDescription)")
+                    LogManager.shared.warning("Re-verify failed: \(igErr.localizedDescription)", category: .api)
+                    await MainActor.run {
+                        manager.reverifyError = igErr.localizedDescription
+                        manager.isReverifying = false
+                        manager.reverifyTask = nil
+                    }
+                }
+                return
             } catch {
-                print("❌ [RE-VERIFY] Failed to fetch feed: \(error.localizedDescription)")
+                print("❌ [RE-VERIFY] Network error: \(error.localizedDescription)")
+                LogManager.shared.warning("Re-verify network error: \(error.localizedDescription)", category: .api)
                 await MainActor.run {
+                    manager.reverifyError = "Network error — check your connection and try again."
                     manager.isReverifying = false
                     manager.reverifyTask = nil
                 }
@@ -907,6 +1014,10 @@ struct SetDetailView: View {
         let photos = visibleUploadedPhotos
         guard !photos.isEmpty, !isSyncing, !isArchivingAll else {
             print("⚠️ [S&A] Already running or no photos")
+            return
+        }
+        guard !instagram.isLocked else {
+            print("⚠️ [S&A] Skipped — lockdown active")
             return
         }
 
@@ -1006,6 +1117,21 @@ struct SetDetailView: View {
         }
 
         // ── PHASE 2: ARCHIVE ──────────────────────────────────────────────
+        // Anti-bot: if a photo upload is running in parallel, pause it first.
+        // Concurrent POST requests (archive + upload) from the same session
+        // increase bot-detection risk and can cause silent archive failures.
+        if uploadManager.isUploading {
+            print("⏸️ [S&A] Pausing active upload before archiving (anti-bot)")
+            LogManager.shared.info("S&A: pausing upload to avoid concurrent API calls", category: .general)
+            await MainActor.run { uploadManager.requestPause = true }
+            // Give the upload loop up to 6 s to react and actually stop
+            for _ in 0..<12 {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 s
+                if uploadManager.isPaused || !uploadManager.isUploading { break }
+            }
+            print("⏸️ [S&A] Upload stopped — starting archive phase")
+        }
+
         print("📦 [S&A] Phase 2: archiving \(confirmedToArchive.count) photo(s) (no pre-check GET)")
         LogManager.shared.info("Archive All started: \(confirmedToArchive.count) photo(s)", category: .general)
 
@@ -2247,6 +2373,7 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD] Ignored duplicate startUpload() call — already active (phase: \(uploadManager.uploadPhase))")
             return
         }
+        
 
         // Safe to reset: no active task exists at this point
         uploadManager.resetAllState()
@@ -2423,13 +2550,17 @@ struct SetDetailView: View {
         // archive step (network change, crash, background kill). Without this pass
         // those photos are permanently skipped by the `mediaId == nil` filter below
         // and stay visually stuck as "archiving" with no recovery path.
+        // Rescue pass: catch photos that have a mediaId but are not yet archived.
+        // Includes .archiving/.uploaded (normal interrupted states) AND .error (session
+        // expired or bot-detected mid-archive — the error handler now leaves those in
+        // .archiving, but .error is kept here as a safety net for any edge cases).
         let stuckPhotos = currentSet.photos.filter {
             $0.mediaId != nil && !$0.isArchived &&
-            ($0.uploadStatus == .archiving || $0.uploadStatus == .uploaded)
+            ($0.uploadStatus == .archiving || $0.uploadStatus == .uploaded || $0.uploadStatus == .error)
         }
         if !stuckPhotos.isEmpty {
-            print("🔧 [RESCUE] Found \(stuckPhotos.count) photo(s) stuck mid-archive — retrying archive...")
-            LogManager.shared.warning("Rescue pass: \(stuckPhotos.count) photo(s) stuck in archiving state", category: .upload)
+            print("🔧 [RESCUE] Found \(stuckPhotos.count) photo(s) needing archive recovery...")
+            LogManager.shared.warning("Rescue pass: \(stuckPhotos.count) photo(s) with mediaId need archiving (statuses: \(stuckPhotos.map { $0.uploadStatus.rawValue }.joined(separator: ", ")))", category: .upload)
 
             await MainActor.run {
                 uploadManager.uploadPhase = .archiving(photoNumber: 0)
@@ -2651,7 +2782,17 @@ struct SetDetailView: View {
                     
                     if isSessionExpired {
                         LogManager.shared.error("Session expired at \(photoInfo) - re-login required", category: .auth)
-                        dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Session expired")
+
+                        // If the photo was already uploaded (has a mediaId in the DB), do NOT
+                        // overwrite its .archiving status with .error. The rescue pass at the
+                        // start of the next upload will re-archive it automatically.
+                        // Only mark as .error when the session expired before the upload itself.
+                        let photoAlreadyUploaded = currentSet.photos.first(where: { $0.id == photo.id })?.mediaId != nil
+                        if !photoAlreadyUploaded {
+                            dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Session expired")
+                        }
+                        // If already uploaded: leave the existing .archiving status intact.
+                        // Rescue pass will handle re-archiving on next upload start.
                         
                         await MainActor.run {
                             uploadManager.failedPhotoIndex = index
@@ -2665,7 +2806,12 @@ struct SetDetailView: View {
                         
                     } else if isBotError {
                         LogManager.shared.bot("Bot detection triggered at \(photoInfo): \(error.localizedDescription)")
-                        dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Bot detected")
+                        // Same guard as session expiry: if photo was already uploaded, don't
+                        // clobber its .archiving status. The rescue pass will re-archive it.
+                        let photoAlreadyUploadedForBot = currentSet.photos.first(where: { $0.id == photo.id })?.mediaId != nil
+                        if !photoAlreadyUploadedForBot {
+                            dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Bot detected")
+                        }
                         
                         await MainActor.run {
                             uploadManager.failedPhotoIndex = index

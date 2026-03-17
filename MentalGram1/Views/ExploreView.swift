@@ -305,6 +305,11 @@ struct ExploreView: View {
 
             guard !Task.isCancelled else { return }
 
+            guard !InstagramService.shared.isLocked else {
+                print("🚫 [EXPLORE] Search skipped — lockdown active")
+                return
+            }
+
             await MainActor.run { isSearching = true }
 
             do {
@@ -324,8 +329,12 @@ struct ExploreView: View {
     }
     
     private func loadUserProfile(userId: String) {
+        guard !InstagramService.shared.isLocked else {
+            print("🚫 [SEARCH] Profile load skipped — lockdown active")
+            return
+        }
+
         // ANTI-BOT: Enforce minimum 5 s gap between consecutive profile loads.
-        // Tapping results quickly would otherwise fire getProfileInfo (5 parallel calls) in rapid succession.
         let now = Date()
         let elapsed = now.timeIntervalSince(lastProfileLoadTime)
         guard elapsed >= 5 else {
@@ -376,6 +385,12 @@ struct ExploreView: View {
         // We need to fetch it asynchronously if not cached
         if secretInputSettings.mode == .latestFollower {
             Task {
+                guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                    await MainActor.run {
+                        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
+                    }
+                    return
+                }
                 do {
                     let follower = try await instagram.getLatestFollower()
                     await MainActor.run {

@@ -133,17 +133,50 @@ struct SetsListView: View {
                 .hidden()
             }
             
-            if dataManager.sets.isEmpty {
-                EmptyStateView(
-                    icon: "square.stack.3d.up.slash.fill",
-                    title: "No Sets Yet",
-                    message: "Create your first photo set to get started with magic performances",
-                    actionTitle: "Create Set",
-                    action: { showingCreateSet = true }
-                )
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: VaultTheme.Spacing.md) {
+            ScrollView {
+                LazyVStack(spacing: VaultTheme.Spacing.md) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 10) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(LinearGradient(
+                                        colors: [Color(hex: "7C3AED"), Color(hex: "0EA5E9")],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 38, height: 38)
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("My Sets")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("Post Prediction · Old Date")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                            }
+                            Spacer()
+                        }
+                        Text("Each set groups photo banks used to unarchive posts during your performance.")
+                            .font(.system(size: 12))
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, VaultTheme.Spacing.lg)
+                    .padding(.top, VaultTheme.Spacing.md)
+                    .padding(.bottom, VaultTheme.Spacing.sm)
+
+                    if dataManager.sets.isEmpty {
+                        EmptyStateView(
+                            icon: "square.stack.3d.up.slash.fill",
+                            title: "No Sets Yet",
+                            message: "Create your first photo set to get started with magic performances",
+                            actionTitle: "Create Set",
+                            action: { showingCreateSet = true }
+                        )
+                        .padding(.top, 40)
+                    } else {
                         ForEach(dataManager.sets) { set in
                             NavigationLink(destination: SetDetailView(set: set)) {
                                 SetRowView(
@@ -161,14 +194,15 @@ struct SetsListView: View {
                                 )
                             }
                             .buttonStyle(.plain)
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
                         }
+                        .padding(.bottom, VaultTheme.Spacing.lg)
                     }
-                    .padding(VaultTheme.Spacing.lg)
                 }
             }
         }
         .navigationTitle("My Sets")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: { showingCreateSet = true }) {

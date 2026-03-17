@@ -48,6 +48,10 @@ class ExploreManager: ObservableObject {
     
     func loadExplore() {
         guard !isLoading else { return }
+        guard !InstagramService.shared.isSessionChallenged else {
+            print("🚫 [EXPLORE] Load skipped — session in challenged state (anti-bot)")
+            return
+        }
         
         isLoading = true
         loadError = nil
@@ -67,9 +71,13 @@ class ExploreManager: ObservableObject {
     func backgroundRefresh() {
         guard !isLoading, !isBackgroundRefreshing else { return }
 
-        // Anti-bot: check lockdown
+        // Anti-bot: check lockdown or challenged session
         guard !InstagramService.shared.isLocked else {
             print("🚫 [EXPLORE] Background refresh skipped — lockdown active")
+            return
+        }
+        guard !InstagramService.shared.isSessionChallenged else {
+            print("🚫 [EXPLORE] Background refresh skipped — session in challenged state")
             return
         }
 
@@ -109,6 +117,10 @@ class ExploreManager: ObservableObject {
     func refreshAsync() async {
         guard !isLoading, !isBackgroundRefreshing else { return }
         guard !InstagramService.shared.isLocked else { return }
+        guard !InstagramService.shared.isSessionChallenged else {
+            print("🚫 [EXPLORE] Refresh skipped — session in challenged state")
+            return
+        }
         await MainActor.run { isLoading = true }
         await loadExploreInternal()
         await MainActor.run { isLoading = false }
@@ -361,6 +373,10 @@ class ExploreManager: ObservableObject {
     func loadMore() {
         guard !isLoadingMore, hasMorePages else {
             print("⚠️ [EXPLORE] Cannot load more: isLoadingMore=\(isLoadingMore), hasMorePages=\(hasMorePages)")
+            return
+        }
+        guard !InstagramService.shared.isLocked, !InstagramService.shared.isSessionChallenged else {
+            print("🚫 [EXPLORE] Load more skipped — locked or challenged")
             return
         }
         

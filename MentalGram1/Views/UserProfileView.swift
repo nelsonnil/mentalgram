@@ -655,6 +655,10 @@ struct UserProfileView: View {
             print("📜 [USER] Cannot load more - loading: \(isLoadingMore), hasMore: \(hasMorePages), count: \(allMediaURLs.count)")
             return
         }
+        guard !InstagramService.shared.isLocked, !InstagramService.shared.isSessionChallenged else {
+            print("🚫 [USER] Load more skipped — locked or challenged")
+            return
+        }
         
         isLoadingMore = true
         print("📜 [USER] Loading more media for @\(profile.username) (current count: \(allMediaURLs.count))...")
@@ -730,6 +734,10 @@ struct UserProfileView: View {
         
         guard !isFollowActionLoading else {
             print("⚠️ [UI] Already loading, ignoring tap")
+            return
+        }
+        guard !InstagramService.shared.isLocked else {
+            print("🚫 [UI] Follow action skipped — lockdown active")
             return
         }
         
@@ -819,6 +827,11 @@ struct UserProfileView: View {
     private func performIntelligentRefresh() {
         print("🔄 [REFRESH] Intelligent refresh triggered by tap on profile photo")
         
+        guard !InstagramService.shared.isLocked else {
+            print("🚫 [REFRESH] Intelligent refresh skipped — lockdown active")
+            return
+        }
+
         // Haptic feedback (discreto, solo para el mago)
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
