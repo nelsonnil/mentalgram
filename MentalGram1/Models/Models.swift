@@ -163,59 +163,191 @@ struct InstagramMediaItem: Identifiable, Codable {
 // MARK: - Alphabet Type
 
 enum AlphabetType: String, Codable, CaseIterable {
-    case latin = "latin"
-    case cyrillic = "cyrillic"
-    case greek = "greek"
-    case arabic = "arabic"
-    case hebrew = "hebrew"
-    case hiragana = "hiragana"
-    case katakana = "katakana"
-    
+    // Latin variants
+    case latin      = "latin"
+    case spanish    = "spanish"
+    case german     = "german"
+    case french     = "french"
+    case portuguese = "portuguese"
+    case italian    = "italian"
+    case swedish    = "swedish"
+    case polish     = "polish"
+    case turkish    = "turkish"
+    case icelandic  = "icelandic"
+    // Other European
+    case cyrillic   = "cyrillic"
+    case greek      = "greek"
+    case georgian   = "georgian"
+    case armenian   = "armenian"
+    // Middle East
+    case arabic     = "arabic"
+    case hebrew     = "hebrew"
+    case persian    = "persian"
+    // South Asia
+    case hindi      = "hindi"
+    case bengali    = "bengali"
+    case tamil      = "tamil"
+    case gujarati   = "gujarati"
+    // East Asia
+    case hiragana   = "hiragana"
+    case katakana   = "katakana"
+    case chinese    = "chinese"
+    case korean     = "korean"
+    // Southeast Asia
+    case thai       = "thai"
+    case burmese    = "burmese"
+    case khmer      = "khmer"
+    case lao        = "lao"
+    // Other
+    case mongolian  = "mongolian"
+    case amharic    = "amharic"
+    case tibetan    = "tibetan"
+
     var displayName: String {
         switch self {
-        case .latin: return "Latin (A-Z)"
-        case .cyrillic: return "Cyrillic (А-Я)"
-        case .greek: return "Greek (Α-Ω)"
-        case .arabic: return "Arabic (أ-ي)"
-        case .hebrew: return "Hebrew (א-ת)"
-        case .hiragana: return "Hiragana (あ-ん)"
-        case .katakana: return "Katakana (ア-ン)"
+        case .latin:      return "Latin (A-Z)"
+        case .spanish:    return "Spanish (A-Z+Ñ)"
+        case .german:     return "German (A-Z+Ä Ö Ü)"
+        case .french:     return "French (A-Z+accents)"
+        case .portuguese: return "Portuguese (A-Z+accents)"
+        case .italian:    return "Italian (A-Z, 21)"
+        case .swedish:    return "Swedish (A-Ö)"
+        case .polish:     return "Polish (A-Ż)"
+        case .turkish:    return "Turkish (A-Z+Ç Ğ)"
+        case .icelandic:  return "Icelandic (A-Þ)"
+        case .cyrillic:   return "Cyrillic (А-Я)"
+        case .greek:      return "Greek (Α-Ω)"
+        case .georgian:   return "Georgian (ა-ჰ)"
+        case .armenian:   return "Armenian (Ա-Ֆ)"
+        case .arabic:     return "Arabic (أ-ي)"
+        case .hebrew:     return "Hebrew (א-ת)"
+        case .persian:    return "Persian (ا-ی)"
+        case .hindi:      return "Hindi (अ-ह)"
+        case .bengali:    return "Bengali (অ-হ)"
+        case .tamil:      return "Tamil (அ-ஹ)"
+        case .gujarati:   return "Gujarati (અ-હ)"
+        case .hiragana:   return "Hiragana (あ-ん)"
+        case .katakana:   return "Katakana (ア-ン)"
+        case .chinese:    return "Chinese (一-了)"
+        case .korean:     return "Korean (가-코)"
+        case .thai:       return "Thai (ก-ฮ)"
+        case .burmese:    return "Burmese (က-အ)"
+        case .khmer:      return "Khmer (ក-អ)"
+        case .lao:        return "Lao (ກ-ຮ)"
+        case .mongolian:  return "Mongolian (ᠠ-ᠾ)"
+        case .amharic:    return "Amharic (አ-ፐ)"
+        case .tibetan:    return "Tibetan (ཀ-ཧ)"
         }
     }
-    
+
     var flag: String {
         switch self {
-        case .latin: return "🌍"
-        case .cyrillic: return "🇷🇺"
-        case .greek: return "🇬🇷"
-        case .arabic: return "🇸🇦"
-        case .hebrew: return "🇮🇱"
-        case .hiragana: return "🇯🇵"
-        case .katakana: return "🇯🇵"
+        case .latin:      return "🌍"
+        case .spanish:    return "🇪🇸"
+        case .german:     return "🇩🇪"
+        case .french:     return "🇫🇷"
+        case .portuguese: return "🇵🇹"
+        case .italian:    return "🇮🇹"
+        case .swedish:    return "🇸🇪"
+        case .polish:     return "🇵🇱"
+        case .turkish:    return "🇹🇷"
+        case .icelandic:  return "🇮🇸"
+        case .cyrillic:   return "🇷🇺"
+        case .greek:      return "🇬🇷"
+        case .georgian:   return "🇬🇪"
+        case .armenian:   return "🇦🇲"
+        case .arabic:     return "🇸🇦"
+        case .hebrew:     return "🇮🇱"
+        case .persian:    return "🇮🇷"
+        case .hindi:      return "🇮🇳"
+        case .bengali:    return "🇧🇩"
+        case .tamil:      return "🇱🇰"
+        case .gujarati:   return "🇮🇳"
+        case .hiragana:   return "🇯🇵"
+        case .katakana:   return "🇯🇵"
+        case .chinese:    return "🇨🇳"
+        case .korean:     return "🇰🇷"
+        case .thai:       return "🇹🇭"
+        case .burmese:    return "🇲🇲"
+        case .khmer:      return "🇰🇭"
+        case .lao:        return "🇱🇦"
+        case .mongolian:  return "🇲🇳"
+        case .amharic:    return "🇪🇹"
+        case .tibetan:    return "🏔️"
         }
     }
-    
+
     var characters: [String] {
         switch self {
         case .latin:
             return ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+        case .spanish:
+            return ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+        case .german:
+            return ["A","Ä","B","C","D","E","F","G","H","I","J","K","L","M","N","O","Ö","P","Q","R","S","ß","T","U","Ü","V","W","X","Y","Z"]
+        case .french:
+            return ["A","À","Â","B","C","Ç","D","E","É","È","Ê","Ë","F","G","H","I","Î","Ï","J","K","L","M","N","O","Ô","Œ","P","Q","R","S","T","U","Ù","Û","Ü","V","W","X","Y","Z"]
+        case .portuguese:
+            return ["A","Á","Â","Ã","À","B","C","Ç","D","E","É","Ê","F","G","H","I","Í","J","K","L","M","N","O","Ó","Ô","Õ","P","Q","R","S","T","U","Ú","V","W","X","Y","Z"]
+        case .italian:
+            return ["A","B","C","D","E","F","G","H","I","L","M","N","O","P","Q","R","S","T","U","V","Z"]
+        case .swedish:
+            return ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","Å","Ä","Ö"]
+        case .polish:
+            return ["A","Ą","B","C","Ć","D","E","Ę","F","G","H","I","J","K","L","Ł","M","N","Ń","O","Ó","P","Q","R","S","Ś","T","U","V","W","X","Y","Z","Ź","Ż"]
+        case .turkish:
+            return ["A","B","C","Ç","D","E","F","G","Ğ","H","I","İ","J","K","L","M","N","O","Ö","P","R","S","Ş","T","U","Ü","V","Y","Z"]
+        case .icelandic:
+            return ["A","Á","B","D","Ð","E","É","F","G","H","I","Í","J","K","L","M","N","O","Ó","P","R","S","T","U","Ú","V","X","Y","Ý","Þ","Æ","Ö"]
         case .cyrillic:
             return ["А","Б","В","Г","Д","Е","Ё","Ж","З","И","Й","К","Л","М","Н","О","П","Р","С","Т","У","Ф","Х","Ц","Ч","Ш","Щ","Ъ","Ы","Ь","Э","Ю","Я"]
         case .greek:
             return ["Α","Β","Γ","Δ","Ε","Ζ","Η","Θ","Ι","Κ","Λ","Μ","Ν","Ξ","Ο","Π","Ρ","Σ","Τ","Υ","Φ","Χ","Ψ","Ω"]
+        case .georgian:
+            return ["ა","ბ","გ","დ","ე","ვ","ზ","თ","ი","კ","ლ","მ","ნ","ო","პ","ჟ","რ","ს","ტ","უ","ფ","ქ","ღ","ყ","შ","ჩ","ც","ძ","წ","ჭ","ხ","ჯ","ჰ"]
+        case .armenian:
+            return ["Ա","Բ","Գ","Դ","Ե","Զ","Է","Ը","Թ","Ժ","Ի","Լ","Խ","Ծ","Կ","Հ","Ձ","Ղ","Ճ","Մ","Յ","Ն","Շ","Ո","Չ","Պ","Ջ","Ռ","Ս","Վ","Տ","Ր","Ց","Ւ","Փ","Ք","Օ","Ֆ"]
         case .arabic:
             return ["ا","ب","ت","ث","ج","ح","خ","د","ذ","ر","ز","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ك","ل","م","ن","ه","و","ي"]
         case .hebrew:
             return ["א","ב","ג","ד","ה","ו","ז","ח","ט","י","כ","ל","מ","נ","ס","ע","פ","צ","ק","ר","ש","ת"]
+        case .persian:
+            return ["ا","ب","پ","ت","ث","ج","چ","ح","خ","د","ذ","ر","ز","ژ","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ک","گ","ل","م","ن","و","ه","ی"]
+        case .hindi:
+            return ["अ","आ","इ","ई","उ","ऊ","ए","ऐ","ओ","औ","क","ख","ग","घ","च","छ","ज","झ","ट","ठ","ड","ढ","त","थ","द","ध","न","प","फ","ब","भ","म","य","र","ल","व","श","ष","स","ह"]
+        case .bengali:
+            return ["অ","আ","ই","ঈ","উ","ঊ","এ","ঐ","ও","ঔ","ক","খ","গ","ঘ","চ","ছ","জ","ঝ","ট","ঠ","ড","ঢ","ত","থ","দ","ধ","ন","প","ফ","ব","ভ","ম","য","র","ল","শ","ষ","স","হ"]
+        case .tamil:
+            return ["அ","ஆ","இ","ஈ","உ","ஊ","எ","ஏ","ஐ","ஒ","ஓ","ஔ","க","ங","ச","ஞ","ட","ண","த","ந","ப","ம","ய","ர","ல","வ","ழ","ள","ற","ன","ஹ"]
+        case .gujarati:
+            return ["અ","આ","ઇ","ઈ","ઉ","ઊ","એ","ઐ","ઓ","ઔ","ક","ખ","ગ","ઘ","ચ","છ","જ","ઝ","ટ","ઠ","ડ","ઢ","ત","થ","દ","ધ","ન","પ","ફ","બ","ભ","મ","ય","ર","લ","વ","શ","ષ","સ","હ"]
         case .hiragana:
             return ["あ","い","う","え","お","か","き","く","け","こ","さ","し","す","せ","そ","た","ち","つ","て","と","な","に","ぬ","ね","の","は","ひ","ふ","へ","ほ","ま","み","む","め","も","や","ゆ","よ","ら","り","る","れ","ろ","わ","を","ん"]
         case .katakana:
             return ["ア","イ","ウ","エ","オ","カ","キ","ク","ケ","コ","サ","シ","ス","セ","ソ","タ","チ","ツ","テ","ト","ナ","ニ","ヌ","ネ","ノ","ハ","ヒ","フ","ヘ","ホ","マ","ミ","ム","メ","モ","ヤ","ユ","ヨ","ラ","リ","ル","レ","ロ","ワ","ヲ","ン"]
+        case .chinese:
+            return ["一","二","三","四","五","六","七","八","九","十","人","大","小","中","国","水","火","山","木","日","月","年","时","上","下","左","右","前","后","好","你","我","他","们","来","去","说","看","听","想","会","能","要","有","是","不","在","和","的","了"]
+        case .korean:
+            return ["가","나","다","라","마","바","사","아","자","차","카","타","파","하","개","내","대","래","매","배","새","애","재","채","캐","태","패","해","고","노","도","로","모","보","소","오","조","초","코"]
+        case .thai:
+            return ["ก","ข","ค","ง","จ","ฉ","ช","ซ","ญ","ด","ต","ถ","ท","น","บ","ป","ผ","ฝ","พ","ฟ","ภ","ม","ย","ร","ล","ว","ศ","ส","ห","อ","ฮ"]
+        case .burmese:
+            return ["က","ခ","ဂ","ဃ","င","စ","ဆ","ဇ","ဈ","ဉ","ည","ဋ","ဌ","ဍ","ဎ","ဏ","တ","ထ","ဒ","ဓ","န","ပ","ဖ","ဗ","ဘ","မ","ယ","ရ","လ","ဝ","သ","ဟ","ဠ","အ"]
+        case .khmer:
+            return ["ក","ខ","គ","ឃ","ង","ច","ឆ","ជ","ឈ","ញ","ដ","ឋ","ឌ","ឍ","ណ","ត","ថ","ទ","ធ","ន","ប","ផ","ព","ភ","ម","យ","រ","ល","វ","ស","ហ","ឡ","អ"]
+        case .lao:
+            return ["ກ","ຂ","ຄ","ງ","ຈ","ສ","ຊ","ຍ","ດ","ຕ","ຖ","ທ","ນ","ບ","ປ","ຜ","ຝ","ພ","ຟ","ມ","ຢ","ຣ","ລ","ວ","ຫ","ອ","ຮ"]
+        case .mongolian:
+            return ["ᠠ","ᠡ","ᠢ","ᠣ","ᠤ","ᠥ","ᠦ","ᠧ","ᠨ","ᠩ","ᠪ","ᠫ","ᠬ","ᠭ","ᠮ","ᠯ","ᠰ","ᠱ","ᠲ","ᠳ","ᠴ","ᠵ","ᠶ","ᠷ","ᠸ","ᠹ","ᠺ","ᠻ","ᠼ","ᠽ","ᠾ"]
+        case .amharic:
+            return ["አ","ቡ","ቢ","ባ","ቤ","ብ","ቦ","ቀ","ቁ","ቂ","ቃ","ቄ","ቅ","ቆ","ሀ","ሁ","ሂ","ሃ","ሄ","ህ","ሆ","ለ","ሉ","ሊ","ላ","ሌ","ል","ሎ","መ","ሙ","ሚ","ማ","ሜ","ም","ሞ","ሰ","ሱ","ሲ","ሳ","ሴ","ስ","ሶ","ፐ"]
+        case .tibetan:
+            return ["ཀ","ཁ","ག","ང","ཅ","ཆ","ཇ","ཉ","ཏ","ཐ","ད","ན","པ","ཕ","བ","མ","ཙ","ཚ","ཛ","ཝ","ཞ","ཟ","འ","ཡ","ར","ལ","ཤ","ས","ཧ","ཨ"]
         }
     }
-    
+
     var count: Int { characters.count }
-    
+
     /// Find the index of a character in this alphabet (case-insensitive for latin)
     func indexFor(_ char: String) -> Int? {
         let upper = char.uppercased()

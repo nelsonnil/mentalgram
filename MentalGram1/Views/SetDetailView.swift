@@ -83,13 +83,23 @@ struct SetDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var deleteTargetSymbol: String? = nil
     @State private var isProcessingSlotPhoto = false
-    
+
+    // BULK "SELECT ALL" for current bank empty slots
+    @State private var bulkSelectedItems: [PhotosPickerItem] = []
+    @State private var isBulkLoading = false
+    @State private var bulkLoadProgress: (current: Int, total: Int) = (0, 0)
+
     // ARCHIVED PHOTO MAPPING
     @State private var showArchivedPicker = false
     @State private var archivedPickerTargetSymbol: String? = nil
     @State private var showSlotSourcePicker = false
     @State private var slotSourcePickerSymbol: String? = nil
-    @State private var showGalleryPickerSheet = false
+    @State private var showDirectGalleryPicker = false
+
+    // FILLED SLOT ACTIONS (tap → action sheet)
+    @State private var showFilledSlotActions = false
+    @State private var filledSlotActionSymbol: String? = nil
+    @State private var filledSlotActionIsUploaded = false
 
     // VERIFY & SYNC state
     @State private var isSyncing = false
@@ -136,105 +146,119 @@ struct SetDetailView: View {
 
     /// isReverifying is now driven by uploadManager.isReverifying (persists across view lifecycle).
     
-    var body: some View {
-        ZStack {
-            VaultTheme.Colors.background
-                .ignoresSafeArea()
-            
-            ScrollView {
-                VStack(spacing: VaultTheme.Spacing.lg) {
-                // Header Stats
+    private var mainScrollContent: some View {
+        ScrollView {
+            VStack(spacing: VaultTheme.Spacing.lg) {
                 statsSection
-
-                // Session expired banner
-                if instagram.isSessionExpired {
-                    HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.lock.fill")
-                            .foregroundColor(.white)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Session expired")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white)
-                            Text("Log out and log in again to continue uploading.")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.85))
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.red)
-                    .cornerRadius(10)
-                    .padding(.horizontal, 16)
-                }
-
-                // Verify & Sync banner (shown when visible uploaded photos exist)
+                sessionExpiredBanner
                 verifySyncSection
-
-                // Re-verify button — always available when all photos appear archived locally
-                // but might be out of sync with Instagram's real state.
-                if instagram.isLoggedIn && visibleUploadedPhotos.isEmpty && !allUploadedPhotos.isEmpty && !isSyncing && !isArchivingAll {
-                    if uploadManager.isReverifying {
-                        HStack(spacing: 8) {
-                            ProgressView().scaleEffect(0.75)
-                            Text("Re-verifying \(uploadManager.reverifyProgress)/\(uploadManager.reverifyTotal)…")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            if uploadManager.reverifyDesynced > 0 {
-                                Text("(\(uploadManager.reverifyDesynced) desync)")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.gray.opacity(0.08))
-                        .cornerRadius(8)
-                    } else {
-                        Button(action: {
-                            startReverify()
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.secondary)
-                                Text("Re-verify all (\(allUploadedPhotos.count) photos)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.gray.opacity(0.08))
-                            .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                // Status & Actions (only when logged in)
+                reverifySection
                 if instagram.isLoggedIn {
                     statusSection
                         .id("\(uploadManager.uploadPhase)-\(uploadManager.nextPhotoCountdown)-\(uploadManager.botCountdownSeconds)-\(uploadManager.autoRetryCountdown)-\(uploadManager.escalatedPauseCountdown)")
-                    
-                    // ERROR RECOVERY SECTION (only for photo rejected - others are auto-handled)
                     if uploadManager.isPhotoRejected {
                         photoRejectedRecoverySection
                     }
                 }
-                
-                // Banks Tabs (for word/number)
-                if !currentSet.banks.isEmpty {
-                    banksTabsSection
-                }
-                
-                // Reorder / Done button (below banks)
-                reorderToggleButton
-                
-                // Photos Grid
+                banksTabsWithActions
+                // reorderToggleButton — hidden until needed
                 photosGridSection
             }
             .padding(VaultTheme.Spacing.lg)
         }
+    }
+
+    @ViewBuilder private var sessionExpiredBanner: some View {
+        if instagram.isSessionExpired {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.lock.fill").foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Session expired")
+                        .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                    Text("Log out and log in again to continue uploading.")
+                        .font(.system(size: 12)).foregroundColor(.white.opacity(0.85))
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(Color.red).cornerRadius(10).padding(.horizontal, 16)
+        }
+    }
+
+    @ViewBuilder private var reverifySection: some View {
+        if instagram.isLoggedIn && visibleUploadedPhotos.isEmpty && !allUploadedPhotos.isEmpty && !isSyncing && !isArchivingAll {
+            if uploadManager.isReverifying {
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.75)
+                    Text("Re-verifying \(uploadManager.reverifyProgress)/\(uploadManager.reverifyTotal)…")
+                        .font(.caption).foregroundColor(.secondary)
+                    if uploadManager.reverifyDesynced > 0 {
+                        Text("(\(uploadManager.reverifyDesynced) desync)")
+                            .font(.caption).foregroundColor(.orange)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Color.gray.opacity(0.08)).cornerRadius(8)
+            } else {
+                Button { startReverify() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 13)).foregroundColor(.secondary)
+                        Text("Re-verify all (\(allUploadedPhotos.count) photos)")
+                            .font(.caption).foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.gray.opacity(0.08)).cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder private var bankManagementSection: some View {
+        if (currentSet.type == .word || currentSet.type == .number) && !uploadManager.isActive {
+            HStack(spacing: 10) {
+                Button { _ = dataManager.addBank(setId: currentSet.id) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.rectangle.on.rectangle").font(.system(size: 13))
+                        Text("Add Bank").font(.caption.bold())
+                    }
+                    .foregroundColor(VaultTheme.Colors.primary)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(VaultTheme.Colors.primary.opacity(0.1)).cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                deleteLastBankButton
+                Spacer()
+            }
+        }
+    }
+
+    @ViewBuilder private var deleteLastBankButton: some View {
+        let canDelete: Bool = {
+            guard currentSet.banks.count > 1 else { return false }
+            guard let last = currentSet.banks.max(by: { $0.position < $1.position }) else { return false }
+            let bankPhotos = currentSet.photos.filter { $0.bankId == last.id }
+            return !bankPhotos.contains(where: { $0.uploadStatus != .pending || $0.imageData != nil })
+        }()
+        if canDelete {
+            Button { dataManager.removeLastBank(setId: currentSet.id) } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash").font(.system(size: 13))
+                    Text("Delete last bank").font(.caption)
+                }
+                .foregroundColor(.red)
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Color.red.opacity(0.08)).cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            VaultTheme.Colors.background.ignoresSafeArea()
+            mainScrollContent
         }
         .navigationTitle(currentSet.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -280,6 +304,10 @@ struct SetDetailView: View {
             guard let item = newItem, let symbol = targetSlotSymbol else { return }
             loadPhotoForSlot(item: item, symbol: symbol)
         }
+        .onChange(of: bulkSelectedItems) { newItems in
+            guard !newItems.isEmpty else { return }
+            loadBulkPhotosIntoEmptySlots(items: newItems)
+        }
         .alert("Delete Photo", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 if let symbol = deleteTargetSymbol {
@@ -293,11 +321,44 @@ struct SetDetailView: View {
         } message: {
             Text("Remove this photo from all banks? This cannot be undone.")
         }
+        .confirmationDialog("Photo options", isPresented: $showFilledSlotActions, titleVisibility: .visible) {
+            Button(filledSlotActionIsUploaded ? "Replace from Gallery" : "Change photo from Gallery") {
+                if let symbol = filledSlotActionSymbol {
+                    targetSlotSymbol = symbol
+                    showDirectGalleryPicker = true
+                }
+                showFilledSlotActions = false
+            }
+            if instagram.isLoggedIn {
+                Button(filledSlotActionIsUploaded ? "Replace from Archived" : "Change photo from Archived") {
+                    if let symbol = filledSlotActionSymbol {
+                        archivedPickerTargetSymbol = symbol
+                        showArchivedPicker = true
+                    }
+                    showFilledSlotActions = false
+                }
+            }
+            Button("Remove Photo", role: .destructive) {
+                if let symbol = filledSlotActionSymbol {
+                    deleteTargetSymbol = symbol
+                    showDeleteConfirm = true
+                }
+                showFilledSlotActions = false
+            }
+            Button("Cancel", role: .cancel) {
+                filledSlotActionSymbol = nil
+                showFilledSlotActions = false
+            }
+        } message: {
+            if let symbol = filledSlotActionSymbol {
+                Text("Slot \"\(symbol)\"")
+            }
+        }
         .confirmationDialog("Add photo for slot", isPresented: $showSlotSourcePicker, titleVisibility: .visible) {
             Button("From Gallery") {
                 if let symbol = slotSourcePickerSymbol {
                     targetSlotSymbol = symbol
-                    showGalleryPickerSheet = true
+                    showDirectGalleryPicker = true
                 }
                 showSlotSourcePicker = false
             }
@@ -329,11 +390,7 @@ struct SetDetailView: View {
                 )
             }
         }
-        .sheet(isPresented: $showGalleryPickerSheet) {
-            if let symbol = targetSlotSymbol ?? slotSourcePickerSymbol {
-                galleryPickerSheetView(symbol: symbol)
-            }
-        }
+        .photosPicker(isPresented: $showDirectGalleryPicker, selection: $slotPickerItem, matching: .images)
         .preferredColorScheme(.dark)
     }
     
@@ -1403,19 +1460,61 @@ struct SetDetailView: View {
     
     // MARK: - Banks Tabs
     
-    private var banksTabsSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: VaultTheme.Spacing.md) {
-                ForEach(currentSet.banks.indices, id: \.self) { index in
-                    Button(action: { selectedBankIndex = index }) {
-                        Text(currentSet.banks[index].name)
-                            .font(.subheadline.weight(selectedBankIndex == index ? .bold : .regular))
-                            .foregroundColor(selectedBankIndex == index ? .white : VaultTheme.Colors.primary)
-                            .padding(.horizontal, VaultTheme.Spacing.lg)
-                            .padding(.vertical, VaultTheme.Spacing.sm)
-                            .background(selectedBankIndex == index ? VaultTheme.Colors.primary : VaultTheme.Colors.primary.opacity(0.1))
-                            .cornerRadius(VaultTheme.CornerRadius.sm)
+    @ViewBuilder private var banksTabsWithActions: some View {
+        let showActions = (currentSet.type == .word || currentSet.type == .number) && !uploadManager.isActive
+        let canDelete: Bool = {
+            guard currentSet.banks.count > 1 else { return false }
+            guard let last = currentSet.banks.max(by: { $0.position < $1.position }) else { return false }
+            let bankPhotos = currentSet.photos.filter { $0.bankId == last.id }
+            return !bankPhotos.contains(where: { $0.uploadStatus != .pending || $0.imageData != nil })
+        }()
+
+        if !currentSet.banks.isEmpty || showActions {
+            HStack(spacing: 8) {
+                // Tabs — scrollable
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: VaultTheme.Spacing.sm) {
+                        ForEach(currentSet.banks.indices, id: \.self) { index in
+                            Button(action: { selectedBankIndex = index }) {
+                                Text(currentSet.banks[index].name)
+                                    .font(.subheadline.weight(selectedBankIndex == index ? .bold : .regular))
+                                    .foregroundColor(selectedBankIndex == index ? .white : VaultTheme.Colors.primary)
+                                    .padding(.horizontal, VaultTheme.Spacing.lg)
+                                    .padding(.vertical, VaultTheme.Spacing.sm)
+                                    .background(selectedBankIndex == index ? VaultTheme.Colors.primary : VaultTheme.Colors.primary.opacity(0.1))
+                                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                            }
+                        }
                     }
+                }
+
+                if showActions {
+                    // Add bank
+                    Button {
+                        _ = dataManager.addBank(setId: currentSet.id)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(VaultTheme.Colors.primary)
+                            .frame(width: 32, height: 32)
+                            .background(VaultTheme.Colors.primary.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Delete last bank
+                    Button {
+                        dataManager.removeLastBank(setId: currentSet.id)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(canDelete ? .red : .gray.opacity(0.4))
+                            .frame(width: 32, height: 32)
+                            .background(canDelete ? Color.red.opacity(0.08) : Color.gray.opacity(0.06))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canDelete)
                 }
             }
         }
@@ -1482,21 +1581,19 @@ struct SetDetailView: View {
                     selectedReorderIndex = nil
                 }
             }) {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     Image(systemName: "checkmark.circle.fill")
-                    Text("Done Reordering")
+                    Text("Done")
                 }
-                .font(.subheadline)
-                .fontWeight(.semibold)
+                .font(.caption.weight(.semibold))
                 .foregroundColor(.white)
-                .padding(.horizontal, VaultTheme.Spacing.lg)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
                 .background(VaultTheme.Colors.success)
                 .cornerRadius(VaultTheme.CornerRadius.sm)
             }
             .disabled(!consecutiveDuplicates.isEmpty)
             .opacity(consecutiveDuplicates.isEmpty ? 1.0 : 0.5)
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             let hasPending = currentSet.photos.contains(where: { $0.uploadStatus == .pending || $0.uploadStatus == .error })
             if hasPending {
@@ -1504,19 +1601,17 @@ struct SetDetailView: View {
                     withAnimation { isReorderMode = true }
                     checkConsecutiveDuplicates()
                 }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         Image(systemName: "arrow.up.arrow.down")
-                        Text("Reorder Photos")
+                        Text("Reorder")
                     }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.caption.weight(.medium))
                     .foregroundColor(VaultTheme.Colors.primary)
-                    .padding(.horizontal, VaultTheme.Spacing.lg)
-                    .padding(.vertical, VaultTheme.Spacing.sm)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
                     .background(VaultTheme.Colors.primary.opacity(0.1))
                     .cornerRadius(VaultTheme.CornerRadius.sm)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -1542,27 +1637,66 @@ struct SetDetailView: View {
     private func slotBasedGrid(photos: [SetPhoto]) -> some View {
         let labels = currentSet.slotLabels
         let photosBySymbol = Dictionary(grouping: photos, by: { $0.symbol })
-        
+
+        // Empty slots = slots without a photo or with a photo but no imageData
+        let emptyLabels = labels.filter { label in
+            guard let p = photosBySymbol[label]?.first else { return true }
+            return p.imageData == nil
+        }
+
         return VStack(spacing: 12) {
-            // Summary
-            let filled = labels.filter { photosBySymbol[$0] != nil }.count
+            // Summary + Select All
+            let filled = labels.count - emptyLabels.count
             let total = labels.count
-            
+
             HStack(spacing: 8) {
                 Image(systemName: filled == total ? "checkmark.circle.fill" : "circle.dotted")
                     .foregroundColor(filled == total ? .green : .orange)
                 Text("\(filled)/\(total) slots filled")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                
+
                 if filled < total {
-                    Text("(\(total - filled) missing)")
+                    Text("(\(emptyLabels.count) missing)")
                         .font(.caption)
                         .foregroundColor(.red)
                 }
+
+                Spacer()
+
+                // Import Photos (bulk load) — hidden until needed
+                // if !emptyLabels.isEmpty && !isBulkLoading {
+                //     PhotosPicker(
+                //         selection: $bulkSelectedItems,
+                //         maxSelectionCount: emptyLabels.count,
+                //         matching: .images
+                //     ) {
+                //         HStack(spacing: 5) {
+                //             Image(systemName: "photo.stack")
+                //                 .font(.system(size: 13))
+                //             Text("Import Photos")
+                //                 .font(.caption.bold())
+                //         }
+                //         .foregroundColor(.white)
+                //         .padding(.horizontal, 12)
+                //         .padding(.vertical, 7)
+                //         .background(VaultTheme.Colors.primary)
+                //         .cornerRadius(8)
+                //     }
+                // }
             }
             .padding(.horizontal)
-            
+
+            // Bulk loading progress — hidden until Import Photos is re-enabled
+            // if isBulkLoading {
+            //     HStack(spacing: 8) {
+            //         ProgressView().scaleEffect(0.8).tint(VaultTheme.Colors.primary)
+            //         Text("Loading \(bulkLoadProgress.current)/\(bulkLoadProgress.total)…")
+            //             .font(.caption)
+            //             .foregroundColor(.secondary)
+            //     }
+            // }
+
             if isProcessingSlotPhoto {
                 HStack(spacing: 8) {
                     ProgressView()
@@ -1574,11 +1708,11 @@ struct SetDetailView: View {
             
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 10)], spacing: 10) {
                 ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
-                    if let photos = photosBySymbol[label], let photo = photos.first {
-                        // FILLED SLOT: show photo with symbol label
+                    if let photo = photosBySymbol[label]?.first, photo.imageData != nil {
+                        // FILLED SLOT: has real image data
                         filledSlotView(photo: photo, label: label, position: index + 1)
                     } else {
-                        // EMPTY SLOT: tappable placeholder to add photo
+                        // EMPTY SLOT: no image yet (new set or photo removed)
                         emptySlotView(label: label, position: index + 1)
                     }
                 }
@@ -1598,20 +1732,9 @@ struct SetDetailView: View {
                         .cornerRadius(10)
                         .opacity(photo.isArchived ? 0.4 : 1.0)
                         .overlay(
-                            // Overlay oscuro cuando está archivado
-                            photo.isArchived ? 
-                                Color.black.opacity(0.3)
-                                    .cornerRadius(10)
+                            photo.isArchived
+                                ? Color.black.opacity(0.3).cornerRadius(10)
                                 : nil
-                        )
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 100, height: 100)
-                        .cornerRadius(10)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
                         )
                 }
                 
@@ -1632,31 +1755,10 @@ struct SetDetailView: View {
                 }
             }
             .frame(width: 100, height: 100)
-            .contextMenu {
-                Button(role: .destructive) {
-                    deleteTargetSymbol = label
-                    showDeleteConfirm = true
-                } label: {
-                    Label("Remove Photo", systemImage: "trash")
-                }
-                
-                // Replace from gallery
-                Button {
-                    targetSlotSymbol = label
-                    // PhotosPicker will trigger automatically
-                } label: {
-                    Label("Replace from Gallery", systemImage: "photo.on.rectangle")
-                }
-                
-                // Replace from archived (only when logged in)
-                if instagram.isLoggedIn {
-                    Button {
-                        archivedPickerTargetSymbol = label
-                        showArchivedPicker = true
-                    } label: {
-                        Label("Replace from Archived", systemImage: "archivebox")
-                    }
-                }
+            .onTapGesture {
+                filledSlotActionSymbol = label
+                filledSlotActionIsUploaded = photo.mediaId != nil
+                showFilledSlotActions = true
             }
             
             // Status text below photo (only when logged in)
@@ -1858,56 +1960,57 @@ struct SetDetailView: View {
                 slotPickerItem = nil
                 targetSlotSymbol = nil
                 isProcessingSlotPhoto = false
-                showGalleryPickerSheet = false
             }
         }
     }
     
-    // MARK: - Gallery Picker Sheet (for slot tap flow)
-    
-    private func galleryPickerSheetView(symbol: String) -> some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                Text("Select a photo for \"\(symbol)\"")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 24)
-                
-                PhotosPicker(
-                    selection: $slotPickerItem,
-                    matching: .images
-                ) {
-                    Label("Choose from Gallery", systemImage: "photo.on.rectangle.angled")
-                        .font(.title3)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(VaultTheme.Colors.primary)
-                        .cornerRadius(VaultTheme.CornerRadius.md)
-                }
-                
-                Spacer()
-            }
-            .padding()
-            .background(VaultTheme.Colors.background)
-            .navigationTitle("Add Photo")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        slotPickerItem = nil
-                        targetSlotSymbol = nil
-                        showGalleryPickerSheet = false
+    // MARK: - Bulk Load (Select All empty slots)
+
+    private func loadBulkPhotosIntoEmptySlots(items: [PhotosPickerItem]) {
+        let photos = currentSet.photos
+        let labels = currentSet.slotLabels
+        let photosBySymbol = Dictionary(grouping: photos, by: { $0.symbol })
+        let emptyLabels = labels.filter { label in
+            guard let p = photosBySymbol[label]?.first else { return true }
+            return p.imageData == nil
+        }
+        guard !emptyLabels.isEmpty else {
+            bulkSelectedItems = []
+            return
+        }
+        let itemsToLoad = Array(zip(items, emptyLabels))
+        isBulkLoading = true
+        bulkLoadProgress = (0, itemsToLoad.count)
+
+        Task {
+            for (idx, (item, symbol)) in itemsToLoad.enumerated() {
+                guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+                let validData    = InstagramService.adjustImageAspectRatio(imageData: data)
+                let optimized    = InstagramService.compressImageForUpload(imageData: validData, photoIndex: idx)
+                let filename     = item.itemIdentifier ?? "photo_\(UUID().uuidString)"
+                let existingPhotos = currentSet.photos.filter { $0.symbol == symbol }
+                await MainActor.run {
+                    if !existingPhotos.isEmpty {
+                        dataManager.replacePhotoAtSymbol(
+                            setId: currentSet.id, symbol: symbol,
+                            newFilename: filename, newImageData: optimized)
+                    } else {
+                        let position = labels.firstIndex(of: symbol) ?? labels.count
+                        dataManager.insertPhotoAtPosition(
+                            setId: currentSet.id, symbol: symbol,
+                            filename: filename, imageData: optimized, position: position)
                     }
-                    .foregroundColor(.white)
+                    bulkLoadProgress = (idx + 1, itemsToLoad.count)
                 }
             }
-            .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            await MainActor.run {
+                isBulkLoading = false
+                bulkLoadProgress = (0, 0)
+                bulkSelectedItems = []
+            }
         }
     }
+
     
     // MARK: - Map Archived Photo to Slot
     
@@ -2259,7 +2362,6 @@ struct SetDetailView: View {
             print("⏸️ [UPLOAD] Pause requested by user")
             await MainActor.run {
                 uploadManager.requestPause = false
-                UIApplication.shared.isIdleTimerDisabled = false
                 uploadManager.invalidateAllTimers()
                 uploadManager.failedPhotoIndex = index
                 uploadManager.uploadPhase = .paused
@@ -2277,18 +2379,10 @@ struct SetDetailView: View {
         print("   Total photos to upload: \(currentSet.photos.count)")
         LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
         
-        // CRITICAL: Keep screen awake during upload (prevent interruptions)
-        await MainActor.run {
-            UIApplication.shared.isIdleTimerDisabled = true
-            print("🔆 [SCREEN] Screen sleep DISABLED (Upload mode)")
-            LogManager.shared.info("Screen sleep disabled for upload", category: .device)
-        }
-        
         // CRITICAL: Check if lockdown is active before starting
         if instagram.isLocked {
             print("🚨 [UPLOAD] Cannot start - lockdown is active")
             await MainActor.run {
-                UIApplication.shared.isIdleTimerDisabled = false
                 uploadManager.showingError = "Instagram lockdown active. Cannot upload. Wait for lockdown to clear."
                 uploadManager.uploadPhase = .paused
                 uploadManager.currentPhaseDescription = "Upload Paused - Lockdown Active"
@@ -2314,7 +2408,6 @@ struct SetDetailView: View {
         } catch {
             print("⚠️ [UPLOAD] Network stability check failed: \(error)")
             await MainActor.run {
-                UIApplication.shared.isIdleTimerDisabled = false
                 dataManager.updateSetStatus(id: currentSet.id, status: .error)
                 uploadManager.showingError = "Network error starting upload: \(error.localizedDescription)"
                 uploadManager.uploadPhase = .paused
@@ -2411,7 +2504,6 @@ struct SetDetailView: View {
             if instagram.isLocked {
                 print("🚨 [UPLOAD] Lockdown is active - STOPPING upload")
                 await MainActor.run {
-                    UIApplication.shared.isIdleTimerDisabled = false
                     dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                     uploadManager.uploadPhase = .paused
                     uploadManager.currentPhaseDescription = "Upload Paused - Lockdown Active"
@@ -2562,7 +2654,6 @@ struct SetDetailView: View {
                         dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Session expired")
                         
                         await MainActor.run {
-                            UIApplication.shared.isIdleTimerDisabled = false
                             uploadManager.failedPhotoIndex = index
                             uploadManager.uploadPhase = .sessionExpired
                             uploadManager.currentPhaseDescription = "Session Expired - Re-login Required"
@@ -2577,7 +2668,6 @@ struct SetDetailView: View {
                         dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Bot detected")
                         
                         await MainActor.run {
-                            UIApplication.shared.isIdleTimerDisabled = false
                             uploadManager.failedPhotoIndex = index
                             uploadManager.botDetectionTime = Date()
                             uploadManager.botCountdownSeconds = 900
@@ -2610,7 +2700,6 @@ struct SetDetailView: View {
                         dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Photo rejected")
                         
                         await MainActor.run {
-                            UIApplication.shared.isIdleTimerDisabled = false
                             uploadManager.failedPhotoIndex = index
                             uploadManager.isPhotoRejected = true
                             uploadManager.showingError = "Photo #\(index + 1) was rejected\n\nReason: \(error.localizedDescription)\n\nYou can skip this photo or replace it."
@@ -2731,10 +2820,7 @@ struct SetDetailView: View {
                     }
                 }
                 
-                // Allow screen to sleep during the wait (user can lock phone)
-                await MainActor.run {
-                    UIApplication.shared.isIdleTimerDisabled = false
-                }
+                // Screen remains on during wait — managed globally by MentalGram1App
                 
                 // Wait using persisted timestamp — survives background
                 while true {
@@ -2747,7 +2833,6 @@ struct SetDetailView: View {
                             uploadManager.nextPhotoTimer?.invalidate()
                             uploadManager.nextPhotoTimer = nil
                             uploadManager.clearWaitPersistence()
-                            UIApplication.shared.isIdleTimerDisabled = false
                             uploadManager.uploadPhase = .paused
                             uploadManager.currentPhaseDescription = "Upload Paused"
                             uploadManager.failedPhotoIndex = index + 1
@@ -2759,9 +2844,7 @@ struct SetDetailView: View {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
                 
-                // Wait finished — re-enable screen lock prevention for the upload
                 await MainActor.run {
-                    UIApplication.shared.isIdleTimerDisabled = true
                     uploadManager.nextPhotoTimer?.invalidate()
                     uploadManager.nextPhotoTimer = nil
                     uploadManager.clearWaitPersistence()
@@ -2769,11 +2852,44 @@ struct SetDetailView: View {
             }
         } // end for (photos loop)
         
+        // ── AUTO-NEXT BANK ────────────────────────────────────────────────
+        // For word/number sets: automatically add the next bank and keep uploading.
+        // This lets the user leave the app running overnight without manual intervention.
+        let setForBankCheck = dataManager.sets.first(where: { $0.id == currentSet.id })
+        let isWordOrNumber = setForBankCheck?.type == .word || setForBankCheck?.type == .number
+        if isWordOrNumber {
+            print("➕ [BANK] Bank complete — auto-adding next bank and continuing upload…")
+            LogManager.shared.info("Bank complete — auto-adding next bank", category: .upload)
+            let newBank = await MainActor.run { dataManager.addBank(setId: currentSet.id) }
+            if newBank != nil {
+                // Brief pause (1 cooldown cycle) before starting next bank
+                let (hasCooldown, cooldownRemaining) = instagram.isPhotoUploadOnCooldown()
+                if hasCooldown && cooldownRemaining > 0 {
+                    let wait = cooldownRemaining + Int.random(in: 5...15)
+                    print("⏳ [BANK] Waiting \(wait)s cooldown before next bank…")
+                    let endTime = Date().addingTimeInterval(Double(wait))
+                    await MainActor.run {
+                        uploadManager.persistWait(endTime: endTime, nextPhotoIndex: 0)
+                        uploadManager.uploadPhase = .waiting(nextPhoto: 1, remainingSeconds: wait)
+                        uploadManager.currentPhaseDescription = "Next bank in \(wait / 60):\(String(format: "%02d", wait % 60))"
+                    }
+                    var remaining = wait
+                    while remaining > 0 {
+                        if uploadManager.requestPause { break }
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        remaining -= 1
+                    }
+                    await MainActor.run { uploadManager.clearWaitPersistence() }
+                }
+                // Recurse: upload the new bank's pending photos
+                await uploadAllPhotos()
+                return
+            }
+        }
+
         print("\n✅ [UPLOAD ALL] All photos uploaded and archived!")
         LogManager.shared.success("Upload completed for set '\(currentSet.name)' - All \(currentSet.photos.count) photos uploaded", category: .upload)
         await MainActor.run {
-            UIApplication.shared.isIdleTimerDisabled = false
-            LogManager.shared.info("Screen sleep re-enabled after upload completion", category: .device)
             uploadManager.uploadPhase = .completed
             uploadManager.currentPhaseDescription = "Upload Completed"
             uploadManager.activeTask = nil
@@ -2864,7 +2980,6 @@ struct SetDetailView: View {
         LogManager.shared.warning("Upload escalated at Photo #\(photoIndex + 1) - pausing for 5 minutes after multiple failures", category: .upload)
         
         await MainActor.run {
-            UIApplication.shared.isIdleTimerDisabled = false
             uploadManager.failedPhotoIndex = photoIndex
             uploadManager.activeTask = nil
             

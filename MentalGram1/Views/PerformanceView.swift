@@ -314,9 +314,7 @@ struct PerformanceView: View {
             print("🔄 [PERF] Grid updated locally — \(newURLs.count) items (no API call)")
         }
         .onAppear {
-            // CRITICAL: Keep screen on during performance (magic trick needs screen always on)
-            UIApplication.shared.isIdleTimerDisabled = true
-            print("🔆 [SCREEN] Screen sleep DISABLED (Performance mode)")
+            // Screen always on — managed globally by MentalGram1App
             // Show fake home screen if enabled and image is available
             if fakeHomeScreenEnabled && illusionService.hasImage {
                 showingHomeScreenIllusion = true
@@ -361,9 +359,6 @@ struct PerformanceView: View {
             ocrUsedInSession = false
         }
         .onDisappear {
-            // Re-enable sleep when leaving Performance
-            UIApplication.shared.isIdleTimerDisabled = false
-            print("🌙 [SCREEN] Screen sleep RE-ENABLED")
             // Stop volume monitoring and OCR when leaving Performance
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()

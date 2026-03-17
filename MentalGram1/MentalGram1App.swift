@@ -45,6 +45,7 @@ struct MentalGram1App: App {
                     URLActionManager.shared.handleURL(url)
                 }
                 .onAppear {
+                    UIApplication.shared.isIdleTimerDisabled = true
                     handleFirstLaunch()
                 }
         }
@@ -52,9 +53,11 @@ struct MentalGram1App: App {
             let um = UploadManager.shared
             switch phase {
             case .background:
+                UIApplication.shared.isIdleTimerDisabled = false
                 um.beginBackgroundWork()
                 CloudBackupService.shared.syncToCloud()
             case .active:
+                UIApplication.shared.isIdleTimerDisabled = true
                 um.endBackgroundWork()
                 um.restoreTimersIfNeeded()
                 // Resume any interrupted auto re-archive (accounts for time elapsed while killed)

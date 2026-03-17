@@ -108,6 +108,13 @@ struct SetsListView: View {
     @State private var showingCreateSet = false
     @State private var newlyCreatedSet: PhotoSet? = nil
     @State private var navigateToNewSet = false
+    // Rename state
+    @State private var setToRename: PhotoSet? = nil
+    @State private var renameText = ""
+    @State private var showRenameAlert = false
+    // Delete confirmation state
+    @State private var setToDelete: PhotoSet? = nil
+    @State private var showDeleteAlert = false
     
     var body: some View {
         ZStack {
@@ -139,18 +146,21 @@ struct SetsListView: View {
                     LazyVStack(spacing: VaultTheme.Spacing.md) {
                         ForEach(dataManager.sets) { set in
                             NavigationLink(destination: SetDetailView(set: set)) {
-                                SetRowView(set: set, isLoggedIn: instagram.isLoggedIn)
+                                SetRowView(
+                                    set: set,
+                                    isLoggedIn: instagram.isLoggedIn,
+                                    onRename: {
+                                        setToRename = set
+                                        renameText = set.name
+                                        showRenameAlert = true
+                                    },
+                                    onDelete: {
+                                        setToDelete = set
+                                        showDeleteAlert = true
+                                    }
+                                )
                             }
                             .buttonStyle(.plain)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    withAnimation {
-                                        dataManager.deleteSet(id: set.id)
-                                    }
-                                } label: {
-                                    Label("Delete Set", systemImage: "trash")
-                                }
-                            }
                         }
                     }
                     .padding(VaultTheme.Spacing.lg)
@@ -179,12 +189,34 @@ struct SetsListView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(isPresented: $showingCreateSet) {
             CreateSetView(isPresented: $showingCreateSet) { createdSet in
-                // Callback when set is created: navigate to it automatically
                 newlyCreatedSet = createdSet
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     navigateToNewSet = true
                 }
             }
+        }
+        .alert("Rename Set", isPresented: $showRenameAlert) {
+            TextField("Set name", text: $renameText)
+            Button("Rename") {
+                if let s = setToRename {
+                    dataManager.renameSet(id: s.id, newName: renameText)
+                }
+                setToRename = nil
+            }
+            Button("Cancel", role: .cancel) { setToRename = nil }
+        } message: {
+            Text("Enter a new name for \"\(setToRename?.name ?? "")\"")
+        }
+        .alert("Delete Set", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                if let s = setToDelete {
+                    withAnimation { dataManager.deleteSet(id: s.id) }
+                }
+                setToDelete = nil
+            }
+            Button("Cancel", role: .cancel) { setToDelete = nil }
+        } message: {
+            Text("Are you sure you want to delete \"\(setToDelete?.name ?? "")\"? This cannot be undone.")
         }
         .preferredColorScheme(.dark)
     }
@@ -202,150 +234,197 @@ struct SetsListView: View {
 struct SetRowView: View {
     let set: PhotoSet
     let isLoggedIn: Bool
+    var onRename: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
-    
-    private var statusBadgeStyle: StatusBadge.BadgeStyle {
-        switch set.status {
-        case .ready: return .info
-        case .uploading: return .warning
-        case .paused: return .pending
-        case .completed: return .success
-        case .error: return .error
+
+    // Per-type accent colors
+    private var typeAccent: Color {
+        switch set.type {
+        case .word:   return Color(hex: "7C3AED")  // purple
+        case .number: return Color(hex: "0EA5E9")  // sky blue
+        case .custom: return Color(hex: "F97316")  // orange
         }
     }
-    
+
     private var typeGradient: [Color] {
         switch set.type {
-        case .word: return [VaultTheme.Colors.primary, VaultTheme.Colors.primaryDark]
-        case .number: return [VaultTheme.Colors.secondary, VaultTheme.Colors.secondaryDark]
-        case .custom: return [VaultTheme.Colors.info, Color(hex: "6366F1")]
+        case .word:   return [Color(hex: "7C3AED"), Color(hex: "6D28D9")]
+        case .number: return [Color(hex: "0EA5E9"), Color(hex: "0369A1")]
+        case .custom: return [Color(hex: "F97316"), Color(hex: "EA580C")]
         }
     }
-    
+
+    private var typeIcon: String {
+        switch set.type {
+        case .word:   return "textformat.abc"
+        case .number: return "123.rectangle.fill"
+        case .custom: return "square.grid.2x2.fill"
+        }
+    }
+
+    private var statusBadgeStyle: StatusBadge.BadgeStyle {
+        switch set.status {
+        case .ready:     return .info
+        case .uploading: return .warning
+        case .paused:    return .pending
+        case .completed: return .success
+        case .error:     return .error
+        }
+    }
+
     var body: some View {
-        VaultCard {
-            HStack(spacing: VaultTheme.Spacing.md) {
-                // Type icon with gradient
-                IconBadge(icon: set.type.icon, colors: typeGradient, size: 56)
-                
-                VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                    // Title + Status Badge
-                    HStack {
-                        Text(set.name)
-                            .font(VaultTheme.Typography.title())
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
-                            .lineLimit(1)
-                        
-                        Spacer()
-                        
-                        // Only show status badge when logged in
-                        if isLoggedIn {
-                            StatusBadge(text: set.status.rawValue, style: statusBadgeStyle)
-                        }
-                    }
-                    
-                    // Stats row
+        let isActive = activeSetSettings.isActive(set.id, type: set.type)
+
+        ZStack(alignment: .leading) {
+            // Active left accent bar
+            if isActive {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(typeAccent)
+                    .frame(width: 4)
+                    .frame(maxHeight: .infinity)
+                    .padding(.vertical, 10)
+            }
+
+            VaultCard {
+                VStack(spacing: 0) {
                     HStack(spacing: VaultTheme.Spacing.md) {
-                        // Type label
-                        HStack(spacing: 4) {
-                            Image(systemName: "tag.fill")
-                                .font(.system(size: 10))
-                            Text(set.type.title)
-                        }
-                        .font(VaultTheme.Typography.captionSmall())
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                        
-                        Text("•")
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-                        
-                        // Banks
-                        HStack(spacing: 4) {
-                            Image(systemName: "square.stack.3d.up.fill")
-                                .font(.system(size: 10))
-                            Text("\(set.banks.isEmpty ? 1 : set.banks.count)")
-                        }
-                        .font(VaultTheme.Typography.captionSmall())
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                        
-                        Text("•")
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-                        
-                        // Photos
-                        HStack(spacing: 4) {
-                            Image(systemName: "photo.stack.fill")
-                                .font(.system(size: 10))
-                            Text("\(set.totalPhotos)")
-                        }
-                        .font(VaultTheme.Typography.captionSmall())
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                        
-                        // Only show completion date when logged in
-                        if isLoggedIn && set.status == .completed, let completedDate = set.completedAt {
-                            Text("•")
-                                .foregroundColor(VaultTheme.Colors.textTertiary)
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "calendar")
-                                    .font(.system(size: 10))
-                                Text(completedDate.formatted(date: .abbreviated, time: .omitted))
+                        // Type icon
+                        IconBadge(icon: typeIcon, colors: typeGradient, size: 52)
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            // Name row
+                            HStack(alignment: .center, spacing: 6) {
+                                Text(set.name)
+                                    .font(VaultTheme.Typography.title())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    .lineLimit(1)
+
+                                if isActive {
+                                    Text("ACTIVE")
+                                        .font(.system(size: 9, weight: .black))
+                                        .foregroundColor(typeAccent)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(typeAccent.opacity(0.15))
+                                        .cornerRadius(4)
+                                }
+
+                                Spacer()
+
+                                if isLoggedIn {
+                                    StatusBadge(text: set.status.rawValue, style: statusBadgeStyle)
+                                }
+
+                                // ··· menu
+                                Menu {
+                                    Button { onRename?() } label: {
+                                        Label("Rename", systemImage: "pencil")
+                                    }
+                                    Button(role: .destructive) { onDelete?() } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                                        .frame(width: 30, height: 30)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            // Stats row
+                            HStack(spacing: 8) {
+                                Label(set.type.title, systemImage: "tag.fill")
+                                Text("·").foregroundColor(VaultTheme.Colors.textTertiary)
+                                Label("\(set.banks.isEmpty ? 1 : set.banks.count) banks",
+                                      systemImage: "square.stack.3d.up.fill")
+                                Text("·").foregroundColor(VaultTheme.Colors.textTertiary)
+                                Label("\(set.totalPhotos) photos",
+                                      systemImage: "photo.stack.fill")
                             }
                             .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(VaultTheme.Colors.textTertiary)
-                        }
-                    }
-                    
-                    // Active set toggle (word / number / custom — only one active per type)
-                    let isActive = activeSetSettings.isActive(set.id, type: set.type)
-                    Button(action: {
-                        if isActive {
-                            activeSetSettings.setActive(nil, for: set.type)
-                        } else {
-                            activeSetSettings.setActive(set.id, for: set.type)
-                        }
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 13))
-                                .foregroundColor(isActive ? VaultTheme.Colors.success : VaultTheme.Colors.textTertiary)
-                            Text(isActive ? "Active set" : "Set as active")
-                                .font(VaultTheme.Typography.captionSmall())
-                                .foregroundColor(isActive ? VaultTheme.Colors.success : VaultTheme.Colors.textTertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 2)
 
-                    // Progress bar for uploading - ONLY VISIBLE WHEN LOGGED IN
-                    if isLoggedIn && (set.status == .uploading || set.status == .paused) {
-                        VStack(spacing: 6) {
-                            ProgressBar(
-                                progress: set.totalPhotos > 0 ? Double(set.uploadedPhotos) / Double(set.totalPhotos) : 0,
-                                height: 6,
-                                gradient: set.status == .paused 
-                                    ? LinearGradient(colors: [VaultTheme.Colors.textSecondary], startPoint: .leading, endPoint: .trailing)
-                                    : VaultTheme.Colors.gradientWarning
-                            )
-                            
-                            HStack {
-                                Text("\(set.uploadedPhotos) / \(set.totalPhotos)")
+                            // Completed date
+                            if isLoggedIn && set.status == .completed,
+                               let completedDate = set.completedAt {
+                                Label(completedDate.formatted(date: .abbreviated, time: .omitted),
+                                      systemImage: "calendar")
                                     .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                                
-                                Spacer()
-                                
-                                let percentage = set.totalPhotos > 0 ? Int((Double(set.uploadedPhotos) / Double(set.totalPhotos)) * 100) : 0
-                                Text("\(percentage)%")
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .fontWeight(.bold)
-                                    .foregroundColor(set.status == .paused ? VaultTheme.Colors.textSecondary : VaultTheme.Colors.warning)
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                    .padding(.top, 1)
                             }
                         }
-                        .padding(.top, 4)
                     }
+
+                    // Upload progress bar
+                    if isLoggedIn && (set.status == .uploading || set.status == .paused) {
+                        VStack(spacing: 4) {
+                            ProgressBar(
+                                progress: set.totalPhotos > 0
+                                    ? Double(set.uploadedPhotos) / Double(set.totalPhotos) : 0,
+                                height: 5,
+                                gradient: set.status == .paused
+                                    ? LinearGradient(colors: [VaultTheme.Colors.textSecondary],
+                                                     startPoint: .leading, endPoint: .trailing)
+                                    : VaultTheme.Colors.gradientWarning
+                            )
+                            HStack {
+                                Text("\(set.uploadedPhotos) / \(set.totalPhotos)")
+                                Spacer()
+                                let pct = set.totalPhotos > 0
+                                    ? Int((Double(set.uploadedPhotos) / Double(set.totalPhotos)) * 100) : 0
+                                Text("\(pct)%").fontWeight(.bold)
+                                    .foregroundColor(set.status == .paused
+                                        ? VaultTheme.Colors.textSecondary : VaultTheme.Colors.warning)
+                            }
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        .padding(.top, 10)
+                    }
+
+                    // Active toggle strip — always visible at the bottom of the card
+                    Divider()
+                        .background(Color.white.opacity(0.06))
+                        .padding(.top, 10)
+
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            if isActive {
+                                activeSetSettings.setActive(nil, for: set.type)
+                            } else {
+                                activeSetSettings.setActive(set.id, for: set.type)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(isActive ? typeAccent : VaultTheme.Colors.textTertiary)
+                            Text(isActive ? "Active set" : "Set as active")
+                                .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                                .foregroundColor(isActive ? typeAccent : VaultTheme.Colors.textSecondary)
+                            Spacer()
+                            if isActive {
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(typeAccent.opacity(0.7))
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.leading, isActive ? 8 : 0)
         }
+        .glowEffect(color: isActive ? typeAccent.opacity(0.35) : .clear, radius: 6)
         .glowEffect(color: isLoggedIn && set.status == .uploading ? VaultTheme.Colors.warning : .clear, radius: 8)
+        .animation(.easeInOut(duration: 0.2), value: isActive)
     }
 }
 

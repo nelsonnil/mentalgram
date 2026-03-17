@@ -23,54 +23,71 @@ class DataManager: ObservableObject {
         var banks: [Bank] = []
         var setPhotos: [SetPhoto] = []
         let setId = UUID()
-        
+
+        // Determine slot labels (used when photos array is empty)
+        let slotLabels: [String] = {
+            switch type {
+            case .word:   return selectedAlphabet?.characters ?? AlphabetType.latin.characters
+            case .number: return (0...9).map { "\($0)" }
+            case .custom: return []
+            }
+        }()
+
         // Create banks for word/number types
         if type == .word || type == .number {
             for i in 0..<bankCount {
-                let bank = Bank(
-                    id: UUID(),
-                    position: i + 1,
-                    name: "Bank \(i + 1)"
-                )
+                let bank = Bank(id: UUID(), position: i + 1, name: "Bank \(i + 1)")
                 banks.append(bank)
             }
         }
-        
-        // Create photos
-        // ANTI-BOT: Group by bank to avoid consecutive duplicate uploads
-        // Safe order: All photos from bank 1, then bank 2, then bank 3...
-        // This separates duplicate images by ~10-50 minutes instead of 2-5 minutes
+
         if type == .word || type == .number {
-            // Group by bank (NOT by symbol) to avoid consecutive duplicates
-            for bank in banks {
-                for (index, photo) in photos.enumerated() {
-                    let photoId = UUID()
-                    
-                    let setPhoto = SetPhoto(
-                        id: photoId,
-                        setId: setId,
-                        bankId: bank.id,
-                        symbol: photo.symbol,
-                        filename: photo.filename,
-                        imageData: photo.imageData,
-                        mediaId: nil,
-                        isArchived: false,
-                        uploadDate: nil,
-                        lastCommentId: nil,
-                        uploadStatus: .pending,
-                        errorMessage: nil
-                    )
-                    setPhotos.append(setPhoto)
+            if photos.isEmpty {
+                // Empty set creation: create placeholder slots with no imageData
+                for bank in banks {
+                    for symbol in slotLabels {
+                        setPhotos.append(SetPhoto(
+                            id: UUID(),
+                            setId: setId,
+                            bankId: bank.id,
+                            symbol: symbol,
+                            filename: "\(symbol.lowercased())_\(bank.position).jpg",
+                            imageData: nil,
+                            mediaId: nil,
+                            isArchived: false,
+                            uploadDate: nil,
+                            lastCommentId: nil,
+                            uploadStatus: .pending,
+                            errorMessage: nil
+                        ))
+                    }
+                }
+            } else {
+                // Photos provided: group by bank (anti-bot: bank1 all, then bank2 all…)
+                for bank in banks {
+                    for photo in photos {
+                        setPhotos.append(SetPhoto(
+                            id: UUID(),
+                            setId: setId,
+                            bankId: bank.id,
+                            symbol: photo.symbol,
+                            filename: photo.filename,
+                            imageData: photo.imageData,
+                            mediaId: nil,
+                            isArchived: false,
+                            uploadDate: nil,
+                            lastCommentId: nil,
+                            uploadStatus: .pending,
+                            errorMessage: nil
+                        ))
+                    }
                 }
             }
         } else {
             // Custom type
-            for (index, photo) in photos.enumerated() {
-                // Custom: one photo per symbol
-                let photoId = UUID()
-                
-                let setPhoto = SetPhoto(
-                    id: photoId,
+            for photo in photos {
+                setPhotos.append(SetPhoto(
+                    id: UUID(),
                     setId: setId,
                     symbol: photo.symbol,
                     filename: photo.filename,
@@ -81,8 +98,7 @@ class DataManager: ObservableObject {
                     lastCommentId: nil,
                     uploadStatus: .pending,
                     errorMessage: nil
-                )
-                setPhotos.append(setPhoto)
+                ))
             }
         }
         
@@ -267,6 +283,74 @@ class DataManager: ObservableObject {
         guard let set = sets.first(where: { $0.id == setId }) else { return [] }
         return set.photos.filter { $0.bankId == bankId }
     }
+
+    // MARK: - Add / Remove Bank
+
+    /// Adds a new bank to a word/number set, duplicating all slot symbols from bank 1.
+    /// Returns the new Bank, or nil if the set is custom or not found.
+    @discardableResult
+    func addBank(setId: UUID) -> Bank? {
+        guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return nil }
+        let set = sets[setIndex]
+        guard set.type == .word || set.type == .number else { return nil }
+
+        let newPosition = (set.banks.map(\.position).max() ?? 0) + 1
+        let newBank = Bank(id: UUID(), position: newPosition, name: "Bank \(newPosition)")
+
+        // Get slot symbols from bank 1 (or from the existing slot labels)
+        let slotLabels = set.slotLabels
+        var newPhotos: [SetPhoto] = []
+        for symbol in slotLabels {
+            let photo = SetPhoto(
+                id: UUID(),
+                setId: setId,
+                bankId: newBank.id,
+                symbol: symbol,
+                filename: "\(symbol.lowercased())_bank\(newPosition).jpg",
+                imageData: nil,
+                mediaId: nil,
+                isArchived: false,
+                uploadDate: nil,
+                lastCommentId: nil,
+                uploadStatus: .pending,
+                errorMessage: nil
+            )
+            newPhotos.append(photo)
+        }
+
+        sets[setIndex].banks.append(newBank)
+        sets[setIndex].photos.append(contentsOf: newPhotos)
+        saveSets()
+        print("➕ [BANK] Added bank \(newPosition) to set '\(set.name)' — \(newPhotos.count) slots")
+        return newBank
+    }
+
+    /// Removes the last bank from a word/number set, but only if ALL its photos are still pending (not uploaded).
+    /// Returns true if removed, false if blocked.
+    @discardableResult
+    func removeLastBank(setId: UUID) -> Bool {
+        guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return false }
+        let set = sets[setIndex]
+        guard set.type == .word || set.type == .number else { return false }
+        guard set.banks.count > 1 else {
+            print("⚠️ [BANK] Cannot remove last remaining bank")
+            return false
+        }
+
+        guard let lastBank = set.banks.max(by: { $0.position < $1.position }) else { return false }
+        let bankPhotos = set.photos.filter { $0.bankId == lastBank.id }
+        let hasUploaded = bankPhotos.contains { $0.uploadStatus != .pending }
+        if hasUploaded {
+            print("⚠️ [BANK] Cannot remove bank \(lastBank.position) — has uploaded photos")
+            return false
+        }
+
+        sets[setIndex].banks.removeAll { $0.id == lastBank.id }
+        sets[setIndex].photos.removeAll { $0.bankId == lastBank.id }
+        saveSets()
+        print("🗑️ [BANK] Removed bank \(lastBank.position) from set '\(set.name)'")
+        return true
+    }
     
     // MARK: - Swap Photos (exchange positions)
     
@@ -298,6 +382,14 @@ class DataManager: ObservableObject {
         print("✅ [SWAP] Swapped position \(indexA + 1) ↔ \(indexB + 1)")
     }
     
+    func renameSet(id: UUID, newName: String) {
+        guard let idx = sets.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        sets[idx].name = trimmed
+        saveSets()
+    }
+
     func deleteSet(id: UUID) {
         sets.removeAll { $0.id == id }
         saveSets()
