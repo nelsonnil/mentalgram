@@ -849,6 +849,8 @@ struct SetDetailView: View {
                             errorMessage: nil
                         )
                     }
+                    // Remove from ProfileCache so PerformanceView grid updates instantly
+                    ProfileCacheService.shared.removeMediaItem(byMediaId: mediaId)
                 }
             } else {
                 LogManager.shared.warning("Archive All: failed to archive \(mediaId)", category: .api)
@@ -1175,6 +1177,8 @@ struct SetDetailView: View {
                             errorMessage: nil
                         )
                     }
+                    // Remove from ProfileCache so PerformanceView grid updates instantly
+                    ProfileCacheService.shared.removeMediaItem(byMediaId: mediaId)
                 }
             } else {
                 LogManager.shared.warning("S&A: failed to archive \(mediaId) after retry", category: .api)

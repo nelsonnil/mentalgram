@@ -9,8 +9,16 @@ import SwiftUI
 import UserNotifications
 import Combine
 
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return .portrait
+    }
+}
+
 @main
 struct MentalGram1App: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject var instagram  = InstagramService.shared
     @ObservedObject var backup     = CloudBackupService.shared
     @Environment(\.scenePhase) private var scenePhase

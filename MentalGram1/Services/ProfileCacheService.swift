@@ -80,7 +80,48 @@ class ProfileCacheService: ObservableObject {
         saveProfile(updated)
     }
 
-    private func rebuildProfile(_ p: InstagramProfile, mediaURLs: [String]) -> InstagramProfile {
+    /// Replaces both the URL list and the full items list atomically.
+    /// Call from refreshMediaGridSilently so mediaId→URL mapping stays fresh
+    /// and removeMediaItem(byMediaId:) can resolve the correct URL to remove.
+    func updateMediaURLsAndItems(_ urls: [String], items: [InstagramMediaItem]) {
+        guard let p = cachedProfile else { return }
+        let updated = rebuildProfile(p, mediaURLs: urls, mediaItems: items)
+        saveProfile(updated)
+        print("🗂️ [CACHE] updateMediaURLsAndItems: \(urls.count) URLs, \(items.count) items saved")
+    }
+
+    /// Removes a photo by mediaId from both the URL list and the full items list.
+    /// Call after successfully archiving a photo — PerformanceView reacts instantly via onChange.
+    func removeMediaItem(byMediaId mediaId: String) {
+        guard var p = cachedProfile else {
+            print("❌ [CACHE] removeMediaItem: no cachedProfile in memory — cannot remove \(mediaId)")
+            return
+        }
+        print("🔍 [CACHE] removeMediaItem: searching for \(mediaId) among \(p.cachedMediaItems.count) cached items, \(p.cachedMediaURLs.count) cached URLs")
+
+        guard let item = p.cachedMediaItems.first(where: { $0.mediaId == mediaId }) else {
+            print("⚠️ [CACHE] removeMediaItem: mediaId \(mediaId) NOT in cachedMediaItems")
+            print("⚠️ [CACHE]   Known mediaIds: \(p.cachedMediaItems.map { $0.mediaId }.joined(separator: ", "))")
+            // Fallback: try direct scan if the items list is stale (no silent refresh happened)
+            // We can't remove without knowing the URL — log and bail.
+            return
+        }
+
+        let url = item.imageURL
+        let urlWasPresent = p.cachedMediaURLs.contains(url)
+        print("🔍 [CACHE] removeMediaItem: found item, imageURL=\(url.suffix(60))")
+        print("🔍 [CACHE]   URL present in cachedMediaURLs: \(urlWasPresent)")
+
+        var urls  = p.cachedMediaURLs;  urls.removeAll  { $0 == url }
+        var items = p.cachedMediaItems; items.removeAll { $0.mediaId == mediaId }
+        p = rebuildProfile(p, mediaURLs: urls, mediaItems: items)
+        saveProfile(p)
+        print("✅ [CACHE] removeMediaItem done — \(urlWasPresent ? "removed" : "URL not in list (stale?)") — remaining: \(urls.count) URLs, \(items.count) items")
+    }
+
+    private func rebuildProfile(_ p: InstagramProfile,
+                                mediaURLs: [String],
+                                mediaItems: [InstagramMediaItem]? = nil) -> InstagramProfile {
         InstagramProfile(
             userId: p.userId, username: p.username, fullName: p.fullName,
             biography: p.biography, externalUrl: p.externalUrl,
@@ -92,7 +133,8 @@ class ProfileCacheService: ObservableObject {
             cachedMediaURLs: mediaURLs,
             cachedReelURLs: p.cachedReelURLs,
             cachedTaggedURLs: p.cachedTaggedURLs,
-            cachedHighlights: p.cachedHighlights
+            cachedHighlights: p.cachedHighlights,
+            cachedMediaItems: mediaItems ?? p.cachedMediaItems
         )
     }
     
