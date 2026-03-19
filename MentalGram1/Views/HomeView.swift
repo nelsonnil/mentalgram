@@ -6,13 +6,41 @@ struct HomeView: View {
     @ObservedObject var instagram = InstagramService.shared
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject private var urlAction = URLActionManager.shared
+    @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     @State private var selectedTab = 1 // Start on Sets tab
     @State private var showingCreateSet = false
     @State private var showingExplore = false
     @State private var showingChallengeAlert = false
+
+    // Pre-performance visible photos check
+    @State private var showVisiblePhotosAlert = false
+    @State private var visiblePhotosToArchive: [SetPhoto] = []
+    @State private var isArchivingBeforePerformance = false
+    @State private var archiveProgress: (done: Int, total: Int) = (0, 0)
+    @State private var showArchiveProgressSheet = false
     
+    /// Custom binding that intercepts tab switches to Performance (0)
+    /// and shows the pre-check alert if there are visible photos.
+    private var tabBinding: Binding<Int> {
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                if newValue == 0 && instagram.isLoggedIn {
+                    let visible = visiblePhotosInActiveSets()
+                    if !visible.isEmpty {
+                        visiblePhotosToArchive = visible
+                        showVisiblePhotosAlert = true
+                        return  // block the tab switch
+                    }
+                }
+                selectedTab = newValue
+                updateTabBarAppearance(forTab: newValue)
+            }
+        )
+    }
+
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabBinding) {
             // Performance Tab - MUST stay light (Instagram replica)
             Group {
                 if instagram.isLoggedIn {
@@ -50,19 +78,132 @@ struct HomeView: View {
         .onChange(of: selectedTab) { newTab in
             updateTabBarAppearance(forTab: newTab)
         }
-        // When a URL scheme action arrives, switch to Performance tab immediately
+        // URL scheme: bypass the check and go directly to Performance
         .onChange(of: urlAction.pendingMode) { mode in
             guard !mode.isEmpty else { return }
             print("📲 [URL] Switching to Performance tab for action: \(mode)")
             selectedTab = 0
+            updateTabBarAppearance(forTab: 0)
         }
         .onAppear {
             updateTabBarAppearance(forTab: selectedTab)
         }
+        .alert("Visible Photos Detected", isPresented: $showVisiblePhotosAlert) {
+            Button("Continue Anyway") {
+                selectedTab = 0
+                updateTabBarAppearance(forTab: 0)
+            }
+            Button("Verify & Archive") {
+                showArchiveProgressSheet = true
+                Task { await archiveVisiblePhotosAndEnter() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            let sets = activeSetNames()
+            Text("\(visiblePhotosToArchive.count) photo(s) from your active sets are still visible on Instagram.\n\nActive sets: \(sets)\n\nArchive them before performing?")
+        }
+        .sheet(isPresented: $showArchiveProgressSheet) {
+            archiveProgressView
+        }
         .fullScreenCover(isPresented: $showingExplore) {
             ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
-                .preferredColorScheme(.light) // CRITICAL: Explore must look like Instagram (light)
+                .preferredColorScheme(.light)
         }
+    }
+
+    // MARK: - Pre-Performance Check
+
+    private func visiblePhotosInActiveSets() -> [SetPhoto] {
+        var result: [SetPhoto] = []
+        let activeIds = [activeSetSettings.activeWordSetId,
+                         activeSetSettings.activeNumberSetId].compactMap { $0 }
+        print("🔍 [PRE-PERF] Checking \(activeIds.count) active set(s) for visible photos")
+        for setId in activeIds {
+            guard let photoSet = dataManager.sets.first(where: { $0.id == setId }) else {
+                print("⚠️ [PRE-PERF] Active set \(setId) not found in dataManager")
+                continue
+            }
+            let visible = photoSet.photos.filter {
+                $0.mediaId != nil && !$0.isArchived
+            }
+            let byStatus = Dictionary(grouping: photoSet.photos.filter { $0.mediaId != nil }, by: { $0.uploadStatus.rawValue })
+            print("🔍 [PRE-PERF] Set '\(photoSet.name)': \(visible.count) visible photo(s) of \(photoSet.photos.count) total — by status: \(byStatus.mapValues { $0.count })")
+            result.append(contentsOf: visible)
+        }
+        print("🔍 [PRE-PERF] Total visible photos found: \(result.count)")
+        return result
+    }
+
+    private func activeSetNames() -> String {
+        let activeIds = [activeSetSettings.activeWordSetId,
+                         activeSetSettings.activeNumberSetId].compactMap { $0 }
+        let names = activeIds.compactMap { id in
+            dataManager.sets.first(where: { $0.id == id })?.name
+        }
+        return names.joined(separator: ", ")
+    }
+
+    @MainActor
+    private func archiveVisiblePhotosAndEnter() async {
+        let photos = visiblePhotosToArchive
+        archiveProgress = (0, photos.count)
+        isArchivingBeforePerformance = true
+
+        for (i, photo) in photos.enumerated() {
+            guard let mediaId = photo.mediaId else { continue }
+            do {
+                let archived = try await InstagramService.shared.archivePhoto(mediaId: mediaId, skipPreCheck: false)
+                if archived {
+                    dataManager.updatePhoto(photoId: photo.id, isArchived: true, uploadStatus: .completed)
+                }
+            } catch {
+                print("⚠️ [PRE-PERF] Failed to archive \(mediaId): \(error.localizedDescription)")
+            }
+            archiveProgress = (i + 1, photos.count)
+        }
+
+        isArchivingBeforePerformance = false
+        showArchiveProgressSheet = false
+        visiblePhotosToArchive = []
+        selectedTab = 0
+        updateTabBarAppearance(forTab: 0)
+    }
+
+    private var archiveProgressView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.1), lineWidth: 6)
+                    .frame(width: 80, height: 80)
+                Circle()
+                    .trim(from: 0, to: archiveProgress.total > 0
+                          ? CGFloat(archiveProgress.done) / CGFloat(archiveProgress.total) : 0)
+                    .stroke(Color(hex: "7C3AED"), style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.3), value: archiveProgress.done)
+                Image(systemName: "archivebox.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.white)
+            }
+            VStack(spacing: 6) {
+                Text("Archiving photos…")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                Text("\(archiveProgress.done) / \(archiveProgress.total)")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+            }
+            Text("Please wait. Do not close the app.")
+                .font(.system(size: 12))
+                .foregroundColor(.gray.opacity(0.7))
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: "111111").ignoresSafeArea())
+        .interactiveDismissDisabled(isArchivingBeforePerformance)
     }
     
     /// Update tab bar appearance based on which tab is active

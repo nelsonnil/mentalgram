@@ -857,16 +857,13 @@ struct ExploreMediaCell: View {
     let cachedImage: UIImage?
     
     var body: some View {
-        // Fixed 4:5 container - all content fills this uniformly
+        // 4:5 portrait container — image fills via scaledToFill, no distortion
         Color.clear
             .aspectRatio(4/5, contentMode: .fit)
             .overlay(
                 ZStack(alignment: .topTrailing) {
-                    // Content fills the entire 4:5 cell
                     if media.mediaType == .video, let videoURL = media.videoURL {
                         ZStack {
-                            // Always show thumbnail as poster — visible immediately even before
-                            // the video streams. Also works as fallback for expired video URLs.
                             if let image = cachedImage {
                                 Image(uiImage: image)
                                     .resizable()

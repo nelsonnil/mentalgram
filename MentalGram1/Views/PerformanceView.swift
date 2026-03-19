@@ -1,6 +1,7 @@
 import SwiftUI
 import Photos
 import AVFoundation
+import AudioToolbox
 
 // MARK: - Performance View (Instagram Profile Replica)
 
@@ -173,6 +174,14 @@ struct PerformanceView: View {
                     print("⚡️ [PERF] \(revealedPhotos.count) photo(s) inserted from local storage")
                     LogManager.shared.info("Grid updated from local images: \(revealedPhotos.count) photo(s)", category: .general)
                 }
+                // Double full-power vibration (notification-level) — magician confirms photos live on Instagram
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+                Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s gap
+                    await MainActor.run {
+                        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+                    }
+                }
                 Task { await refreshMediaGridSilently() }
             },
             mediaItemsByURL: mediaItemsByURL,
@@ -227,6 +236,8 @@ struct PerformanceView: View {
             .onChange(of: ocrCoordinator.recognizedText) { text in
                 guard let text = text, !text.isEmpty else { return }
                 print("📷 [OCR] Recognized: \"\(text)\"")
+                // Full-power vibration: confirms recognition to the magician
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
                 // Lock OCR for the rest of this Performance session — one reveal per trick.
                 ocrUsedInSession = true
                 Task {
@@ -1307,26 +1318,36 @@ struct PerformanceView: View {
                 return
             }
 
-            // Strip pseudo-URLs (reveal://) inserted as instant placeholders.
-            // Real CDN URLs from this response will replace them.
+            // Pre-download all new images BEFORE swapping allMediaURLs.
+            // This prevents blank cells: cells keep showing local reveal:// images
+            // until the real CDN images are fully cached and ready.
+            let missing = newURLs.filter { cachedImages[$0] == nil }
+            if !missing.isEmpty {
+                print("🔄 [PERF] Silent refresh: pre-downloading \(missing.count) CDN image(s) before swap…")
+                await withTaskGroup(of: Void.self) { group in
+                    for url in missing {
+                        group.addTask {
+                            if let image = await self.downloadImage(from: url) {
+                                await MainActor.run {
+                                    self.cachedImages[url] = image
+                                    ProfileCacheService.shared.saveImage(image, forURL: url)
+                                }
+                            }
+                        }
+                    }
+                }
+                print("🔄 [PERF] Silent refresh: all CDN images cached — swapping grid now")
+            }
+
+            // Atomic swap: reveal:// placeholders replaced with real CDN URLs.
+            // All images are already in cache so no blank frames appear.
             let cleanedExisting = allMediaURLs.filter { !$0.hasPrefix("reveal://") }
-
-            let newCount = newURLs.filter { !cleanedExisting.contains($0) }.count
-
-            // Merge: new first-page items + tail items not in the new page
             let existingTail = cleanedExisting.filter { !newURLs.contains($0) }
             let merged = newURLs + existingTail
             allMediaURLs = merged
-
             ProfileCacheService.shared.updateMediaURLs(merged)
 
-            // Download any images not yet cached (new unarchived photos)
-            let missing = newURLs.filter { cachedImages[$0] == nil }
-            if !missing.isEmpty {
-                print("🔄 [PERF] Silent refresh: downloading \(missing.count) new image(s)…")
-                downloadImagesForURLs(missing)
-            }
-
+            let newCount = newURLs.filter { !cleanedExisting.contains($0) }.count
             print("🔄 [PERF] Silent refresh done — \(merged.count) total, \(newCount) newly visible")
             LogManager.shared.info("Silent refresh done: \(merged.count) items, \(newCount) new", category: .general)
         } catch {
@@ -2155,7 +2176,6 @@ struct InstagramProfileView: View {
         }
 
         print("🔢 [FORCE#] Done — \(successCount) ok, \(skipCount) skipped, \(failCount) failed")
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         // Schedule auto re-archive if enabled and we have IDs to re-archive
         if !revealedIds.isEmpty {
@@ -2275,7 +2295,6 @@ struct InstagramProfileView: View {
 
         // ── PHASE 3: Finish ───────────────────────────────────────────────────────
         ForceNumberRevealSettings.shared.scheduleReArchive(mediaIds: revealedIds)
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         print("📷 [OCR-PP] ═══ Done — \(revealedIds.count)/\(jobs.count) unarchived on Instagram")
 
         // Trigger ONE CDN refresh now that all photos are unarchived on Instagram
@@ -2305,33 +2324,37 @@ struct ReelsGridView: View {
         let placeholderCount = max(0, minCells - reelURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
             ForEach(reelURLs, id: \.self) { url in
-                ZStack(alignment: .bottomLeading) {
-                    if let image = cachedImages[url] {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(4/5, contentMode: .fill) // Same size as Posts grid
-                            .clipped()
-                    } else {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .aspectRatio(4/5, contentMode: .fill)
-                    }
-                    // Play icon overlay (like Instagram reels tab)
-                    IGIcon(asset: "instagram_play", fallback: "play.fill", size: 12, color: .white)
-                        .shadow(radius: 2)
-                        .padding(6)
-                }
+                Color.clear
+                    .aspectRatio(4/5, contentMode: .fit)
+                    .overlay(
+                        ZStack(alignment: .bottomLeading) {
+                            if let image = cachedImages[url] {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Rectangle().fill(Color.gray.opacity(0.3))
+                            }
+                            IGIcon(asset: "instagram_play", fallback: "play.fill", size: 12, color: .white)
+                                .shadow(radius: 2)
+                                .padding(6)
+                        }
+                    )
+                    .clipped()
             }
-            // Placeholder cells — same size, same play icon
+            // Placeholder cells
             if placeholderCount > 0 {
                 ForEach(0..<placeholderCount, id: \.self) { _ in
-                    ZStack(alignment: .bottomLeading) {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.15))
-                            .aspectRatio(4/5, contentMode: .fill)
-                        IGIcon(asset: "instagram_play", fallback: "play.fill", size: 12, color: .white.opacity(0.4))
-                            .padding(6)
-                    }
+                    Color.clear
+                        .aspectRatio(4/5, contentMode: .fit)
+                        .overlay(
+                            ZStack(alignment: .bottomLeading) {
+                                Rectangle().fill(Color.gray.opacity(0.15))
+                                IGIcon(asset: "instagram_play", fallback: "play.fill", size: 12, color: .white.opacity(0.4))
+                                    .padding(6)
+                            }
+                        )
+                        .clipped()
                 }
             }
         }
@@ -2674,27 +2697,30 @@ struct PhotosGridView: View {
         let placeholderCount = max(0, minCells - mediaURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
             ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
-                Group {
-                    if let image = cachedImages[url] {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(4/5, contentMode: .fill)
-                            .clipped()
-                    } else {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .aspectRatio(4/5, contentMode: .fill)
-                    }
-                }
-                .onAppear { onMediaAppear?(url) }
-                .onTapGesture { onTapIndex?(index) }
+                Color.clear
+                    .aspectRatio(4/5, contentMode: .fit)
+                    .overlay(
+                        Group {
+                            if let image = cachedImages[url] {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Rectangle().fill(Color.gray.opacity(0.3))
+                            }
+                        }
+                    )
+                    .clipped()
+                    .onAppear { onMediaAppear?(url) }
+                    .onTapGesture { onTapIndex?(index) }
             }
-            // Placeholder cells — look like loading skeletons, enable digit-detection anywhere
+            // Placeholder cells
             if placeholderCount > 0 {
                 ForEach(0..<placeholderCount, id: \.self) { _ in
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.15))
-                        .aspectRatio(4/5, contentMode: .fill)
+                    Color.clear
+                        .aspectRatio(4/5, contentMode: .fit)
+                        .overlay(Rectangle().fill(Color.gray.opacity(0.15)))
+                        .clipped()
                 }
             }
         }

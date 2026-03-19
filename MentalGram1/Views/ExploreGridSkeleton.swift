@@ -36,7 +36,7 @@ struct SkeletonGridItem: View {
                     endPoint: isAnimating ? .bottomTrailing : .topLeading
                 )
             )
-            .aspectRatio(4/5, contentMode: .fill)
+            .aspectRatio(4/5, contentMode: .fit)
             .clipped()
             .onAppear {
                 withAnimation(
