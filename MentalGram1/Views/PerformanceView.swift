@@ -19,6 +19,9 @@ struct PerformanceView: View {
     // OCR
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
+    // Optimistic note state — @AppStorage triggers instant re-render on write
+    @AppStorage("last_note_text")           private var lastNoteText: String = ""
+    @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
     @ObservedObject private var forceRevealSettings = ForceNumberRevealSettings.shared
     @ObservedObject private var followingMagic = FollowingMagicSettings.shared
     @ObservedObject private var volumeMonitor  = VolumeButtonMonitor.shared
@@ -40,6 +43,7 @@ struct PerformanceView: View {
     // MARK: - Infinite Scroll State
     @State private var allMediaURLs: [String] = []
     @State private var mediaItemsByURL: [String: InstagramMediaItem] = [:]
+    @State private var revealDates: [String: Date] = [:]
     @State private var nextMaxId: String? = nil
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
@@ -161,14 +165,14 @@ struct PerformanceView: View {
             onAddLocalImages: { photos in
                 for item in photos {
                     if let image = item.image { cachedImages[item.pseudoURL] = image }
-                    if !allMediaURLs.contains(item.pseudoURL) { allMediaURLs.insert(item.pseudoURL, at: 0) }
+                    insertRevealURL(item.pseudoURL)
                 }
                 print("⚡️ [PERF] \(photos.count) photo(s) pre-inserted instantly — API unarchive in progress")
             },
             onRevealComplete: { revealedPhotos in
                 for item in revealedPhotos {
                     if let image = item.image { cachedImages[item.pseudoURL] = image }
-                    if !allMediaURLs.contains(item.pseudoURL) { allMediaURLs.insert(item.pseudoURL, at: 0) }
+                    insertRevealURL(item.pseudoURL)
                 }
                 if !revealedPhotos.isEmpty {
                     print("⚡️ [PERF] \(revealedPhotos.count) photo(s) inserted from local storage")
@@ -240,14 +244,33 @@ struct PerformanceView: View {
                 AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
                 // Lock OCR for the rest of this Performance session — one reveal per trick.
                 ocrUsedInSession = true
+                // Execute all active OCR targets sequentially (bio → note → post prediction)
+                // to avoid concurrent API calls that could trigger bot detection.
                 Task {
-                    if noteTopInputMode == "ocr" {
-                        await applyOCRResult(text: text, target: "note")
-                    }
-                    if bioTopInputMode == "ocr" {
+                    let hasBio  = bioTopInputMode  == "ocr"
+                    let hasNote = noteTopInputMode == "ocr"
+                    let hasPost = forceRevealSettings.ocrEnabled
+
+                    if hasBio {
+                        print("📷 [OCR] Step 1/3 — applying to biography")
                         await applyOCRResult(text: text, target: "bio")
                     }
-                    if forceRevealSettings.ocrEnabled {
+                    if hasNote {
+                        if hasBio {
+                            // Brief gap between consecutive API write operations
+                            print("📷 [OCR] Waiting 3s before note (anti-bot gap)")
+                            try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        }
+                        print("📷 [OCR] Step \(hasBio ? "2" : "1")/\([hasBio, hasNote, hasPost].filter { $0 }.count) — applying to note")
+                        await applyOCRResult(text: text, target: "note")
+                    }
+                    if hasPost {
+                        let priorSteps = (hasBio ? 1 : 0) + (hasNote ? 1 : 0)
+                        if priorSteps > 0 {
+                            print("📷 [OCR] Waiting 3s before post prediction (anti-bot gap)")
+                            try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        }
+                        print("📷 [OCR] Step \(priorSteps + 1)/\([hasBio, hasNote, hasPost].filter { $0 }.count) — applying to post prediction")
                         await applyOCRToPostPrediction(text: text)
                     }
                 }
@@ -320,10 +343,19 @@ struct PerformanceView: View {
         .onChange(of: profileCache.cachedProfile?.cachedMediaURLs) { newURLs in
             guard let newURLs else { return }
             // Only sync if the change came from somewhere else (not from our own full reload)
-            guard !isLoading else { return }
+            guard !isLoading else {
+                print("🔄 [PERF] onChange cachedMediaURLs fired but isLoading=true — skipped")
+                return
+            }
             let currentSet = Set(allMediaURLs)
             let newSet = Set(newURLs)
-            guard currentSet != newSet else { return }
+            guard currentSet != newSet else {
+                print("🔄 [PERF] onChange cachedMediaURLs fired — no diff (both \(newURLs.count) items), skipped")
+                return
+            }
+            let removed = currentSet.subtracting(newSet).count
+            let added   = newSet.subtracting(currentSet).count
+            print("🔄 [PERF] onChange cachedMediaURLs: \(allMediaURLs.count)→\(newURLs.count) (-\(removed) +\(added))")
             allMediaURLs = newURLs
             // Download thumbnails for any new URLs not yet cached
             let missing = newURLs.filter { cachedImages[$0] == nil }
@@ -630,17 +662,41 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(text, limit: 60)
+                // Optimistic: show note bubble instantly, before API confirms
+                await MainActor.run {
+                    lastNoteText = final
+                    lastNoteSentTimestamp = Date().timeIntervalSince1970
+                }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     print("✅ [API AUTO] Note sent: \"\(final)\"")
                     ud.set(final.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)
+                    fireDoubleConfirmationVibration()
                 }
             } else {
                 let final = truncateAtWordBoundary(text, limit: 150)
+                // Optimistic: update bio in fake profile instantly, before API confirms
+                await MainActor.run {
+                    if let current = profile {
+                        profile = InstagramProfile(
+                            userId: current.userId, username: current.username,
+                            fullName: current.fullName, biography: final,
+                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
+                            isVerified: current.isVerified, isPrivate: current.isPrivate,
+                            followerCount: current.followerCount, followingCount: current.followingCount,
+                            mediaCount: current.mediaCount, followedBy: current.followedBy,
+                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                            cachedHighlights: current.cachedHighlights
+                        )
+                    }
+                }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     print("✅ [API AUTO] Biography updated: \"\(final)\"")
                     ud.set(final.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)
+                    fireDoubleConfirmationVibration()
                 }
             }
         } catch {
@@ -686,22 +742,57 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(trimmed, limit: 60)
+                // Optimistic: show note bubble instantly, before API confirms
+                await MainActor.run {
+                    lastNoteText = final
+                    lastNoteSentTimestamp = Date().timeIntervalSince1970
+                }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     ud.set(final, forKey: lastKey)
                     print("✅ [OCR] Note sent: \"\(final)\"")
+                    fireDoubleConfirmationVibration()
                 }
             } else {
                 let final = truncateAtWordBoundary(trimmed, limit: 150)
+                // Optimistic: update bio in fake profile instantly, before API confirms
+                await MainActor.run {
+                    if let current = profile {
+                        profile = InstagramProfile(
+                            userId: current.userId, username: current.username,
+                            fullName: current.fullName, biography: final,
+                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
+                            isVerified: current.isVerified, isPrivate: current.isPrivate,
+                            followerCount: current.followerCount, followingCount: current.followingCount,
+                            mediaCount: current.mediaCount, followedBy: current.followedBy,
+                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                            cachedHighlights: current.cachedHighlights
+                        )
+                    }
+                }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     ud.set(final, forKey: lastKey)
                     print("✅ [OCR] Biography updated: \"\(final)\"")
+                    fireDoubleConfirmationVibration()
                 }
             }
         } catch {
             print("⚠️ [OCR] Error applying \(target): \(error.localizedDescription)")
             LogManager.shared.warning("OCR auto-mode failed (\(target)): \(error.localizedDescription)", category: .general)
+        }
+    }
+
+    /// Two full-power vibrations with a 2-second gap — mirrors the post-unarchive confirmation.
+    private func fireDoubleConfirmationVibration() {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            }
         }
     }
 
@@ -723,6 +814,17 @@ struct PerformanceView: View {
         // ALWAYS try to load from cache first (anti-bot: no automatic requests)
         if let cached = ProfileCacheService.shared.loadProfile() {
             print("📦 [CACHE] Loading profile from cache (no auto-request)")
+            print("📦 [CACHE]   cachedMediaURLs: \(cached.cachedMediaURLs.count), cachedMediaItems: \(cached.cachedMediaItems.count)")
+            // Show full grid state on entry so we can diagnose order/duplicate issues
+            print("📦 [CACHE] Grid on entry (newest→oldest):")
+            for (i, url) in cached.cachedMediaURLs.enumerated() {
+                if let item = cached.cachedMediaItems.first(where: { $0.imageURL == url }) {
+                    let date = item.takenAt.map { "\($0)" } ?? "noDate"
+                    print("  [\(i)] id=\(item.mediaId) date=\(date)")
+                } else {
+                    print("  [\(i)] url=\(url.suffix(50)) — no matching item")
+                }
+            }
             self.profile = cached
             self.allMediaURLs = cached.cachedMediaURLs
             self.hasMorePages = cached.cachedMediaURLs.count >= 18
@@ -846,6 +948,7 @@ struct PerformanceView: View {
         ProfileCacheService.shared.clearAll()
         cachedImages.removeAll()
         mediaItemsByURL.removeAll()
+        revealDates.removeAll()
         
         do {
             // ANTI-BOT: Wait if network changed recently
@@ -1284,7 +1387,64 @@ struct PerformanceView: View {
 
     // MARK: - Silent Media Grid Refresh (after Force Number Reveal unarchive)
 
-    /// Fetches only the first page of media and updates the grid locally.
+    /// Inserts a reveal:// pseudo-URL at the correct chronological position (newest-first).
+    ///
+    /// Strategy:
+    ///  1. Find the photo's `uploadDate` from DataManager (set at upload time, very close to Instagram's
+    ///     `taken_at` since Instagram uses its own server timestamp upon receiving the photo).
+    ///  2. Store that date in `revealDates` so sibling reveal:// items can be compared against it.
+    ///  3. Scan `allMediaURLs` newest-first; insert just before the first item that is OLDER.
+    ///     - CDN items:    compare via `mediaItemsByURL[url]?.takenAt`
+    ///     - reveal:// items: compare via `revealDates[url]`
+    ///  4. Fallback: insert at position 0 if no date is available (safe default, old behavior).
+    ///
+    /// Example — word "julia", grid has two new real posts (Mar 28) and old posts (Jan 10):
+    ///   Each magic photo has uploadDate in Feb 2026 → they land AFTER the Mar 28 posts, BEFORE Jan 10.
+    ///   Final: [new1(Mar28), new2(Mar28), J, U, L, I, A, old(Jan10)] ✓
+    @MainActor
+    private func insertRevealURL(_ pseudoURL: String) {
+        guard !allMediaURLs.contains(pseudoURL) else { return }
+
+        let mediaId = String(pseudoURL.dropFirst("reveal://".count))
+
+        // Look up the upload date from DataManager — this is the closest approximation
+        // to Instagram's `taken_at` that we have without an extra API call.
+        let uploadDate: Date? = DataManager.shared.sets
+            .flatMap { $0.photos }
+            .first(where: { $0.mediaId == mediaId })
+            .flatMap { $0.uploadDate }
+
+        guard let revealDate = uploadDate else {
+            // No date available — fall back to prepend (old behavior).
+            allMediaURLs.insert(pseudoURL, at: 0)
+            print("⚡️ [REVEAL] No uploadDate for \(mediaId) — inserted at position 0 (fallback)")
+            return
+        }
+
+        // Cache the date so future siblings can compare against this reveal.
+        revealDates[pseudoURL] = revealDate
+
+        // Scan grid newest-first: insert before the first item that is strictly OLDER.
+        for (i, url) in allMediaURLs.enumerated() {
+            let itemDate: Date?
+            if url.hasPrefix("reveal://") {
+                itemDate = revealDates[url]
+            } else {
+                itemDate = mediaItemsByURL[url]?.takenAt
+            }
+            guard let d = itemDate else { continue }
+            if d < revealDate {
+                allMediaURLs.insert(pseudoURL, at: i)
+                print("⚡️ [REVEAL] \(mediaId) (uploadDate=\(revealDate)) → inserted at pos \(i)")
+                return
+            }
+        }
+
+        // All existing items are newer — this is the oldest; append at the end.
+        allMediaURLs.append(pseudoURL)
+        print("⚡️ [REVEAL] \(mediaId) (uploadDate=\(revealDate)) → appended at end (all existing are newer)")
+    }
+
     /// Does NOT touch profile stats, bio, follower count, etc. — zero visible disruption.
     @MainActor
     private func refreshMediaGridSilently() async {
@@ -1341,11 +1501,53 @@ struct PerformanceView: View {
 
             // Atomic swap: reveal:// placeholders replaced with real CDN URLs.
             // All images are already in cache so no blank frames appear.
-            let cleanedExisting = allMediaURLs.filter { !$0.hasPrefix("reveal://") }
-            let existingTail = cleanedExisting.filter { !newURLs.contains($0) }
+            let revealURLsBefore = allMediaURLs.filter { $0.hasPrefix("reveal://") }
+            let cleanedExisting  = allMediaURLs.filter { !$0.hasPrefix("reveal://") }
+
+            // Build existingTail by mediaId — NOT by URL string.
+            // CDN URLs rotate per session, so the same post has different URL strings
+            // between fetches. Comparing URL strings causes every previously-seen
+            // post to land in existingTail, creating duplicates in the grid.
+            let newMediaIds = Set(items.map { $0.mediaId })
+            let existingTail = cleanedExisting.filter { url -> Bool in
+                // Only keep URLs whose mediaId is known AND not covered by the new fetch.
+                // Stale/orphan URLs (no matching item) are always discarded.
+                guard let item = mediaItemsByURL[url] else { return false }
+                return !newMediaIds.contains(item.mediaId)
+            }
             let merged = newURLs + existingTail
+            
+            // ── Diagnostic logs ──────────────────────────────────────────────
+            print("🔄 [SWAP] allMediaURLs BEFORE (\(allMediaURLs.count) total, \(revealURLsBefore.count) reveal://):")
+            for (i, url) in allMediaURLs.enumerated() {
+                let itemId = items.first(where: { $0.imageURL == url })?.mediaId ?? "?"
+                print("  [\(i)] \(url.hasPrefix("reveal://") ? url : "cdn…\(url.suffix(40))") id=\(itemId)")
+            }
+            print("🔄 [SWAP] Instagram returned \(newURLs.count) URLs (newest→oldest):")
+            for (i, url) in newURLs.enumerated() {
+                let itemId = items.first(where: { $0.imageURL == url })?.mediaId ?? "?"
+                let date   = items.first(where: { $0.imageURL == url })?.takenAt.map { "\($0)" } ?? "noDate"
+                print("  [\(i)] id=\(itemId) date=\(date)")
+            }
+            print("🔄 [SWAP] existingTail (\(existingTail.count) old paged URLs not in new fetch)")
+            print("🔄 [SWAP] merged AFTER (\(merged.count) total):")
+            for (i, url) in merged.enumerated() {
+                let itemId = items.first(where: { $0.imageURL == url })?.mediaId ?? "?"
+                print("  [\(i)] \(url.hasPrefix("reveal://") ? url : "cdn…\(url.suffix(40))") id=\(itemId)")
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             allMediaURLs = merged
-            ProfileCacheService.shared.updateMediaURLs(merged)
+
+            // reveal:// placeholders have been replaced by real CDN URLs — clear cached dates.
+            revealDates.removeAll()
+
+            // Keep mediaItemsByURL in sync so removeMediaItem(byMediaId:) can resolve fresh URLs.
+            for item in items { mediaItemsByURL[item.imageURL] = item }
+
+            // Persist both URLs and items — this keeps cachedMediaItems fresh so that
+            // removeMediaItem(byMediaId:) can find the correct CDN URL to remove.
+            ProfileCacheService.shared.updateMediaURLsAndItems(merged, items: items)
 
             let newCount = newURLs.filter { !cleanedExisting.contains($0) }.count
             print("🔄 [PERF] Silent refresh done — \(merged.count) total, \(newCount) newly visible")
@@ -1580,6 +1782,10 @@ struct InstagramProfileView: View {
     @ObservedObject private var dateForce = DateForceSettings.shared
     var onAutoFollowedByTap: (() -> Void)? = nil
 
+    // Optimistic note state — @AppStorage triggers instant re-render on write
+    @AppStorage("last_note_text")           private var lastNoteText: String = ""
+    @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
+
     // Called after a successful Force Number Reveal with local images already loaded.
     // Each element: pseudo-URL key + optional UIImage from local storage.
     // PerformanceView inserts them into the grid immediately (no GET needed).
@@ -1747,13 +1953,13 @@ struct InstagramProfileView: View {
             HStack(alignment: .center, spacing: 0) {
                 // Profile pic + note bubble stacked vertically
                 VStack(spacing: 0) {
-                    // Note bubble: only shown if note exists AND was sent within last 24h
-                    let noteText = UserDefaults.standard.string(forKey: "last_note_text") ?? ""
-                    let noteSentDate = UserDefaults.standard.object(forKey: "last_note_sent_date") as? Date
-                    let noteIsActive = !noteText.isEmpty
-                        && (noteSentDate.map { Date().timeIntervalSince($0) < 86400 } ?? false)
+                    // Note bubble: shown if note exists AND was sent within last 24h.
+                    // Uses @AppStorage so it re-renders instantly on optimistic write.
+                    let noteIsActive = !lastNoteText.isEmpty
+                        && lastNoteSentTimestamp > 0
+                        && Date().timeIntervalSince1970 - lastNoteSentTimestamp < 86400
                     if noteIsActive {
-                        NotesBubbleView(text: noteText)
+                        NotesBubbleView(text: lastNoteText)
                             .padding(.bottom, 4)
                     }
 

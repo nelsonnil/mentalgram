@@ -155,6 +155,8 @@ struct HomeView: View {
                 let archived = try await InstagramService.shared.archivePhoto(mediaId: mediaId, skipPreCheck: false)
                 if archived {
                     dataManager.updatePhoto(photoId: photo.id, isArchived: true, uploadStatus: .completed)
+                    // Remove from ProfileCache so PerformanceView grid is already clean on entry
+                    ProfileCacheService.shared.removeMediaItem(byMediaId: mediaId)
                 }
             } catch {
                 print("⚠️ [PRE-PERF] Failed to archive \(mediaId): \(error.localizedDescription)")
@@ -1228,14 +1230,6 @@ struct SettingsView: View {
                             topMode.wrappedValue = mode.rawValue
                             if clipboardAutoMode == clipboardKey { clipboardAutoMode = "" }
                             if mode != .api { apiSource.wrappedValue = .none }
-                            // OCR exclusivity: only one target can use OCR at a time
-                            if mode == .ocr {
-                                let other = clipboardKey == "note" ? "bioTopInputMode" : "noteTopInputMode"
-                                UserDefaults.standard.set("off", forKey: other)
-                                if clipboardKey == "note" { bioTopInputMode = "off" }
-                                else { noteTopInputMode = "off" }
-                                ForceNumberRevealSettings.shared.ocrEnabled = false
-                            }
                         }
                     } label: {
                         HStack(spacing: 5) {
@@ -2199,18 +2193,10 @@ struct ForceNumberRevealSettingsCard: View {
     @AppStorage("noteTopInputMode")  private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")   private var bioTopInputMode:  String = "off"
 
-    /// Binding for the OCR toggle that enforces mutual exclusivity with Note/Bio OCR.
     private var ocrEnabledBinding: Binding<Bool> {
         Binding(
             get: { settings.ocrEnabled },
-            set: { newValue in
-                settings.ocrEnabled = newValue
-                if newValue {
-                    // Turn off OCR on Note and Bio when Post Prediction OCR is enabled
-                    if noteTopInputMode == "ocr" { noteTopInputMode = "off" }
-                    if bioTopInputMode  == "ocr" { bioTopInputMode  = "off" }
-                }
-            }
+            set: { newValue in settings.ocrEnabled = newValue }
         )
     }
 
