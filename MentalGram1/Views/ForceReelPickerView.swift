@@ -204,7 +204,10 @@ struct ForceReelPickerView: View {
             thumbnailURL: reel.imageURL,
             videoURL: reel.videoURL ?? "",
             mediaId: reel.mediaId,
-            username: searchedUsername
+            username: searchedUsername,
+            likeCount: reel.likeCount,
+            commentCount: reel.commentCount,
+            caption: reel.caption
         )
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         dismiss()

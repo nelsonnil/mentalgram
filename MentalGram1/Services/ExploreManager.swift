@@ -18,6 +18,10 @@ class ExploreManager: ObservableObject {
     private var hasMorePages = true
     private var itemBuffer: [InstagramMediaItem] = [] // Buffer para items que no caben en grid de 3
     private var lastBackgroundRefresh: Date? = nil
+
+    // UserDefaults keys for persisting scroll cursor across launches
+    private static let udKeyNextMaxId   = "explore_nextMaxId"
+    private static let udKeyHasMore     = "explore_hasMorePages"
     private static let backgroundRefreshMinInterval: TimeInterval = 30 * 60 // 30 min
     private static let startupDelay: TimeInterval = 12 // seconds to wait after app start
     
@@ -146,9 +150,6 @@ class ExploreManager: ObservableObject {
             if !itemsToBuffer.isEmpty {
                 print("🔍 [EXPLORE] Buffering \(itemsToBuffer.count) extra items for next load")
             }
-            
-            // Clear old thumbnails BEFORE saving new ones so stale files don't pile up
-            clearPermanentThumbnails()
 
             await MainActor.run {
                 self.exploreMedia = itemsToShow
@@ -156,15 +157,18 @@ class ExploreManager: ObservableObject {
                 self.nextMaxId = maxId
                 self.hasMorePages = maxId != nil
 
-                // Save item list permanently
+                // Save item list and cursor permanently
                 saveToCache()
 
                 print("✅ [EXPLORE] Loaded \(itemsToShow.count) items into UI")
                 print("🔍 [EXPLORE] Has more pages: \(self.hasMorePages)")
             }
 
-            // Download and permanently store all thumbnails
+            // Download new thumbnails FIRST, then clear stale ones.
+            // Doing it in this order ensures that if the download fails (offline, CDN error),
+            // the old thumbnails on disk are still shown rather than a blank grid.
             await downloadThumbnails(items: itemsToShow)
+            clearPermanentThumbnails(except: Set(itemsToShow.map { $0.imageURL }))
             
         } catch {
             print("❌ [EXPLORE] Error loading: \(error)")
@@ -277,13 +281,23 @@ class ExploreManager: ObservableObject {
         return UIImage(data: data)
     }
 
-    /// Deletes all stored thumbnails (call before saving a new batch so old ones don't pile up).
-    private func clearPermanentThumbnails() {
+    /// Deletes stored thumbnails that are NOT in `keep`.
+    /// Pass an empty set to delete everything (used by clearCache).
+    /// Pass the current batch of URLs to remove only orphaned/stale files.
+    private func clearPermanentThumbnails(except keep: Set<String> = []) {
         guard let dir = Self.thumbnailDir else { return }
         let files = (try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: nil)) ?? []
-        files.forEach { try? FileManager.default.removeItem(at: $0) }
-        print("🗑️ [EXPLORE] Permanent thumbnails cleared (\(files.count) files)")
+        let keepFilenames = Set(keep.map { Self.thumbnailFilename(for: $0) })
+        var removed = 0
+        for file in files {
+            guard !keepFilenames.contains(file.lastPathComponent) else { continue }
+            try? FileManager.default.removeItem(at: file)
+            removed += 1
+        }
+        if removed > 0 {
+            print("🗑️ [EXPLORE] Removed \(removed) stale thumbnails, kept \(files.count - removed)")
+        }
     }
 
     // MARK: - Cache Management (JSON stored in Application Support too)
@@ -294,7 +308,16 @@ class ExploreManager: ObservableObject {
               let data = try? JSONEncoder().encode(exploreMedia) else { return }
         let fileURL = dir.appendingPathComponent("explore_items.json")
         try? data.write(to: fileURL, options: .atomic)
-        print("💾 [EXPLORE] Items saved permanently")
+
+        // Persist scroll cursor so infinite scroll works after app re-launch (weeks later)
+        if let cursor = nextMaxId {
+            UserDefaults.standard.set(cursor, forKey: Self.udKeyNextMaxId)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.udKeyNextMaxId)
+        }
+        UserDefaults.standard.set(hasMorePages, forKey: Self.udKeyHasMore)
+
+        print("💾 [EXPLORE] Items + cursor saved (nextMaxId: \(nextMaxId?.prefix(20) ?? "nil"))")
     }
 
     private func loadFromCache() {
@@ -330,7 +353,13 @@ class ExploreManager: ObservableObject {
         }
 
         self.exploreMedia = loadedItems
-        print("✅ [EXPLORE] Loaded \(loadedItems.count) items from permanent storage")
+
+        // Restore scroll cursor so infinite scroll works immediately on re-launch
+        self.nextMaxId   = UserDefaults.standard.string(forKey: Self.udKeyNextMaxId)
+        self.hasMorePages = UserDefaults.standard.object(forKey: Self.udKeyHasMore) != nil
+            ? UserDefaults.standard.bool(forKey: Self.udKeyHasMore)
+            : self.nextMaxId != nil
+        print("✅ [EXPLORE] Loaded \(loadedItems.count) items from permanent storage (cursor: \(self.nextMaxId?.prefix(20) ?? "nil"), hasMore: \(self.hasMorePages))")
 
         // Load thumbnails from permanent storage; collect any missing ones
         var missingItems: [InstagramMediaItem] = []

@@ -132,15 +132,20 @@ struct PerformanceView: View {
             isHome: true, isSearch: false,
             onHomePress: {},
             onSearchPress: {
-                if FollowingMagicSettings.shared.isEnabled && SecretNumberManager.shared.hasDigits {
+                // Capture buffer ONCE before any consumer resets it.
+                // FollowingMagic's captureFromBuffer() calls reset() internally,
+                // which would empty the buffer before ForceReel can read it.
+                let capturedDigits = SecretNumberManager.shared.digitBuffer
+                let capturedNumber = capturedDigits.reduce(0) { $0 * 10 + $1 }
+
+                if FollowingMagicSettings.shared.isEnabled && !capturedDigits.isEmpty {
                     FollowingMagicSettings.shared.captureFromBuffer()
                 }
-                if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel {
-                    let buffer = SecretNumberManager.shared.digitBuffer
-                    if !buffer.isEmpty {
-                        let position = buffer.reduce(0) { $0 * 10 + $1 }
-                        ForceReelSettings.shared.pendingPosition = position
-                        print("🎭 [FORCE] Position captured: \(position)")
+                if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel && capturedNumber > 0 {
+                    ForceReelSettings.shared.pendingPosition = capturedNumber
+                    print("🎭 [FORCE] Position captured: \(capturedNumber)")
+                    // Buffer may already be reset by FollowingMagic above; only reset if still populated.
+                    if SecretNumberManager.shared.hasDigits {
                         SecretNumberManager.shared.reset()
                     }
                 }

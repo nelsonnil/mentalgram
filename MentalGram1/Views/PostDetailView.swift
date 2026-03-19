@@ -2,7 +2,7 @@ import SwiftUI
 import AVKit
 import Combine
 
-// MARK: - Post Detail View (Instagram-style fullscreen post viewer)
+// MARK: - Post Detail View (vertical swipe, Instagram Reels style)
 
 struct PostDetailView: View {
     let mediaItems: [InstagramMediaItem]
@@ -13,6 +13,19 @@ struct PostDetailView: View {
     @State private var currentIndex: Int
     @State private var likedItems: Set<String> = []
     @State private var savedItems: Set<String> = []
+
+    // Vertical swipe state
+    @State private var dragOffset: CGFloat = 0
+    /// Decided at the START of each drag: will the next page be the forced reel?
+    @State private var isForcedNext: Bool = false
+    /// True while the forced reel is the page currently on screen.
+    @State private var showingForcedReel: Bool = false
+
+    @ObservedObject private var forceSettings = ForceReelSettings.shared
+
+    // Velocity threshold to commit a swipe even if displacement is small
+    private let velocityThreshold: CGFloat = 350
+    private let displacementThreshold: CGFloat = 80
 
     init(
         mediaItems: [InstagramMediaItem],
@@ -33,58 +46,171 @@ struct PostDetailView: View {
             .first?.windows.first?.safeAreaInsets.top) ?? 44
     }
 
-    var body: some View {
-        ZStack(alignment: .top) {
-            Color.black.ignoresSafeArea()
+    // MARK: - Item helpers
 
-            // Horizontal pager — one full-screen page per post
-            TabView(selection: $currentIndex) {
-                ForEach(Array(mediaItems.enumerated()), id: \.offset) { index, item in
+    /// The page currently filling the screen.
+    private var currentItem: InstagramMediaItem? {
+        if showingForcedReel { return forceSettings.asFakeMediaItem() }
+        guard currentIndex < mediaItems.count else { return nil }
+        return mediaItems[currentIndex]
+    }
+
+    /// The page that will slide up from below during a swipe-up gesture.
+    private var peekItem: InstagramMediaItem? {
+        if isForcedNext { return forceSettings.asFakeMediaItem() }
+        // After showing forced reel, "next" is the real item at currentIndex
+        // (forced reel sits between currentIndex-1 and currentIndex conceptually)
+        let nextIdx = showingForcedReel ? currentIndex : currentIndex + 1
+        return nextIdx < mediaItems.count ? mediaItems[nextIdx] : nil
+    }
+
+    /// Resolves the cached thumbnail for an item, handling the forced reel's stable key.
+    private func cachedImg(for item: InstagramMediaItem) -> UIImage? {
+        if item.id.hasPrefix("forced_reel_") {
+            return ExploreManager.shared.cachedImages[ForceReelSettings.localCacheKey]
+        }
+        return cachedImages[item.imageURL]
+    }
+
+    // MARK: - Body
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .top) {
+                Color.black.ignoresSafeArea()
+
+                // ── Peek page: slides up from below while dragging ──────────
+                if let peek = peekItem, dragOffset < 0 {
+                    PostPageView(
+                        item: peek,
+                        cachedImage: cachedImg(for: peek),
+                        isLiked: likedItems.contains(peek.id),
+                        isSaved: savedItems.contains(peek.id),
+                        onLike: { toggleLike(peek.id) },
+                        onSave: { toggleSave(peek.id) }
+                    )
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    // Starts just below the screen; follows the drag so both pages move together
+                    .offset(y: geo.size.height + dragOffset)
+                }
+
+                // ── Current page ─────────────────────────────────────────────
+                if let item = currentItem {
                     PostPageView(
                         item: item,
-                        cachedImage: cachedImages[item.imageURL],
+                        cachedImage: cachedImg(for: item),
                         isLiked: likedItems.contains(item.id),
                         isSaved: savedItems.contains(item.id),
                         onLike: { toggleLike(item.id) },
                         onSave: { toggleSave(item.id) }
                     )
-                    .tag(index)
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .offset(y: dragOffset)
                 }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
 
-            // Top navigation bar (overlaid on content)
-            HStack(spacing: 0) {
-                Button(action: onClose) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .semibold))
+                // ── Navigation bar (always on top) ───────────────────────────
+                HStack(spacing: 0) {
+                    Button(action: onClose) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .padding(.leading, 4)
+                    Spacer()
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 20))
                         .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                        .padding(.trailing, 16)
                 }
-                .padding(.leading, 4)
-
-                Spacer()
-
-                // Filter / options icon (right of nav bar — mirrors screenshot)
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .font(.system(size: 20))
-                    .foregroundColor(.white)
-                    .padding(.trailing, 16)
+                .padding(.top, statusBarHeight)
             }
-            .padding(.top, statusBarHeight)
+            .ignoresSafeArea()
+            .gesture(swipeGesture(geo: geo))
         }
-        .ignoresSafeArea()
-        // Force explicit colors — ignore parent preferredColorScheme(.light) from ExploreView
         .environment(\.colorScheme, .dark)
         .onDisappear {
-            // Auto-reset spectators after the trick is shown so it's ready for the next round
             if DateForceSettings.shared.isEnabled && DateForceSettings.shared.hasSpectators {
                 DateForceSettings.shared.resetSpectators()
                 print("🎯 [DATE FORCE] Spectators auto-reset after post closed")
             }
         }
+    }
+
+    // MARK: - Vertical drag gesture
+
+    private func swipeGesture(geo: GeometryProxy) -> some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                let dy = value.translation.height
+
+                // Only handle upward swipes (negative dy)
+                guard dy < 0 else { return }
+
+                // ── Decide target on the very first movement of this drag ────
+                if dragOffset == 0 {
+                    let startedInBottomHalf = value.startLocation.y > geo.size.height / 2
+                    let canForce = forceSettings.isEnabled
+                                   && forceSettings.hasReel
+                                   && !showingForcedReel   // don't double-trigger
+
+                    isForcedNext = startedInBottomHalf && canForce
+
+                    if isForcedNext {
+                        print("🎭 [FORCE] Secret swipe detected — forced reel queued")
+                    }
+                }
+
+                // Apply rubber-band resistance when there is no next page
+                if peekItem == nil {
+                    dragOffset = dy * 0.12
+                } else {
+                    dragOffset = dy
+                }
+            }
+            .onEnded { value in
+                let dy       = value.translation.height
+                let velocity = value.predictedEndTranslation.height   // negative = fast upward
+
+                let committed = (dy < -displacementThreshold || velocity < -velocityThreshold)
+                              && peekItem != nil
+
+                if committed {
+                    // Animate both pages off / on screen
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
+                        dragOffset = -geo.size.height
+                    }
+                    // After animation completes, swap state and snap back to 0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+                        commitSwipeUp()   // updates currentItem
+                        dragOffset = 0   // instant — new item is already at y:0 conceptually
+                    }
+                } else {
+                    // Cancel: snap back
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                        dragOffset = 0
+                    }
+                    isForcedNext = false
+                }
+            }
+    }
+
+    /// Called once the transition animation finishes. Updates which item is "current".
+    private func commitSwipeUp() {
+        if isForcedNext {
+            // Secret swipe: reveal the forced reel
+            showingForcedReel = true
+            print("🎭 [FORCE] Forced reel now on screen")
+        } else if showingForcedReel {
+            // Was showing forced reel; normal swipe-up moves to the real next
+            showingForcedReel = false
+            if currentIndex < mediaItems.count - 1 { currentIndex += 1 }
+        } else {
+            // Normal swipe: advance real index
+            if currentIndex < mediaItems.count - 1 { currentIndex += 1 }
+        }
+        isForcedNext = false
     }
 
     // MARK: - Actions

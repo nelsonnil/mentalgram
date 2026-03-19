@@ -35,6 +35,24 @@ class ForceReelSettings: ObservableObject {
         didSet { UserDefaults.standard.set(sourceUsername, forKey: "forceReel_sourceUsername") }
     }
 
+    @Published var likeCount: Int? {
+        didSet {
+            if let v = likeCount { UserDefaults.standard.set(v, forKey: "forceReel_likeCount") }
+            else { UserDefaults.standard.removeObject(forKey: "forceReel_likeCount") }
+        }
+    }
+
+    @Published var commentCount: Int? {
+        didSet {
+            if let v = commentCount { UserDefaults.standard.set(v, forKey: "forceReel_commentCount") }
+            else { UserDefaults.standard.removeObject(forKey: "forceReel_commentCount") }
+        }
+    }
+
+    @Published var caption: String? {
+        didSet { UserDefaults.standard.set(caption, forKey: "forceReel_caption") }
+    }
+
     // MARK: - Local permanent assets
 
     /// Thumbnail loaded from permanent local storage (never expires).
@@ -79,6 +97,9 @@ class ForceReelSettings: ObservableObject {
         videoURL       = UserDefaults.standard.string(forKey: "forceReel_videoURL") ?? ""
         mediaId        = UserDefaults.standard.string(forKey: "forceReel_mediaId") ?? ""
         sourceUsername = UserDefaults.standard.string(forKey: "forceReel_sourceUsername") ?? ""
+        likeCount      = UserDefaults.standard.object(forKey: "forceReel_likeCount") as? Int
+        commentCount   = UserDefaults.standard.object(forKey: "forceReel_commentCount") as? Int
+        caption        = UserDefaults.standard.string(forKey: "forceReel_caption")
 
         // Load thumbnail from disk
         localThumbnailImage = Self.loadLocalThumbnail()
@@ -98,15 +119,19 @@ class ForceReelSettings: ObservableObject {
 
     /// Saves the reel configuration and immediately starts downloading
     /// the thumbnail and video to permanent local storage.
-    func selectReel(thumbnailURL: String, videoURL: String, mediaId: String, username: String) {
+    func selectReel(thumbnailURL: String, videoURL: String, mediaId: String, username: String,
+                    likeCount: Int? = nil, commentCount: Int? = nil, caption: String? = nil) {
         self.thumbnailURL   = thumbnailURL
         self.videoURL       = videoURL
         self.mediaId        = mediaId
         self.sourceUsername = username
+        self.likeCount      = likeCount
+        self.commentCount   = commentCount
+        self.caption        = caption
 
         // Reset local asset state so UI reflects that a fresh download is starting
         localVideoReady = false
-        print("🎭 [FORCE] Reel selected: mediaId=\(mediaId) from @\(username)")
+        print("🎭 [FORCE] Reel selected: mediaId=\(mediaId) from @\(username) ❤️\(likeCount ?? 0)")
 
         Task {
             await ensureAppSupportDir()
@@ -121,6 +146,9 @@ class ForceReelSettings: ObservableObject {
         videoURL        = ""
         mediaId         = ""
         sourceUsername  = ""
+        likeCount       = nil
+        commentCount    = nil
+        caption         = nil
         pendingPosition = 0
         localThumbnailImage = nil
         localVideoReady     = false
@@ -152,10 +180,10 @@ class ForceReelSettings: ObservableObject {
             mediaId: mediaId,
             imageURL: Self.localCacheKey,   // stable key → always in cachedImages
             videoURL: effectiveVideoURL,
-            caption: nil,
+            caption: caption,
             takenAt: nil,
-            likeCount: nil,
-            commentCount: nil,
+            likeCount: likeCount,
+            commentCount: commentCount,
             mediaType: .video
         )
     }
