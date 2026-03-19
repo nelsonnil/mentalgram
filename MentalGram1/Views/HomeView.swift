@@ -641,6 +641,8 @@ struct SettingsView: View {
     @ObservedObject var instagram      = InstagramService.shared
     @ObservedObject var backup         = CloudBackupService.shared
     @ObservedObject private var integrations = IntegrationsSettings.shared
+    @ObservedObject private var profileCache = ProfileCacheService.shared
+    @State private var settingsProfilePic: UIImage? = nil
     @State private var showingLogoutAlert = false
     @State private var showingFollowerData = false
     @State private var latestFollower: InstagramFollower?
@@ -784,16 +786,37 @@ struct SettingsView: View {
                 VStack(spacing: 0) {
                     // Avatar row
                     HStack(spacing: VaultTheme.Spacing.md) {
-                        ZStack {
-                            Circle().fill(Self.colorAccount.opacity(0.2)).frame(width: 44, height: 44)
-                            Text(String(instagram.session.username.prefix(1)).uppercased())
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(Self.colorAccount)
+                        Group {
+                            if let pic = settingsProfilePic ?? profileCache.pendingProfilePic {
+                                Image(uiImage: pic)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 48, height: 48)
+                                    .clipShape(Circle())
+                            } else {
+                                ZStack {
+                                    Circle().fill(Self.colorAccount.opacity(0.2)).frame(width: 48, height: 48)
+                                    Text(String(instagram.session.username.prefix(1)).uppercased())
+                                        .font(.system(size: 20, weight: .bold))
+                                        .foregroundColor(Self.colorAccount)
+                                }
+                            }
                         }
+                        .task { await loadSettingsProfilePic() }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("@\(instagram.session.username)")
-                                .font(VaultTheme.Typography.bodyBold())
-                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            let fullName = profileCache.cachedProfile?.fullName ?? ""
+                            if !fullName.isEmpty {
+                                Text(fullName)
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("@\(instagram.session.username)")
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            } else {
+                                Text("@\(instagram.session.username)")
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                            }
                             Text("Instagram account connected")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
@@ -819,6 +842,19 @@ struct SettingsView: View {
             }
         }
         Spacer().frame(height: 28)
+    }
+
+    private func loadSettingsProfilePic() async {
+        guard let url = profileCache.cachedProfile?.profilePicURL, !url.isEmpty else { return }
+        if let cached = ProfileCacheService.shared.loadImage(forURL: url) {
+            await MainActor.run { settingsProfilePic = cached }
+            return
+        }
+        guard let imageUrl = URL(string: url),
+              let (data, _) = try? await URLSession.shared.data(from: imageUrl),
+              let image = UIImage(data: data) else { return }
+        ProfileCacheService.shared.saveImage(image, forURL: url)
+        await MainActor.run { settingsProfilePic = image }
     }
 
     // MARK: - Section: Instagram Profile
