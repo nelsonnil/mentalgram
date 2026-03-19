@@ -510,9 +510,8 @@ class InstagramService: ObservableObject {
         print("➕ [FOLLOW] Current user ID: \(session.userId)")
         print("➕ [FOLLOW] Client UUID: \(clientUUID)")
         
-        // Simulate human delay (2-5 seconds - a real person takes time to decide)
-        let delay = UInt64.random(in: 2_000_000_000...5_000_000_000)
-        print("⏱️ [FOLLOW] Waiting \(Double(delay) / 1_000_000_000.0) seconds...")
+        let delay = UInt64.random(in: 500_000_000...1_500_000_000)
+        print("⏱️ [FOLLOW] Waiting \(Double(delay) / 1_000_000_000.0)s...")
         try await Task.sleep(nanoseconds: delay)
         
         let data = try await apiRequest(

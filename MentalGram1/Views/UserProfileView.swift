@@ -727,17 +727,13 @@ struct UserProfileView: View {
     }
     
     private func toggleFollow() {
-        print("🔘 [UI] toggleFollow() called")
-        print("🔘 [UI] Current isFollowing: \(isFollowing)")
-        print("🔘 [UI] Profile userId: \(profile.userId)")
-        print("🔘 [UI] Profile username: @\(profile.username)")
-        
-        guard !isFollowActionLoading else {
-            print("⚠️ [UI] Already loading, ignoring tap")
-            return
-        }
+        print("🔘 [UI] toggleFollow() called — isFollowing:\(isFollowing) userId:\(profile.userId)")
+
+        guard !isFollowActionLoading else { return }
         guard !InstagramService.shared.isLocked else {
             print("🚫 [UI] Follow action skipped — lockdown active")
+            lastError = .apiError("App is in safety lockdown. Wait a moment and try again.")
+            showingConnectionError = true
             return
         }
         
@@ -746,61 +742,48 @@ struct UserProfileView: View {
         
         Task {
             do {
-                // OPCIÓN 2: Confiar en estado local (más natural, menos detectable)
-                // Estado se verificó al cargar perfil (fresco y correcto)
-                // Si algo está mal, Instagram simplemente rechaza el request
-                print("🔘 [UI] Using local state for follow action")
-                print("📊 [UI] Local state - Following: \(isFollowing), Requested: \(isFollowRequested)")
-                
+                let wasFollowing = isFollowing
+                let wasRequested = isFollowRequested
                 let success: Bool
-                
-                if isFollowing {
-                    // Ya lo estamos siguiendo, hacer unfollow
-                    print("➖ [UI] Unfollowing @\(profile.username) (ID: \(profile.userId))...")
+
+                if wasFollowing {
+                    print("➖ [UI] Unfollowing @\(profile.username)...")
                     success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
-                } else if isFollowRequested {
-                    // Tiene solicitud pendiente, cancelarla (unfollow)
+                } else if wasRequested {
                     print("🚫 [UI] Canceling follow request for @\(profile.username)...")
                     success = try await InstagramService.shared.unfollowUser(userId: profile.userId)
                 } else {
-                    // No lo estamos siguiendo NI hay solicitud, hacer follow
-                    print("➕ [UI] Following @\(profile.username) (ID: \(profile.userId))...")
+                    print("➕ [UI] Following @\(profile.username)...")
                     success = try await InstagramService.shared.followUser(userId: profile.userId)
                 }
-                
+
                 print("📊 [UI] API returned success: \(success)")
-                
+
                 await MainActor.run {
                     if success {
-                        if isFollowing {
-                            // Hicimos unfollow de un perfil que seguíamos
+                        if wasFollowing || wasRequested {
                             isFollowing = false
                             isFollowRequested = false
-                            print("✅ [UI] Unfollowed successfully")
-                        } else if isFollowRequested {
-                            // Cancelamos una solicitud pendiente
-                            isFollowing = false
-                            isFollowRequested = false
-                            print("✅ [UI] Follow request canceled")
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            print("✅ [UI] Unfollowed / request canceled")
                         } else {
-                            // Enviamos un follow nuevo
                             if currentProfile.isPrivate {
-                                // Si es privado, el follow crea una solicitud pendiente
                                 isFollowRequested = true
                                 isFollowing = false
-                                print("✅ [UI] Follow request sent (private profile, pending approval)")
+                                print("✅ [UI] Follow request sent (private)")
                             } else {
-                                // Si es público, follow inmediato
                                 isFollowing = true
                                 isFollowRequested = false
-                                print("✅ [UI] Now following (public profile)")
+                                print("✅ [UI] Now following")
                             }
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         }
                     } else {
-                        print("❌ [UI] Follow action failed - API returned false")
+                        print("❌ [UI] Follow action returned false")
+                        lastError = .apiError("Follow action failed. Please try again.")
+                        showingConnectionError = true
                     }
                     isFollowActionLoading = false
-                    print("🔄 [UI] Set loading to false")
                 }
             } catch let error as InstagramError {
                 print("❌ [UI] Instagram error toggling follow: \(error)")
@@ -811,8 +794,6 @@ struct UserProfileView: View {
                 }
             } catch {
                 print("❌ [UI] Error toggling follow: \(error)")
-                print("❌ [UI] Error type: \(type(of: error))")
-                print("❌ [UI] Error description: \(error.localizedDescription)")
                 await MainActor.run {
                     isFollowActionLoading = false
                     lastError = .apiError(error.localizedDescription)
