@@ -34,10 +34,16 @@ struct ScrollViewInterceptor: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.forcedIndex    = forcedIndex
-        context.coordinator.totalPostCount = totalPostCount
-        context.coordinator.isActive       = isActive
-        context.coordinator.hasActivatedBinding = $hasActivated
+        let c = context.coordinator
+        // If the key inputs changed (new session or different post), invalidate
+        // the cached target Y so it's recalculated fresh on the next scroll.
+        if c.forcedIndex != forcedIndex || c.totalPostCount != totalPostCount {
+            c.invalidateCache()
+        }
+        c.forcedIndex    = forcedIndex
+        c.totalPostCount = totalPostCount
+        c.isActive       = isActive
+        c.hasActivatedBinding = $hasActivated
     }
 
     // MARK: - View hierarchy search
@@ -69,19 +75,35 @@ struct ScrollViewInterceptor: UIViewRepresentable {
     class Coordinator: NSObject, UIScrollViewDelegate {
         var forcedIndex: Int = 0
         var totalPostCount: Int = 1
-        var isActive = false
         var hasActivatedBinding: Binding<Bool>?
 
         /// Once true, the trick is done and all scrolling is normal.
         private var released = false
-        /// The Y we're forcing the scroll to — cached after first successful resolution.
+        /// The Y we're forcing the scroll to — cached within a single activation session.
         private var cachedForcedY: CGFloat?
         private weak var originalDelegate: UIScrollViewDelegate?
+
+        /// Tracks the last isActive value to detect re-entry.
+        private var lastIsActive = false
+        var isActive = false {
+            didSet {
+                // When activating fresh (false → true), reset so the trick
+                // runs again and the target Y is recalculated from scratch.
+                if isActive && !lastIsActive {
+                    released = false
+                    cachedForcedY = nil
+                }
+                lastIsActive = isActive
+            }
+        }
+
+        func invalidateCache() { cachedForcedY = nil }
 
         init(parent: ScrollViewInterceptor) {
             self.forcedIndex    = parent.forcedIndex
             self.totalPostCount = parent.totalPostCount
             self.isActive       = parent.isActive
+            self.lastIsActive   = parent.isActive
         }
 
         func attach(to scrollView: UIScrollView) {
@@ -150,43 +172,82 @@ struct ScrollViewInterceptor: UIViewRepresentable {
         // MARK: - Compute forced Y (with caching)
 
         private func computeForcedY(in scrollView: UIScrollView) -> CGFloat? {
+            let headerHeight: CGFloat = 48
+            let screenW      = UIScreen.main.bounds.width
+            let topInset     = scrollView.adjustedContentInset.top
+            let botInset     = scrollView.adjustedContentInset.bottom
+            let visibleH     = scrollView.bounds.height - topInset - botInset
+
+            // Use the ACTUAL thumbnail dimensions to get the real rendered image height.
+            // PostCardView uses .scaledToFit() at full width, so height = screenW × (h/w).
+            // Capped at visibleH so we center the visible portion for very tall reels.
+            let imageHeight: CGFloat = {
+                if let img = ForcePostSettings.shared.localThumbnailImage {
+                    let ratio = img.size.height / max(img.size.width, 1)
+                    let natural = screenW * ratio
+                    return min(natural, visibleH - headerHeight)
+                }
+                return screenW  // fallback: assume square
+            }()
+
+            // Helper: given the absolute content-Y of the card top, return the
+            // contentOffset.y that centres the image in the visible area.
+            func centeredOffset(cardAbsoluteY: CGFloat) -> CGFloat {
+                let imageCenterInContent = cardAbsoluteY + headerHeight + imageHeight / 2
+                // Target: image center lands exactly at the visual mid-point of the visible area.
+                return imageCenterInContent - topInset - visibleH / 2
+            }
+
+            // ── Primary: locate the card view by its accessibility identifier ──────
+            // Note: SwiftUI may not expose the identifier in UIKit's tree, so this
+            // path often falls through to the fallback below.
             if let view = Self.findView(identifier: "forced_post_card", in: scrollView) {
+                // view.convert(…, to: scrollView) returns coords in the scrollView's
+                // BOUNDS space (origin = contentOffset), so we add contentOffset.y
+                // to get the absolute content position.
                 let frame = view.convert(view.bounds, to: scrollView)
+                let absoluteCardY = frame.minY + scrollView.contentOffset.y
 
-                let headerHeight: CGFloat = 48
-                let imageHeight = UIScreen.main.bounds.width   // square post
-                let viewportHeight = scrollView.bounds.height
-
-                let y = frame.minY + headerHeight + imageHeight - viewportHeight
+                let y = centeredOffset(cardAbsoluteY: absoluteCardY)
 
                 print("""
-                🎯 [FORCE DEBUG]
-                   screen.width       = \(UIScreen.main.bounds.width)
-                   screen.height      = \(UIScreen.main.bounds.height)
-                   viewport.height    = \(viewportHeight)
-                   contentInset.top   = \(scrollView.contentInset.top)
-                   adjustedInset.top  = \(scrollView.adjustedContentInset.top)
-                   card frame.minY    = \(frame.minY)
-                   card frame.height  = \(frame.height)
-                   imageHeight(width) = \(imageHeight)
-                   computed Y         = \(y)
-                   currentOffset.y    = \(scrollView.contentOffset.y)
+                🎯 [FORCE DEBUG] via findView
+                   absoluteCardY     = \(absoluteCardY)  (frame.minY \(frame.minY) + offset \(scrollView.contentOffset.y))
+                   topInset          = \(topInset)   visibleH = \(visibleH)
+                   imageHeight(real) = \(imageHeight)   screenW = \(screenW)
+                   centeredOffset    = \(y)
                 """)
 
                 cachedForcedY = y
                 return y
             }
 
-            // If we already computed it before, reuse (LazyVStack may have recycled the view)
+            // If we already computed it before, reuse (findView may fail on subsequent
+            // calls if SwiftUI has recycled or not yet rendered the cell).
             if let cached = cachedForcedY {
                 return cached
             }
 
-            // Fallback: estimate from content size
+            // ── Fallback: estimate absolute card top from uniform row heights ───────
+            // forcedIndex * avg gives the card's TOP in content coords.
+            // We then apply the same centering formula.
             let contentHeight = scrollView.contentSize.height
             guard contentHeight > 0 else { return nil }
             let avg = contentHeight / CGFloat(max(1, totalPostCount))
-            let y = CGFloat(forcedIndex) * avg
+            let cardAbsoluteY = CGFloat(forcedIndex) * avg
+
+            let y = centeredOffset(cardAbsoluteY: cardAbsoluteY)
+
+            print("""
+            🎯 [FORCE DEBUG] via fallback
+               forcedIndex       = \(forcedIndex) / \(totalPostCount)
+               avg card height   = \(avg)
+               cardAbsoluteY     = \(cardAbsoluteY)
+               topInset          = \(topInset)   visibleH = \(visibleH)
+               imageHeight(real) = \(imageHeight)   screenW = \(screenW)
+               centeredOffset    = \(y)
+            """)
+
             cachedForcedY = y
             return y
         }

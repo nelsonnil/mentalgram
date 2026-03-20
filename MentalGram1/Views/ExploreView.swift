@@ -35,6 +35,8 @@ struct ExploreView: View {
     @State private var revealTask: Task<Void, Never>?
     // Debounce duplicate space triggers (keyboard can fire onChange multiple times)
     @State private var lastSpaceTriggerTime: Date = .distantPast
+    // Debounce task for plain-text search (fires 600ms after last keypress)
+    @State private var searchDebounceTask: Task<Void, Never>?
     
     var body: some View {
         ZStack {
@@ -66,6 +68,7 @@ struct ExploreView: View {
                         
                         if !searchText.isEmpty {
                             Button(action: {
+                                searchDebounceTask?.cancel()
                                 isUpdatingMask = true
                                 searchText = ""
                                 secretInputBuffer = ""
@@ -86,6 +89,7 @@ struct ExploreView: View {
                     
                     if isSearchFieldFocused || !searchText.isEmpty {
                         Button("Cancelar") {
+                            searchDebounceTask?.cancel()
                             isUpdatingMask = true
                             searchText = ""
                             secretInputBuffer = ""
@@ -423,8 +427,29 @@ struct ExploreView: View {
         // NOTE: maskTextCache is loaded once on .onAppear — never refresh it here.
         // Doing so would fire a getLatestFollower() API call on every keypress.
 
-        let expectedLength = secretInputBuffer.count
         let secretInputActive = !maskTextCache.isEmpty
+
+        // ── Cover typing DISABLED: behave as a plain search field ────────────
+        // Do NOT accumulate secretInputBuffer or call handleSpacePressed().
+        // Debounce: wait 600ms after the last keypress before hitting the API.
+        if !secretInputActive {
+            searchDebounceTask?.cancel()
+            if newValue.isEmpty {
+                searchTask?.cancel()
+                searchResults = []
+            } else if newValue.count >= 4 {
+                let query = newValue
+                searchDebounceTask = Task {
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    guard !Task.isCancelled else { return }
+                    performSearch(query: query)
+                }
+            }
+            return
+        }
+
+        // ── Cover typing ACTIVE ───────────────────────────────────────────────
+        let expectedLength = secretInputBuffer.count
 
         if newValue.count > expectedLength {
             // User typed new character(s)
@@ -449,11 +474,6 @@ struct ExploreView: View {
                 // SPACE = word complete → reveal + trigger ONE search with the mask text
                 handleSpacePressed()
                 // handleSpacePressed calls performSearch internally (see below)
-            } else if !secretInputActive {
-                // No secret input: search only when adding chars and 4+ chars visible
-                if searchText.count >= 4 {
-                    performSearch(query: searchText)
-                }
             }
             // Secret input active + no space: do nothing, wait for SPACE
 
