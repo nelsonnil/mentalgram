@@ -6,6 +6,7 @@ import Combine
 /// Supported URLs:
 ///   vault://note?text=<encoded text>   → send as Instagram Note
 ///   vault://bio?text=<encoded text>    → update Instagram Biography
+///   vault://reveal?word=<encoded word> → open Performance and unarchive photos for the given word
 ///
 /// Flow:
 ///   1. App receives URL → URLActionManager.shared.handleURL(_:)
@@ -59,6 +60,25 @@ class URLActionManager: ObservableObject {
             return true
         }
 
+        // ── Word reveal variant ───────────────────────────────────────────────
+        if host == "reveal" {
+            let paramName = "word"
+            guard let wordItem = components?.queryItems?.first(where: { $0.name == paramName }),
+                  let raw = wordItem.value,
+                  !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                print("⚠️ [URL] Missing or empty 'word' parameter in vault://reveal URL: \(url)")
+                return false
+            }
+            let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            print("📲 [URL] vault://reveal received, word=\"\(word.prefix(40))\"")
+            DispatchQueue.main.async {
+                self.pendingMode = "reveal"
+                self.pendingText = word
+            }
+            return true
+        }
+
         // ── Note / Bio text variants ──────────────────────────────────────────
         guard host == "note" || host == "bio" else {
             print("⚠️ [URL] Unknown action: \(host)")
@@ -104,6 +124,17 @@ class URLActionManager: ObservableObject {
         components.host   = mode
         components.queryItems = [URLQueryItem(name: "text", value: text)]
         return components.url?.absoluteString ?? "vault://\(mode)?text=\(text)"
+    }
+
+    // MARK: - Reveal URL builder
+
+    /// Builds a vault://reveal?word= URL for the given word, with proper URL encoding.
+    static func revealURL(word: String) -> String {
+        var components = URLComponents()
+        components.scheme = "vault"
+        components.host   = "reveal"
+        components.queryItems = [URLQueryItem(name: "word", value: word)]
+        return components.url?.absoluteString ?? "vault://reveal?word=\(word)"
     }
 
     // MARK: - Profile pic URL builders

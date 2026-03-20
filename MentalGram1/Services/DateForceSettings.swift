@@ -3,26 +3,32 @@ import Combine
 
 // MARK: - Date Force Settings
 // "El Oráculo Social": forces followers/following counts on any Explore post
-// to match the current date+time after subtracting audience spectators' following counts.
+// to match the current date+time after subtracting audience spectators' counts.
+//
+// Metrics:
+//   dual/auto date group → uses rawFollowerCount  (seguidores del espectador)
+//   dual/auto time group → uses rawFollowingCount (seguidos del espectador)
+//
+// Split logic:
+//   auto → exactly autoSpectatorCount/2 each group (selector: 2, 4, 6, 8)
+//   dual → first count/2 spectators → date; remaining → time (dynamic, no preset)
 
 enum DateForceMode: String, CaseIterable {
-    case simple = "simple"  // All spectators → date group; time comes directly
-    case dual   = "dual"    // First N → date group, rest → time group
-    case auto   = "auto"    // Followers captured automatically when PerformanceView opens
+    case dual = "dual"  // Manual: magician visits spectator profiles in Explore
+    case auto = "auto"  // Automatic: app fetches latest followers via API
 }
 
 enum DateForceFormat: String, CaseIterable {
     case ddmm = "DD/MM"
     case mmdd = "MM/DD"
-
     var displayName: String { rawValue }
 }
 
 struct DateForceSpectator: Identifiable, Equatable {
     let id = UUID()
     let username: String
-    let rawFollowingCount: Int
-    let effectiveValue: Int
+    let rawFollowerCount: Int   // seguidores — date group metric
+    let rawFollowingCount: Int  // seguidos   — time group metric
     let group: DateForceGroup
 }
 
@@ -48,35 +54,27 @@ class DateForceSettings: ObservableObject {
         didSet { UserDefaults.standard.set(dateFormat.rawValue, forKey: "dateForce_format") }
     }
 
-    /// How many spectators go to the date group (in dual mode).
-    /// Spectators beyond this count go to the time group.
-    @Published var dateGroupSize: Int {
-        didSet { UserDefaults.standard.set(dateGroupSize, forKey: "dateForce_dateGroupSize") }
-    }
-
     /// Minutes added to the current time before calculating the override.
-    /// Compensates for the time spent building drama before the reveal.
-    /// 0 = use exact current time.
     @Published var timeOffsetMinutes: Int {
         didSet { UserDefaults.standard.set(timeOffsetMinutes, forKey: "dateForce_timeOffset") }
     }
 
-    /// Number of most-recent followers to capture in Auto mode (2–6).
-    @Published var autoMaxFollowers: Int {
-        didSet { UserDefaults.standard.set(autoMaxFollowers, forKey: "dateForce_autoMax") }
+    /// Auto mode: total spectators to capture. Must be even (2, 4, 6, 8).
+    /// Half go to date group, half to time group.
+    @Published var autoSpectatorCount: Int {
+        didSet { UserDefaults.standard.set(autoSpectatorCount, forKey: "dateForce_autoCount") }
     }
 
     // MARK: - Runtime (not persisted)
 
     @Published private(set) var spectators: [DateForceSpectator] = []
 
-    /// Auto mode: which group is currently displayed in PerformanceView (date or time).
+    /// Auto mode: which group is currently displayed in PerformanceView.
     @Published var autoDisplayGroup: DateForceGroup = .date
 
-    /// Auto mode: true while fetching recent followers + their following counts.
+    /// Auto mode: true while fetching recent followers + their counts.
     @Published var isAutoLoading: Bool = false
 
-    /// Auto mode: total expected spectators (used to pre-assign groups during progressive load).
     private var autoExpectedTotal: Int = 0
 
     // MARK: - Init
@@ -84,41 +82,51 @@ class DateForceSettings: ObservableObject {
     private init() {
         self.isEnabled = UserDefaults.standard.bool(forKey: "dateForce_enabled")
 
+        // Migrate legacy modes (simple → dual, mixed → dual)
         let modeStr = UserDefaults.standard.string(forKey: "dateForce_mode") ?? DateForceMode.dual.rawValue
-        self.mode = DateForceMode(rawValue: modeStr) ?? .dual
+        if modeStr == "simple" || modeStr == "mixed" {
+            self.mode = .dual
+        } else {
+            self.mode = DateForceMode(rawValue: modeStr) ?? .dual
+        }
 
         let fmtStr = UserDefaults.standard.string(forKey: "dateForce_format") ?? DateForceFormat.ddmm.rawValue
         self.dateFormat = DateForceFormat(rawValue: fmtStr) ?? .ddmm
 
-        let saved = UserDefaults.standard.integer(forKey: "dateForce_dateGroupSize")
-        self.dateGroupSize = saved > 0 ? saved : 2
-
         let savedOffset = UserDefaults.standard.object(forKey: "dateForce_timeOffset") as? Int
         self.timeOffsetMinutes = savedOffset ?? 0
 
-        let savedAutoMax = UserDefaults.standard.object(forKey: "dateForce_autoMax") as? Int
-        self.autoMaxFollowers = savedAutoMax ?? 6
+        // Migrate legacy autoMaxFollowers to autoSpectatorCount (must be even, max 8)
+        let savedCount = UserDefaults.standard.object(forKey: "dateForce_autoCount") as? Int
+                      ?? UserDefaults.standard.object(forKey: "dateForce_autoMax") as? Int
+        let validCounts = [2, 4, 6, 8]
+        if let c = savedCount, validCounts.contains(c) {
+            self.autoSpectatorCount = c
+        } else {
+            self.autoSpectatorCount = 4
+        }
     }
 
-    // MARK: - Spectator Management
+    // MARK: - Spectator Management (Dual mode — manual registration)
 
-    func addSpectator(username: String, followingCount: Int) {
-        let group = nextGroup()
-        let effective = Self.effectiveValue(from: followingCount)
+    func addSpectator(username: String, followingCount: Int, followerCount: Int) {
+        // Group is assigned by position at registration time for display purposes.
+        // sumDate / sumTime recalculate dynamically from position anyway.
+        let group = nextDualGroup()
         let spectator = DateForceSpectator(
             username: username,
+            rawFollowerCount: followerCount,
             rawFollowingCount: followingCount,
-            effectiveValue: effective,
             group: group
         )
         spectators.append(spectator)
-        print("🎯 [DATE FORCE] Spectator added: @\(username) following=\(followingCount) effective=\(effective) group=\(group.rawValue) (total: \(spectators.count))")
+        print("🎯 [DATE FORCE] @\(username) followers=\(followerCount) following=\(followingCount) → \(group.rawValue) (total: \(spectators.count))")
     }
 
     func removeLastSpectator() {
         guard let last = spectators.last else { return }
         spectators.removeLast()
-        print("🎯 [DATE FORCE] Removed last spectator: @\(last.username) (total: \(spectators.count))")
+        print("🎯 [DATE FORCE] Removed: @\(last.username) (total: \(spectators.count))")
     }
 
     func removeSpectator(id: UUID) {
@@ -131,63 +139,56 @@ class DateForceSettings: ObservableObject {
         print("🎯 [DATE FORCE] All spectators reset")
     }
 
-    /// Prepares the auto mode for progressive loading.
-    /// Call before starting to fetch followers one by one.
-    /// totalExpected = autoMaxFollowers (pre-calculated group split).
+    // MARK: - Auto Mode (API-based capture)
+
     func beginAutoLoad(totalExpected: Int) {
         spectators.removeAll()
         autoDisplayGroup = .date
         autoExpectedTotal = totalExpected
-        print("🤖 [AUTO] Begin progressive load — expecting \(totalExpected) spectators (date: \((totalExpected + 1) / 2), time: \(totalExpected / 2))")
+        let half = totalExpected / 2
+        print("🤖 [AUTO] Begin load — expecting \(totalExpected) (date: \(half), time: \(totalExpected - half))")
     }
 
-    /// Adds one spectator progressively during auto loading.
-    /// Group is assigned by position (index 0-based relative to expected total).
-    func appendAutoSpectator(username: String, followingCount: Int) {
+    func appendAutoSpectator(username: String, followingCount: Int, followerCount: Int) {
         let index = spectators.count
-        let dateCount = (autoExpectedTotal + 1) / 2
-        let group: DateForceGroup = index < dateCount ? .date : .time
-        let effective = Self.effectiveValue(from: followingCount)
+        let half = autoExpectedTotal / 2
+        let group: DateForceGroup = index < half ? .date : .time
         let s = DateForceSpectator(
             username: username,
+            rawFollowerCount: followerCount,
             rawFollowingCount: followingCount,
-            effectiveValue: effective,
             group: group
         )
         spectators.append(s)
-        print("🤖 [AUTO] [\(index + 1)/\(autoExpectedTotal)] @\(username) following=\(followingCount) effective=\(effective) → \(group.rawValue)")
+        print("🤖 [AUTO] [\(index + 1)/\(autoExpectedTotal)] @\(username) followers=\(followerCount) following=\(followingCount) → \(group.rawValue)")
     }
 
-    /// Toggle between date/time display in PerformanceView auto state.
     func toggleAutoDisplayGroup() {
         autoDisplayGroup = autoDisplayGroup == .date ? .time : .date
     }
 
-    // MARK: - Group Assignment
+    // MARK: - Group Assignment (Dual)
 
-    private func nextGroup() -> DateForceGroup {
-        switch mode {
-        case .simple, .auto:
-            return .date
-        case .dual:
-            let dateCount = spectators.filter { $0.group == .date }.count
-            return dateCount < dateGroupSize ? .date : .time
+    /// Assigns group at registration time based on current count.
+    /// The actual split for calculation is always recomputed dynamically.
+    private func nextDualGroup() -> DateForceGroup {
+        let dateCount = spectators.count / 2
+        let currentDate = spectators.filter { $0.group == .date }.count
+        return currentDate < max(1, dateCount) ? .date : .time
+    }
+
+    // MARK: - Effective group by position (for display in dual mode)
+
+    func effectiveGroup(at index: Int) -> DateForceGroup {
+        guard mode == .dual else {
+            return spectators[safe: index]?.group ?? .date
         }
+        let half = spectators.count / 2
+        return index < half ? .date : .time
     }
 
-    // MARK: - Effective Value Extraction
+    // MARK: - Date/Time Targets
 
-    /// Converts a following count to the digits the magician will read aloud.
-    /// < 1000: exact number (347 → 347)
-    /// ≥ 1000: last 3 digits (1,247 → 247, 15,432 → 432)
-    static func effectiveValue(from count: Int) -> Int {
-        guard count >= 1000 else { return count }
-        return count % 1000
-    }
-
-    // MARK: - Date/Time Targets (computed from current clock + optional offset)
-
-    /// Current time adjusted by timeOffsetMinutes
     private var adjustedDate: Date {
         Date().addingTimeInterval(Double(timeOffsetMinutes) * 60)
     }
@@ -212,37 +213,36 @@ class DateForceSettings: ObservableObject {
     }
 
     // MARK: - Sums
+    // dual: split by position — first half uses followerCount (date), rest uses followingCount (time)
+    // auto: split by group property assigned during progressive load
 
     var sumDate: Int {
-        spectators.filter { $0.group == .date }.reduce(0) { $0 + $1.effectiveValue }
-    }
-
-    var sumTime: Int {
-        spectators.filter { $0.group == .time }.reduce(0) { $0 + $1.effectiveValue }
-    }
-
-    // MARK: - Override Values for Explore Post
-
-    /// The followers count to display on the Explore post detail.
-    /// Formula: targetDate + sumDate → spectator sees this, subtracts sumDate, gets the date.
-    var overrideFollowers: Int {
-        targetDate + sumDate
-    }
-
-    /// The following count to display on the Explore post detail.
-    /// In dual mode: targetTime + sumTime
-    /// In simple mode: targetTime directly (no audience math for time)
-    var overrideFollowing: Int {
         switch mode {
-        case .simple:        return targetTime
-        case .dual, .auto:  return targetTime + sumTime
+        case .dual:
+            let half = spectators.count / 2
+            return spectators.prefix(half).reduce(0) { $0 + $1.rawFollowerCount }
+        case .auto:
+            return spectators.filter { $0.group == .date }.reduce(0) { $0 + $1.rawFollowerCount }
         }
     }
 
+    var sumTime: Int {
+        switch mode {
+        case .dual:
+            let half = spectators.count / 2
+            return spectators.dropFirst(half).reduce(0) { $0 + $1.rawFollowingCount }
+        case .auto:
+            return spectators.filter { $0.group == .time }.reduce(0) { $0 + $1.rawFollowingCount }
+        }
+    }
+
+    // MARK: - Override Values
+
+    var overrideFollowers: Int { targetDate + sumDate }
+    var overrideFollowing: Int { targetTime + sumTime }
+
     // MARK: - Display Helpers
 
-    /// Format the override number for display (always exact, never K).
-    /// Uses English locale so separator is always "," (matches Instagram).
     static func formatExact(_ count: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -250,19 +250,29 @@ class DateForceSettings: ObservableObject {
         return formatter.string(from: NSNumber(value: count)) ?? "\(count)"
     }
 
-    /// Preview strings for the magician in Settings
     var previewDateString: String {
         let n = targetDate
-        let first = n / 100
-        let second = n % 100
-        return String(format: "%02d/%02d", first, second)
+        return String(format: "%02d/%02d", n / 100, n % 100)
     }
 
     var previewTimeString: String {
-        let h = targetTime / 100
-        let m = targetTime % 100
-        return String(format: "%02d:%02d", h, m)
+        let t = targetTime
+        return String(format: "%02d:%02d", t / 100, t % 100)
     }
 
     var hasSpectators: Bool { !spectators.isEmpty }
+
+    /// Readable summary of the current split for Auto mode UI.
+    var autoSplitDescription: String {
+        let half = autoSpectatorCount / 2
+        return "📅 \(half) for date  ·  🕐 \(half) for time"
+    }
+}
+
+// MARK: - Safe subscript helper
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
 }

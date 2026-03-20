@@ -680,6 +680,11 @@ struct SettingsView: View {
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
 
+    // Text templates — user writes "My prediction is {word}" and the app
+    // replaces {word} with the detected/fetched word at send time.
+    @AppStorage("note_template") private var noteTemplate: String = ""
+    @AppStorage("bio_template")  private var bioTemplate:  String = ""
+
     // OCR configuration (shared between note and bio)
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
     @AppStorage("ocr_camera")   private var ocrCamera:   Int    = 0  // 0=back, 1=front
@@ -1012,7 +1017,8 @@ struct SettingsView: View {
             autoInputPicker(
                 clipboardKey: "note",
                 topMode: $noteTopInputMode,
-                apiSource: $integrations.noteApiSource)
+                apiSource: $integrations.noteApiSource,
+                template: $noteTemplate)
             modernDivider()
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to send a note when Performance opens",
@@ -1058,7 +1064,8 @@ struct SettingsView: View {
             autoInputPicker(
                 clipboardKey: "bio",
                 topMode: $bioTopInputMode,
-                apiSource: $integrations.bioApiSource)
+                apiSource: $integrations.bioApiSource,
+                template: $bioTemplate)
             modernDivider()
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to update biography when Performance opens",
@@ -1252,7 +1259,8 @@ struct SettingsView: View {
     private func autoInputPicker(
         clipboardKey: String,
         topMode: Binding<String>,
-        apiSource: Binding<ApiSource>
+        apiSource: Binding<ApiSource>,
+        template: Binding<String>
     ) -> some View {
         let currentMode = AutoInputMode(rawValue: topMode.wrappedValue) ?? .off
 
@@ -1422,8 +1430,22 @@ struct SettingsView: View {
                     removal: .opacity.combined(with: .move(edge: .top))
                 ))
             }
+
+            // ── Template field (visible when any auto-input mode is active) ──
+            if currentMode != .off {
+                AutoInputTemplateFieldView(
+                    template: template,
+                    limit: clipboardKey == "note" ? 60 : 150,
+                    accentColor: Self.colorProfile
+                )
+            }
         }
     }
+
+    // NOTE: Extracted to a standalone View struct to avoid SwiftUI type-complexity
+    // stack overflow that occurs when deeply-nested @ViewBuilder closures accumulate
+    // too many generic TupleView layers inside a single body computation.
+    // See: AutoInputTemplateFieldView below SettingsView.
 
     private func apiSourceRow(target: String, source: Binding<ApiSource>, onSelect: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1751,6 +1773,120 @@ struct SettingsView: View {
     
 }
 
+// MARK: - Auto Input Template Field
+// Extracted as a standalone View to avoid SwiftUI generic-type stack overflows
+// that occur when deeply-nested @ViewBuilder closures create excessively long
+// TupleView type signatures inside a single body computation.
+
+private struct AutoInputTemplateFieldView: View {
+    @Binding var template: String
+    let limit: Int
+    let accentColor: Color
+
+    private var hasToken: Bool { template.contains("{word}") }
+    private var previewText: String {
+        hasToken ? template.replacingOccurrences(of: "{word}", with: "alexis") : ""
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider().background(Color(hex: "#3A3A3C"))
+
+            // Header row
+            HStack(spacing: 6) {
+                Image(systemName: "text.cursor")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(accentColor)
+                Text("TEXT TEMPLATE")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                Spacer()
+                if !template.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { template = "" }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "xmark.circle.fill").font(.system(size: 10))
+                            Text("Clear").font(.system(size: 11))
+                        }
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                }
+            }
+
+            // Input row: text field + insert-token button
+            HStack(spacing: 8) {
+                TextField("e.g. My prediction is {word}", text: $template)
+                    .font(VaultTheme.Typography.body())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
+                    .background(Color(hex: "#2C2C2E"))
+                    .cornerRadius(8)
+                    .onChange(of: template) { val in
+                        if val.count > limit { template = String(val.prefix(limit)) }
+                    }
+
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        template += "{word}"
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus").font(.system(size: 10, weight: .bold))
+                        Text("{word}").font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
+                    .background(accentColor)
+                    .cornerRadius(8)
+                }
+            }
+
+            // Live preview / warning
+            if hasToken {
+                HStack(spacing: 5) {
+                    Image(systemName: "eye.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                    Text(previewText)
+                        .font(.system(size: 12))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .lineLimit(2)
+                    Spacer()
+                    Text("\(template.count)/\(limit)")
+                        .font(.system(size: 10))
+                        .foregroundColor(
+                            Double(template.count) > Double(limit) * 0.8
+                            ? VaultTheme.Colors.warning
+                            : VaultTheme.Colors.textSecondary
+                        )
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color(hex: "#1C1C1E"))
+                .cornerRadius(6)
+            } else if !template.isEmpty {
+                HStack(spacing: 5) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(VaultTheme.Colors.warning)
+                    Text("Type {word} where you want the detected word to appear")
+                        .font(.system(size: 11))
+                        .foregroundColor(VaultTheme.Colors.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.top, 2)
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .move(edge: .top)),
+            removal: .opacity.combined(with: .move(edge: .top))
+        ))
+    }
+}
+
 // MARK: - Follower Data Sheet
 
 struct FollowerDataSheet: View {
@@ -1959,13 +2095,27 @@ struct DataRow: View {
 
 // MARK: - Reusable Collapsible Card Shell
 
-struct CollapsibleCard<Content: View>: View {
+struct CollapsibleCard<Content: View, Trailing: View>: View {
     let icon: String
     let iconColor: Color
     let title: String
     let subtitle: String
     @Binding var isExpanded: Bool
+    @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let content: () -> Content
+
+    init(icon: String, iconColor: Color, title: String, subtitle: String,
+         isExpanded: Binding<Bool>,
+         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
+         @ViewBuilder content: @escaping () -> Content) {
+        self.icon = icon
+        self.iconColor = iconColor
+        self.title = title
+        self.subtitle = subtitle
+        self._isExpanded = isExpanded
+        self.trailing = trailing
+        self.content = content
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1983,6 +2133,7 @@ struct CollapsibleCard<Content: View>: View {
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                 }
                 Spacer()
+                trailing()
                 Image(systemName: "chevron.down")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textSecondary)
@@ -2272,8 +2423,10 @@ struct ForceNumberRevealSettingsCard: View {
     var body: some View {
         CollapsibleCard(icon: "number.circle.fill", iconColor: SettingsView.colorTricks,
                         title: "Post Prediction",
-                        subtitle: "Reveal a post with a word by unarchiving photos",
+                        subtitle: "Unarchive photos from the active set to reveal a prediction",
                         isExpanded: $isExpanded) {
+
+            // ── Master enable ────────────────────────────────────────
             HStack {
                 Text("Enabled")
                     .font(VaultTheme.Typography.body())
@@ -2281,45 +2434,125 @@ struct ForceNumberRevealSettingsCard: View {
                 Spacer()
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
             }
-            Text("Swipe the grid to build a number, then tap the Posts icon to unarchive the matching photo in each bank of the active number set.")
+            Text("Unarchive photos from the active set to reveal a word or number. Choose one or more input methods below.")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
             if settings.isEnabled {
-                    Divider()
+                Divider()
 
-                    // ── Active set info ───────────────────────────────────
-                    if let set = activeNumberSet {
-                        HStack(spacing: VaultTheme.Spacing.sm) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(VaultTheme.Colors.success)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Active set: \(set.name)")
-                                    .font(VaultTheme.Typography.bodyBold())
-                                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                                Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
-                                    .font(VaultTheme.Typography.caption())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                            }
-                            Spacer()
-                        }
-                    } else {
-                        HStack(spacing: VaultTheme.Spacing.sm) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(VaultTheme.Colors.warning)
-                            Text("No active number set selected. Go to your sets and mark one as active.")
-                                .font(VaultTheme.Typography.caption())
-                                .foregroundColor(VaultTheme.Colors.textSecondary)
-                        }
-                    }
+                // ── Active set info ──────────────────────────────────
+                PostPredictionActiveSetView(
+                    activeNumberSet: activeNumberSet,
+                    activeWordSet: activeWordSet
+                )
 
+                Divider()
+
+                // ── Digit Grid input ─────────────────────────────────
+                HStack {
+                    Image(systemName: "square.grid.3x3")
+                        .foregroundColor(SettingsView.colorTricks)
+                        .frame(width: 20)
+                    Text("Digit Grid")
+                        .font(VaultTheme.Typography.bodyBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settings.gridSwipeEnabled).labelsHidden()
                 }
+                Text("Swipe left or right on the photo grid to build a number. Tap the Posts icon to unarchive the matching photo from the active number set.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
 
+                Divider()
 
-            // ── Cover Typing Input ─────────────────────────────────
-            Divider()
+                // ── Cover Typing Input ───────────────────────────────
+                PostPredictionCoverTypingView(
+                    secretSettings: secretSettings,
+                    coverTypingPreview: coverTypingPreview
+                )
+
+                Divider()
+
+                // ── OCR Recognition ──────────────────────────────────
+                PostPredictionOCRView(
+                    settings: settings,
+                    ocrEnabledBinding: ocrEnabledBinding,
+                    ocrCamera: $ocrCamera,
+                    ocrLanguage: $ocrLanguage,
+                    activeWordSet: activeWordSet,
+                    activeNumberSet: activeNumberSet
+                )
+
+                Divider()
+
+                // ── URL Scheme ───────────────────────────────────────
+                PostPredictionURLSchemeView()
+            }
+        }
+    }
+}
+
+// MARK: - Post Prediction Sub-Views
+// Extracted as standalone View structs to keep ForceNumberRevealSettingsCard's
+// body type-graph shallow and prevent SwiftUI TupleView stack overflows.
+
+private struct PostPredictionActiveSetView: View {
+    let activeNumberSet: PhotoSet?
+    let activeWordSet: PhotoSet?
+
+    var body: some View {
+        VStack(spacing: VaultTheme.Spacing.sm) {
+            if let set = activeNumberSet {
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(VaultTheme.Colors.success)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Active number set: \(set.name)")
+                            .font(VaultTheme.Typography.bodyBold())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                }
+            } else {
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(VaultTheme.Colors.warning)
+                    Text("No active number set selected. Go to your sets and mark one as active.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+            }
+            if let set = activeWordSet {
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(VaultTheme.Colors.success)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Active word set: \(set.name)")
+                            .font(VaultTheme.Typography.bodyBold())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+}
+
+private struct PostPredictionCoverTypingView: View {
+    @ObservedObject var secretSettings: SecretInputSettings
+    let coverTypingPreview: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
             HStack {
-                Text("Cover Typing Input")
+                Text("Cover Typing")
                     .font(VaultTheme.Typography.bodyBold())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 Spacer()
@@ -2328,6 +2561,7 @@ struct ForceNumberRevealSettingsCard: View {
             Text("Masks what you type in Explore so spectators see a different word. Pressing SPACE triggers the word reveal.")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
+
             if secretSettings.isEnabled {
                 VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                     Text("Mask Mode")
@@ -2374,9 +2608,20 @@ struct ForceNumberRevealSettingsCard: View {
                     }
                 }
             }
+        }
+    }
+}
 
-            // ── OCR Recognition ───────────────────────────────────
-            Divider()
+private struct PostPredictionOCRView: View {
+    @ObservedObject var settings: ForceNumberRevealSettings
+    let ocrEnabledBinding: Binding<Bool>
+    @Binding var ocrCamera: Int
+    @Binding var ocrLanguage: String
+    let activeWordSet: PhotoSet?
+    let activeNumberSet: PhotoSet?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
             HStack {
                 Image(systemName: "camera.viewfinder")
                     .foregroundColor(SettingsView.colorTricks)
@@ -2393,7 +2638,6 @@ struct ForceNumberRevealSettingsCard: View {
 
             if settings.ocrEnabled {
                 VStack(alignment: .leading, spacing: 10) {
-                    // Active sets summary
                     HStack(spacing: VaultTheme.Spacing.sm) {
                         Image(systemName: "text.cursor")
                             .foregroundColor(VaultTheme.Colors.textSecondary)
@@ -2407,8 +2651,6 @@ struct ForceNumberRevealSettingsCard: View {
                                 .foregroundColor(activeNumberSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
                         }
                     }
-
-                    // Camera selector
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Camera")
                             .font(VaultTheme.Typography.captionSmall())
@@ -2434,8 +2676,6 @@ struct ForceNumberRevealSettingsCard: View {
                             }
                         }
                     }
-
-                    // Language selector
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Language")
                             .font(VaultTheme.Typography.captionSmall())
@@ -2453,13 +2693,11 @@ struct ForceNumberRevealSettingsCard: View {
                             }
                         } label: {
                             HStack {
-                                Image(systemName: "globe")
-                                    .font(.system(size: 12))
+                                Image(systemName: "globe").font(.system(size: 12))
                                 Text(OCRConfiguration.displayName(for: ocrLanguage))
                                     .font(.system(size: 12, weight: .semibold))
                                 Spacer()
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 11))
+                                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11))
                             }
                             .foregroundColor(VaultTheme.Colors.textPrimary)
                             .padding(.horizontal, 10).padding(.vertical, 8)
@@ -2469,6 +2707,51 @@ struct ForceNumberRevealSettingsCard: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct PostPredictionURLSchemeView: View {
+    private let templateURL = "vault://reveal?word=<your word>"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+            HStack(spacing: VaultTheme.Spacing.sm) {
+                Image(systemName: "link")
+                    .foregroundColor(VaultTheme.Colors.primary)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("URL Scheme")
+                        .font(VaultTheme.Typography.bodyBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Open this URL to trigger a reveal directly when Performance opens")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = templateURL
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link")
+                        Text("Copy")
+                    }
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, VaultTheme.Spacing.sm)
+                    .padding(.vertical, 6)
+                    .background(VaultTheme.Colors.primary)
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                }
+            }
+            Text(templateURL)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .lineLimit(2)
+                .padding(.horizontal, VaultTheme.Spacing.sm)
+                .padding(.vertical, 4)
+                .background(VaultTheme.Colors.backgroundSecondary)
+                .cornerRadius(VaultTheme.CornerRadius.sm)
         }
     }
 }
@@ -2596,34 +2879,38 @@ struct DateForceSettingsCard: View {
 
     var body: some View {
         Group {
-        CollapsibleCard(icon: "calendar.badge.clock", iconColor: SettingsView.colorTricks,
-                        title: "Date Force",
-                        subtitle: "Force followers/following to reveal today's date",
-                        isExpanded: $isExpanded) {
+        CollapsibleCard(
+            icon: "calendar.badge.clock",
+            iconColor: SettingsView.colorTricks,
+            title: "Date Force",
+            subtitle: "Force followers/following to reveal today's date",
+            isExpanded: $isExpanded,
+            trailing: {
+                Button(action: { showingHelp = true }) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 18))
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+            }
+        ) {
             HStack {
                 Text("Enabled")
                     .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 Spacer()
-                HStack(spacing: 10) {
-                    Button(action: { showingHelp = true }) {
-                        Image(systemName: "questionmark.circle")
-                            .font(.system(size: 18))
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-                    }
-                    Toggle("", isOn: $settings.isEnabled).labelsHidden()
-                }
+                Toggle("", isOn: $settings.isEnabled).labelsHidden()
             }
-            Text("Search spectators in Explore, tap their profile pic to register. Then any Explore post shows forced followers/following that subtract to today's date & time.")
+            Text("Open any spectator's profile in Explore — it registers automatically when you close it. Open any Explore post to reveal today's date and time.")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
             if settings.isEnabled {
                     Divider()
 
-                    // Date format + time offset (grouped together — both affect the target numbers)
+                    // Date format + time offset
                     VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
-                        // Date format
                         VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                             Text("Date format")
                                 .font(VaultTheme.Typography.captionSmall())
@@ -2644,7 +2931,6 @@ struct DateForceSettingsCard: View {
                             }
                         }
 
-                        // Time offset
                         VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                             HStack {
                                 Text("Add minutes to time")
@@ -2682,15 +2968,10 @@ struct DateForceSettingsCard: View {
                             .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(VaultTheme.Colors.textTertiary)
                         HStack(spacing: 8) {
-                            let modes: [(DateForceMode, String)] = [
-                                (.simple, "Simple"),
-                                (.dual, "Dual"),
-                                (.auto, "Auto")
-                            ]
-                            ForEach(modes, id: \.0.rawValue) { mode, label in
+                            ForEach(DateForceMode.allCases, id: \.rawValue) { mode in
                                 let isSelected = settings.mode == mode
                                 Button(action: { settings.mode = mode }) {
-                                    Text(label)
+                                    Text(mode == .dual ? "Dual" : "Auto")
                                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 6)
@@ -2700,37 +2981,32 @@ struct DateForceSettingsCard: View {
                                 }
                             }
                         }
-                        Group {
-                            switch settings.mode {
-                            case .simple:
-                                Text("All spectators → date. Time shows directly on Explore post.")
-                            case .dual:
-                                Text("First group → date, second group → time. Both use subtraction.")
-                            case .auto:
-                                Text("In Performance, tap the 'Followed by' area to auto-capture the latest followers. Tap again to toggle between date/time groups.")
-                            }
-                        }
-                        .font(VaultTheme.Typography.caption())
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        Text(settings.mode == .dual
+                             ? "Visit each spectator manually in Explore. First half → 📅 date (their followers). Second half → 🕐 time (their following)."
+                             : "App captures your latest followers automatically. Tap 'Followed by' in Performance to start.")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    if settings.mode == .dual {
+                    // Auto: spectator count selector
+                    if settings.mode == .auto {
                         Divider()
 
                         VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                             HStack {
-                                Text("Spectators for date")
+                                Text("Spectators to capture")
                                     .font(VaultTheme.Typography.captionSmall())
                                     .foregroundColor(VaultTheme.Colors.textTertiary)
                                 Spacer()
-                                Text("\(settings.dateGroupSize)")
+                                Text("\(settings.autoSpectatorCount)")
                                     .font(VaultTheme.Typography.captionSmall())
                                     .foregroundColor(VaultTheme.Colors.primary)
                             }
                             HStack(spacing: 8) {
-                                ForEach(2...5, id: \.self) { n in
-                                    let isSelected = settings.dateGroupSize == n
-                                    Button(action: { settings.dateGroupSize = n }) {
+                                ForEach([2, 4, 6, 8], id: \.self) { n in
+                                    let isSelected = settings.autoSpectatorCount == n
+                                    Button(action: { settings.autoSpectatorCount = n }) {
                                         Text("\(n)")
                                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                                             .padding(.horizontal, 16)
@@ -2741,43 +3017,27 @@ struct DateForceSettingsCard: View {
                                     }
                                 }
                             }
-                            Text("Remaining spectators go to the time group.")
-                                .font(VaultTheme.Typography.caption())
-                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                            let half = settings.autoSpectatorCount / 2
+                            HStack(spacing: 12) {
+                                Label("\(half) for date (followers)", systemImage: "calendar")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color.blue.opacity(0.8))
+                                Label("\(half) for time (following)", systemImage: "clock")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color.orange.opacity(0.8))
+                            }
                         }
                     }
 
-                    if settings.mode == .auto {
+                    // Dual: info row (no selector needed)
+                    if settings.mode == .dual {
                         Divider()
 
-                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                            HStack {
-                                Text("Max followers to capture")
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.textTertiary)
-                                Spacer()
-                                Text("\(settings.autoMaxFollowers)")
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.primary)
-                            }
-                            HStack(spacing: 8) {
-                                ForEach(2...6, id: \.self) { n in
-                                    let isSelected = settings.autoMaxFollowers == n
-                                    Button(action: { settings.autoMaxFollowers = n }) {
-                                        Text("\(n)")
-                                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 6)
-                                            .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
-                                            .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
-                                            .cornerRadius(20)
-                                    }
-                                }
-                            }
-                            let total = settings.autoMaxFollowers
-                            let dateCount = (total + 1) / 2
-                            let timeCount = total / 2
-                            Text("Date group: \(dateCount) follower\(dateCount == 1 ? "" : "s")  ·  Time group: \(timeCount) follower\(timeCount == 1 ? "" : "s")")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Automatic split")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                            Text("Register an even number of spectators. The app splits them in half automatically: first half → 📅 date (their followers), second half → 🕐 time (their following).")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
@@ -2791,36 +3051,42 @@ struct DateForceSettingsCard: View {
                             .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(VaultTheme.Colors.textTertiary)
 
-                        HStack(spacing: 16) {
-                            VStack(spacing: 2) {
+                        HStack(spacing: 0) {
+                            VStack(spacing: 3) {
                                 Text("Target")
                                     .font(.system(size: 10))
                                     .foregroundColor(VaultTheme.Colors.textTertiary)
                                 Text("\(settings.previewDateString) \(settings.previewTimeString)")
-                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
                                     .foregroundColor(VaultTheme.Colors.primary)
                             }
+                            .frame(maxWidth: .infinity)
 
-                            VStack(spacing: 2) {
-                                Text("Followers")
+                            Divider().frame(height: 32)
+
+                            VStack(spacing: 3) {
+                                Text("Followers (📅)")
                                     .font(.system(size: 10))
-                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                    .foregroundColor(Color.blue.opacity(0.7))
                                 Text(DateForceSettings.formatExact(settings.overrideFollowers))
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                             }
+                            .frame(maxWidth: .infinity)
 
-                            VStack(spacing: 2) {
-                                Text("Following")
+                            Divider().frame(height: 32)
+
+                            VStack(spacing: 3) {
+                                Text("Following (🕐)")
                                     .font(.system(size: 10))
-                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                    .foregroundColor(Color.orange.opacity(0.7))
                                 Text(DateForceSettings.formatExact(settings.overrideFollowing))
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                             }
+                            .frame(maxWidth: .infinity)
                         }
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
                         .background(VaultTheme.Colors.backgroundSecondary)
                         .cornerRadius(8)
                     }
@@ -2842,25 +3108,26 @@ struct DateForceSettingsCard: View {
                                 }
                             }
 
-                            ForEach(settings.spectators) { spec in
-                                HStack(spacing: 8) {
+                            ForEach(Array(settings.spectators.enumerated()), id: \.element.id) { index, spec in
+                                let group = settings.effectiveGroup(at: index)
+                                HStack(spacing: 6) {
                                     Circle()
-                                        .fill(spec.group == .date ? Color.blue.opacity(0.2) : Color.orange.opacity(0.2))
+                                        .fill(group == .date ? Color.blue.opacity(0.25) : Color.orange.opacity(0.25))
                                         .frame(width: 8, height: 8)
                                     Text("@\(spec.username)")
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundColor(VaultTheme.Colors.textPrimary)
                                     Spacer()
-                                    Text("\(spec.rawFollowingCount)")
-                                        .font(.system(size: 12, design: .monospaced))
-                                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                                    Image(systemName: "arrow.right")
-                                        .font(.system(size: 9))
-                                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                                    Text("\(spec.effectiveValue)")
-                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                        .foregroundColor(VaultTheme.Colors.primary)
-                                    Text(spec.group == .date ? "📅" : "🕐")
+                                    if group == .date {
+                                        Text("\(spec.rawFollowerCount) followers")
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundColor(Color.blue.opacity(0.8))
+                                    } else {
+                                        Text("\(spec.rawFollowingCount) following")
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundColor(Color.orange.opacity(0.8))
+                                    }
+                                    Text(group == .date ? "📅" : "🕐")
                                         .font(.system(size: 12))
                                 }
                             }

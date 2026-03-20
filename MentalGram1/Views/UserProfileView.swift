@@ -422,14 +422,15 @@ struct UserProfileView: View {
             if followingMagic.isEnabled && followingMagic.pendingOffset > 0 {
                 let useFollowers = followingMagic.targetFollowers
                 let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
+                // Both classic and transfer: pre-show the inflated number (real + steps).
+                // Classic deflates to real and stops. Transfer deflates to real, saves
+                // offset so own profile can then inflate from real-steps back to real.
+                let inflated = realCount + followingMagic.pendingOffset
+                if useFollowers { magicFollowerText  = formatFollowing(inflated) }
+                else            { magicFollowingText = formatFollowing(inflated) }
                 if followingMagic.transferEnabled {
-                    // Transfer: show real count — decrease happens only on volume press
-                    print("🎩 [TRANSFER] Ready — real count: \(realCount), will decrease by \(followingMagic.pendingOffset) on volume press")
+                    print("🎩 [TRANSFER] Pre-inflated to \(inflated) (real:\(realCount) +\(followingMagic.pendingOffset)) — deflate to real on volume press")
                 } else {
-                    // Classic: pre-show inflated so spectator can already see the trick
-                    let inflated = realCount + followingMagic.pendingOffset
-                    if useFollowers { magicFollowerText  = formatFollowing(inflated) }
-                    else            { magicFollowingText = formatFollowing(inflated) }
                     print("🎩 [MAGIC] Showing inflated: \(inflated) (real:\(realCount) +\(followingMagic.pendingOffset))")
                 }
                 VolumeButtonMonitor.shared.startMonitoring()
@@ -457,7 +458,7 @@ struct UserProfileView: View {
                     // Don't register the forced reel profile or duplicates
                     let isAlreadyRegistered = dateForce.spectators.contains { $0.username == currentProfile.username }
                     if !isAlreadyRegistered {
-                        dateForce.addSpectator(username: currentProfile.username, followingCount: currentProfile.followingCount)
+                        dateForce.addSpectator(username: currentProfile.username, followingCount: currentProfile.followingCount, followerCount: currentProfile.followerCount)
                     }
                 }
             }
@@ -538,23 +539,24 @@ struct UserProfileView: View {
         }
 
         if followingMagic.transferEnabled {
-            // Transfer phase 1: DEFLATE searched profile (realCount → realCount - steps)
+            // Transfer phase 1: DEFLATE from (realCount + steps) down to realCount.
+            // The inflated value was already pre-shown in onAppear.
             let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-            var current = realCount
+            var current = realCount + steps
 
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
                 current -= 1
                 setMagicText(self.formatFollowing(current))
 
-                if current <= realCount - steps {
+                if current <= realCount {
                     timer.invalidate()
                     self.countdownTimer = nil
                     self.isCountingDown = false
-                    self.followingMagic.transferOffset = steps
+                    setMagicText(nil)  // clear override — real count shows through
+                    self.followingMagic.transferOffset = steps  // save for phase 2 (own profile)
                     self.followingMagic.clear()
-                    // Keep count showing at the deflated value (don't clear override)
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    print("🎩 [TRANSFER] Deflation complete — showing \(current), offset \(steps) saved")
+                    print("🎩 [TRANSFER] Deflation complete — back to real: \(realCount), offset \(steps) saved for phase 2")
                 }
             }
         } else {

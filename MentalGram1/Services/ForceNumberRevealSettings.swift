@@ -14,8 +14,15 @@ class ForceNumberRevealSettings: ObservableObject {
 
     // MARK: - Persisted settings
 
+    /// Master switch: enables the unarchiving reveal feature for all input methods.
     @Published var isEnabled: Bool {
         didSet { UserDefaults.standard.set(isEnabled, forKey: "forceNumberRevealEnabled") }
+    }
+
+    /// Controls whether the digit grid swipe input is active.
+    /// Requires `isEnabled = true` to trigger a reveal.
+    @Published var gridSwipeEnabled: Bool {
+        didSet { UserDefaults.standard.set(gridSwipeEnabled, forKey: "forceNumberRevealGridSwipeEnabled") }
     }
 
     /// When enabled, OCR camera starts on Performance open and auto-reveals
@@ -23,6 +30,10 @@ class ForceNumberRevealSettings: ObservableObject {
     @Published var ocrEnabled: Bool {
         didSet { UserDefaults.standard.set(ocrEnabled, forKey: "forceNumberRevealOcrEnabled") }
     }
+
+    /// Runtime flag: set to `true` when a URL scheme reveal is pending so the
+    /// OCR onChange handler skips the `ocrEnabled` guard for that single trigger.
+    @Published var urlRevealActive: Bool = false
 
     @Published var autoReArchiveEnabled: Bool {
         didSet { UserDefaults.standard.set(autoReArchiveEnabled, forKey: "forceNumberAutoReArchiveEnabled") }
@@ -56,6 +67,7 @@ class ForceNumberRevealSettings: ObservableObject {
 
     private init() {
         isEnabled            = UserDefaults.standard.bool(forKey: "forceNumberRevealEnabled")
+        gridSwipeEnabled     = UserDefaults.standard.bool(forKey: "forceNumberRevealGridSwipeEnabled")
         ocrEnabled           = UserDefaults.standard.bool(forKey: "forceNumberRevealOcrEnabled")
         autoReArchiveEnabled = UserDefaults.standard.bool(forKey: "forceNumberAutoReArchiveEnabled")
         let savedMinutes     = UserDefaults.standard.integer(forKey: "forceNumberAutoReArchiveMinutes")

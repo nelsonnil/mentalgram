@@ -19,6 +19,9 @@ struct PerformanceView: View {
     // OCR
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
+    // Text templates — user-defined wrappers with {word} token
+    @AppStorage("note_template") private var noteTemplate: String = ""
+    @AppStorage("bio_template")  private var bioTemplate:  String = ""
     // Optimistic note state — @AppStorage triggers instant re-render on write
     @AppStorage("last_note_text")           private var lastNoteText: String = ""
     @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
@@ -37,6 +40,7 @@ struct PerformanceView: View {
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
     @State private var showingMagicianDebug = false  // For long-press debug info
+    @State private var showDigitGridAlert = false
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     
@@ -298,6 +302,12 @@ struct PerformanceView: View {
             } message: {
                 Text(spectatorLoadError ?? "")
             }
+            .alert("Digit Grid Disabled", isPresented: $showDigitGridAlert) {
+                Button("Enable") { ForceNumberRevealSettings.shared.gridSwipeEnabled = true }
+                Button("Dismiss", role: .cancel) { }
+            } message: {
+                Text("You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid.")
+            }
             // Spectator profile: bound to selectedSpectator to avoid the nil→item race
             // condition that caused stale profiles when tapping a second follower.
             .fullScreenCover(item: $selectedSpectator) { follower in
@@ -432,6 +442,20 @@ struct PerformanceView: View {
                 }
             }
             ocrUsedInSession = false
+
+            // Show a nudge if Post Prediction is enabled with an active number set
+            // but Digit Grid input is off — and this is NOT a URL scheme reveal
+            // (URL reveals supply the word directly so no grid is needed).
+            let hasNumberSet = ActiveSetSettings.shared.activeNumberSetId != nil
+            let isURLReveal  = urlAction.pendingMode == "reveal"
+            if forceRevealSettings.isEnabled,
+               !forceRevealSettings.gridSwipeEnabled,
+               hasNumberSet,
+               !isURLReveal {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    showDigitGridAlert = true
+                }
+            }
         }
         .onDisappear {
             // Stop volume monitoring and OCR when leaving Performance
@@ -541,6 +565,17 @@ struct PerformanceView: View {
         return resized.jpegData(compressionQuality: quality)
     }
 
+    // MARK: - Template Helper
+
+    /// Replaces `{word}` in `template` with the detected/fetched word.
+    /// Returns `word` unchanged when the template is empty or contains no token,
+    /// so existing behaviour is fully preserved for users without a template set.
+    private func applyTemplate(_ word: String, template: String) -> String {
+        let t = template.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, t.contains("{word}") else { return word }
+        return t.replacingOccurrences(of: "{word}", with: word)
+    }
+
     // MARK: - URL Scheme Action
 
     private func applyURLAction(mode: String, text: String) async {
@@ -550,6 +585,24 @@ struct PerformanceView: View {
         }
         print("📲 [URL] Executing action=\(mode), text=\"\(text.prefix(40))\"")
         LogManager.shared.info("URL scheme action: \(mode) — \"\(text.prefix(40))\"", category: .general)
+
+        // ── Word reveal via vault://reveal?word= ─────────────────────────────
+        if mode == "reveal" {
+            guard ForceNumberRevealSettings.shared.isEnabled else {
+                print("🚫 [URL] Reveal blocked: Post Prediction not enabled")
+                return
+            }
+            let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !word.isEmpty else { return }
+            print("📲 [URL] Reveal word: \"\(word)\"")
+            LogManager.shared.info("URL reveal → word: \"\(word)\"", category: .general)
+            // Mark as URL-triggered so the OCR handler skips the ocrEnabled guard
+            await MainActor.run {
+                ForceNumberRevealSettings.shared.urlRevealActive = true
+                pendingOCRWord = word
+            }
+            return
+        }
 
         do {
             if mode == "note" {
@@ -606,24 +659,26 @@ struct PerformanceView: View {
 
         do {
             if clipboardAutoMode == "note" {
-                let final = truncateAtWordBoundary(text, limit: 60)
-                if final.count < text.count {
-                    print("✂️ [CLIPBOARD] Note truncated at word boundary: \(text.count)→\(final.count) chars")
+                let composed = applyTemplate(text, template: noteTemplate)
+                let final = truncateAtWordBoundary(composed, limit: 60)
+                if final.count < composed.count {
+                    print("✂️ [CLIPBOARD] Note truncated at word boundary: \(composed.count)→\(final.count) chars")
                 }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
-                    clipboardAutoLastSent = text  // track original to avoid re-sends
+                    clipboardAutoLastSent = text  // track original clipboard text to avoid re-sends
                     print("✅ [CLIPBOARD] Note sent from clipboard")
                     LogManager.shared.success("Auto-note sent from clipboard (\(final.count) chars)", category: .general)
                 }
             } else {
-                let final = truncateAtWordBoundary(text, limit: 150)
-                if final.count < text.count {
-                    print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(text.count)→\(final.count) chars")
+                let composed = applyTemplate(text, template: bioTemplate)
+                let final = truncateAtWordBoundary(composed, limit: 150)
+                if final.count < composed.count {
+                    print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(composed.count)→\(final.count) chars")
                 }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
-                    clipboardAutoLastSent = text  // track original to avoid re-sends
+                    clipboardAutoLastSent = text  // track original clipboard text to avoid re-sends
                     print("✅ [CLIPBOARD] Biography updated from clipboard")
                     LogManager.shared.success("Auto-bio updated from clipboard (\(final.count) chars)", category: .general)
                 }
@@ -664,9 +719,16 @@ struct PerformanceView: View {
         print("⚡ [API AUTO] Got value: \"\(text.prefix(40))\" — applying to \(target)")
         LogManager.shared.info("Magic API (\(source.displayName)) → \(target): \"\(text.prefix(40))\"", category: .general)
 
+        // Apply text template ({word} → fetched word)
+        let tpl = target == "note" ? noteTemplate : bioTemplate
+        let composed = applyTemplate(text, template: tpl)
+        if tpl.contains("{word}") {
+            print("⚡ [API AUTO] Template applied (\(target)): \"\(composed.prefix(60))\"")
+        }
+
         do {
             if target == "note" {
-                let final = truncateAtWordBoundary(text, limit: 60)
+                let final = truncateAtWordBoundary(composed, limit: 60)
                 // Optimistic: show note bubble instantly, before API confirms
                 await MainActor.run {
                     lastNoteText = final
@@ -675,11 +737,11 @@ struct PerformanceView: View {
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     print("✅ [API AUTO] Note sent: \"\(final)\"")
-                    ud.set(final.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)
+                    ud.set(text.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)  // store raw for dedup
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let final = truncateAtWordBoundary(text, limit: 150)
+                let final = truncateAtWordBoundary(composed, limit: 150)
                 // Optimistic: update bio in fake profile instantly, before API confirms
                 await MainActor.run {
                     if let current = profile {
@@ -700,7 +762,7 @@ struct PerformanceView: View {
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     print("✅ [API AUTO] Biography updated: \"\(final)\"")
-                    ud.set(final.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)
+                    ud.set(text.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)  // store raw for dedup
                     fireDoubleConfirmationVibration()
                 }
             }
@@ -710,8 +772,7 @@ struct PerformanceView: View {
             // If Instagram says "already sent", mark as sent so we stop retrying it
             let msg = error.localizedDescription.lowercased()
             if msg.contains("already sent") || msg.contains("duplicate") {
-                let final = truncateAtWordBoundary(text, limit: target == "note" ? 60 : 150)
-                ud.set(final.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)
+                ud.set(text.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)
                 print("⏭️ [API AUTO] Marked as already sent to prevent future retries")
             }
         }
@@ -736,17 +797,25 @@ struct PerformanceView: View {
         let lastKey = target == "note" ? "last_note_text" : "last_biography_text"
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Dedup on the raw detected word (template-agnostic)
         if let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
             print("⏭️ [OCR] Same value as last sent — skipping")
             return
         }
 
+        // Apply text template ({word} → detected word)
+        let tpl = target == "note" ? noteTemplate : bioTemplate
+        let composed = applyTemplate(trimmed, template: tpl)
+        if tpl.contains("{word}") {
+            print("📷 [OCR] Template applied (\(target)): \"\(composed.prefix(60))\"")
+        }
+
         print("📷 [OCR] Applying to \(target): \"\(trimmed.prefix(40))\"")
-        LogManager.shared.info("OCR → \(target): \"\(trimmed.prefix(40))\"", category: .general)
+        LogManager.shared.info("OCR → \(target): \"\(composed.prefix(40))\"", category: .general)
 
         do {
             if target == "note" {
-                let final = truncateAtWordBoundary(trimmed, limit: 60)
+                let final = truncateAtWordBoundary(composed, limit: 60)
                 // Optimistic: show note bubble instantly, before API confirms
                 await MainActor.run {
                     lastNoteText = final
@@ -754,12 +823,12 @@ struct PerformanceView: View {
                 }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
-                    ud.set(final, forKey: lastKey)
+                    ud.set(trimmed, forKey: lastKey)  // store raw word for dedup
                     print("✅ [OCR] Note sent: \"\(final)\"")
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let final = truncateAtWordBoundary(trimmed, limit: 150)
+                let final = truncateAtWordBoundary(composed, limit: 150)
                 // Optimistic: update bio in fake profile instantly, before API confirms
                 await MainActor.run {
                     if let current = profile {
@@ -779,7 +848,7 @@ struct PerformanceView: View {
                 }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
-                    ud.set(final, forKey: lastKey)
+                    ud.set(trimmed, forKey: lastKey)  // store raw word for dedup
                     print("✅ [OCR] Biography updated: \"\(final)\"")
                     fireDoubleConfirmationVibration()
                 }
@@ -1702,19 +1771,14 @@ struct PerformanceView: View {
 
     // MARK: - Date Force Auto Mode
 
-    /// Called when the magician taps the "Followed by" area in Auto mode.
-    /// First tap: fetches recent followers and loads spectators (date group shown).
-    /// Subsequent taps: toggles between date group and time group display.
     private func handleAutoFollowedByTap() {
         guard dateForce.isEnabled && dateForce.mode == .auto else { return }
         guard !dateForce.isAutoLoading else { return }
 
         if dateForce.hasSpectators {
-            // Already loaded: just toggle group display
             dateForce.toggleAutoDisplayGroup()
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } else {
-            // First tap: fetch new followers
             loadAutoFollowers()
         }
     }
@@ -1726,28 +1790,26 @@ struct PerformanceView: View {
 
         Task {
             do {
-                let count = dateForce.autoMaxFollowers
+                let count = dateForce.autoSpectatorCount
                 print("🤖 [AUTO] Fetching \(count) recent followers...")
                 let followers = try await instagram.getRecentFollowers(count: count)
                 print("🤖 [AUTO] Got \(followers.count) followers, fetching profiles one by one...")
 
-                // Pre-calculate groups based on actual number returned (≤ count)
                 await MainActor.run {
                     dateForce.beginAutoLoad(totalExpected: followers.count)
                 }
 
                 for (i, follower) in followers.enumerated() {
-                    // Anti-bot delay between each profile lookup
                     if i > 0 {
                         try? await Task.sleep(nanoseconds: UInt64.random(in: 700_000_000...1_500_000_000))
                     }
 
                     if let p = try? await instagram.getProfileInfo(userId: follower.userId) {
-                        // Add immediately → UI updates with this spectator right away
                         await MainActor.run {
                             dateForce.appendAutoSpectator(
                                 username: follower.username,
-                                followingCount: p.followingCount
+                                followingCount: p.followingCount,
+                                followerCount: p.followerCount
                             )
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
@@ -1767,6 +1829,7 @@ struct PerformanceView: View {
             }
         }
     }
+
 }
 
 // MARK: - Instagram Profile View
@@ -1837,6 +1900,27 @@ struct InstagramProfileView: View {
     @State private var postsOCRNumberOverride: String? = nil   // for numeric results
     @State private var postsOCRLabelOverride:  String? = nil   // for word results
 
+    // Effective override for follower/following stats.
+    // During the waiting phase (transferOffset > 0, animation not yet started),
+    // returns the pre-deflated value directly so it shows from the very first frame
+    // without any flash. During animation, falls through to the timer-driven @State.
+    private var effectiveFollowerOverride: String? {
+        if let o = followerOverride { return o }
+        guard followingMagic.transferEnabled,
+              followingMagic.transferOffset > 0,
+              !followingMagic.isTransferCounting,
+              followingMagic.targetFollowers else { return nil }
+        return "\(max(0, profile.followerCount - followingMagic.transferOffset))"
+    }
+    private var effectiveFollowingOverride: String? {
+        if let o = followingOverride { return o }
+        guard followingMagic.transferEnabled,
+              followingMagic.transferOffset > 0,
+              !followingMagic.isTransferCounting,
+              !followingMagic.targetFollowers else { return nil }
+        return "\(max(0, profile.followingCount - followingMagic.transferOffset))"
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -1870,8 +1954,19 @@ struct InstagramProfileView: View {
                   followingMagic.transferOffset > 0,
                   !followingMagic.isTransferCounting,
                   !showTransferGlitch else { return }
-            GlitchSoundPlayer.shared.play(style: .electricBuzz)
-            showTransferGlitch = true
+            let delay = followingMagic.triggerDelay
+            if delay > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(delay)) {
+                    guard followingMagic.transferOffset > 0,
+                          !followingMagic.isTransferCounting,
+                          !showTransferGlitch else { return }
+                    GlitchSoundPlayer.shared.play(style: .electricBuzz)
+                    showTransferGlitch = true
+                }
+            } else {
+                GlitchSoundPlayer.shared.play(style: .electricBuzz)
+                showTransferGlitch = true
+            }
         }
         .overlay {
             if showTransferGlitch {
@@ -1884,7 +1979,10 @@ struct InstagramProfileView: View {
         .onChange(of: pendingOCRWord) { word in
             guard let word = word, !word.isEmpty else { return }
             pendingOCRWord = nil  // consume immediately
-            guard ForceNumberRevealSettings.shared.ocrEnabled else { return }
+            let fromURL = ForceNumberRevealSettings.shared.urlRevealActive
+            ForceNumberRevealSettings.shared.urlRevealActive = false  // reset immediately
+            // URL reveals bypass the ocrEnabled guard — they only need the master switch
+            guard ForceNumberRevealSettings.shared.ocrEnabled || fromURL else { return }
             guard !UploadManager.shared.isActive else {
                 print("⚠️ [OCR-PP] Reveal blocked: upload is active")
                 return
@@ -2023,10 +2121,10 @@ struct InstagramProfileView: View {
                         StatView(number: profile.mediaCount, label: "publicaciones")
                             .frame(maxWidth: .infinity)
                         StatView(number: profile.followerCount, label: "seguidores",
-                                 overrideText: followerOverride)
+                                 overrideText: effectiveFollowerOverride)
                             .frame(maxWidth: .infinity)
                         StatView(number: profile.followingCount, label: "seguidos",
-                                 overrideText: postsOCRNumberOverride ?? followingOverride,
+                                 overrideText: postsOCRNumberOverride ?? effectiveFollowingOverride,
                                  overrideLabel: postsOCRLabelOverride)
                             .frame(maxWidth: .infinity)
                     }
@@ -2124,6 +2222,7 @@ struct InstagramProfileView: View {
         HStack(spacing: 0) {
             TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
                 if ForceNumberRevealSettings.shared.isEnabled,
+                   ForceNumberRevealSettings.shared.gridSwipeEnabled,
                    secretManager.hasDigits,
                    let activeId = ActiveSetSettings.shared.activeNumberSetId,
                    let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
@@ -2246,7 +2345,8 @@ struct InstagramProfileView: View {
         }
     }
 
-    /// Inflates own following/followers by transferOffset then counts down to real count.
+    /// Inflates own following/followers from (realCount - transferOffset) up to realCount.
+    /// The pre-deflated value was already set in onAppear; this just animates back to real.
     private func startTransferInflation() {
         let steps      = followingMagic.transferOffset
         let totalMs    = followingMagic.countdownDuration * 1000
@@ -2258,9 +2358,8 @@ struct InstagramProfileView: View {
         let realCount = followingMagic.targetFollowers
             ? profile.followerCount
             : profile.followingCount
-        var current = realCount
+        var current = max(0, realCount - steps)  // start from the pre-deflated value
 
-        // Start from real count and climb UP to (realCount + steps)
         transferCountdownTimer = Timer.scheduledTimer(
             withTimeInterval: Double(intervalMs) / 1000.0,
             repeats: true
@@ -2274,14 +2373,17 @@ struct InstagramProfileView: View {
                 followingOverride = text
                 followerOverride  = nil
             }
-            if current >= realCount + steps {
+            if current >= realCount {
                 timer.invalidate()
                 transferCountdownTimer = nil
-                // Keep the inflated number visible (don't clear override)
+                // Clear override so the real count shows through
+                followerOverride  = nil
+                followingOverride = nil
                 followingMagic.isTransferCounting = false
                 followingMagic.transferOffset = 0
+                VolumeButtonMonitor.shared.stopMonitoring()
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                print("🎩 [TRANSFER] Inflation complete — showing inflated: \(current)")
+                print("🎩 [TRANSFER] Inflation complete — back to real count: \(realCount)")
             }
         }
     }
@@ -2719,12 +2821,10 @@ struct AutoFollowedByView: View {
         dateForce.spectators.filter { $0.group == dateForce.autoDisplayGroup }
     }
 
-    private var isDateGroup: Bool { dateForce.autoDisplayGroup == .date }
     private var isLoading: Bool { dateForce.isAutoLoading }
     private var loaded: Int { dateForce.spectators.count }
-    private var total: Int { dateForce.autoMaxFollowers }
+    private var total: Int { dateForce.autoSpectatorCount }
 
-    // Index of the last spectator in the date group
     private var lastDateIndex: Int {
         let dateCount = (total + 1) / 2
         return dateCount - 1
@@ -2732,23 +2832,19 @@ struct AutoFollowedByView: View {
 
     private func label(for spec: DateForceSpectator, at index: Int) -> String {
         let name = "@\(spec.username)"
-        // Append a dash only to the last date-group spectator — subtle group separator
         return (spec.group == .date && index == lastDateIndex) ? "\(name) —" : name
     }
 
     var body: some View {
         Button(action: { onTap?() }) {
             if isLoading && loaded == 0 {
-                // Nothing yet: spinner
                 HStack(spacing: 6) {
                     ProgressView().scaleEffect(0.65).frame(width: 20, height: 20)
                     Text("Capturing followers…")
                         .font(.system(size: 12))
                         .foregroundColor(Color(white: 0.56))
                 }
-
             } else if isLoading && loaded > 0 {
-                // Progressive: names appearing one by one, plain text
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(dateForce.spectators.enumerated()), id: \.element.id) { index, spec in
                         Text(label(for: spec, at: index))
@@ -2758,9 +2854,7 @@ struct AutoFollowedByView: View {
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: loaded)
-
             } else if loaded > 0 {
-                // Fully loaded: compact tap-to-toggle view
                 HStack(spacing: 6) {
                     Text(displayedSpectators.map { "@\($0.username)" }.joined(separator: "  "))
                         .font(.system(size: 12))
@@ -2769,9 +2863,7 @@ struct AutoFollowedByView: View {
                     Spacer()
                     IGIcon(asset: "instagram_swap", fallback: "arrow.left.arrow.right", size: 12, color: Color(white: 0.7))
                 }
-
             } else {
-                // Idle
                 HStack(spacing: 6) {
                     Text("Seguido/a por")
                         .font(.system(size: 12))
