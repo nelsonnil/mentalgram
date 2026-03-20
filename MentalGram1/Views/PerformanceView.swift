@@ -1829,6 +1829,7 @@ struct InstagramProfileView: View {
     @State private var followerOverride: String?    = nil
     // Transfer effect: inflate own profile after deflating a searched one
     @State private var transferCountdownTimer: Timer? = nil
+    @State private var showTransferGlitch = false
     // isTransferCounting lives in FollowingMagicSettings.shared so PerformanceView
     // can read it and block OCR while the animation runs.
 
@@ -1867,8 +1868,18 @@ struct InstagramProfileView: View {
         .onChange(of: volumeMonitor.triggerCount) { _ in
             guard followingMagic.transferEnabled,
                   followingMagic.transferOffset > 0,
-                  !followingMagic.isTransferCounting else { return }
-            startTransferInflation()
+                  !followingMagic.isTransferCounting,
+                  !showTransferGlitch else { return }
+            GlitchSoundPlayer.shared.play(style: .electricBuzz)
+            showTransferGlitch = true
+        }
+        .overlay {
+            if showTransferGlitch {
+                GlitchOverlayView {
+                    showTransferGlitch = false
+                    startTransferInflation()
+                }
+            }
         }
         .onChange(of: pendingOCRWord) { word in
             guard let word = word, !word.isEmpty else { return }
@@ -2237,8 +2248,8 @@ struct InstagramProfileView: View {
 
     /// Inflates own following/followers by transferOffset then counts down to real count.
     private func startTransferInflation() {
-        let steps    = followingMagic.transferOffset
-        let totalMs  = followingMagic.countdownDuration * 1000
+        let steps      = followingMagic.transferOffset
+        let totalMs    = followingMagic.countdownDuration * 1000
         let intervalMs = max(16, totalMs / steps)
 
         followingMagic.isTransferCounting = true
@@ -2247,36 +2258,30 @@ struct InstagramProfileView: View {
         let realCount = followingMagic.targetFollowers
             ? profile.followerCount
             : profile.followingCount
-        var current = realCount + steps
+        var current = realCount
 
-        if followingMagic.targetFollowers {
-            followerOverride  = "\(current)"
-            followingOverride = nil
-        } else {
-            followingOverride = "\(current)"
-            followerOverride  = nil
-        }
-
+        // Start from real count and climb UP to (realCount + steps)
         transferCountdownTimer = Timer.scheduledTimer(
             withTimeInterval: Double(intervalMs) / 1000.0,
             repeats: true
         ) { timer in
-            current -= 1
+            current += 1
             let text = "\(current)"
             if followingMagic.targetFollowers {
                 followerOverride  = text
+                followingOverride = nil
             } else {
                 followingOverride = text
+                followerOverride  = nil
             }
-            if current <= realCount {
+            if current >= realCount + steps {
                 timer.invalidate()
                 transferCountdownTimer = nil
-                followingOverride  = nil
-                followerOverride   = nil
+                // Keep the inflated number visible (don't clear override)
                 followingMagic.isTransferCounting = false
                 followingMagic.transferOffset = 0
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                print("🎩 [TRANSFER] Inflation complete — own count back to real: \(realCount)")
+                print("🎩 [TRANSFER] Inflation complete — showing inflated: \(current)")
             }
         }
     }
@@ -2828,34 +2833,54 @@ struct FollowedByView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { showingAltPage.toggle() }
             }
 
-            // Names — each individually tappable, matches the current page
+            // Names — each individually tappable, matches the current page.
+            // All text stays on a single line; the last name truncates with "…"
+            // if the total content is wider than the available space.
             if visibleFollowers.count >= 3 {
                 HStack(spacing: 0) {
                     Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                        .fixedSize()
                     Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .lineLimit(1).fixedSize()
                         .onTapGesture { onFollowerTap?(visibleFollowers[0]) }
                     Text(", ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                        .fixedSize()
                     Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .lineLimit(1).fixedSize()
                         .onTapGesture { onFollowerTap?(visibleFollowers[1]) }
                     Text(" y ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                        .fixedSize()
                     Text(visibleFollowers[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .lineLimit(1).truncationMode(.tail)
                         .onTapGesture { onFollowerTap?(visibleFollowers[2]) }
                 }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else if visibleFollowers.count == 2 {
                 HStack(spacing: 0) {
                     Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                        .fixedSize()
                     Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .lineLimit(1).fixedSize()
                         .onTapGesture { onFollowerTap?(visibleFollowers[0]) }
                     Text(" y ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                        .fixedSize()
                     Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .lineLimit(1).truncationMode(.tail)
                         .onTapGesture { onFollowerTap?(visibleFollowers[1]) }
                 }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else if visibleFollowers.count == 1 {
                 HStack(spacing: 0) {
                     Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                        .fixedSize()
                     Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                        .lineLimit(1).truncationMode(.tail)
                         .onTapGesture { onFollowerTap?(visibleFollowers[0]) }
                 }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

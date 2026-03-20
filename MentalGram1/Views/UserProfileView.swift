@@ -423,15 +423,14 @@ struct UserProfileView: View {
                 let useFollowers = followingMagic.targetFollowers
                 let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
                 if followingMagic.transferEnabled {
-                    let deflated = max(0, realCount - followingMagic.pendingOffset)
-                    if useFollowers { magicFollowerText  = formatFollowing(deflated) }
-                    else            { magicFollowingText = formatFollowing(deflated) }
-                    print("🎩 [TRANSFER] Deflated count: \(deflated) (real:\(realCount) offset:\(followingMagic.pendingOffset)) column:\(useFollowers ? "followers" : "following")")
+                    // Transfer: show real count — decrease happens only on volume press
+                    print("🎩 [TRANSFER] Ready — real count: \(realCount), will decrease by \(followingMagic.pendingOffset) on volume press")
                 } else {
+                    // Classic: pre-show inflated so spectator can already see the trick
                     let inflated = realCount + followingMagic.pendingOffset
                     if useFollowers { magicFollowerText  = formatFollowing(inflated) }
                     else            { magicFollowingText = formatFollowing(inflated) }
-                    print("🎩 [MAGIC] Inflated count: \(inflated) (real:\(realCount) offset:\(followingMagic.pendingOffset)) column:\(useFollowers ? "followers" : "following")")
+                    print("🎩 [MAGIC] Showing inflated: \(inflated) (real:\(realCount) +\(followingMagic.pendingOffset))")
                 }
                 VolumeButtonMonitor.shared.startMonitoring()
             }
@@ -539,24 +538,23 @@ struct UserProfileView: View {
         }
 
         if followingMagic.transferEnabled {
-            // Transfer illusion: DEFLATE the searched profile (realCount - steps → realCount)
+            // Transfer phase 1: DEFLATE searched profile (realCount → realCount - steps)
             let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-            var current = realCount - steps
+            var current = realCount
 
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
-                current += 1
+                current -= 1
                 setMagicText(self.formatFollowing(current))
 
-                if current >= realCount {
+                if current <= realCount - steps {
                     timer.invalidate()
                     self.countdownTimer = nil
-                    setMagicText(nil)
                     self.isCountingDown = false
                     self.followingMagic.transferOffset = steps
                     self.followingMagic.clear()
-                    // Keep monitoring alive so own profile can receive volume press for phase 2
+                    // Keep count showing at the deflated value (don't clear override)
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    print("🎩 [TRANSFER] Deflation complete — offset \(steps) saved for own profile")
+                    print("🎩 [TRANSFER] Deflation complete — showing \(current), offset \(steps) saved")
                 }
             }
         } else {
