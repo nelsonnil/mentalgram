@@ -1864,8 +1864,8 @@ struct InstagramProfileView: View {
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
         }
-        // Transfer effect: volume press on own profile inflates count by saved offset
-        .onChange(of: volumeMonitor.triggerCount) { _ in
+        // Transfer effect: volume UP on own profile inflates count by saved offset
+        .onChange(of: volumeMonitor.upCount) { _ in
             guard followingMagic.transferEnabled,
                   followingMagic.transferOffset > 0,
                   !followingMagic.isTransferCounting,

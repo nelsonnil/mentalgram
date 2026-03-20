@@ -465,7 +465,7 @@ struct UserProfileView: View {
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
         }
-        .onChange(of: volumeMonitor.triggerCount) { _ in
+        .onChange(of: volumeMonitor.upCount) { _ in
             guard followingMagic.pendingOffset > 0 && !isCountingDown && !showGlitch else { return }
             let delay = followingMagic.triggerDelay
             if delay > 0 {

@@ -82,10 +82,20 @@ class VolumeButtonMonitor: ObservableObject {
             }
 
         // Open the gate after the prepareVolume reset (0.1s) has settled.
-        // 0.2s is enough: prepareVolume resets at 0.1s → KVO fires → suppressed by isResetting.
-        // Reduced from 0.5s to shrink the startup blind-spot window.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            self?.isResetting = false
+            guard let self else { return }
+            // Safety: if volume is at or near maximum, pressing UP won't fire KVO.
+            // Bring it back to 0.5 so the next UP press always works.
+            let vol = AVAudioSession.sharedInstance().outputVolume
+            if vol >= 0.95 {
+                self.resetVolume()
+                // Hold gate closed a tiny bit longer for the safety reset to settle
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    self.isResetting = false
+                }
+            } else {
+                self.isResetting = false
+            }
         }
     }
 
