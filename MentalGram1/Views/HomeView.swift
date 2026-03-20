@@ -2304,72 +2304,8 @@ struct ForceNumberRevealSettingsCard: View {
                         }
                     }
 
-                    Divider()
-
-                    // ── Auto Re-archive ───────────────────────────────────
-                    HStack(spacing: VaultTheme.Spacing.sm) {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .foregroundColor(VaultTheme.Colors.primary)
-                        Text("Auto Re-archive")
-                            .font(VaultTheme.Typography.body())
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
-                        Spacer()
-                        Toggle("", isOn: $settings.autoReArchiveEnabled)
-                            .labelsHidden()
-                    }
-
-                    if settings.autoReArchiveEnabled {
-                        Text("After the reveal, photos are automatically re-archived one by one with random delays to avoid detection.")
-                            .font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-
-                        // Time picker slider
-                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                            HStack {
-                                Text("Re-archive after")
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.textTertiary)
-                                Spacer()
-                                Text("\(settings.autoReArchiveMinutes) min")
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.primary)
-                                    .monospacedDigit()
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: { Double(settings.autoReArchiveMinutes) },
-                                    set: { settings.autoReArchiveMinutes = Int($0.rounded()) }
-                                ),
-                                in: 5...60,
-                                step: 5
-                            )
-                            .tint(VaultTheme.Colors.primary)
-                            HStack {
-                                Text("5 min").font(VaultTheme.Typography.captionSmall()).foregroundColor(VaultTheme.Colors.textTertiary)
-                                Spacer()
-                                Text("60 min").font(VaultTheme.Typography.captionSmall()).foregroundColor(VaultTheme.Colors.textTertiary)
-                            }
-                        }
-
-                        // Pending re-archive indicator
-                        if settings.reArchiveScheduledAt != nil {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                                Text("Re-archive pending…")
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                                Spacer()
-                                Button("Cancel") {
-                                    settings.cancelPendingReArchive()
-                                }
-                                .font(VaultTheme.Typography.captionSmall())
-                                .foregroundColor(VaultTheme.Colors.error)
-                            }
-                            .padding(.top, 2)
-                        }
-                    }
                 }
+
 
             // ── Cover Typing Input ─────────────────────────────────
             Divider()
