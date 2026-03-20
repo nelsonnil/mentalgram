@@ -105,7 +105,16 @@ struct HomeView: View {
         .sheet(isPresented: $showArchiveProgressSheet) {
             archiveProgressView
         }
-        .fullScreenCover(isPresented: $showingExplore) {
+        .fullScreenCover(isPresented: $showingExplore, onDismiss: {
+            // Restart volume monitoring if FollowingMagic needs it for Transfer phase 2
+            // (UserProfileView stopped monitoring on dismiss; PerformanceView.onAppear won't fire)
+            let fm = FollowingMagicSettings.shared
+            if fm.isEnabled && (fm.transferOffset > 0 || fm.pendingOffset > 0) {
+                VolumeButtonMonitor.shared.prepareVolume()
+                VolumeButtonMonitor.shared.startMonitoring()
+                print("🎩 [MAGIC] Monitoring restarted after ExploreView dismissed (transferOffset:\(fm.transferOffset))")
+            }
+        }) {
             ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
                 .preferredColorScheme(.light)
         }
