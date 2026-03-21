@@ -146,12 +146,14 @@ struct InstagramMediaItem: Identifiable, Codable {
     let id: String
     let mediaId: String
     let imageURL: String
-    let videoURL: String? // NEW: Video URL for playback
+    let videoURL: String?
     let caption: String?
     let takenAt: Date?
     let likeCount: Int?
     let commentCount: Int?
     let mediaType: MediaType
+    /// Username of the post/reel owner, populated from the API when available.
+    var ownerUsername: String? = nil
     
     enum MediaType: String, Codable {
         case photo = "photo"
@@ -372,17 +374,17 @@ enum SetType: String, Codable, CaseIterable {
     
     var title: String {
         switch self {
-        case .word: return "Word Reveal"
-        case .number: return "Number Reveal"
-        case .custom: return "Custom Set"
+        case .word: return String(localized: "Word Reveal")
+        case .number: return String(localized: "Number Reveal")
+        case .custom: return String(localized: "Custom Set")
         }
     }
     
     var description: String {
         switch self {
-        case .word: return "Multiple banks of letters (A-Z)"
-        case .number: return "Multiple banks of digits (0-9)"
-        case .custom: return "Single bank of custom images"
+        case .word: return String(localized: "Multiple banks of letters (A-Z)")
+        case .number: return String(localized: "Multiple banks of digits (0-9)")
+        case .custom: return String(localized: "Single bank of custom images")
         }
     }
     
@@ -414,11 +416,11 @@ enum SetStatus: String, Codable {
     
     var label: String {
         switch self {
-        case .ready: return "Ready to upload"
-        case .uploading: return "Uploading..."
-        case .paused: return "Paused"
-        case .error: return "Error"
-        case .completed: return "Uploaded"
+        case .ready: return String(localized: "Ready to upload")
+        case .uploading: return String(localized: "Uploading...")
+        case .paused: return String(localized: "Paused")
+        case .error: return String(localized: "Error")
+        case .completed: return String(localized: "Uploaded")
         }
     }
     

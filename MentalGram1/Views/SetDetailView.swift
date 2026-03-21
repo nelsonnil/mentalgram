@@ -486,8 +486,8 @@ struct SetDetailView: View {
                         ProgressView().scaleEffect(0.85)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(uploadManager.isSyncArchiveActive
-                                 ? "Sync & Archive — verifying (\(syncProgress)/\(syncTotal))…"
-                                 : "Verifying (\(syncProgress)/\(syncTotal))…")
+                                 ? String(format: String(localized: "Sync & Archive — verifying (%d/%d)…"), syncProgress, syncTotal)
+                                 : String(format: String(localized: "Verifying (%d/%d)…"), syncProgress, syncTotal))
                                 .font(.subheadline.bold())
                                 .foregroundColor(.primary)
                             Text("Checking real state on Instagram")
@@ -506,7 +506,7 @@ struct SetDetailView: View {
                     HStack(spacing: 10) {
                         ProgressView().scaleEffect(0.85)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Preparing to archive… \(saCountdownSeconds)s")
+                            Text(String(format: String(localized: "Preparing to archive… %ds"), saCountdownSeconds))
                                 .font(.subheadline.bold())
                                 .foregroundColor(.primary)
                             Text("Short pause before sending archive requests")
@@ -532,15 +532,15 @@ struct SetDetailView: View {
                             ProgressView().scaleEffect(0.85)
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Archiving (\(archiveAllProgress)/\(archiveAllTotal))")
+                            Text(String(format: String(localized: "Archiving (%d/%d)"), archiveAllProgress, archiveAllTotal))
                                 .font(.subheadline.bold())
                                 .foregroundColor(.primary)
                             if saCountdownSeconds > 0 {
                                 let m = saCountdownSeconds / 60
                                 let s = saCountdownSeconds % 60
                                 Text(m > 0
-                                     ? "Next archive in \(m)m \(s)s — do not close the app"
-                                     : "Next archive in \(s)s — do not close the app")
+                                     ? String(format: String(localized: "Next archive in %dm %ds — do not close the app"), m, s)
+                                     : String(format: String(localized: "Next archive in %ds — do not close the app"), s))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .monospacedDigit()
@@ -564,7 +564,7 @@ struct SetDetailView: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                                 .font(.system(size: 16))
-                            Text("All \(archiveAllTotal) photos archived")
+                            Text(String(format: String(localized: "All %d photos archived"), archiveAllTotal))
                                 .font(.subheadline.bold())
                                 .foregroundColor(.green)
                         } else {
@@ -572,10 +572,10 @@ struct SetDetailView: View {
                                 .foregroundColor(.orange)
                                 .font(.system(size: 16))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Archived \(archiveAllProgress)/\(archiveAllTotal) photos")
+                                Text(String(format: String(localized: "Archived %d/%d photos"), archiveAllProgress, archiveAllTotal))
                                     .font(.subheadline.bold())
                                     .foregroundColor(.orange)
-                                Text("\(archiveAllTotal - archiveAllProgress) failed — tap Sync & Archive to retry")
+                                Text(String(format: String(localized: "%d failed — tap Sync & Archive to retry"), archiveAllTotal - archiveAllProgress))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -670,16 +670,16 @@ struct SetDetailView: View {
     private var syncResultTitle: String {
         var parts: [String] = []
         if syncFixedCount > 0 {
-            parts.append("Fixed \(syncFixedCount) desync\(syncFixedCount > 1 ? "s" : "")")
+            parts.append(String(format: String(localized: "Fixed %d desync(s)"), syncFixedCount))
         }
         if !syncTrulyVisibleIds.isEmpty {
-            parts.append("\(syncTrulyVisibleIds.count) confirmed public")
+            parts.append(String(format: String(localized: "%d confirmed public"), syncTrulyVisibleIds.count))
         }
         if parts.isEmpty {
             if syncUnknownCount == syncTotal {
-                return "API returned no data — check logs"
+                return String(localized: "API returned no data — check logs")
             }
-            return "All photos in sync ✓"
+            return String(localized: "All photos in sync ✓")
         }
         return parts.joined(separator: " · ")
     }
@@ -1323,19 +1323,32 @@ struct SetDetailView: View {
     
     // MARK: - Phase Default Text
     private var phaseDefaultText: String {
+        func fmt(_ secs: Int) -> String { "\(secs / 60):\(String(format: "%02d", secs % 60))" }
         switch uploadManager.uploadPhase {
-        case .idle: return "Ready to upload"
-        case .uploading(let n): return "Uploading photo #\(n) of \(uploadManager.uploadProgress.total)"
-        case .archiving(let n): return "Archiving photo #\(n)..."
-        case .waiting(let next, let secs): return "Next photo in \(secs / 60):\(String(format: "%02d", secs % 60))"
-        case .cooldown(let secs): return "Cooldown \(secs / 60):\(String(format: "%02d", secs % 60))"
-        case .autoRetrying(let secs, let att): return "Retrying in \(secs / 60):\(String(format: "%02d", secs % 60)) (attempt \(att)/3)"
-        case .waitingNetwork(let att): return "Waiting for connection... (attempt \(att)/3)"
-        case .paused: return "Upload Paused"
-        case .escalatedPause(let secs): return "Cooling down \(secs / 60):\(String(format: "%02d", secs % 60))"
-        case .botLockdown(let secs): return "Locked \(secs / 60):\(String(format: "%02d", secs % 60))"
-        case .sessionExpired: return "Session Expired"
-        case .completed: return "Upload Completed"
+        case .idle:
+            return String(localized: "Ready to upload")
+        case .uploading(let n):
+            return String(format: String(localized: "Uploading photo #%d of %d"), n, uploadManager.uploadProgress.total)
+        case .archiving(let n):
+            return String(format: String(localized: "Archiving photo #%d..."), n)
+        case .waiting(_, let secs):
+            return String(format: String(localized: "Next photo in %@"), fmt(secs))
+        case .cooldown(let secs):
+            return String(format: String(localized: "Cooldown %@"), fmt(secs))
+        case .autoRetrying(let secs, let att):
+            return String(format: String(localized: "Retrying in %@ (attempt %d/3)"), fmt(secs), att)
+        case .waitingNetwork(let att):
+            return String(format: String(localized: "Waiting for connection... (attempt %d/3)"), att)
+        case .paused:
+            return String(localized: "Upload Paused")
+        case .escalatedPause(let secs):
+            return String(format: String(localized: "Cooling down %@"), fmt(secs))
+        case .botLockdown(let secs):
+            return String(format: String(localized: "Locked %@"), fmt(secs))
+        case .sessionExpired:
+            return String(localized: "Session Expired")
+        case .completed:
+            return String(localized: "Upload Completed")
         }
     }
     
@@ -1350,7 +1363,7 @@ struct SetDetailView: View {
         case .autoRetrying(let seconds, let attempt) where seconds > 0:
             VStack(spacing: 8) {
                 countdownDisplay(seconds: seconds, color: .orange, label: "Auto-retrying in")
-                Text("Attempt \(attempt) of 3")
+                Text(String(format: String(localized: "Attempt %d of 3"), attempt))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1363,7 +1376,7 @@ struct SetDetailView: View {
                         .font(.subheadline)
                         .foregroundColor(.yellow)
                 }
-                Text("Attempt \(attempt) of 3 - Will retry automatically")
+                Text(String(format: String(localized: "Attempt %d of 3 - Will retry automatically"), attempt))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1401,7 +1414,7 @@ struct SetDetailView: View {
     
     // MARK: - Status Section Helpers
     
-    private func countdownDisplay(seconds: Int, color: Color, label: String) -> some View {
+    private func countdownDisplay(seconds: Int, color: Color, label: LocalizedStringKey) -> some View {
         VStack(spacing: 8) {
             Text("\(seconds / 60):\(String(format: "%02d", seconds % 60))")
                 .font(.system(size: 48, weight: .bold, design: .monospaced))
@@ -1419,11 +1432,14 @@ struct SetDetailView: View {
     private var progressText: some View {
         Group {
             if case .waiting(let nextPhoto, let seconds) = uploadManager.uploadPhase {
-                Text("\(uploadManager.uploadProgress.current)/\(uploadManager.uploadProgress.total) completed - Waiting \(seconds / 60):\(String(format: "%02d", seconds % 60)) for photo #\(nextPhoto)")
+                Text(String(format: String(localized: "%d/%d completed - Waiting %@ for photo #%d"),
+                            uploadManager.uploadProgress.current, uploadManager.uploadProgress.total,
+                            "\(seconds / 60):\(String(format: "%02d", seconds % 60))", nextPhoto))
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else {
-                Text("\(uploadManager.uploadProgress.current) / \(uploadManager.uploadProgress.total)")
+                Text(String(format: String(localized: "%d / %d"),
+                            uploadManager.uploadProgress.current, uploadManager.uploadProgress.total))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1463,7 +1479,7 @@ struct SetDetailView: View {
             case .escalatedPause(let seconds):
                 // Escalated pause — disabled with countdown
                 if seconds > 0 {
-                    Label("Resume in \(seconds / 60):\(String(format: "%02d", seconds % 60))", systemImage: "clock.fill")
+                    Label(String(format: String(localized: "Resume in %@"), "\(seconds / 60):\(String(format: "%02d", seconds % 60))"), systemImage: "clock.fill")
                         .font(.subheadline.bold())
                         .foregroundColor(.white.opacity(0.5))
                         .frame(maxWidth: .infinity)
@@ -1484,7 +1500,7 @@ struct SetDetailView: View {
             case .botLockdown(let seconds):
                 // Bot lockdown — disabled with countdown
                 if seconds > 0 {
-                    Label("Locked \(seconds / 60):\(String(format: "%02d", seconds % 60))", systemImage: "lock.fill")
+                    Label(String(format: String(localized: "Locked %@"), "\(seconds / 60):\(String(format: "%02d", seconds % 60))"), systemImage: "lock.fill")
                         .font(.subheadline.bold())
                         .foregroundColor(.white.opacity(0.5))
                         .frame(maxWidth: .infinity)
@@ -1574,7 +1590,7 @@ struct SetDetailView: View {
                 }
             }
             
-            Text("\(archivedCount) archived • \(visibleCount) visible")
+            Text(String(format: String(localized: "%lld archived • %lld visible"), archivedCount, visibleCount))
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
@@ -2385,7 +2401,7 @@ struct SetDetailView: View {
         uploadManager.activeSetId = currentSet.id
         uploadManager.requestPause = false
         uploadManager.uploadPhase = .uploading(photoNumber: 1)
-        uploadManager.currentPhaseDescription = "Starting upload..."
+        uploadManager.currentPhaseDescription = String(localized: "Starting upload...")
 
         let task = Task {
             await uploadAllPhotos()
@@ -2407,7 +2423,7 @@ struct SetDetailView: View {
         
         // Update phase immediately
         uploadManager.uploadPhase = .uploading(photoNumber: (uploadManager.failedPhotoIndex ?? 0) + 1)
-        uploadManager.currentPhaseDescription = "Resuming upload..."
+        uploadManager.currentPhaseDescription = String(localized: "Resuming upload...")
         
         // If we have a failed photo index, resume from there
         let startIndex = uploadManager.failedPhotoIndex ?? 0
@@ -2445,7 +2461,7 @@ struct SetDetailView: View {
         resetErrorState()
         uploadManager.requestPause = false
         uploadManager.uploadPhase = .uploading(photoNumber: skipIndex + 2)
-        uploadManager.currentPhaseDescription = "Resuming after skip..."
+        uploadManager.currentPhaseDescription = String(localized: "Resuming after skip...")
         
         // Continue from next photo
         await uploadAllPhotos(startFrom: skipIndex + 1)
@@ -2496,7 +2512,7 @@ struct SetDetailView: View {
                 uploadManager.invalidateAllTimers()
                 uploadManager.failedPhotoIndex = index
                 uploadManager.uploadPhase = .paused
-                uploadManager.currentPhaseDescription = "Upload Paused"
+                uploadManager.currentPhaseDescription = String(localized: "Upload Paused")
                 dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                 uploadManager.activeTask = nil
             }
@@ -2516,7 +2532,7 @@ struct SetDetailView: View {
             await MainActor.run {
                 uploadManager.showingError = "Instagram lockdown active. Cannot upload. Wait for lockdown to clear."
                 uploadManager.uploadPhase = .paused
-                uploadManager.currentPhaseDescription = "Upload Paused - Lockdown Active"
+                uploadManager.currentPhaseDescription = String(localized: "Upload Paused - Lockdown Active")
                 uploadManager.activeTask = nil
             }
             return
@@ -2528,7 +2544,7 @@ struct SetDetailView: View {
             let minutes = remainingCooldown / 60
             let seconds = remainingCooldown % 60
             print("⏰ [UPLOAD] Global cooldown active: \(minutes)m \(seconds)s remaining")
-            await waitWithCountdown(seconds: remainingCooldown, label: "Cooldown Active")
+            await waitWithCountdown(seconds: remainingCooldown, label: String(localized: "Cooldown Active"))
         }
         
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
@@ -2542,7 +2558,7 @@ struct SetDetailView: View {
                 dataManager.updateSetStatus(id: currentSet.id, status: .error)
                 uploadManager.showingError = "Network error starting upload: \(error.localizedDescription)"
                 uploadManager.uploadPhase = .paused
-                uploadManager.currentPhaseDescription = "Upload Paused - Network Error"
+                uploadManager.currentPhaseDescription = String(localized: "Upload Paused - Network Error")
                 uploadManager.activeTask = nil
             }
             return
@@ -2568,7 +2584,7 @@ struct SetDetailView: View {
 
             await MainActor.run {
                 uploadManager.uploadPhase = .archiving(photoNumber: 0)
-                uploadManager.currentPhaseDescription = "Recovering interrupted archives…"
+                uploadManager.currentPhaseDescription = String(localized: "Recovering interrupted archives…")
             }
 
             for stuckPhoto in stuckPhotos {
@@ -2641,7 +2657,7 @@ struct SetDetailView: View {
                 await MainActor.run {
                     dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                     uploadManager.uploadPhase = .paused
-                    uploadManager.currentPhaseDescription = "Upload Paused - Lockdown Active"
+                    uploadManager.currentPhaseDescription = String(localized: "Upload Paused - Lockdown Active")
                     uploadManager.activeTask = nil
                 }
                 return
@@ -2671,9 +2687,9 @@ struct SetDetailView: View {
                 // UPDATE PHASE: Uploading
                 await MainActor.run {
                     uploadManager.uploadPhase = .uploading(photoNumber: index + 1)
-                    uploadManager.currentPhaseDescription = retryAttempt > 0 
-                        ? "Retrying photo #\(index + 1) (attempt \(retryAttempt + 1))"
-                        : "Uploading photo #\(index + 1) of \(totalPhotos)"
+                    uploadManager.currentPhaseDescription = retryAttempt > 0
+                        ? String(format: String(localized: "Retrying photo #%d (attempt %d)"), index + 1, retryAttempt + 1)
+                        : String(format: String(localized: "Uploading photo #%d of %d"), index + 1, totalPhotos)
                 }
                 
                 do {
@@ -2706,7 +2722,7 @@ struct SetDetailView: View {
                         // UPDATE PHASE: Archiving
                         await MainActor.run {
                             uploadManager.uploadPhase = .archiving(photoNumber: index + 1)
-                            uploadManager.currentPhaseDescription = "Archiving photo #\(index + 1)..."
+                            uploadManager.currentPhaseDescription = String(format: String(localized: "Archiving photo #%d..."), index + 1)
                         }
                         
                         // Archive
@@ -2801,7 +2817,7 @@ struct SetDetailView: View {
                         await MainActor.run {
                             uploadManager.failedPhotoIndex = index
                             uploadManager.uploadPhase = .sessionExpired
-                            uploadManager.currentPhaseDescription = "Session Expired - Re-login Required"
+                            uploadManager.currentPhaseDescription = String(localized: "Session Expired - Re-login Required")
                             dataManager.updateSetStatus(id: currentSet.id, status: .error)
                             uploadManager.activeTask = nil
                             uploadManager.sendSessionExpiredNotification()
@@ -2823,7 +2839,7 @@ struct SetDetailView: View {
                             uploadManager.botCountdownSeconds = 900
                             
                             uploadManager.uploadPhase = .botLockdown(remainingSeconds: 900)
-                            uploadManager.currentPhaseDescription = "Bot Detection - Account Locked"
+                            uploadManager.currentPhaseDescription = String(localized: "Bot Detection - Account Locked")
                             
                             uploadManager.botCountdownTimer?.invalidate()
                             uploadManager.botCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak uploadManager] _ in
@@ -2831,12 +2847,12 @@ struct SetDetailView: View {
                                 if um.botCountdownSeconds > 0 {
                                     um.botCountdownSeconds -= 1
                                     um.uploadPhase = .botLockdown(remainingSeconds: um.botCountdownSeconds)
-                                    um.currentPhaseDescription = "Bot Detection - Account Locked"
+                                    um.currentPhaseDescription = String(localized: "Bot Detection - Account Locked")
                                 } else {
                                     um.botCountdownTimer?.invalidate()
                                     um.botCountdownTimer = nil
                                     um.uploadPhase = .paused
-                                    um.currentPhaseDescription = "Upload Paused - Ready to Resume"
+                                    um.currentPhaseDescription = String(localized: "Upload Paused - Ready to Resume")
                                 }
                             }
                             
@@ -2854,7 +2870,7 @@ struct SetDetailView: View {
                             uploadManager.isPhotoRejected = true
                             uploadManager.showingError = "Photo #\(index + 1) was rejected\n\nReason: \(error.localizedDescription)\n\nYou can skip this photo or replace it."
                             uploadManager.uploadPhase = .paused
-                            uploadManager.currentPhaseDescription = "Upload Paused - Photo Rejected"
+                            uploadManager.currentPhaseDescription = String(localized: "Upload Paused - Photo Rejected")
                             dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                             uploadManager.activeTask = nil
                         }
@@ -2890,7 +2906,7 @@ struct SetDetailView: View {
                             
                             await MainActor.run {
                                 uploadManager.uploadPhase = .waitingNetwork(attempt: retryAttempt)
-                                uploadManager.currentPhaseDescription = "Waiting for connection..."
+                                uploadManager.currentPhaseDescription = String(localized: "Waiting for connection...")
                             }
                             
                             // Wait up to 120s for network
@@ -2953,7 +2969,7 @@ struct SetDetailView: View {
                 await MainActor.run {
                     uploadManager.persistWait(endTime: endTime, nextPhotoIndex: index + 2)
                     uploadManager.uploadPhase = .waiting(nextPhoto: index + 2, remainingSeconds: delaySeconds)
-                    uploadManager.currentPhaseDescription = "Next photo in \(delaySeconds / 60):\(String(format: "%02d", delaySeconds % 60))"
+                    uploadManager.currentPhaseDescription = String(format: String(localized: "Next photo in %@"), "\(delaySeconds / 60):\(String(format: "%02d", delaySeconds % 60))")
                     uploadManager.nextPhotoCountdown = delaySeconds
                     
                     uploadManager.nextPhotoTimer?.invalidate()
@@ -2962,7 +2978,7 @@ struct SetDetailView: View {
                         let r = um.remainingWaitSeconds()
                         um.nextPhotoCountdown = r
                         um.uploadPhase = .waiting(nextPhoto: index + 2, remainingSeconds: r)
-                        um.currentPhaseDescription = "Next photo in \(r / 60):\(String(format: "%02d", r % 60))"
+                        um.currentPhaseDescription = String(format: String(localized: "Next photo in %@"), "\(r / 60):\(String(format: "%02d", r % 60))")
                         if r <= 0 {
                             um.nextPhotoTimer?.invalidate()
                             um.nextPhotoTimer = nil
@@ -2984,8 +3000,8 @@ struct SetDetailView: View {
                             uploadManager.nextPhotoTimer = nil
                             uploadManager.clearWaitPersistence()
                             uploadManager.uploadPhase = .paused
-                            uploadManager.currentPhaseDescription = "Upload Paused"
-                            uploadManager.failedPhotoIndex = index + 1
+                uploadManager.currentPhaseDescription = String(localized: "Upload Paused")
+                uploadManager.failedPhotoIndex = index + 1
                             dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                             uploadManager.activeTask = nil
                         }
@@ -3021,7 +3037,7 @@ struct SetDetailView: View {
                     await MainActor.run {
                         uploadManager.persistWait(endTime: endTime, nextPhotoIndex: 0)
                         uploadManager.uploadPhase = .waiting(nextPhoto: 1, remainingSeconds: wait)
-                        uploadManager.currentPhaseDescription = "Next bank in \(wait / 60):\(String(format: "%02d", wait % 60))"
+                        uploadManager.currentPhaseDescription = String(format: String(localized: "Next bank in %@"), "\(wait / 60):\(String(format: "%02d", wait % 60))")
                     }
                     var remaining = wait
                     while remaining > 0 {
@@ -3041,7 +3057,7 @@ struct SetDetailView: View {
         LogManager.shared.success("Upload completed for set '\(currentSet.name)' - All \(currentSet.photos.count) photos uploaded", category: .upload)
         await MainActor.run {
             uploadManager.uploadPhase = .completed
-            uploadManager.currentPhaseDescription = "Upload Completed"
+            uploadManager.currentPhaseDescription = String(localized: "Upload Completed")
             uploadManager.activeTask = nil
         }
         dataManager.updateSetStatus(id: currentSet.id, status: .completed)
@@ -3054,7 +3070,7 @@ struct SetDetailView: View {
         await MainActor.run {
             uploadManager.autoRetryCountdown = seconds
             uploadManager.uploadPhase = .autoRetrying(remainingSeconds: seconds, attempt: attempt)
-            uploadManager.currentPhaseDescription = "Auto-retrying \(photoInfo) in \(seconds)s"
+            uploadManager.currentPhaseDescription = String(format: String(localized: "Auto-retrying %@ in %ds"), photoInfo, seconds)
             
             uploadManager.autoRetryTimer?.invalidate()
             uploadManager.autoRetryTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak uploadManager] _ in
@@ -3098,7 +3114,7 @@ struct SetDetailView: View {
             if uploadManager.requestPause { return }
             await MainActor.run {
                 uploadManager.uploadPhase = .cooldown(remainingSeconds: remaining)
-                uploadManager.currentPhaseDescription = "Cooldown \(remaining / 60):\(String(format: "%02d", remaining % 60))"
+                uploadManager.currentPhaseDescription = String(format: String(localized: "Cooldown %@"), "\(remaining / 60):\(String(format: "%02d", remaining % 60))")
             }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
@@ -3137,7 +3153,7 @@ struct SetDetailView: View {
             uploadManager.escalatedPauseEndTime = pauseEndDate
             uploadManager.escalatedPauseCountdown = escalationWaitSeconds
             uploadManager.uploadPhase = .escalatedPause(remainingSeconds: escalationWaitSeconds)
-            uploadManager.currentPhaseDescription = "Multiple errors - Cooling down"
+            uploadManager.currentPhaseDescription = String(localized: "Multiple errors - Cooling down")
             
             dataManager.updateSetStatus(id: currentSet.id, status: .paused)
             
@@ -3148,14 +3164,14 @@ struct SetDetailView: View {
                 if left > 0 {
                     um.escalatedPauseCountdown = left
                     um.uploadPhase = .escalatedPause(remainingSeconds: left)
-                    um.currentPhaseDescription = "Multiple errors - Cooling down"
+                    um.currentPhaseDescription = String(localized: "Multiple errors - Cooling down")
                 } else {
                     um.escalatedPauseTimer?.invalidate()
                     um.escalatedPauseTimer = nil
                     um.escalatedPauseEndTime = nil
                     um.escalatedPauseCountdown = 0
                     um.uploadPhase = .paused
-                    um.currentPhaseDescription = "Upload Paused - Ready to Resume"
+                    um.currentPhaseDescription = String(localized: "Upload Paused - Ready to Resume")
                 }
             }
         }

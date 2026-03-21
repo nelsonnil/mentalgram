@@ -246,7 +246,7 @@ class DateForceSettings: ObservableObject {
     static func formatExact(_ count: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        formatter.locale = Locale(identifier: "en_US")
+        formatter.locale = Locale.current
         return formatter.string(from: NSNumber(value: count)) ?? "\(count)"
     }
 

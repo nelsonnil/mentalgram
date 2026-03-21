@@ -1997,6 +1997,7 @@ class InstagramService: ObservableObject {
             mediaId = UUID().uuidString
         }
         
+        let ownerUsername = (media["user"] as? [String: Any])?["username"] as? String
         return InstagramMediaItem(
             id: mediaId,
             mediaId: mediaId,
@@ -2006,7 +2007,8 @@ class InstagramService: ObservableObject {
             takenAt: (media["taken_at"] as? TimeInterval).map { Date(timeIntervalSince1970: $0) },
             likeCount: media["like_count"] as? Int,
             commentCount: media["comment_count"] as? Int,
-            mediaType: mediaType == 2 ? .video : (mediaType == 8 ? .carousel : .photo)
+            mediaType: mediaType == 2 ? .video : (mediaType == 8 ? .carousel : .photo),
+            ownerUsername: ownerUsername
         )
     }
     
@@ -2360,6 +2362,7 @@ class InstagramService: ObservableObject {
             
             let likeCount = item["like_count"] as? Int
             let commentCount = item["comment_count"] as? Int
+            let ownerUsername = (item["user"] as? [String: Any])?["username"] as? String
             
             // Extract video URL if it's a video
             var videoUrl: String?
@@ -2388,7 +2391,8 @@ class InstagramService: ObservableObject {
                 takenAt: takenAt,
                 likeCount: likeCount,
                 commentCount: commentCount,
-                mediaType: mediaType
+                mediaType: mediaType,
+                ownerUsername: ownerUsername
             )
             mediaItems.append(mediaItem)
         }

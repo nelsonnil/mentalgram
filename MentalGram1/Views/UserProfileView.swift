@@ -218,12 +218,12 @@ struct UserProfileView: View {
                                     .lineLimit(1)
 
                                 HStack(spacing: 0) {
-                                    StatView(number: currentProfile.mediaCount, label: "posts")
+                                    StatView(number: currentProfile.mediaCount, label: String(localized: "ig.stat.posts"))
                                         .frame(maxWidth: .infinity)
-                                    StatView(number: currentProfile.followerCount, label: "followers",
+                                    StatView(number: currentProfile.followerCount, label: String(localized: "ig.stat.followers"),
                                              overrideText: magicFollowerText)
                                         .frame(maxWidth: .infinity)
-                                    StatView(number: currentProfile.followingCount, label: "following",
+                                    StatView(number: currentProfile.followingCount, label: String(localized: "ig.stat.following"),
                                              overrideText: magicFollowingText ?? followingOverride)
                                         .frame(maxWidth: .infinity)
                                 }
@@ -271,7 +271,7 @@ struct UserProfileView: View {
                                 } else if isFollowing {
                                     // Already following - show "Following" with dropdown
                                     HStack(spacing: 4) {
-                                        Text("Following")
+                                        Text("ig.following_btn")
                                             .font(.system(size: 14, weight: .semibold))
                                         Image(systemName: "chevron.down")
                                             .font(.system(size: 10, weight: .semibold))
@@ -283,7 +283,7 @@ struct UserProfileView: View {
                                     .cornerRadius(8)
                                 } else if isFollowRequested {
                                     // Request pending - show "Requested" (NO dropdown)
-                                    Text("Requested")
+                                    Text("ig.follow_requested")
                                         .font(.system(size: 14, weight: .semibold))
                                         .frame(maxWidth: .infinity)
                                         .frame(height: 32)
@@ -292,7 +292,7 @@ struct UserProfileView: View {
                                         .cornerRadius(8)
                                 } else {
                                     // Not following - show "Follow" in blue
-                                    Text("Follow")
+                                    Text("ig.follow")
                                         .font(.system(size: 14, weight: .semibold))
                                         .frame(maxWidth: .infinity)
                                         .frame(height: 32)

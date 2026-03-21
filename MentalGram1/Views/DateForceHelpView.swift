@@ -544,10 +544,10 @@ struct DateForceHelpView: View {
 private struct HelpSection<Content: View>: View {
     let icon: String
     let iconColor: Color
-    let title: String
+    let title: LocalizedStringKey
     let content: Content
 
-    init(icon: String, iconColor: Color, title: String, @ViewBuilder content: () -> Content) {
+    init(icon: String, iconColor: Color, title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.icon = icon
         self.iconColor = iconColor
         self.title = title
@@ -572,8 +572,8 @@ private struct HelpSection<Content: View>: View {
 private struct MetricRow: View {
     let icon: String
     let color: Color
-    let label: String
-    let description: String
+    let label: LocalizedStringKey
+    let description: LocalizedStringKey
 
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.md) {
@@ -586,7 +586,7 @@ private struct MetricRow: View {
                 Text(label)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(color)
-                Text(LocalizedStringKey(description))
+                Text(description)
                     .font(VaultTheme.Typography.caption())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -599,8 +599,8 @@ private struct MetricRow: View {
 }
 
 private struct BodyText: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         Text(text)
             .font(VaultTheme.Typography.body())
@@ -629,7 +629,7 @@ private struct NumberedStep: View {
 }
 
 private struct InfoBox: View {
-    let text: String
+    let text: LocalizedStringKey
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
             Image(systemName: "info.circle.fill")
@@ -650,12 +650,12 @@ private struct InfoBox: View {
 }
 
 private struct ShowStepItem {
-    let action: String
-    let dialogue: String?
+    let action: LocalizedStringKey
+    let dialogue: LocalizedStringKey?
 }
 
 private struct ShowStep: View {
-    let label: String
+    let label: LocalizedStringKey
     let labelColor: Color
     let steps: [ShowStepItem]
 
@@ -695,7 +695,7 @@ private struct ShowStep: View {
 }
 
 private struct DialogueBox: View {
-    let text: String
+    let text: LocalizedStringKey
     let color: Color
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {

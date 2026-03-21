@@ -88,7 +88,7 @@ struct ExploreView: View {
                     .cornerRadius(10)
                     
                     if isSearchFieldFocused || !searchText.isEmpty {
-                        Button("Cancelar") {
+                        Button(String(localized: "action.cancel")) {
                             searchDebounceTask?.cancel()
                             isUpdatingMask = true
                             searchText = ""
@@ -118,7 +118,7 @@ struct ExploreView: View {
                             if isSearching {
                                 HStack {
                                     ProgressView()
-                                    Text("Buscando...")
+                                    Text("ig.searching")
                                         .foregroundColor(.secondary)
                                 }
                                 .padding()
@@ -127,7 +127,7 @@ struct ExploreView: View {
                                     Image(systemName: "magnifyingglass")
                                         .font(.system(size: 48))
                                         .foregroundColor(.secondary)
-                                    Text("No se encontraron resultados")
+                                    Text("explore.no_results")
                                         .foregroundColor(.secondary)
                                 }
                                 .padding(.top, 60)
@@ -154,11 +154,11 @@ struct ExploreView: View {
                                 Image(systemName: "wifi.exclamationmark")
                                     .font(.system(size: 44))
                                     .foregroundColor(.secondary)
-                                Text("No se pudo cargar el contenido")
+                                Text("explore.load_error")
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundColor(.secondary)
                                 Button(action: { exploreManager.loadExplore() }) {
-                                    Text("Reintentar")
+                                    Text("action.retry")
                                         .font(.system(size: 15, weight: .semibold))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 28)

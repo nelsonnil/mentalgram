@@ -1,0 +1,208 @@
+// ─── Instagram Fake UI ───────────────────────────────────────────────────────
+"ig.stat.posts"      = "posts";
+"ig.stat.followers"  = "followers";
+"ig.stat.following"  = "following";
+"ig.edit_profile"    = "Edit profile";
+"ig.share_profile"   = "Share profile";
+"ig.new"             = "New";
+"ig.followed_by"     = "Followed by ";
+"ig.and"             = " and ";
+"ig.tab_posts"       = "Posts";
+"ig.add_comment"     = "Add a comment...";
+"ig.follow"          = "Follow";
+"ig.following_btn"   = "Following";
+"ig.loading_profile" = "Loading profile…";
+"ig.no_internet"     = "No Internet Connection";
+"ig.check_connection"= "Check your connection and try again";
+"ig.load_more"       = "Load more posts";
+"ig.capturing_followers" = "Capturing followers…";
+"ig.searching"       = "Searching...";
+
+// ─── App Navigation ──────────────────────────────────────────────────────────
+"nav.settings"       = "Settings";
+"nav.my_sets"        = "My Sets";
+"nav.performance"    = "Performance";
+"nav.logs"           = "Logs";
+"nav.integrations"   = "Integrations";
+"nav.quick_reveal"   = "Quick Reveal";
+
+// ─── Common Actions ──────────────────────────────────────────────────────────
+"action.cancel"      = "Cancel";
+"action.done"        = "Done";
+"action.save"        = "Save";
+"action.delete"      = "Delete";
+"action.clear"       = "Clear";
+"action.copy"        = "Copy";
+"action.close"       = "Close";
+"action.select"      = "Select";
+"action.rename"      = "Rename";
+"action.enable"      = "Enable";
+"action.hide"        = "Hide";
+"action.hide_all"    = "Hide All";
+"action.show"        = "Show";
+"action.reveal"      = "Reveal";
+"action.upload"      = "Upload";
+"action.dismiss"     = "Dismiss";
+"action.ok"          = "OK";
+"action.follow"      = "Follow";
+"action.logout"      = "Log Out";
+"action.add_bank"    = "Add Bank";
+"action.delete_bank" = "Delete last bank";
+"action.create_set"  = "Create Set";
+"action.sync_archive"= "Sync & Archive";
+"action.cancel_upload"= "Cancel Upload";
+"action.skip_photo"  = "Skip This Photo";
+"action.remove_photo"= "Remove Photo";
+"action.connect_account" = "Connect Account";
+"action.got_it"      = "Got it";
+"action.continue_anyway" = "Continue Anyway";
+"action.log_out_retry"   = "Log Out & Retry";
+"action.from_gallery"    = "From Gallery";
+"action.from_archived"   = "From Archived";
+"action.load_more"       = "Load more posts";
+
+// ─── Set Management ──────────────────────────────────────────────────────────
+"set.enter_name"     = "Enter a set name to continue";
+"set.each_set_desc"  = "Each set groups photo banks used to unarchive posts during your performance.";
+"set.alphabet"       = "Alphabet";
+"set.auto_split"     = "Automatic split";
+"set.delete_confirm" = "Are you sure you want to delete \"%@\"? This cannot be undone.";
+"set.rename_title"   = "Enter a new name for \"%@\"";
+"set.another_uploading" = "Another set is currently uploading";
+"set.active_number"  = "Active number set: %@";
+"set.active_word"    = "Active word set: %@";
+"set.choose"         = "Choose a set...";
+
+// ─── Upload / Archive ────────────────────────────────────────────────────────
+"upload.archiving"        = "Archiving...";
+"upload.archiving_photos" = "Archiving photos…";
+"upload.archiving_nodismiss" = "Archiving… do not close the app";
+"upload.archived"         = "Archived";
+"upload.archived_all"     = "All %d photos archived";
+"upload.archiving_progress" = "Archiving (%d/%d)";
+"upload.checking_state"   = "Checking real state on Instagram";
+"upload.could_not_load"   = "Could not load archived photos";
+"upload.loading_archived" = "Loading archived photos...";
+"upload.identical_warning"= "Identical photos next to each other will trigger bot detection. Reorder to fix.";
+"upload.blocked_by_upload"= "A photo upload is currently running. Wait for it to finish before revealing numbers — both actions share the same hourly Instagram limit and triggering both together can cause bot detection.";
+"upload.log_out_retry"    = "Log out and log in again to continue uploading.";
+"upload.next_photo"       = "Next photo in";
+"upload.auto_retry"       = "Auto-retrying in";
+"upload.cooldown_active"  = "Cooldown Active";
+"upload.cooldown_remaining" = "Cooldown remaining";
+"upload.multiple_errors"  = "Multiple errors - Cooling down";
+"upload.lockdown"         = "Lockdown - Wait";
+"upload.select_photo"     = "Select Photo for \"%@\"";
+"upload.slot"             = "Slot \"%@\"";
+"upload.choose_source"    = "Choose where to get the photo for \"%@\"";
+"upload.instantly_reveal" = "Instantly unarchive and reveal photos";
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+"settings.language"           = "Language";
+"settings.account"            = "Account";
+"settings.username"           = "Username";
+"settings.password"           = "Password";
+"settings.instagram_connected"= "Instagram account connected";
+"settings.connect_account"    = "Connect Account";
+"settings.backup"             = "Backup";
+"settings.last_backup"        = "Last backup";
+"settings.backup_desc"        = "Backup runs automatically when the app is closed. Includes all your sets and images.";
+"settings.backup_restored"    = "iCloud backup applied successfully";
+"settings.fake_home"          = "Enable fake home screen";
+"settings.date_format"        = "Date format";
+"settings.date_force"         = "Date Force";
+"settings.delay_countdown"    = "Delay before countdown";
+"settings.cover_typing"       = "Cover Typing";
+"settings.cover_typing_desc"  = "Masks what you type in Explore so spectators see a different word. Pressing SPACE triggers the word reveal.";
+"settings.mask_mode"          = "Mask Mode";
+"settings.secret_input"       = "Secret Input";
+"settings.digit_grid"         = "Digit Grid";
+"settings.digit_grid_warn"    = "You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid.";
+"settings.ocr"                = "OCR";
+"settings.camera"             = "Camera";
+"settings.camera_desc"        = "Camera activates silently in background when Performance opens. Vibrates once on recognition.";
+"settings.camera_desc_full"   = "Camera starts silently when Performance opens. Recognized text auto-reveals: letters → word set, digits → number set.";
+"settings.auto_input"         = "Auto Input";
+"settings.auto_input_desc"    = "Fetch text from Inject or Custom API when Performance opens";
+"settings.api_source"         = "API Source";
+"settings.magic_api_source"   = "Magic API source";
+"settings.inject_id"          = "Inject ID";
+"settings.inject_desc"        = "Fetches a word/text from 11z.co using your Inject ID.";
+"settings.base64"             = "Base64 from external app";
+"settings.base64_desc"        = "Another app sends the image as base64. Vault handles resize and compression automatically.";
+"settings.json_field"         = "JSON field name";
+"settings.comment_preview"    = "Comment Preview";
+"settings.live_preview"       = "Live preview";
+"settings.note"               = "Note";
+"settings.note_text"          = "Note text";
+"settings.bio"                = "Bio";
+"settings.message"            = "Message";
+"settings.enabled"            = "Enabled";
+"settings.auto"               = "Auto";
+"settings.auto_scroll"        = "Auto-scroll";
+"settings.auto_unlock"        = "Auto-unlock in:";
+"settings.followers_date"     = "Followers (📅)";
+"settings.following_time"     = "Following (🕐)";
+"settings.n_a"                = "N/A";
+"settings.transfer_effect"    = "Transfer Effect";
+"settings.transfer_desc"      = "Deflates the searched profile, then inflates yours when you press the volume button.";
+"settings.restore_settings"   = "Settings restored";
+"settings.latest_follower"    = "Latest Follower";
+
+// ─── Integrations ────────────────────────────────────────────────────────────
+"integrations.title"          = "Inject & Custom APIs";
+"integrations.open_service"   = "Open the **official app** of the connected service";
+"integrations.login"          = "Log in with your account";
+
+// ─── Force features ──────────────────────────────────────────────────────────
+"force.select_post"           = "Select Post to Force";
+"force.select_reel"           = "Select Reel to Force";
+
+// ─── Errors & States ────────────────────────────────────────────────────────
+"error.generic"               = "Error";
+"error.failed"                = "Failed";
+"error.active"                = "ACTIVE";
+"error.go_to_settings"        = "Go to Settings and re-login to continue";
+"error.logout_confirm"        = "Are you sure you want to logout?";
+"error.challenge_title"       = "Verification Required";
+"error.challenge_desc"        = "Instagram detected unusual activity and requires you to complete a verification.";
+"error.challenge_how"         = "**How to fix it?**";
+"error.challenge_why"         = "**Why did this happen?**";
+"error.challenge_step1"       = "Complete the **verification challenge** (captcha, SMS code, email, etc.)";
+"error.challenge_wait"        = "Wait **15–30 minutes**";
+"error.session_hint"          = "Open the **official Instagram app** and complete any pending verification.";
+
+// ─── Date Force / Oracle ─────────────────────────────────────────────────────
+"dateforce.how_many_followers" = "How many people follow that spectator → date group";
+"dateforce.how_many_following" = "How many people that spectator follows → time group";
+"dateforce.how_followers_date" = "How many people follow that spectator → used for the **date** group";
+"dateforce.how_following_time" = "How many people that spectator follows → used for the **time** group";
+
+// ─── Date Force Script Labels ────────────────────────────────────────────────
+"script.setup"                = "SETUP";
+"script.collecting_numbers"   = "COLLECTING THE NUMBERS  —  THE RITUAL";
+"script.invitation_auto"      = "THE INVITATION  —  AUTO MODE";
+"script.hook_monologue"       = "THE HOOK  —  OPENING MONOLOGUE";
+"script.free_choice"          = "THE FREE CHOICE";
+"script.justification_two"    = "THE JUSTIFICATION  —  TWO KINDS OF CONNECTION";
+"script.justification_stranger"= "THE STRANGER  —  JUSTIFYING EXPLORE";
+"script.registering_dual"     = "REGISTERING SPECTATORS  —  DUAL";
+"script.date_group_auto"      = "DATE GROUP  —  AUTO";
+"script.date_group_dual"      = "DATE GROUP  —  DUAL";
+"script.time_group_auto"      = "TIME GROUP  —  AUTO";
+"script.revelation"           = "THE REVELATION";
+"script.revelation_building"  = "THE REVELATION  —  BUILDING TO THE MOMENT";
+"ig.follow_requested" = "Requested";
+"challenge.why_reasons"  = "• Recent device ID change\n• Too many requests in a short time\n• Suspicious behavior detected";
+"challenge.reopen_app"   = "Reopen this app";
+"challenge.warning"      = "⚠️ **Important:** Do NOT attempt to logout/login repeatedly. This makes things worse.";
+"explore.no_results" = "No results found";
+"backup.never"    = "Never";
+"backup.just_now" = "Just now";
+"backup.min_ago"  = "%d min ago";
+"backup.h_ago"    = "%d h ago";
+
+// ─── New semantic keys ───────────────────────────────────────────────────────
+"explore.load_error"      = "Could not load content";
+"action.retry"            = "Retry";
+"settings.icloud_applied" = "iCloud backup applied successfully";

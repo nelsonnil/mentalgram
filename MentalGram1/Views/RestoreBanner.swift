@@ -8,10 +8,10 @@ struct RestoreBanner: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.white)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Configuración restaurada")
+                Text("settings.restore_settings")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
-                Text("Backup de iCloud aplicado correctamente")
+                Text("settings.icloud_applied")
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.85))
             }

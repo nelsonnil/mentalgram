@@ -416,28 +416,26 @@ struct PostPageView: View {
                     }
                 }
 
-                // Username
-                Text("usuario")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.4), radius: 3)
+                // Username (real owner from API, blank if unavailable)
+                if let owner = item.ownerUsername, !owner.isEmpty {
+                    Text(owner)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.4), radius: 3)
+                }
 
-                // Verified badge
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.4), radius: 2)
-
-                // Follow button
-                Text("Follow")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.white.opacity(0.85), lineWidth: 1)
-                    )
+                // Follow button — only shown when we know who owns the reel
+                if item.ownerUsername != nil {
+                    Text("ig.follow")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.white.opacity(0.85), lineWidth: 1)
+                        )
+                }
             }
 
             // Forced followers/following stats (Date Force active)
@@ -447,14 +445,14 @@ struct PostPageView: View {
                         Text(DateForceSettings.formatExact(dateForce.overrideFollowers))
                             .font(.system(size: 13, weight: .bold))
                             .monospacedDigit()
-                        Text("followers")
+                        Text("ig.stat.followers")
                             .font(.system(size: 13))
                     }
                     HStack(spacing: 4) {
                         Text(DateForceSettings.formatExact(dateForce.overrideFollowing))
                             .font(.system(size: 13, weight: .bold))
                             .monospacedDigit()
-                        Text("following")
+                        Text("ig.stat.following")
                             .font(.system(size: 13))
                     }
                 }
@@ -471,21 +469,8 @@ struct PostPageView: View {
                     .shadow(color: .black.opacity(0.5), radius: 4)
             }
 
-            // Followed by
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(Color(white: 0.4))
-                    .frame(width: 18, height: 18)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 9))
-                            .foregroundColor(.white)
-                    )
-                (Text("Followed by ").font(.system(size: 12)) +
-                 Text("oriana_gomez").font(.system(size: 12, weight: .semibold)))
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.4), radius: 3)
-            }
+            // "Followed by" row intentionally omitted:
+            // no follower data available for Explore items.
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 16)
@@ -501,7 +486,7 @@ struct PostPageView: View {
                 .background(Color(white: 0.25))
 
             // Wide dark capsule — no icon, white text, full width minus small margins
-            Text("Add a comment...")
+            Text("ig.add_comment")
                 .font(.system(size: 14))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)

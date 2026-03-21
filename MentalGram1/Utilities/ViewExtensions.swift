@@ -4,8 +4,8 @@ import SwiftUI
 
 extension View {
     /// Padding horizontal adaptativo según tamaño de pantalla
-    /// iPhone Pro (<400pt): 12px
-    /// iPhone Pro Max (>=400pt): 16px
+    /// iPhone SE / standard (<400pt): 12px
+    /// iPhone Plus / Pro Max (>=400pt): 16px
     func responsiveHorizontalPadding() -> some View {
         let screenWidth = UIScreen.main.bounds.width
         let padding: CGFloat = screenWidth < 400 ? 12 : 16

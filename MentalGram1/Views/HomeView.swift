@@ -499,7 +499,7 @@ struct SetRowView: View {
                                 Spacer()
 
                                 if isLoggedIn {
-                                    StatusBadge(text: set.status.rawValue, style: statusBadgeStyle)
+                                    StatusBadge(text: set.status.label, style: statusBadgeStyle)
                                 }
 
                                 // ··· menu
@@ -1036,7 +1036,7 @@ struct SettingsView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 ZStack(alignment: .topLeading) {
                     if bioText.isEmpty {
-                        Text(currentBio.isEmpty ? "Write your biography…" : currentBio)
+                        Text(currentBio.isEmpty ? String(localized: "Write your biography…") : currentBio)
                             .font(VaultTheme.Typography.body())
                             .foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.5))
                             .padding(.horizontal, VaultTheme.Spacing.md).padding(.vertical, VaultTheme.Spacing.md)
@@ -1083,7 +1083,7 @@ struct SettingsView: View {
     // MARK: - Modern UI Helpers
 
     @ViewBuilder
-    private func settingsSectionLabel(_ title: String, icon: String, color: Color) -> some View {
+    private func settingsSectionLabel(_ title: LocalizedStringKey, icon: String, color: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .semibold))
@@ -1127,8 +1127,8 @@ struct SettingsView: View {
     /// Card con cabecera pulsable que expande/colapsa el contenido
     @ViewBuilder
     private func collapsibleCard<Content: View>(
-        icon: String, iconColor: Color, title: String,
-        subtitle: String? = nil,
+        icon: String, iconColor: Color, title: LocalizedStringKey,
+        subtitle: LocalizedStringKey? = nil,
         isExpanded: Binding<Bool>,
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -1180,7 +1180,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func modernCardHeader(icon: String, iconColor: Color, title: String) -> some View {
+    private func modernCardHeader(icon: String, iconColor: Color, title: LocalizedStringKey) -> some View {
         HStack(spacing: VaultTheme.Spacing.sm) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7).fill(iconColor.opacity(0.15)).frame(width: 30, height: 30)
@@ -1195,7 +1195,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func modernToggleRow(icon: String, iconColor: Color, title: String, detail: String, isOn: Binding<Bool>) -> some View {
+    private func modernToggleRow(icon: String, iconColor: Color, title: LocalizedStringKey, detail: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
         HStack(spacing: VaultTheme.Spacing.sm) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6).fill(iconColor.opacity(0.15)).frame(width: 28, height: 28)
@@ -1211,7 +1211,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func modernRow<T: View>(icon: String, iconColor: Color, title: String, trailing: T) -> some View {
+    private func modernRow<T: View>(icon: String, iconColor: Color, title: LocalizedStringKey, trailing: T) -> some View {
         HStack(spacing: VaultTheme.Spacing.sm) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6).fill(iconColor.opacity(0.15)).frame(width: 28, height: 28)
@@ -1226,7 +1226,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func modernActionButton(title: String, icon: String, loading: Bool, enabled: Bool, action: @escaping () -> Void) -> some View {
+    private func modernActionButton(title: LocalizedStringKey, icon: String, loading: Bool, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: VaultTheme.Spacing.sm) {
                 if loading {
@@ -1389,7 +1389,7 @@ struct SettingsView: View {
                             Text("Camera")
                                 .font(VaultTheme.Typography.body())
                                 .foregroundColor(VaultTheme.Colors.textPrimary)
-                            Text(ocrCamera == 0 ? "Rear camera" : "Front camera")
+                            Text(ocrCamera == 0 ? "Rear camera" as LocalizedStringKey : "Front camera")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
@@ -1398,7 +1398,7 @@ struct SettingsView: View {
                             ForEach([(0, "Rear"), (1, "Front")], id: \.0) { val, label in
                                 let sel = ocrCamera == val
                                 Button { ocrCamera = val } label: {
-                                    Text(label)
+                                    Text(LocalizedStringKey(label))
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundColor(sel ? .white : VaultTheme.Colors.textSecondary)
                                         .padding(.horizontal, 10)
@@ -1580,7 +1580,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func urlSchemeRow(icon: String, title: String, detail: String, url: String) -> some View {
+    private func urlSchemeRow(icon: String, title: LocalizedStringKey, detail: LocalizedStringKey, url: String) -> some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
             HStack(spacing: VaultTheme.Spacing.sm) {
                 Image(systemName: icon)
@@ -2098,13 +2098,13 @@ struct DataRow: View {
 struct CollapsibleCard<Content: View, Trailing: View>: View {
     let icon: String
     let iconColor: Color
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     @Binding var isExpanded: Bool
     @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let content: () -> Content
 
-    init(icon: String, iconColor: Color, title: String, subtitle: String,
+    init(icon: String, iconColor: Color, title: LocalizedStringKey, subtitle: LocalizedStringKey,
          isExpanded: Binding<Bool>,
          @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
          @ViewBuilder content: @escaping () -> Content) {
@@ -2663,7 +2663,7 @@ private struct PostPredictionOCRView: View {
                                     HStack(spacing: 5) {
                                         Image(systemName: val == 0 ? "camera.fill" : "camera.rotate.fill")
                                             .font(.system(size: 11, weight: .semibold))
-                                        Text(val == 0 ? "Rear" : "Front")
+                                        Text(val == 0 ? "Rear" as LocalizedStringKey : "Front")
                                             .font(.system(size: 12, weight: .semibold))
                                     }
                                     .foregroundColor(sel ? .white : VaultTheme.Colors.textSecondary)
@@ -2797,7 +2797,7 @@ struct FollowingMagicSettingsCard: View {
                                     HStack(spacing: 5) {
                                         Image(systemName: icon)
                                             .font(.system(size: 11, weight: .semibold))
-                                        Text(label)
+                                        Text(LocalizedStringKey(label))
                                             .font(.system(size: 12, weight: .semibold))
                                     }
                                     .foregroundColor(selected ? .white : VaultTheme.Colors.textSecondary)
@@ -3149,17 +3149,17 @@ private struct BackupCard: View {
 
     private var lastBackupText: String {
         guard let date = backup.lastBackupDate else {
-            return "Never"
+            return String(localized: "backup.never")
         }
         let diff = Date().timeIntervalSince(date)
-        if diff < 60 { return "Just now" }
+        if diff < 60 { return String(localized: "backup.just_now") }
         if diff < 3600 {
             let m = Int(diff / 60)
-            return "\(m) min ago"
+            return String(format: String(localized: "backup.min_ago"), m)
         }
         if diff < 86400 {
             let h = Int(diff / 3600)
-            return "\(h) h ago"
+            return String(format: String(localized: "backup.h_ago"), h)
         }
         let formatter = DateFormatter()
         formatter.dateStyle = .short

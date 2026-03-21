@@ -184,7 +184,8 @@ class ForceReelSettings: ObservableObject {
             takenAt: nil,
             likeCount: likeCount,
             commentCount: commentCount,
-            mediaType: .video
+            mediaType: .video,
+            ownerUsername: sourceUsername.isEmpty ? nil : sourceUsername
         )
     }
 

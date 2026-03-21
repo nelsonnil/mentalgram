@@ -47,7 +47,7 @@ struct GlowModifier: ViewModifier {
 // MARK: - Gradient Button
 
 struct GradientButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: String?
     let action: () -> Void
     var isEnabled: Bool = true
@@ -210,7 +210,7 @@ struct IconBadge: View {
 // MARK: - Stat Card (for dashboard stats)
 
 struct StatCard: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let icon: String
     var color: Color = VaultTheme.Colors.primary
@@ -269,9 +269,9 @@ struct ProgressBar: View {
 
 struct EmptyStateView: View {
     let icon: String
-    let title: String
-    let message: String
-    var actionTitle: String? = nil
+    let title: LocalizedStringKey
+    let message: LocalizedStringKey
+    var actionTitle: LocalizedStringKey? = nil
     var action: (() -> Void)? = nil
     
     var body: some View {

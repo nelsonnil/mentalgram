@@ -16,23 +16,23 @@ struct ChallengeRequiredView: View {
                     .foregroundColor(.orange)
                 
                 // Title
-                Text("Verificación Requerida")
+                Text("error.challenge_title")
                     .font(.title.bold())
                 
                 // Explanation
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("El servicio ha detectado actividad inusual y requiere que completes una verificación.")
+                    Text("error.challenge_desc")
                         .font(.body)
                         .multilineTextAlignment(.leading)
                     
-                    Text("**¿Por qué pasó esto?**")
+                    Text("error.challenge_why")
                         .font(.headline)
                     
-                    Text("• Cambio reciente de device ID\n• Demasiadas peticiones en poco tiempo\n• Se detectó comportamiento sospechoso")
+                    Text("challenge.why_reasons")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     
-                    Text("**¿Cómo solucionarlo?**")
+                    Text("error.challenge_how")
                         .font(.headline)
                         .padding(.top, 8)
                     
@@ -40,36 +40,36 @@ struct ChallengeRequiredView: View {
                         HStack(alignment: .top, spacing: 8) {
                             Text("1.")
                                 .fontWeight(.bold)
-                            Text("Abre la **app oficial** del servicio conectado")
+                            Text("integrations.open_service")
                         }
                         
                         HStack(alignment: .top, spacing: 8) {
                             Text("2.")
                                 .fontWeight(.bold)
-                            Text("Inicia sesión con tu cuenta")
+                            Text("integrations.login")
                         }
                         
                         HStack(alignment: .top, spacing: 8) {
                             Text("3.")
                                 .fontWeight(.bold)
-                            Text("Completa el **challenge de verificación** (captcha, código SMS, email, etc.)")
+                            Text("error.challenge_step1")
                         }
                         
                         HStack(alignment: .top, spacing: 8) {
                             Text("4.")
                                 .fontWeight(.bold)
-                            Text("Espera **15-30 minutos**")
+                            Text("error.challenge_wait")
                         }
                         
                         HStack(alignment: .top, spacing: 8) {
                             Text("5.")
                                 .fontWeight(.bold)
-                            Text("Vuelve a abrir esta app")
+                            Text("challenge.reopen_app")
                         }
                     }
                     .font(.subheadline)
                     
-                    Text("⚠️ **Importante:** NO intentes hacer logout/login repetidamente. Esto empeora la situación.")
+                    Text("challenge.warning")
                         .font(.caption)
                         .foregroundColor(.red)
                         .padding(.top, 8)
@@ -80,7 +80,7 @@ struct ChallengeRequiredView: View {
                 
                 // Button
                 Button(action: onDismiss) {
-                    Text("Entendido")
+                    Text("action.got_it")
                         .font(.headline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
