@@ -6,41 +6,43 @@ struct InstagramProfileSkeleton: View {
     var onPlusPress: (() -> Void)? = nil
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // MARK: - Header Bar (matches InstagramHeaderView)
-                HStack {
-                    // Plus button (back to Sets)
-                    if let onPlusPress = onPlusPress {
-                        Button(action: onPlusPress) {
-                            Image(systemName: "plus.app")
-                                .font(.system(size: 24))
-                                .foregroundColor(.black)
-                        }
-                    } else {
-                        SkeletonBox(width: 24, height: 24)
+        VStack(spacing: 0) {
+            // MARK: - Header Bar — outside ScrollView so it always sits below Dynamic Island
+
+            HStack {
+                // Plus button (back to Sets)
+                if let onPlusPress = onPlusPress {
+                    Button(action: onPlusPress) {
+                        Image(systemName: "plus.app")
+                            .font(.system(size: 24))
+                            .foregroundColor(.black)
                     }
-                    
-                    Spacer()
-                    
-                    // Username placeholder
-                    HStack(spacing: 4) {
-                        SkeletonBox(width: 100, height: 16)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.gray.opacity(0.3))
-                    }
-                    
-                    Spacer()
-                    
-                    HStack(spacing: 20) {
-                        SkeletonBox(width: 22, height: 22)
-                        SkeletonBox(width: 22, height: 22)
-                    }
+                } else {
+                    SkeletonBox(width: 24, height: 24)
                 }
-                .responsiveHorizontalPadding()
-                .frame(height: 44)
-                
+
+                Spacer()
+
+                // Username placeholder
+                HStack(spacing: 4) {
+                    SkeletonBox(width: 100, height: 16)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.gray.opacity(0.3))
+                }
+
+                Spacer()
+
+                HStack(spacing: 20) {
+                    SkeletonBox(width: 22, height: 22)
+                    SkeletonBox(width: 22, height: 22)
+                }
+            }
+            .responsiveHorizontalPadding()
+            .frame(height: 44)
+
+            ScrollView {
+                VStack(spacing: 0) {
                 // MARK: - Profile Info Section
                 VStack(spacing: 16) {
                     // Profile Picture (LEFT) + Stats (RIGHT) - SAME ROW
@@ -48,9 +50,9 @@ struct InstagramProfileSkeleton: View {
                         // Profile Picture on LEFT
                         SkeletonCircle(size: 86)
                             .padding(.leading, UIScreen.main.bounds.width * 0.04)
-                        
+
                         Spacer(minLength: 8)
-                        
+
                         // Stats on RIGHT (Posts, Followers, Following)
                         HStack(spacing: 0) {
                             SkeletonStatView()
@@ -59,7 +61,7 @@ struct InstagramProfileSkeleton: View {
                         }
                         .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                     }
-                    
+
                     // Name + Bio placeholders
                     VStack(alignment: .leading, spacing: 6) {
                         SkeletonBox(width: 120, height: 14)
@@ -68,7 +70,7 @@ struct InstagramProfileSkeleton: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .responsiveHorizontalPadding()
-                    
+
                     // Followed by placeholder
                     HStack(spacing: 4) {
                         HStack(spacing: -8) {
@@ -80,7 +82,7 @@ struct InstagramProfileSkeleton: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .responsiveHorizontalPadding()
-                    
+
                     // Edit Profile + Share Profile buttons
                     HStack(spacing: 8) {
                         SkeletonBox(width: 0, height: 32)
@@ -93,7 +95,7 @@ struct InstagramProfileSkeleton: View {
                             .cornerRadius(8)
                     }
                     .responsiveHorizontalPadding()
-                    
+
                     // Story Highlights
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
@@ -145,9 +147,10 @@ struct InstagramProfileSkeleton: View {
                             .aspectRatio(4/5, contentMode: .fill)
                     }
                 }
-            }
-        }
-        .background(Color.white)
+                }  // inner VStack
+            }  // ScrollView
+            .background(Color.white)
+        }  // outer VStack
     }
 }
 

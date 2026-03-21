@@ -79,18 +79,31 @@ struct PerformanceView: View {
     
     // MARK: - Sub-views (split to help Swift type-checker)
 
+    /// Safe area top (Dynamic Island / status bar). Read once at render time.
+    private var safeAreaTopInset: CGFloat {
+        UIApplication.shared
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets.top ?? 59
+    }
+
     private var performanceRoot: some View {
-        ZStack(alignment: .bottom) {
-            Color.white.ignoresSafeArea()
+        // Ignoramos el safe area completamente y lo manejamos con espaciadores explícitos.
+        // Esto es 100 % fiable en todos los modelos y simuladores porque leemos los insets
+        // directamente de UIKit, igual que hacemos con InstagramBottomBar.safeAreaBottom.
+        VStack(spacing: 0) {
+            Color.white.frame(height: safeAreaTopInset)   // espacio bajo Dynamic Island
             profileContent
-                .padding(.bottom, 54)
             bottomBar
         }
+        .ignoresSafeArea()
+        .background(Color.white)
     }
 
     @ViewBuilder private var profileContent: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
             if let profile = profile {
                 instagramProfileView(profile: profile)
             } else {
@@ -290,7 +303,6 @@ struct PerformanceView: View {
         ocrModifiers
             .background(Color.white.ignoresSafeArea())
             .toolbar(.hidden, for: .tabBar)
-            .edgesIgnoringSafeArea(.bottom)
             .navigationBarHidden(true)
             .preferredColorScheme(.light)
             .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
@@ -1392,11 +1404,11 @@ struct PerformanceView: View {
                     .foregroundColor(.white)
                 
                 VStack(spacing: 8) {
-                    Text("No Internet Connection")
+                    Text("ig.no_internet")
                         .font(.title2.bold())
                         .foregroundColor(.white)
                     
-                    Text("Check your connection and try again")
+                    Text("ig.check_connection")
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
@@ -1922,28 +1934,33 @@ struct InstagramProfileView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                InstagramHeaderView(
-                    username: profile.username,
-                    isVerified: profile.isVerified,
-                    onRefresh: onRefresh,
-                    onPlusPress: onPlusPress
-                )
-                profileInfoSection
-                    .padding(.top, 12)
-                tabBarSection
-                Divider()
-                tabContentSection
+        VStack(spacing: 0) {
+            // Header fixed outside the ScrollView — mirrors UserProfileView's layout so
+            // the header always sits below the Dynamic Island / status bar correctly.
+            InstagramHeaderView(
+                username: profile.username,
+                isVerified: profile.isVerified,
+                onRefresh: onRefresh,
+                onPlusPress: onPlusPress
+            )
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    profileInfoSection
+                        .padding(.top, 12)
+                    tabBarSection
+                    Divider()
+                    tabContentSection
+                }
             }
+            // Pull-to-refresh: runs load in an unstructured Task so SwiftUI
+            // cancellation doesn't abort the URLSession requests inside loadProfile.
+            // The spinner stays visible until the task finishes.
+            .refreshable {
+                await Task { await onAsyncRefresh() }.value
+            }
+            .background(Color.white)
         }
-        // Pull-to-refresh: runs load in an unstructured Task so SwiftUI
-        // cancellation doesn't abort the URLSession requests inside loadProfile.
-        // The spinner stays visible until the task finishes.
-        .refreshable {
-            await Task { await onAsyncRefresh() }.value
-        }
-        .background(Color.white)
         // Keep following count display in sync with digit buffer
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
@@ -2118,12 +2135,12 @@ struct InstagramProfileView: View {
                         .lineLimit(1)
 
                     HStack(spacing: 0) {
-                        StatView(number: profile.mediaCount, label: "publicaciones")
+                        StatView(number: profile.mediaCount, label: String(localized: "ig.stat.posts"))
                             .frame(maxWidth: .infinity)
-                        StatView(number: profile.followerCount, label: "seguidores",
+                        StatView(number: profile.followerCount, label: String(localized: "ig.stat.followers"),
                                  overrideText: effectiveFollowerOverride)
                             .frame(maxWidth: .infinity)
-                        StatView(number: profile.followingCount, label: "seguidos",
+                        StatView(number: profile.followingCount, label: String(localized: "ig.stat.following"),
                                  overrideText: postsOCRNumberOverride ?? effectiveFollowingOverride,
                                  overrideLabel: postsOCRLabelOverride)
                             .frame(maxWidth: .infinity)
@@ -2162,14 +2179,14 @@ struct InstagramProfileView: View {
 
             HStack(spacing: 8) {
                 Button(action: {}) {
-                    Text("Editar perfil")
+                    Text("ig.edit_profile")
                         .font(.system(size: 14, weight: .semibold))
                         .frame(maxWidth: .infinity).frame(height: 32)
                         .background(Color(red: 0.898, green: 0.898, blue: 0.918))
                         .foregroundColor(.black).cornerRadius(8)
                 }
                 Button(action: {}) {
-                    Text("Compartir perfil")
+                    Text("ig.share_profile")
                         .font(.system(size: 14, weight: .semibold))
                         .frame(maxWidth: .infinity).frame(height: 32)
                         .background(Color(red: 0.898, green: 0.898, blue: 0.918))
@@ -2191,7 +2208,7 @@ struct InstagramProfileView: View {
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                             .frame(width: 64, height: 64)
                             .overlay(Image(systemName: "plus").foregroundColor(.black))
-                        Text("Nuevo")
+                        Text("ig.new")
                             .font(.system(size: 12))
                             .foregroundColor(.black)
                     }
@@ -2694,9 +2711,9 @@ struct InstagramHeaderView: View {
                     .font(.system(size: 24))
                     .foregroundColor(.black)
             }
-            
+
             Spacer()
-            
+
             // Username with dropdown
             HStack(spacing: 4) {
                 if isVerified {
@@ -2707,16 +2724,16 @@ struct InstagramHeaderView: View {
                     .foregroundColor(.black)
                 IGIcon(asset: "instagram_chevron_down", fallback: "chevron.down", size: 12)
             }
-            
+
             Spacer()
-            
+
             HStack(spacing: 20) {
                 Button(action: {}) {
                     Image(systemName: "at")
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundColor(.black)
                 }
-                
+
                 Button(action: {}) {
                     IGIcon(asset: "Instagram_menu", fallback: "line.3.horizontal", size: 24)
                 }
@@ -2812,67 +2829,125 @@ struct StoryHighlightCell: View {
 }
 
 // MARK: - Auto Followed By View (Date Force Auto Mode)
+// Looks identical to FollowedByView: 3 overlapping circles + "Seguido/a por" text.
+// Tapping alternates between the date group and the time group spectators.
 
 struct AutoFollowedByView: View {
     @ObservedObject var dateForce: DateForceSettings
     let onTap: (() -> Void)?
 
-    private var displayedSpectators: [DateForceSpectator] {
-        dateForce.spectators.filter { $0.group == dateForce.autoDisplayGroup }
-    }
-
     private var isLoading: Bool { dateForce.isAutoLoading }
     private var loaded: Int { dateForce.spectators.count }
-    private var total: Int { dateForce.autoSpectatorCount }
 
-    private var lastDateIndex: Int {
-        let dateCount = (total + 1) / 2
-        return dateCount - 1
-    }
-
-    private func label(for spec: DateForceSpectator, at index: Int) -> String {
-        let name = "@\(spec.username)"
-        return (spec.group == .date && index == lastDateIndex) ? "\(name) —" : name
+    /// Up to 3 spectators from the currently active display group.
+    private var visible: [DateForceSpectator] {
+        Array(dateForce.spectators
+            .filter { $0.group == dateForce.autoDisplayGroup }
+            .prefix(3))
     }
 
     var body: some View {
-        Button(action: { onTap?() }) {
-            if isLoading && loaded == 0 {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.65).frame(width: 20, height: 20)
-                    Text("Capturing followers…")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(white: 0.56))
-                }
-            } else if isLoading && loaded > 0 {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(dateForce.spectators.enumerated()), id: \.element.id) { index, spec in
-                        Text(label(for: spec, at: index))
-                            .font(.system(size: 12))
-                            .foregroundColor(.black)
-                            .transition(.opacity)
-                    }
-                }
-                .animation(.easeOut(duration: 0.2), value: loaded)
-            } else if loaded > 0 {
-                HStack(spacing: 6) {
-                    Text(displayedSpectators.map { "@\($0.username)" }.joined(separator: "  "))
-                        .font(.system(size: 12))
-                        .foregroundColor(.black)
-                        .lineLimit(1)
-                    Spacer()
-                    IGIcon(asset: "instagram_swap", fallback: "arrow.left.arrow.right", size: 12, color: Color(white: 0.7))
-                }
-            } else {
-                HStack(spacing: 6) {
-                    Text("Seguido/a por")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(white: 0.56))
-                    Spacer()
-                }
-            }
+        HStack(spacing: 4) {
+            // ── Circles ───────────────────────────────────────────────────
+            circlesArea
+
+            // ── Text ──────────────────────────────────────────────────────
+            textArea
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !isLoading else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { onTap?() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // Circles section extracted so the body stays simple
+    @ViewBuilder private var circlesArea: some View {
+        if isLoading && loaded == 0 {
+            ProgressView()
+                .scaleEffect(0.65)
+                .frame(width: 20, height: 20)
+        } else {
+            HStack(spacing: -8) {
+                ForEach(0..<min(max(visible.count, 0), 3), id: \.self) { _ in
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 20, height: 20)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                }
+                if isLoading {
+                    ForEach(0..<max(0, 3 - min(loaded, 3)), id: \.self) { _ in
+                        Circle()
+                            .fill(Color.gray.opacity(0.15))
+                            .frame(width: 20, height: 20)
+                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                    }
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: loaded)
+        }
+    }
+
+    // Text section: each HStack gets its own .frame(maxWidth:.infinity) so
+    // fixedSize() texts never overflow the available width.
+    @ViewBuilder private var textArea: some View {
+        if isLoading && loaded == 0 {
+            Text("Capturing followers…")
+                .font(.system(size: 12))
+                .foregroundColor(Color(white: 0.56))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if visible.isEmpty {
+            Text("ig.followed_by")
+                .font(.system(size: 12))
+                .foregroundColor(Color(white: 0.56))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if visible.count >= 3 {
+            HStack(spacing: 0) {
+                Text("ig.followed_by")
+                    .font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
+                Text(visible[0].username)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                    .lineLimit(1).fixedSize()
+                Text(", ")
+                    .font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
+                Text(visible[1].username)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                    .lineLimit(1).fixedSize()
+                Text("ig.and")
+                    .font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
+                Text(visible[2].username)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if visible.count == 2 {
+            HStack(spacing: 0) {
+                Text("ig.followed_by")
+                    .font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
+                Text(visible[0].username)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                    .lineLimit(1).fixedSize()
+                Text("ig.and")
+                    .font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
+                Text(visible[1].username)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 0) {
+                Text("ig.followed_by")
+                    .font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
+                Text(visible[0].username)
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -2930,7 +3005,7 @@ struct FollowedByView: View {
             // if the total content is wider than the available space.
             if visibleFollowers.count >= 3 {
                 HStack(spacing: 0) {
-                    Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
                         .fixedSize()
                     Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
                         .lineLimit(1).fixedSize()
@@ -2940,7 +3015,7 @@ struct FollowedByView: View {
                     Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
                         .lineLimit(1).fixedSize()
                         .onTapGesture { onFollowerTap?(visibleFollowers[1]) }
-                    Text(" y ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text("ig.and").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
                         .fixedSize()
                     Text(visibleFollowers[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
                         .lineLimit(1).truncationMode(.tail)
@@ -2950,12 +3025,12 @@ struct FollowedByView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else if visibleFollowers.count == 2 {
                 HStack(spacing: 0) {
-                    Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
                         .fixedSize()
                     Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
                         .lineLimit(1).fixedSize()
                         .onTapGesture { onFollowerTap?(visibleFollowers[0]) }
-                    Text(" y ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text("ig.and").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
                         .fixedSize()
                     Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
                         .lineLimit(1).truncationMode(.tail)
@@ -2965,7 +3040,7 @@ struct FollowedByView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else if visibleFollowers.count == 1 {
                 HStack(spacing: 0) {
-                    Text("Seguido/a por ").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                    Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56))
                         .fixedSize()
                     Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
                         .lineLimit(1).truncationMode(.tail)
@@ -3134,7 +3209,7 @@ struct PostScrollView: View {
                 }
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 1) {
-                        Text("Posts")
+                        Text("ig.tab_posts")
                             .font(.system(size: 15, weight: .semibold))
                         Text(username)
                             .font(.system(size: 12))
@@ -3298,80 +3373,72 @@ struct InstagramBottomBar: View {
     let onReelsPress: () -> Void
     let onMessagesPress: () -> Void
     let onProfilePress: () -> Void
-    
+
+    /// Bottom safe area of the current device: 0 on SE (home button), ~34 on Face ID iPhones.
+    static var safeAreaBottom: CGFloat {
+        UIApplication.shared
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets.bottom ?? 34  // default 34 if window not ready yet
+    }
+
     var body: some View {
-        ZStack(alignment: .top) {
-            // White background with top border
-            Rectangle()
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.15), radius: 0, x: 0, y: -0.33)
-            
-            // Icons pinned to top with bottom padding to expand the bar
-            HStack(spacing: 0) {
-                // Home button
-                Button(action: onHomePress) {
-                    IGIcon(asset: "instagram_home", fallback: "house", size: 24)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                // Reels button
-                Button(action: onReelsPress) {
-                    IGIcon(asset: "instagram_reels_tab", fallback: "play.rectangle", size: 24)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                // Messages button (paper plane with red dot)
-                Button(action: onMessagesPress) {
-                    ZStack(alignment: .topTrailing) {
-                        IGIcon(asset: "instagram_share", fallback: "paperplane", size: 24)
-                        
-                        // Red notification dot
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 7, height: 7)
-                            .offset(x: 6, y: -3)
-                    }
+        HStack(spacing: 0) {
+            Button(action: onHomePress) {
+                IGIcon(asset: "instagram_home", fallback: "house", size: 24)
                     .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                // Search button
-                Button(action: onSearchPress) {
-                    IGIcon(asset: "instagram_search", fallback: "magnifyingglass", size: 24)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                // Profile button (circular profile pic)
-                Button(action: onProfilePress) {
-                    if let image = cachedImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 26, height: 26)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.black, lineWidth: 1.5)
-                            )
-                    } else {
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 26))
-                            .foregroundColor(.black)
-                    }
+            }
+
+            Button(action: onReelsPress) {
+                IGIcon(asset: "instagram_reels_tab", fallback: "play.rectangle", size: 24)
+                    .frame(maxWidth: .infinity)
+            }
+
+            Button(action: onMessagesPress) {
+                ZStack(alignment: .topTrailing) {
+                    IGIcon(asset: "instagram_share", fallback: "paperplane", size: 24)
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 7, height: 7)
+                        .offset(x: 6, y: -3)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 10)
-                .padding(.bottom, 44)
             }
+
+            Button(action: onSearchPress) {
+                IGIcon(asset: "instagram_search", fallback: "magnifyingglass", size: 24)
+                    .frame(maxWidth: .infinity)
+            }
+
+            Button(action: onProfilePress) {
+                if let image = cachedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 26, height: 26)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.black, lineWidth: 1.5))
+                } else {
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 26))
+                        .foregroundColor(.black)
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 10)
+        .padding(.bottom, InstagramBottomBar.safeAreaBottom + 8)
+        .frame(maxWidth: .infinity)
+        .background(
+            // Extiende el blanco por detrás del home indicator sin afectar el layout
+            Color.white.ignoresSafeArea(edges: .bottom)
+        )
+        .overlay(alignment: .top) {
+            // Línea separadora superior (sustituye el shadow del Rectangle anterior)
+            Color.black.opacity(0.12).frame(height: 0.33)
+        }
     }
 }
 
