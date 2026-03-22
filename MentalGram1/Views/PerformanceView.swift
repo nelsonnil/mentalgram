@@ -79,31 +79,18 @@ struct PerformanceView: View {
     
     // MARK: - Sub-views (split to help Swift type-checker)
 
-    /// Safe area top (Dynamic Island / status bar). Read once at render time.
-    private var safeAreaTopInset: CGFloat {
-        UIApplication.shared
-            .connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?
-            .safeAreaInsets.top ?? 59
-    }
-
     private var performanceRoot: some View {
-        // Ignoramos el safe area completamente y lo manejamos con espaciadores explícitos.
-        // Esto es 100 % fiable en todos los modelos y simuladores porque leemos los insets
-        // directamente de UIKit, igual que hacemos con InstagramBottomBar.safeAreaBottom.
-        VStack(spacing: 0) {
-            Color.white.frame(height: safeAreaTopInset)   // espacio bajo Dynamic Island
+        ZStack(alignment: .bottom) {
+            Color.white.ignoresSafeArea()
             profileContent
+                .padding(.bottom, 54)
             bottomBar
         }
-        .ignoresSafeArea()
-        .background(Color.white)
     }
 
     @ViewBuilder private var profileContent: some View {
         ZStack {
+            Color.white.ignoresSafeArea()
             if let profile = profile {
                 instagramProfileView(profile: profile)
             } else {
@@ -303,6 +290,7 @@ struct PerformanceView: View {
         ocrModifiers
             .background(Color.white.ignoresSafeArea())
             .toolbar(.hidden, for: .tabBar)
+            .edgesIgnoringSafeArea(.bottom)
             .navigationBarHidden(true)
             .preferredColorScheme(.light)
             .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
@@ -1934,33 +1922,28 @@ struct InstagramProfileView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header fixed outside the ScrollView — mirrors UserProfileView's layout so
-            // the header always sits below the Dynamic Island / status bar correctly.
-            InstagramHeaderView(
-                username: profile.username,
-                isVerified: profile.isVerified,
-                onRefresh: onRefresh,
-                onPlusPress: onPlusPress
-            )
-
-            ScrollView {
-                VStack(spacing: 0) {
-                    profileInfoSection
-                        .padding(.top, 12)
-                    tabBarSection
-                    Divider()
-                    tabContentSection
-                }
+        ScrollView {
+            VStack(spacing: 0) {
+                InstagramHeaderView(
+                    username: profile.username,
+                    isVerified: profile.isVerified,
+                    onRefresh: onRefresh,
+                    onPlusPress: onPlusPress
+                )
+                profileInfoSection
+                    .padding(.top, 12)
+                tabBarSection
+                Divider()
+                tabContentSection
             }
-            // Pull-to-refresh: runs load in an unstructured Task so SwiftUI
+        }
+        // Pull-to-refresh: runs load in an unstructured Task so SwiftUI
             // cancellation doesn't abort the URLSession requests inside loadProfile.
             // The spinner stays visible until the task finishes.
             .refreshable {
                 await Task { await onAsyncRefresh() }.value
             }
             .background(Color.white)
-        }
         // Keep following count display in sync with digit buffer
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
@@ -2764,6 +2747,8 @@ struct StatView: View {
             Text(overrideLabel ?? label)
                 .font(.system(size: 14))
                 .foregroundColor(.black)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
     }
 
@@ -3374,71 +3359,70 @@ struct InstagramBottomBar: View {
     let onMessagesPress: () -> Void
     let onProfilePress: () -> Void
 
-    /// Bottom safe area of the current device: 0 on SE (home button), ~34 on Face ID iPhones.
-    static var safeAreaBottom: CGFloat {
-        UIApplication.shared
-            .connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?
-            .safeAreaInsets.bottom ?? 34  // default 34 if window not ready yet
-    }
-
     var body: some View {
-        HStack(spacing: 0) {
-            Button(action: onHomePress) {
-                IGIcon(asset: "instagram_home", fallback: "house", size: 24)
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.15), radius: 0, x: 0, y: -0.33)
+            
+            HStack(spacing: 0) {
+                Button(action: onHomePress) {
+                    IGIcon(asset: "instagram_home", fallback: "house", size: 24)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 44)
+                
+                Button(action: onReelsPress) {
+                    IGIcon(asset: "instagram_reels_tab", fallback: "play.rectangle", size: 24)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 44)
+                
+                Button(action: onMessagesPress) {
+                    ZStack(alignment: .topTrailing) {
+                        IGIcon(asset: "instagram_share", fallback: "paperplane", size: 24)
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 7, height: 7)
+                            .offset(x: 6, y: -3)
+                    }
                     .frame(maxWidth: .infinity)
-            }
-
-            Button(action: onReelsPress) {
-                IGIcon(asset: "instagram_reels_tab", fallback: "play.rectangle", size: 24)
-                    .frame(maxWidth: .infinity)
-            }
-
-            Button(action: onMessagesPress) {
-                ZStack(alignment: .topTrailing) {
-                    IGIcon(asset: "instagram_share", fallback: "paperplane", size: 24)
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 7, height: 7)
-                        .offset(x: 6, y: -3)
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 44)
+                
+                Button(action: onSearchPress) {
+                    IGIcon(asset: "instagram_search", fallback: "magnifyingglass", size: 24)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 44)
+                
+                Button(action: onProfilePress) {
+                    if let image = cachedImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 26, height: 26)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black, lineWidth: 1.5)
+                            )
+                    } else {
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 26))
+                            .foregroundColor(.black)
+                    }
                 }
                 .frame(maxWidth: .infinity)
+                .padding(.top, 10)
+                .padding(.bottom, 44)
             }
-
-            Button(action: onSearchPress) {
-                IGIcon(asset: "instagram_search", fallback: "magnifyingglass", size: 24)
-                    .frame(maxWidth: .infinity)
-            }
-
-            Button(action: onProfilePress) {
-                if let image = cachedImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 26, height: 26)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.black, lineWidth: 1.5))
-                } else {
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 26))
-                        .foregroundColor(.black)
-                }
-            }
-            .frame(maxWidth: .infinity)
         }
-        .padding(.top, 10)
-        .padding(.bottom, InstagramBottomBar.safeAreaBottom + 8)
-        .frame(maxWidth: .infinity)
-        .background(
-            // Extiende el blanco por detrás del home indicator sin afectar el layout
-            Color.white.ignoresSafeArea(edges: .bottom)
-        )
-        .overlay(alignment: .top) {
-            // Línea separadora superior (sustituye el shadow del Rectangle anterior)
-            Color.black.opacity(0.12).frame(height: 0.33)
-        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

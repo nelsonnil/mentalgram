@@ -208,7 +208,7 @@ struct UserProfileView: View {
                                 }
                             }
                             
-                            Spacer(minLength: 4)
+                            Spacer(minLength: 8)
 
                             // Columna derecha: nombre encima de los stats
                             VStack(alignment: .leading, spacing: 6) {
