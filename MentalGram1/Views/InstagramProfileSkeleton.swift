@@ -13,9 +13,7 @@ struct InstagramProfileSkeleton: View {
                     // Plus button (back to Sets)
                     if let onPlusPress = onPlusPress {
                         Button(action: onPlusPress) {
-                            Image(systemName: "plus.app")
-                                .font(.system(size: 24))
-                                .foregroundColor(.black)
+                            IGIcon(asset: "Instagram_plus", fallback: "plus.app", size: 24)
                         }
                     } else {
                         SkeletonBox(width: 24, height: 24)

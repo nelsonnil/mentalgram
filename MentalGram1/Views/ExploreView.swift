@@ -101,9 +101,7 @@ struct ExploreView: View {
                         .foregroundColor(.primary)
                     } else {
                         Button(action: {}) {
-                            Image(systemName: "line.3.horizontal.decrease")
-                                .foregroundColor(.primary)
-                                .font(.system(size: 20))
+                            IGIcon(asset: "instagram_more_horizontal", fallback: "ellipsis", size: 20)
                         }
                     }
                 }

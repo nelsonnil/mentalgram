@@ -1,16 +1,23 @@
 {
-  "images" : [
+  "images": [
     {
-      "filename" : "comment.svg",
-      "idiom" : "universal"
+      "idiom": "universal",
+      "scale": "1x",
+      "filename": "instagram_comment@1x.png"
+    },
+    {
+      "idiom": "universal",
+      "scale": "2x",
+      "filename": "instagram_comment@2x.png"
+    },
+    {
+      "idiom": "universal",
+      "scale": "3x",
+      "filename": "instagram_comment@3x.png"
     }
   ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
-  },
-  "properties" : {
-    "preserves-vector-representation" : true,
-    "template-rendering-intent" : "template"
+  "info": {
+    "author": "xcode",
+    "version": 1
   }
 }

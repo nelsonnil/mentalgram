@@ -2220,7 +2220,7 @@ struct InstagramProfileView: View {
 
     @ViewBuilder private var tabBarSection: some View {
         HStack(spacing: 0) {
-            TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
+            TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
                 if ForceNumberRevealSettings.shared.isEnabled,
                    ForceNumberRevealSettings.shared.gridSwipeEnabled,
                    secretManager.hasDigits,
@@ -2247,12 +2247,12 @@ struct InstagramProfileView: View {
                 }
                 selectedTab = 0
             }
-            TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
+            TabButton(icon: "play.rectangle", activeAsset: "instagram_reels_active", inactiveAsset: "instagram_reels_inactive", isSelected: selectedTab == 1) {
                 selectedTab = 1
                 secretManager.reset()
                 followingOverride = nil; followerOverride = nil
             }
-            TabButton(icon: "person.crop.square", isSelected: selectedTab == 2) {
+            TabButton(icon: "person.crop.square", activeAsset: "instagram_tagged_active", inactiveAsset: "instagram_tagged_inactive", isSelected: selectedTab == 2) {
                 selectedTab = 2
                 secretManager.reset()
                 followingOverride = nil; followerOverride = nil
@@ -2690,9 +2690,7 @@ struct InstagramHeaderView: View {
         HStack {
             // Plus button (closes Performance and goes to Sets)
             Button(action: onPlusPress) {
-                Image(systemName: "plus.app")
-                    .font(.system(size: 24))
-                    .foregroundColor(.black)
+                IGIcon(asset: "Instagram_plus", fallback: "plus.app", size: 24)
             }
 
             Spacer()
@@ -2712,9 +2710,7 @@ struct InstagramHeaderView: View {
 
             HStack(spacing: 20) {
                 Button(action: {}) {
-                    Image(systemName: "at")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.black)
+                    IGIcon(asset: "instagram_threads", fallback: "at", size: 22)
                 }
 
                 Button(action: {}) {
@@ -3044,22 +3040,44 @@ struct FollowedByView: View {
 
 struct TabButton: View {
     let icon: String
+    let activeAsset: String?
+    let inactiveAsset: String?
     let isSelected: Bool
     let action: () -> Void
-    
+
+    init(icon: String, activeAsset: String? = nil, inactiveAsset: String? = nil,
+         isSelected: Bool, action: @escaping () -> Void) {
+        self.icon = icon
+        self.activeAsset = activeAsset
+        self.inactiveAsset = inactiveAsset
+        self.isSelected = isSelected
+        self.action = action
+    }
+
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundColor(isSelected ? .black : Color(white: 0.56))
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .overlay(
-                    Rectangle()
-                        .fill(isSelected ? Color.black : Color.clear)
-                        .frame(height: 1),
-                    alignment: .bottom
-                )
+            Group {
+                let assetName = isSelected ? activeAsset : inactiveAsset
+                if let asset = assetName, UIImage(named: asset) != nil {
+                    Image(asset)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 24))
+                }
+            }
+            .foregroundColor(isSelected ? .black : Color(white: 0.56))
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
+            .overlay(
+                Rectangle()
+                    .fill(isSelected ? Color.black : Color.clear)
+                    .frame(height: 1),
+                alignment: .bottom
+            )
         }
     }
 }

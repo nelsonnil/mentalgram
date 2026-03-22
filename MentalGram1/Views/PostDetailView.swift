@@ -90,7 +90,6 @@ struct PostDetailView: View {
                         onSave: { toggleSave(peek.id) }
                     )
                     .frame(width: geo.size.width, height: geo.size.height)
-                    // Starts just below the screen; follows the drag so both pages move together
                     .offset(y: geo.size.height + dragOffset)
                 }
 
@@ -108,7 +107,7 @@ struct PostDetailView: View {
                     .offset(y: dragOffset)
                 }
 
-                // ── Navigation bar (always on top) ───────────────────────────
+                // ── Navigation bar (always on top, never moves) ──────────────
                 HStack(spacing: 0) {
                     Button(action: onClose) {
                         Image(systemName: "chevron.left")
@@ -119,12 +118,16 @@ struct PostDetailView: View {
                     }
                     .padding(.leading, 4)
                     Spacer()
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 20))
-                        .foregroundColor(.white)
+                    IGIcon(asset: "instagram_camera", fallback: "camera", size: 22, color: .white)
                         .padding(.trailing, 16)
                 }
                 .padding(.top, statusBarHeight)
+
+                // ── Comment bar (always fixed at bottom, never moves) ────────
+                VStack {
+                    Spacer()
+                    fixedCommentBar(geo: geo)
+                }
             }
             .ignoresSafeArea()
             .gesture(swipeGesture(geo: geo))
@@ -136,6 +139,34 @@ struct PostDetailView: View {
                 print("🎯 [DATE FORCE] Spectators auto-reset after post closed")
             }
         }
+    }
+
+    // MARK: - Fixed comment bar (lives in PostDetailView so it never moves with swipe)
+
+    private func fixedCommentBar(geo: GeometryProxy) -> some View {
+        let bottomInset = (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first?.safeAreaInsets.bottom) ?? 34
+
+        return VStack(spacing: 0) {
+            Rectangle()
+                .fill(Color(white: 0.20))
+                .frame(height: 0.5)
+
+            Text("ig.add_comment")
+                .font(.system(size: 15))
+                .foregroundColor(Color(white: 0.50))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .background(Color(white: 0.14))
+                .clipShape(Capsule())
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, bottomInset > 0 ? bottomInset : 12)
+        }
+        .background(Color.black)
+        .frame(width: geo.size.width)
     }
 
     // MARK: - Vertical drag gesture
@@ -246,64 +277,51 @@ struct PostPageView: View {
     @State private var showHeartAnimation = false
     @ObservedObject private var dateForce = DateForceSettings.shared
 
-    private var bottomSafeArea: CGFloat {
-        (UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets.bottom) ?? 34
-    }
-
-    private let commentBarHeight: CGFloat = 52
+    // Extra bottom padding so the info overlay doesn't hide behind the fixed comment bar
+    private let commentBarReserved: CGFloat = 70
 
     var body: some View {
         GeometryReader { geo in
-            let totalHeight     = geo.size.height
-            let commentBarTotal = commentBarHeight + bottomSafeArea
-            let mediaHeight     = totalHeight - commentBarTotal
+            ZStack(alignment: .bottom) {
+                // ── Media (full screen) ───────────────────────────────────
+                mediaContent
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+                    .onTapGesture(count: 2) { handleDoubleTap() }
+                    .overlay(
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 90))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.35), radius: 10)
+                            .opacity(showHeartAnimation ? 1 : 0)
+                            .scaleEffect(showHeartAnimation ? 1 : 0.4)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.55), value: showHeartAnimation)
+                    )
 
-            VStack(spacing: 0) {
+                // ── Right-side action bar ─────────────────────────────────
+                rightActionBar
+                    .padding(.trailing, 12)
+                    .padding(.bottom, commentBarReserved + 16)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
 
-                // ── LAYER 1: Media + overlays (fixed height) ──────────────
-                ZStack(alignment: .bottom) {
-                    mediaContent
-                        .frame(width: geo.size.width, height: mediaHeight)
-                        .clipped()
-                        .onTapGesture(count: 2) { handleDoubleTap() }
-                        .overlay(
-                            Image(systemName: "heart.fill")
-                                .font(.system(size: 90))
-                                .foregroundColor(.white)
-                                .shadow(color: .black.opacity(0.35), radius: 10)
-                                .opacity(showHeartAnimation ? 1 : 0)
-                                .scaleEffect(showHeartAnimation ? 1 : 0.4)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.55), value: showHeartAnimation)
-                        )
-
-                    // Right-side action bar — anchored 16pt above bottom of media
-                    rightActionBar
-                        .padding(.trailing, 12)
-                        .padding(.bottom, 16)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    // Bottom info overlay — anchored at bottom of media with gradient
-                    // Fixed height so it NEVER overflows into the comment bar
-                    bottomInfoOverlay
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            LinearGradient(
-                                colors: [.clear, Color.black.opacity(0.6)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .allowsHitTesting(false)
-                        )
+                // ── Bottom gradient (continuous, covers bottom third) ──────
+                VStack(spacing: 0) {
+                    Spacer()
+                    LinearGradient(
+                        colors: [.clear, Color.black.opacity(0.55)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: geo.size.height * 0.45)
+                    .allowsHitTesting(false)
                 }
-                .frame(width: geo.size.width, height: mediaHeight)
 
-                // ── LAYER 2: Comment bar — fixed height, always visible ──
-                commentBar
-                    .frame(width: geo.size.width, height: commentBarTotal)
+                // ── Bottom info overlay ─────────────────────────────────────
+                bottomInfoOverlay
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, commentBarReserved)
             }
-            .frame(width: geo.size.width, height: totalHeight)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .background(Color.black)
         .ignoresSafeArea(edges: .bottom)
@@ -339,6 +357,7 @@ struct PostPageView: View {
         VStack(spacing: 22) {
             PostActionButton(
                 icon: isLiked ? "heart.fill" : "heart",
+                asset: isLiked ? nil : "instagram_like",
                 count: (item.likeCount ?? 0) + (isLiked ? 1 : 0),
                 color: isLiked ? .red : .white,
                 action: onLike
@@ -346,6 +365,7 @@ struct PostPageView: View {
 
             PostActionButton(
                 icon: "bubble.right",
+                asset: "instagram_comment",
                 count: item.commentCount,
                 color: .white,
                 action: {}
@@ -353,23 +373,21 @@ struct PostPageView: View {
 
             PostActionButton(
                 icon: "arrow.2.squarepath",
+                asset: "instagram_swap",
                 count: nil,
                 color: .white,
                 action: {}
             )
 
-            // Send / DM — inverted-triangle style (▽)
             PostActionButton(
                 icon: "arrowtriangle.down",
+                asset: "instagram_send",
                 count: nil,
                 color: .white,
                 action: {}
             )
 
-            // Options (···)
-            Image(systemName: "ellipsis")
-                .font(.system(size: 20))
-                .foregroundColor(.white)
+            IGIcon(asset: "instagram_more_reel", fallback: "ellipsis", size: 20, color: .white)
                 .shadow(color: .black.opacity(0.5), radius: 3)
 
             // Small thumbnail of the post (bottom-right, like Instagram)
@@ -478,29 +496,6 @@ struct PostPageView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Comment bar (dark grey strip below the media, matches Instagram)
-
-    private var commentBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-                .background(Color(white: 0.25))
-
-            // Wide dark capsule — no icon, white text, full width minus small margins
-            Text("ig.add_comment")
-                .font(.system(size: 14))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 11)
-                .background(Color(white: 0.20))
-                .clipShape(Capsule())
-                .padding(.horizontal, 6)
-                .padding(.vertical, 8)
-
-            Spacer() // absorbs bottom safe area
-        }
-        .background(Color(white: 0.08)) // very dark grey, not pure black
-    }
 
     // MARK: - Helpers
 
@@ -524,6 +519,7 @@ struct PostPageView: View {
 
 struct PostActionButton: View {
     let icon: String
+    var asset: String? = nil
     let count: Int?
     let color: Color
     let action: () -> Void
@@ -531,10 +527,20 @@ struct PostActionButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 28, weight: .light))
-                    .foregroundColor(color)
-                    .shadow(color: .black.opacity(0.55), radius: 3)
+                if let assetName = asset, UIImage(named: assetName) != nil {
+                    Image(assetName)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
+                        .foregroundColor(color)
+                        .shadow(color: .black.opacity(0.55), radius: 3)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundColor(color)
+                        .shadow(color: .black.opacity(0.55), radius: 3)
+                }
 
                 if let count = count, count > 0 {
                     Text(formatCount(count))

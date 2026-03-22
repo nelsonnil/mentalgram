@@ -342,17 +342,17 @@ struct UserProfileView: View {
 
                     // Tabs — tapping a tab resets the secret digit buffer
                     HStack(spacing: 0) {
-                        TabButton(icon: "square.grid.3x3", isSelected: selectedTab == 0) {
+                        TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
                             selectedTab = 0
                             secretManager.reset()
                             followingOverride = nil
                         }
-                        TabButton(icon: "play.rectangle", isSelected: selectedTab == 1) {
+                        TabButton(icon: "play.rectangle", activeAsset: "instagram_reels_active", inactiveAsset: "instagram_reels_inactive", isSelected: selectedTab == 1) {
                             selectedTab = 1
                             secretManager.reset()
                             followingOverride = nil
                         }
-                        TabButton(icon: "person.crop.square", isSelected: selectedTab == 2) {
+                        TabButton(icon: "person.crop.square", activeAsset: "instagram_tagged_active", inactiveAsset: "instagram_tagged_inactive", isSelected: selectedTab == 2) {
                             selectedTab = 2
                             secretManager.reset()
                             followingOverride = nil
