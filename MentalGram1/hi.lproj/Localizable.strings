@@ -475,3 +475,33 @@
 "Enable **Date Force** in Settings." = "सेटिंग्स में **Date Force** सक्षम करें।";
 "Select **Auto** mode." = "**स्वचालित** मोड चुनें।";
 "Select **Dual** mode." = "**दोहरा** मोड चुनें।";
+
+"Image Template" = "छवि टेम्पलेट";
+"Upload my own" = "अपनी अपलोड करें";
+"No templates available. You'll upload your own images." = "कोई टेम्पलेट उपलब्ध नहीं। आप अपनी छवियां अपलोड करेंगे।";
+"1 bank" = "1 बैंक";
+"%lld banks" = "%lld बैंक";
+"You can add or remove banks later from the set view." = "आप बाद में सेट व्यू से बैंक जोड़ या हटा सकते हैं।";
+"followers.tab.subscriptions" = "सदस्यताएं";
+"followers.tab.more" = "अधिक";
+"followers.section.all" = "सभी फ़ॉलोअर";
+"followers.follow_back" = "फ़ॉलो करें";
+"followers.remove_btn" = "हटाएं";
+"followers.search" = "खोजें";
+
+// Force Reel
+"force_reel.title" = "Force Reel";
+"force_reel.subtitle" = "Explore में 3 तक Reels रखें";
+"force_reel.description" = "किसी भी प्रोफाइल से 3 तक Reels पहले से चुनें। Performance में, स्थिति सेट करने के लिए ग्रिड स्वाइप करें, फिर Explore खोलें — Reels उस slot से शुरू होकर 3-3 की दूरी पर दिखेंगे।";
+"force_reel.add_reel_count" = "Reel जोड़ें (%d/3)";
+"force_reel.select_reel" = "Reel चुनें";
+"force_reel.remove_all" = "सभी हटाएं";
+"force_reel.slot_n" = "Slot %d";
+"force_reel.downloading" = "डाउनलोड हो रहा है…";
+"force_reel.picker.placeholder" = "यूज़रनेम (जैसे beyonce)";
+"force_reel.picker.empty_state" = "Reels देखने के लिए प्रोफाइल खोजें";
+"force_reel.picker.no_reels" = "@%@ के लिए कोई Reel नहीं मिला";
+"force_reel.picker.loading" = "Reels लोड हो रहे हैं…";
+"force_reel.picker.header" = "@%1$@ · %2$d Reels — चुनने के लिए टैप करें";
+"force_reel.picker.nav_title" = "Reel चुनें — Slot %d";
+"force_reel.picker.clear" = "साफ़ करें";

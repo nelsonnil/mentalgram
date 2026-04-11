@@ -206,3 +206,34 @@
 "explore.load_error"      = "Could not load content";
 "action.retry"            = "Retry";
 "settings.icloud_applied" = "iCloud backup applied successfully";
+
+"Image Template" = "Image Template";
+"Upload my own" = "Upload my own";
+"No templates available. You'll upload your own images." = "No templates available. You'll upload your own images.";
+"1 bank" = "1 bank";
+"%lld banks" = "%lld banks";
+"Number of Banks" = "Number of Banks";
+"You can add or remove banks later from the set view." = "You can add or remove banks later from the set view.";
+"followers.tab.subscriptions" = "Subscriptions";
+"followers.tab.more" = "More";
+"followers.section.all" = "All followers";
+"followers.follow_back" = "Follow too";
+"followers.remove_btn" = "Remove";
+"followers.search" = "Search";
+
+// Force Reel
+"force_reel.title" = "Force Reel";
+"force_reel.subtitle" = "Place up to 3 reels in Explore";
+"force_reel.description" = "Pre-select up to 3 reels from any profile. In Performance, swipe the grid to set a position, then open Explore — reels appear starting at that slot, spaced 3 apart.";
+"force_reel.add_reel_count" = "Add Reel (%d/3)";
+"force_reel.select_reel" = "Select Reel";
+"force_reel.remove_all" = "Remove All";
+"force_reel.slot_n" = "Slot %d";
+"force_reel.downloading" = "Downloading…";
+"force_reel.picker.placeholder" = "Username (e.g. beyonce)";
+"force_reel.picker.empty_state" = "Search a profile to see their reels";
+"force_reel.picker.no_reels" = "No reels found for @%@";
+"force_reel.picker.loading" = "Loading reels…";
+"force_reel.picker.header" = "@%1$@ · %2$d reels — tap to select";
+"force_reel.picker.nav_title" = "Select Reel — Slot %d";
+"force_reel.picker.clear" = "Clear";

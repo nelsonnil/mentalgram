@@ -486,3 +486,33 @@
 "Enable **Date Force** in Settings." = "設定で **Date Force** を有効にしてください。";
 "Select **Auto** mode." = "**自動**モードを選択してください。";
 "Select **Dual** mode." = "**デュアル**モードを選択してください。";
+
+"Image Template" = "画像テンプレート";
+"Upload my own" = "自分でアップロード";
+"No templates available. You'll upload your own images." = "テンプレートがありません。独自の画像をアップロードします。";
+"1 bank" = "1 バンク";
+"%lld banks" = "%lld バンク";
+"You can add or remove banks later from the set view." = "セットビューから後でバンクを追加・削除できます。";
+"followers.tab.subscriptions" = "サブスクリプション";
+"followers.tab.more" = "その他";
+"followers.section.all" = "すべてのフォロワー";
+"followers.follow_back" = "フォローする";
+"followers.remove_btn" = "削除";
+"followers.search" = "検索";
+
+// Force Reel
+"force_reel.title" = "リール強制配置";
+"force_reel.subtitle" = "探索タブに最大3つのリールを配置";
+"force_reel.description" = "任意のプロフィールから最大3つのリールを事前選択。パフォーマンス画面でグリッドをスワイプして位置を設定し、探索タブを開くと、そのスロットから3つ間隔でリールが表示されます。";
+"force_reel.add_reel_count" = "リールを追加 (%d/3)";
+"force_reel.select_reel" = "リールを選択";
+"force_reel.remove_all" = "すべて削除";
+"force_reel.slot_n" = "スロット %d";
+"force_reel.downloading" = "ダウンロード中…";
+"force_reel.picker.placeholder" = "ユーザー名（例：beyonce）";
+"force_reel.picker.empty_state" = "プロフィールを検索してリールを表示";
+"force_reel.picker.no_reels" = "@%@ のリールが見つかりません";
+"force_reel.picker.loading" = "リールを読み込み中…";
+"force_reel.picker.header" = "@%1$@ · %2$d 件のリール — タップして選択";
+"force_reel.picker.nav_title" = "リールを選択 — スロット %d";
+"force_reel.picker.clear" = "クリア";

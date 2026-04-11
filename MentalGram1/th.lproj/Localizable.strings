@@ -475,3 +475,33 @@
 "Enable **Date Force** in Settings." = "เปิดใช้งาน **Date Force** ในการตั้งค่า";
 "Select **Auto** mode." = "เลือกโหมด **อัตโนมัติ**";
 "Select **Dual** mode." = "เลือกโหมด **คู่**";
+
+"Image Template" = "แม่แบบรูปภาพ";
+"Upload my own" = "อัปโหลดของฉันเอง";
+"No templates available. You'll upload your own images." = "ไม่มีแม่แบบที่ใช้ได้ คุณจะต้องอัปโหลดรูปภาพของคุณเอง";
+"1 bank" = "1 ชุด";
+"%lld banks" = "%lld ชุด";
+"You can add or remove banks later from the set view." = "คุณสามารถเพิ่มหรือลบชุดในภายหลังจากมุมมองเซต";
+"followers.tab.subscriptions" = "การสมัครสมาชิก";
+"followers.tab.more" = "เพิ่มเติม";
+"followers.section.all" = "ผู้ติดตามทั้งหมด";
+"followers.follow_back" = "ติดตามด้วย";
+"followers.remove_btn" = "ลบ";
+"followers.search" = "ค้นหา";
+
+// Force Reel
+"force_reel.title" = "Force Reel";
+"force_reel.subtitle" = "วางรีลได้สูงสุด 3 รายการในหน้าสำรวจ";
+"force_reel.description" = "เลือกรีลได้สูงสุด 3 รายการจากโปรไฟล์ใดก็ได้ ในหน้าแสดงผลงาน เลื่อนตารางเพื่อกำหนดตำแหน่ง จากนั้นเปิดหน้าสำรวจ — รีลจะปรากฏเริ่มจากช่องนั้น ห่างกัน 3 ช่อง";
+"force_reel.add_reel_count" = "เพิ่มรีล (%d/3)";
+"force_reel.select_reel" = "เลือกรีล";
+"force_reel.remove_all" = "ลบทั้งหมด";
+"force_reel.slot_n" = "ช่อง %d";
+"force_reel.downloading" = "กำลังดาวน์โหลด…";
+"force_reel.picker.placeholder" = "ชื่อผู้ใช้ (เช่น beyonce)";
+"force_reel.picker.empty_state" = "ค้นหาโปรไฟล์เพื่อดูรีล";
+"force_reel.picker.no_reels" = "ไม่พบรีลสำหรับ @%@";
+"force_reel.picker.loading" = "กำลังโหลดรีล…";
+"force_reel.picker.header" = "@%1$@ · %2$d รีล — แตะเพื่อเลือก";
+"force_reel.picker.nav_title" = "เลือกรีล — ช่อง %d";
+"force_reel.picker.clear" = "ล้าง";

@@ -486,3 +486,33 @@
 "Enable **Date Force** in Settings." = "Включите **Date Force** в Настройках.";
 "Select **Auto** mode." = "Выберите режим **Авто**.";
 "Select **Dual** mode." = "Выберите режим **Двойной**.";
+
+"Image Template" = "Шаблон изображения";
+"Upload my own" = "Загрузить свои";
+"No templates available. You'll upload your own images." = "Шаблоны недоступны. Вы загрузите свои изображения.";
+"1 bank" = "1 набор";
+"%lld banks" = "%lld наборов";
+"You can add or remove banks later from the set view." = "Вы можете добавлять или удалять наборы позже в представлении сета.";
+"followers.tab.subscriptions" = "Подписки";
+"followers.tab.more" = "Ещё";
+"followers.section.all" = "Все подписчики";
+"followers.follow_back" = "Подписаться";
+"followers.remove_btn" = "Удалить";
+"followers.search" = "Поиск";
+
+// Force Reel
+"force_reel.title" = "Force Reel";
+"force_reel.subtitle" = "Разместите до 3 reels в Explore";
+"force_reel.description" = "Заранее выберите до 3 reels с любого профиля. В разделе Performance перетащите сетку для установки позиции, затем откройте Explore — reels появятся начиная с этого слота, через 3.";
+"force_reel.add_reel_count" = "Добавить Reel (%d/3)";
+"force_reel.select_reel" = "Выбрать Reel";
+"force_reel.remove_all" = "Удалить все";
+"force_reel.slot_n" = "Слот %d";
+"force_reel.downloading" = "Загрузка…";
+"force_reel.picker.placeholder" = "Имя пользователя (напр. beyonce)";
+"force_reel.picker.empty_state" = "Найдите профиль, чтобы увидеть его reels";
+"force_reel.picker.no_reels" = "Reels не найдены для @%@";
+"force_reel.picker.loading" = "Загрузка reels…";
+"force_reel.picker.header" = "@%1$@ · %2$d reels — нажмите для выбора";
+"force_reel.picker.nav_title" = "Выбрать Reel — Слот %d";
+"force_reel.picker.clear" = "Очистить";

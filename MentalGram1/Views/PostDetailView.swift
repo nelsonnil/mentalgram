@@ -16,10 +16,17 @@ struct PostDetailView: View {
 
     // Vertical swipe state
     @State private var dragOffset: CGFloat = 0
-    /// Decided at the START of each drag: will the next page be the forced reel?
+    /// Decided at the START of each drag: will the next page be a forced reel?
     @State private var isForcedNext: Bool = false
-    /// True while the forced reel is the page currently on screen.
-    @State private var showingForcedReel: Bool = false
+    /// Index of the forced reel currently on screen (-1 = not showing any).
+    @State private var showingForcedSlotIdx: Int = -1
+    /// Which forced reel slot to show NEXT on a bottom-half swipe.
+    /// Advances each time a forced reel is committed, and persists even when
+    /// the user exits forced mode via a top-half swipe (so each bottom swipe
+    /// always goes to the next sequential reel, never repeating the same one).
+    @State private var nextForcedSlotIdx: Int = 0
+    /// Convenience: true when any forced reel is on screen.
+    private var showingForcedReel: Bool { showingForcedSlotIdx >= 0 }
 
     @ObservedObject private var forceSettings = ForceReelSettings.shared
 
@@ -48,26 +55,36 @@ struct PostDetailView: View {
 
     // MARK: - Item helpers
 
+    private var forcedItems: [(item: InstagramMediaItem, slot: ForceReelSlot)] {
+        forceSettings.allFakeMediaItems()
+    }
+
     /// The page currently filling the screen.
     private var currentItem: InstagramMediaItem? {
-        if showingForcedReel { return forceSettings.asFakeMediaItem() }
+        if showingForcedReel, showingForcedSlotIdx < forcedItems.count {
+            return forcedItems[showingForcedSlotIdx].item
+        }
         guard currentIndex < mediaItems.count else { return nil }
         return mediaItems[currentIndex]
     }
 
     /// The page that will slide up from below during a swipe-up gesture.
     private var peekItem: InstagramMediaItem? {
-        if isForcedNext { return forceSettings.asFakeMediaItem() }
-        // After showing forced reel, "next" is the real item at currentIndex
-        // (forced reel sits between currentIndex-1 and currentIndex conceptually)
+        if isForcedNext {
+            // If already in forced mode advance by 1; otherwise use the persistent pointer.
+            let targetIdx = showingForcedReel ? showingForcedSlotIdx + 1 : nextForcedSlotIdx
+            if targetIdx < forcedItems.count { return forcedItems[targetIdx].item }
+            return nil
+        }
         let nextIdx = showingForcedReel ? currentIndex : currentIndex + 1
         return nextIdx < mediaItems.count ? mediaItems[nextIdx] : nil
     }
 
-    /// Resolves the cached thumbnail for an item, handling the forced reel's stable key.
+    /// Resolves the cached thumbnail for an item, handling forced reel stable keys.
     private func cachedImg(for item: InstagramMediaItem) -> UIImage? {
         if item.id.hasPrefix("forced_reel_") {
-            return ExploreManager.shared.cachedImages[ForceReelSettings.localCacheKey]
+            // item.imageURL already equals the slot-specific key ("forced_reel_local_X")
+            return ExploreManager.shared.cachedImages[item.imageURL]
         }
         return cachedImages[item.imageURL]
     }
@@ -182,14 +199,16 @@ struct PostDetailView: View {
                 // ── Decide target on the very first movement of this drag ────
                 if dragOffset == 0 {
                     let startedInBottomHalf = value.startLocation.y > geo.size.height / 2
-                    let canForce = forceSettings.isEnabled
-                                   && forceSettings.hasReel
-                                   && !showingForcedReel   // don't double-trigger
+                    let canForce = forceSettings.isEnabled && startedInBottomHalf
 
-                    isForcedNext = startedInBottomHalf && canForce
-
-                    if isForcedNext {
-                        print("🎭 [FORCE] Secret swipe detected — forced reel queued")
+                    if canForce {
+                        let nextIdx = showingForcedReel ? showingForcedSlotIdx + 1 : nextForcedSlotIdx
+                        isForcedNext = nextIdx < forcedItems.count
+                        if isForcedNext {
+                            print("🎭 [FORCE] Secret swipe (bottom) — forced reel #\(nextIdx + 1) queued")
+                        }
+                    } else {
+                        isForcedNext = false
                     }
                 }
 
@@ -230,15 +249,22 @@ struct PostDetailView: View {
     /// Called once the transition animation finishes. Updates which item is "current".
     private func commitSwipeUp() {
         if isForcedNext {
-            // Secret swipe: reveal the forced reel
-            showingForcedReel = true
-            print("🎭 [FORCE] Forced reel now on screen")
+            // Land on the correct slot and advance the persistent pointer so the
+            // next bottom-half swipe goes to the following forced reel.
+            if showingForcedReel {
+                showingForcedSlotIdx += 1
+            } else {
+                showingForcedSlotIdx = nextForcedSlotIdx
+            }
+            nextForcedSlotIdx = showingForcedSlotIdx + 1
+            print("🎭 [FORCE] Forced reel #\(showingForcedSlotIdx + 1) on screen — next slot: \(nextForcedSlotIdx)")
         } else if showingForcedReel {
-            // Was showing forced reel; normal swipe-up moves to the real next
-            showingForcedReel = false
+            // Top-half swipe while a forced reel is showing: exit forced mode.
+            // nextForcedSlotIdx is intentionally preserved so the next bottom swipe
+            // continues from the following reel rather than restarting from reel 1.
+            showingForcedSlotIdx = -1
             if currentIndex < mediaItems.count - 1 { currentIndex += 1 }
         } else {
-            // Normal swipe: advance real index
             if currentIndex < mediaItems.count - 1 { currentIndex += 1 }
         }
         isForcedNext = false
@@ -332,7 +358,11 @@ struct PostPageView: View {
     @ViewBuilder
     private var mediaContent: some View {
         if item.mediaType == .video, let videoURL = item.videoURL {
+            // .id(videoURL) forces SwiftUI to destroy and recreate DetailVideoPlayer
+            // whenever the video URL changes (e.g. switching between forced reels).
+            // Without this, onAppear doesn't re-fire and the old video keeps playing.
             DetailVideoPlayer(videoURL: videoURL)
+                .id(videoURL)
         } else if let image = cachedImage {
             Image(uiImage: image)
                 .resizable()

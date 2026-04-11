@@ -18,6 +18,7 @@ struct ForcePostPickerView: View {
     @State private var searchedUsername: String = ""
     @State private var searchedUserId: String = ""
     @State private var lastSearchTime: Date = .distantPast
+    @State private var showingRelogin = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 1),
@@ -51,6 +52,9 @@ struct ForcePostPickerView: View {
                             .foregroundColor(.red)
                     }
                 }
+            }
+            .sheet(isPresented: $showingRelogin) {
+                ReloginSheet(isPresented: $showingRelogin)
             }
         }
     }
@@ -179,6 +183,12 @@ struct ForcePostPickerView: View {
             return
         }
 
+        // Session expired — prompt re-login directly
+        if instagram.isSessionExpired {
+            showingRelogin = true
+            return
+        }
+
         lastSearchTime = now
         errorMessage = nil
         isSearching = true
@@ -222,10 +232,14 @@ struct ForcePostPickerView: View {
                 let msg = "\(error)"
                 let isPrivate = msg.lowercased().contains("not authorized") || msg.lowercased().contains("not found")
                 await MainActor.run {
-                    errorMessage = isPrivate
-                        ? "@\(username) is a private account. You need to follow them first."
-                        : "Error: \(error.localizedDescription)"
                     isSearching = false
+                    if instagram.isSessionExpired {
+                        showingRelogin = true
+                    } else {
+                        errorMessage = isPrivate
+                            ? "@\(username) is a private account. You need to follow them first."
+                            : "Error: \(error.localizedDescription)"
+                    }
                 }
             }
         }

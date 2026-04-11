@@ -486,3 +486,33 @@
 "Enable **Date Force** in Settings." = "설정에서 **Date Force**를 활성화하세요.";
 "Select **Auto** mode." = "**자동** 모드를 선택하세요.";
 "Select **Dual** mode." = "**듀얼** 모드를 선택하세요.";
+
+"Image Template" = "이미지 템플릿";
+"Upload my own" = "직접 업로드";
+"No templates available. You'll upload your own images." = "사용 가능한 템플릿이 없습니다. 직접 이미지를 업로드하세요.";
+"1 bank" = "1 뱅크";
+"%lld banks" = "%lld 뱅크";
+"You can add or remove banks later from the set view." = "나중에 세트 보기에서 뱅크를 추가하거나 삭제할 수 있습니다.";
+"followers.tab.subscriptions" = "구독";
+"followers.tab.more" = "더보기";
+"followers.section.all" = "모든 팔로워";
+"followers.follow_back" = "맞팔로우";
+"followers.remove_btn" = "삭제";
+"followers.search" = "검색";
+
+// Force Reel
+"force_reel.title" = "릴 강제 배치";
+"force_reel.subtitle" = "탐색 탭에 최대 3개의 릴 배치";
+"force_reel.description" = "임의 프로필에서 최대 3개의 릴을 미리 선택하세요. 퍼포먼스 화면에서 격자를 스와이프하여 위치를 설정한 후 탐색 탭을 열면 해당 슬롯부터 3칸 간격으로 릴이 표시됩니다.";
+"force_reel.add_reel_count" = "릴 추가 (%d/3)";
+"force_reel.select_reel" = "릴 선택";
+"force_reel.remove_all" = "모두 제거";
+"force_reel.slot_n" = "슬롯 %d";
+"force_reel.downloading" = "다운로드 중…";
+"force_reel.picker.placeholder" = "사용자 이름 (예: beyonce)";
+"force_reel.picker.empty_state" = "프로필을 검색하여 릴을 확인하세요";
+"force_reel.picker.no_reels" = "@%@의 릴을 찾을 수 없습니다";
+"force_reel.picker.loading" = "릴 불러오는 중…";
+"force_reel.picker.header" = "@%1$@ · 릴 %2$d개 — 탭하여 선택";
+"force_reel.picker.nav_title" = "릴 선택 — 슬롯 %d";
+"force_reel.picker.clear" = "지우기";

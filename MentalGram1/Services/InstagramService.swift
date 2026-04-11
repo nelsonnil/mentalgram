@@ -3,6 +3,7 @@ import UIKit
 import Combine
 import CryptoKit
 import Network
+import WebKit
 
 /// Instagram Private API client - Pure Swift, no Python needed.
 /// Replicates what instagrapi does: HTTP requests to Instagram's private API.
@@ -64,6 +65,7 @@ class InstagramService: ObservableObject {
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         config.waitsForConnectivity = true  // Safe for GET requests
+        config.timeoutIntervalForResource = 30
         return URLSession(configuration: config)
     }()
     
@@ -72,6 +74,7 @@ class InstagramService: ObservableObject {
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         config.waitsForConnectivity = false  // CRITICAL: Don't auto-retry POSTs
+        config.timeoutIntervalForResource = 30
         return URLSession(configuration: config)
     }()
     
@@ -352,23 +355,80 @@ class InstagramService: ObservableObject {
         session = .empty
         isLoggedIn = false
         KeychainService.shared.deleteSession()
-        
+        KeychainService.shared.clearCredentials()
+
         // Reset lockdown
         unlock()
-        
-        // Clear cookies
+
+        // Clear profile cache (disk + memory)
+        ProfileCacheService.shared.clearAll()
+        ProfileCacheService.shared.pendingProfilePic = nil
+        UserDefaults.standard.removeObject(forKey: "instagram_mid")
+
+        // Clear HTTP cookies
         if let cookies = HTTPCookieStorage.shared.cookies {
             for cookie in cookies where cookie.domain.contains("instagram.com") {
                 HTTPCookieStorage.shared.deleteCookie(cookie)
             }
         }
-        
+
+        // Clear WKWebView session data
+        WKWebsiteDataStore.default().removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            modifiedSince: Date(timeIntervalSince1970: 0)
+        ) { }
+
         // Clear cached data
         URLCache.shared.removeAllCachedResponses()
-        
+
         print("🚨 [EMERGENCY] Full logout and cache clear completed")
     }
-    
+
+    // MARK: - Session Validation
+
+    enum SessionStatus {
+        case valid
+        case expired
+        case challenged
+        case networkError
+    }
+
+    /// Lightweight GET to check whether the current session is still alive.
+    /// Does NOT trigger lockdown by itself — only sets `isSessionExpired` when appropriate.
+    /// Use this for pre-flight checks (e.g., before entering Performance view).
+    func validateSession() async -> SessionStatus {
+        guard isLoggedIn else { return .expired }
+        guard isConnected else { return .networkError }
+
+        print("🔍 [SESSION] Validating session...")
+        do {
+            let data = try await apiRequest(method: "GET", path: "/accounts/current_user/?edit=true")
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               json["user"] != nil {
+                await MainActor.run { isSessionExpired = false }
+                print("✅ [SESSION] Session is valid")
+                return .valid
+            }
+            // Response was 200 but no "user" key — treat as expired
+            await MainActor.run { isSessionExpired = true }
+            print("⚠️ [SESSION] Unexpected response structure — marking as expired")
+            return .expired
+        } catch InstagramError.sessionExpired {
+            await MainActor.run { isSessionExpired = true }
+            print("❌ [SESSION] Session expired (401/403)")
+            return .expired
+        } catch InstagramError.challengeRequired {
+            print("⚠️ [SESSION] Challenge required during validation")
+            return .challenged
+        } catch InstagramError.networkError {
+            print("📶 [SESSION] Network error during validation")
+            return .networkError
+        } catch {
+            print("⚠️ [SESSION] Validation error: \(error) — assuming network issue")
+            return .networkError
+        }
+    }
+
     /// Waits if network changed recently (anti-bot protection)
     /// Returns immediately if network is stable
     func waitForNetworkStability() async throws {
@@ -461,14 +521,29 @@ class InstagramService: ObservableObject {
         session = .empty
         isLoggedIn = false
         KeychainService.shared.deleteSession()
-        
-        // Clear cookies
+        KeychainService.shared.clearCredentials()
+
+        // Clear profile cache (disk + memory) so next login loads fresh data for the new account
+        ProfileCacheService.shared.clearAll()
+        ProfileCacheService.shared.pendingProfilePic = nil
+
+        // Clear instagram_mid so it is re-fetched for the new account
+        UserDefaults.standard.removeObject(forKey: "instagram_mid")
+
+        // Clear HTTP cookies
         if let cookies = HTTPCookieStorage.shared.cookies {
             for cookie in cookies {
                 HTTPCookieStorage.shared.deleteCookie(cookie)
             }
         }
-        
+
+        // Clear WKWebView session data (cookies + local storage) so the next login WebView
+        // starts fresh and doesn't auto-restore the previous account's web session
+        WKWebsiteDataStore.default().removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            modifiedSince: Date(timeIntervalSince1970: 0)
+        ) { }
+
         print("✅ Logged out successfully")
     }
     
@@ -999,6 +1074,12 @@ class InstagramService: ObservableObject {
                 // For POST/write operations the lockdown is still required.
                 if message.contains("challenge_required") {
                     await MainActor.run { challengeRequiredStreak += 1 }
+                    // After 2+ consecutive challenges, escalate to session expired so
+                    // SessionGuardView appears and prompts the magician to re-login.
+                    if challengeRequiredStreak >= 2 {
+                        await MainActor.run { isSessionExpired = true }
+                        print("🔴 [SESSION] challengeRequiredStreak=\(challengeRequiredStreak) — escalating to isSessionExpired")
+                    }
                     if method == "GET" {
                         // Transient soft-check on read endpoint — no lockdown, no alarm.
                         // Undo the consecutiveErrors increment done above (HTTP != 200 path)

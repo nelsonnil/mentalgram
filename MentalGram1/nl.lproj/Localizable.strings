@@ -486,3 +486,33 @@
 "Enable **Date Force** in Settings." = "Schakel **Date Force** in bij Instellingen.";
 "Select **Auto** mode." = "Selecteer de **Auto** modus.";
 "Select **Dual** mode." = "Selecteer de **Dubbel** modus.";
+
+"Image Template" = "Afbeeldingssjabloon";
+"Upload my own" = "Eigen uploaden";
+"No templates available. You'll upload your own images." = "Geen sjablonen beschikbaar. Je uploadt je eigen afbeeldingen.";
+"1 bank" = "1 bank";
+"%lld banks" = "%lld banken";
+"You can add or remove banks later from the set view." = "Je kunt later banken toevoegen of verwijderen in de setweergave.";
+"followers.tab.subscriptions" = "Abonnementen";
+"followers.tab.more" = "Meer";
+"followers.section.all" = "Alle volgers";
+"followers.follow_back" = "Ook volgen";
+"followers.remove_btn" = "Verwijderen";
+"followers.search" = "Zoeken";
+
+// Force Reel
+"force_reel.title" = "Force Reel";
+"force_reel.subtitle" = "Plaats tot 3 reels in Verkennen";
+"force_reel.description" = "Selecteer vooraf tot 3 reels van een willekeurig profiel. Veeg in Performance het raster om een positie in te stellen, open dan Verkennen — reels verschijnen vanaf dat slot, met tussenruimte van 3.";
+"force_reel.add_reel_count" = "Reel toevoegen (%d/3)";
+"force_reel.select_reel" = "Reel selecteren";
+"force_reel.remove_all" = "Alles verwijderen";
+"force_reel.slot_n" = "Slot %d";
+"force_reel.downloading" = "Downloaden…";
+"force_reel.picker.placeholder" = "Gebruikersnaam (bijv. beyonce)";
+"force_reel.picker.empty_state" = "Zoek een profiel om reels te zien";
+"force_reel.picker.no_reels" = "Geen reels gevonden voor @%@";
+"force_reel.picker.loading" = "Reels laden…";
+"force_reel.picker.header" = "@%1$@ · %2$d reels — tik om te selecteren";
+"force_reel.picker.nav_title" = "Reel selecteren — Slot %d";
+"force_reel.picker.clear" = "Wissen";

@@ -547,3 +547,32 @@
 "Enable **Date Force** in Settings." = "在设置中启用 **Date Force**。";
 "Select **Auto** mode." = "选择**自动**模式。";
 "Select **Dual** mode." = "选择**双重**模式。";
+
+"Image Template" = "图片模板";
+"Upload my own" = "上传我自己的";
+"No templates available. You'll upload your own images." = "暂无模板。您将上传自己的图片。";
+"1 bank" = "1 组";
+"%lld banks" = "%lld 组";
+"followers.tab.subscriptions" = "订阅";
+"followers.tab.more" = "更多";
+"followers.section.all" = "所有粉丝";
+"followers.follow_back" = "也关注";
+"followers.remove_btn" = "移除";
+"followers.search" = "搜索";
+
+// Force Reel
+"force_reel.title" = "强制视频";
+"force_reel.subtitle" = "在发现页放置最多3个视频";
+"force_reel.description" = "从任意账号预先选择最多3个视频。在表演界面，滑动网格设置位置，然后打开发现页——视频将从该位置开始出现，每隔3个插入一次。";
+"force_reel.add_reel_count" = "添加视频 (%d/3)";
+"force_reel.select_reel" = "选择视频";
+"force_reel.remove_all" = "全部删除";
+"force_reel.slot_n" = "位置 %d";
+"force_reel.downloading" = "下载中…";
+"force_reel.picker.placeholder" = "用户名（例如 beyonce）";
+"force_reel.picker.empty_state" = "搜索账号以查看其视频";
+"force_reel.picker.no_reels" = "未找到 @%@ 的视频";
+"force_reel.picker.loading" = "加载视频中…";
+"force_reel.picker.header" = "@%1$@ · %2$d 个视频 — 点击选择";
+"force_reel.picker.nav_title" = "选择视频 — 位置 %d";
+"force_reel.picker.clear" = "清除";

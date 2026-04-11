@@ -770,3 +770,31 @@
 "**Time offset.** If the reveal happens a few minutes after you start, set the offset to +2 or +3 min so the time on stage matches the real clock." = "**Desplazamiento de hora.** Si la revelación ocurre unos minutos después de empezar, establece el desplazamiento en +2 o +3 min para que la hora en el escenario coincida con el reloj real.";
 "**Private profiles.** Both follower and following counts are still visible publicly. No issues." = "**Perfiles privados.** Tanto el número de seguidores como el de seguidos siguen siendo visibles públicamente. Sin problemas.";
 "**The audience can verify.** Each spectator can open Instagram on their own phone and confirm their follower/following counts match what you read aloud." = "**El público puede verificar.** Cada espectador puede abrir Instagram en su propio teléfono y confirmar que sus números de seguidores/seguidos coinciden con lo que leíste en voz alta.";
+
+"Image Template" = "Plantilla de imagen";
+"Upload my own" = "Subir mis propias";
+"No templates available. You'll upload your own images." = "Sin plantillas disponibles. Subirás tus propias imágenes.";
+"1 bank" = "1 banco";
+"followers.tab.subscriptions" = "Suscripciones";
+"followers.tab.more" = "Más";
+"followers.section.all" = "Todos los seguidores";
+"followers.follow_back" = "Seguir también";
+"followers.remove_btn" = "Quitar";
+"followers.search" = "Buscar";
+
+// Force Reel
+"force_reel.title" = "Force Reel";
+"force_reel.subtitle" = "Coloca hasta 3 reels en Explorar";
+"force_reel.description" = "Preselecciona hasta 3 reels de cualquier perfil. En Performance, desliza la cuadrícula para fijar una posición, luego abre Explorar: los reels aparecerán desde ese slot, con 3 de separación.";
+"force_reel.add_reel_count" = "Añadir Reel (%d/3)";
+"force_reel.select_reel" = "Seleccionar Reel";
+"force_reel.remove_all" = "Eliminar todos";
+"force_reel.slot_n" = "Slot %d";
+"force_reel.downloading" = "Descargando…";
+"force_reel.picker.placeholder" = "Usuario (ej. beyonce)";
+"force_reel.picker.empty_state" = "Busca un perfil para ver sus reels";
+"force_reel.picker.no_reels" = "No se encontraron reels para @%@";
+"force_reel.picker.loading" = "Cargando reels…";
+"force_reel.picker.header" = "@%1$@ · %2$d reels — toca para seleccionar";
+"force_reel.picker.nav_title" = "Seleccionar Reel — Slot %d";
+"force_reel.picker.clear" = "Borrar";

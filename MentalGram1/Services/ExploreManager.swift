@@ -365,7 +365,7 @@ class ExploreManager: ObservableObject {
         var missingItems: [InstagramMediaItem] = []
         for item in loadedItems {
             guard !item.imageURL.isEmpty,
-                  item.imageURL != ForceReelSettings.localCacheKey else { continue }
+                  !item.imageURL.hasPrefix("forced_reel_local") else { continue }
             if let image = loadThumbnailPermanently(forURL: item.imageURL) {
                 cachedImages[item.imageURL] = image
             } else {
@@ -496,45 +496,45 @@ class ExploreManager: ObservableObject {
     
     // MARK: - Force Reel injection
 
-    /// Returns `exploreMedia` with the forced reel injected at the position
-    /// stored in `ForceReelSettings.pendingPosition` (1-based, consumed once).
-    /// If Force Reel is disabled or no position/reel is set, returns the array unchanged.
+    /// Returns `exploreMedia` with forced reels injected at positions based on
+    /// `ForceReelSettings.pendingPosition` (1-based). Multiple reels are spaced
+    /// 3 cells apart so they look naturally distributed in the grid.
     func exploreMediaWithForce() -> [InstagramMediaItem] {
         let forceSettings = ForceReelSettings.shared
         guard forceSettings.isEnabled,
-              forceSettings.pendingPosition > 0,
-              let forcedItem = forceSettings.asFakeMediaItem() else {
+              forceSettings.pendingPosition > 0 else {
             return exploreMedia
         }
 
-        let pos = forceSettings.pendingPosition
-        let insertIndex = min(pos - 1, exploreMedia.count)
+        let fakeItems = forceSettings.allFakeMediaItems()
+        guard !fakeItems.isEmpty else { return exploreMedia }
 
         var result = exploreMedia
-        result.insert(forcedItem, at: insertIndex)
+        let basePos = forceSettings.pendingPosition
 
-        // Always inject the locally saved thumbnail into cachedImages using the stable key.
-        // This image was saved permanently when the reel was selected — it never expires.
-        let localKey = ForceReelSettings.localCacheKey
-        if cachedImages[localKey] == nil {
-            if let localImage = forceSettings.localThumbnailImage {
-                // Use local permanent copy — no network call needed
-                cachedImages[localKey] = localImage
-                print("🎭 [FORCE] Forced reel thumbnail loaded from local storage (no CDN needed)")
-            } else if !forceSettings.thumbnailURL.isEmpty {
-                // Fallback: CDN URL (only used if local file was somehow lost)
-                Task {
-                    if let url = URL(string: forceSettings.thumbnailURL),
-                       let (data, _) = try? await URLSession.shared.data(from: url),
-                       let img = UIImage(data: data) {
-                        await MainActor.run { self.cachedImages[localKey] = img }
-                        print("🎭 [FORCE] Forced reel thumbnail loaded from CDN (fallback)")
+        for (offset, entry) in fakeItems.enumerated() {
+            let pos = basePos + (offset * 3)
+            let insertIndex = min(pos - 1 + offset, result.count)
+            result.insert(entry.item, at: insertIndex)
+
+            let cacheKey = entry.slot.localCacheKey
+            if cachedImages[cacheKey] == nil {
+                if let localImage = forceSettings.thumbnailImages[entry.slot.id] {
+                    cachedImages[cacheKey] = localImage
+                } else if !entry.slot.thumbnailURL.isEmpty {
+                    let url = entry.slot.thumbnailURL
+                    Task {
+                        if let u = URL(string: url),
+                           let (data, _) = try? await URLSession.shared.data(from: u),
+                           let img = UIImage(data: data) {
+                            await MainActor.run { self.cachedImages[cacheKey] = img }
+                        }
                     }
                 }
             }
         }
 
-        print("🎭 [FORCE] Injected reel at position \(pos) (index \(insertIndex)) in Explore grid (\(result.count) total items)")
+        print("🎭 [FORCE] Injected \(fakeItems.count) reel(s) starting at position \(basePos) in Explore grid")
         return result
     }
 

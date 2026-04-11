@@ -486,3 +486,33 @@
 "Enable **Date Force** in Settings." = "Włącz **Date Force** w Ustawieniach.";
 "Select **Auto** mode." = "Wybierz tryb **Auto**.";
 "Select **Dual** mode." = "Wybierz tryb **Podwójny**.";
+
+"Image Template" = "Szablon obrazu";
+"Upload my own" = "Prześlij własne";
+"No templates available. You'll upload your own images." = "Brak dostępnych szablonów. Prześlesz własne zdjęcia.";
+"1 bank" = "1 bank";
+"%lld banks" = "%lld banki";
+"You can add or remove banks later from the set view." = "Możesz dodawać lub usuwać banki później w widoku zestawu.";
+"followers.tab.subscriptions" = "Subskrypcje";
+"followers.tab.more" = "Więcej";
+"followers.section.all" = "Wszyscy obserwujący";
+"followers.follow_back" = "Śledź też";
+"followers.remove_btn" = "Usuń";
+"followers.search" = "Szukaj";
+
+// Force Reel
+"force_reel.title" = "Force Reel";
+"force_reel.subtitle" = "Umieść do 3 reels w Eksploruj";
+"force_reel.description" = "Wstępnie wybierz do 3 reels z dowolnego profilu. W Performance przesuń siatkę, aby ustawić pozycję, następnie otwórz Eksploruj — reels pojawią się od tego slotu, co 3.";
+"force_reel.add_reel_count" = "Dodaj Reel (%d/3)";
+"force_reel.select_reel" = "Wybierz Reel";
+"force_reel.remove_all" = "Usuń wszystkie";
+"force_reel.slot_n" = "Slot %d";
+"force_reel.downloading" = "Pobieranie…";
+"force_reel.picker.placeholder" = "Nazwa użytkownika (np. beyonce)";
+"force_reel.picker.empty_state" = "Znajdź profil, aby zobaczyć jego reels";
+"force_reel.picker.no_reels" = "Nie znaleziono reels dla @%@";
+"force_reel.picker.loading" = "Ładowanie reels…";
+"force_reel.picker.header" = "@%1$@ · %2$d reels — dotknij, aby wybrać";
+"force_reel.picker.nav_title" = "Wybierz Reel — Slot %d";
+"force_reel.picker.clear" = "Wyczyść";

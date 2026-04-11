@@ -134,13 +134,16 @@ struct SetDetailView: View {
         }
     }
 
-    /// All uploaded photos (including locally-archived) that have a mediaId.
-    /// Used by "Re-verify All" to detect desync where local state says archived
-    /// but Instagram still has the photo as public.
+    /// All photos that have a mediaId (were at least uploaded to Instagram),
+    /// regardless of whether the archive step completed or failed.
+    /// Used by "Re-verify All" to detect:
+    ///   (a) local says archived but IG shows it public (desync)
+    ///   (b) local says error/incomplete but IG has the photo — needs archive
     private var allUploadedPhotos: [SetPhoto] {
         currentSet.photos.filter {
             $0.mediaId != nil &&
-            $0.uploadStatus == .completed
+            $0.uploadStatus != .pending &&
+            $0.uploadStatus != .uploading
         }
     }
 
@@ -871,17 +874,33 @@ struct SetDetailView: View {
     /// Fetches all VISIBLE media from Instagram in 1-2 API calls, then compares
     /// against local state. Much faster than checking 100+ photos one by one.
     private func startReverify() {
+        // ── DIAGNOSTIC DUMP ─────────────────────────────────────────────
+        print("🔍 [RE-VERIFY] startReverify() called")
+        print("🔍 [RE-VERIFY] allUploadedPhotos=\(allUploadedPhotos.count)  isReverifying=\(uploadManager.isReverifying)  isLocked=\(instagram.isLocked)")
+        print("🔍 [RE-VERIFY] All photos in set (\(currentSet.photos.count) total):")
+        for p in currentSet.photos {
+            print("🔍 [RE-VERIFY]   symbol=\(p.symbol)  mediaId=\(p.mediaId ?? "nil")  status=\(p.uploadStatus)  isArchived=\(p.isArchived)")
+        }
+        // ────────────────────────────────────────────────────────────────
+
         let photos = allUploadedPhotos
-        guard !photos.isEmpty, !uploadManager.isReverifying else { return }
+        guard !photos.isEmpty else {
+            print("🔍 [RE-VERIFY] Guard exit: allUploadedPhotos is EMPTY — no photos to verify")
+            return
+        }
+        guard !uploadManager.isReverifying else {
+            print("🔍 [RE-VERIFY] Guard exit: already reverifying")
+            return
+        }
         guard !instagram.isLocked else {
             uploadManager.reverifyError = "App is in safety lockdown — wait for it to clear."
             print("⚠️ [RE-VERIFY] Skipped — lockdown active")
             return
         }
 
-        let photoSnapshots: [(id: UUID, mediaId: String, isArchived: Bool)] = photos.compactMap { p in
+        let photoSnapshots: [(id: UUID, mediaId: String, isArchived: Bool, status: PhotoUploadStatus)] = photos.compactMap { p in
             guard let mid = p.mediaId else { return nil }
-            return (p.id, mid, p.isArchived)
+            return (p.id, mid, p.isArchived, p.uploadStatus)
         }
 
         let manager = uploadManager
@@ -895,10 +914,15 @@ struct SetDetailView: View {
         manager.reverifyDesynced = 0
 
         manager.reverifyTask = Task.detached(priority: .utility) {
-            print("🔍 [RE-VERIFY] Fast mode: fetching all visible media from Instagram…")
+            print("🔍 [RE-VERIFY] ─────────────────────────────────────")
+            print("🔍 [RE-VERIFY] Starting — \(photoSnapshots.count) photo(s) to check")
+            for snap in photoSnapshots {
+                print("🔍 [RE-VERIFY]   local mediaId=\(snap.mediaId) isArchived=\(snap.isArchived) status=\(snap.status)")
+            }
 
             // Fetch all visible (non-archived) media IDs from Instagram feed.
-            // Paginate to get the full list (each page ~18 items).
+            // Store BOTH the raw id and the pk-only prefix (strips _userId suffix)
+            // so comparison works regardless of which format was stored locally.
             var visibleOnIG: Set<String> = []
             var nextMaxId: String? = nil
             var page = 0
@@ -911,9 +935,17 @@ struct SetDetailView: View {
                     let (items, cursor) = try await ig.getUserMedia(maxId: nextMaxId)
                     for item in items {
                         visibleOnIG.insert(item.id)
+                        // Also insert the pk-only form (before first '_') so we match
+                        // both "123456" and "123456_999" regardless of which side has the suffix
+                        let pkOnly = item.id.split(separator: "_").first.map(String.init) ?? item.id
+                        visibleOnIG.insert(pkOnly)
                     }
                     nextMaxId = cursor
-                    print("🔍 [RE-VERIFY] Page \(page): got \(items.count) visible items (total: \(visibleOnIG.count))")
+                    print("🔍 [RE-VERIFY] Page \(page): got \(items.count) visible items (total unique: \(visibleOnIG.count / 2))")
+                    if !items.isEmpty {
+                        let sample = items.prefix(3).map { $0.id }.joined(separator: ", ")
+                        print("🔍 [RE-VERIFY]   Sample IDs from feed: \(sample)")
+                    }
                     // Stop if page returned no items (avoid infinite pagination)
                     if items.isEmpty { break }
                     if nextMaxId != nil {
@@ -960,14 +992,20 @@ struct SetDetailView: View {
                 return
             }
 
-            print("🔍 [RE-VERIFY] Instagram reports \(visibleOnIG.count) visible post(s) — comparing with \(photoSnapshots.count) local photo(s)")
+            print("🔍 [RE-VERIFY] Instagram reports \(visibleOnIG.count / 2) visible post(s) — comparing with \(photoSnapshots.count) local photo(s)")
 
-            // Compare: if a photo is locally archived but appears in the visible feed → desync
+            // Compare each local photo against the visible feed:
+            //   Case A: locally archived=true  but visible on IG → desync, fix to isArchived=false
+            //   Case B: locally error/incomplete but visible on IG → upload arrived, needs archive → fix to completed+isArchived=false
             var desynced = 0
             for (index, snap) in photoSnapshots.enumerated() {
-                let isVisibleOnIG = visibleOnIG.contains(snap.mediaId)
+                // Normalize local mediaId: try both raw form and pk-only (strips _userId suffix)
+                let localPkOnly = snap.mediaId.split(separator: "_").first.map(String.init) ?? snap.mediaId
+                let isVisibleOnIG = visibleOnIG.contains(snap.mediaId) || visibleOnIG.contains(localPkOnly)
+                print("🔍 [RE-VERIFY]   [\(index)] mediaId=\(snap.mediaId) pkOnly=\(localPkOnly) visibleOnIG=\(isVisibleOnIG) isArchived=\(snap.isArchived) status=\(snap.status)")
 
                 if isVisibleOnIG && snap.isArchived {
+                    // Case A: app thinks archived but IG shows it public
                     await MainActor.run {
                         dm.updatePhoto(
                             photoId: snap.id,
@@ -978,8 +1016,24 @@ struct SetDetailView: View {
                         )
                     }
                     desynced += 1
-                    print("⚠️ [RE-VERIFY] Desync: \(snap.mediaId) visible on IG but locally archived")
+                    print("⚠️ [RE-VERIFY] Case A desync: \(snap.mediaId) visible on IG but locally archived → fixed")
                     LogManager.shared.warning("Re-verify desync: \(snap.mediaId) is public on IG, fixed local state", category: .general)
+
+                } else if isVisibleOnIG && snap.status != .completed {
+                    // Case B: upload succeeded on IG (photo is visible) but local state is error/incomplete
+                    // Mark as completed+not-archived so Sync & Archive can pick it up
+                    await MainActor.run {
+                        dm.updatePhoto(
+                            photoId: snap.id,
+                            mediaId: snap.mediaId,
+                            isArchived: false,
+                            uploadStatus: .completed,
+                            errorMessage: nil
+                        )
+                    }
+                    desynced += 1
+                    print("⚠️ [RE-VERIFY] Case B orphan: \(snap.mediaId) visible on IG but local status=\(snap.status) → marked completed+visible")
+                    LogManager.shared.warning("Re-verify orphan: \(snap.mediaId) is public on IG, local was \(snap.status) → fixed", category: .general)
                 }
 
                 await MainActor.run {
@@ -987,6 +1041,107 @@ struct SetDetailView: View {
                     manager.reverifyDesynced = desynced
                 }
             }
+
+            // ── ORPHAN CLEANUP ───────────────────────────────────────────────
+            // Remove from the profile cache any media item whose ID is NOT in the
+            // current visible feed. This catches "ghost" uploads: photos that reached
+            // Instagram but were never tracked by the set (e.g. a failed-retry upload
+            // where the first attempt's pk was never saved), which kept showing in
+            // the Performance grid even though the set believed everything was archived.
+            // NOTE: reads from disk directly (loadProfile) so it works even when
+            //       the in-memory cachedProfile is nil (e.g. cleared by another path).
+            await MainActor.run {
+                let cache = ProfileCacheService.shared
+                // Prefer in-memory; fall back to disk so we never miss orphans
+                guard let cached = cache.cachedProfile ?? cache.loadProfile() else {
+                    print("🔍 [RE-VERIFY] Orphan cleanup: no profile on disk — skipping")
+                    return
+                }
+                guard !cached.cachedMediaItems.isEmpty else {
+                    print("🔍 [RE-VERIFY] Orphan cleanup: cachedMediaItems empty — skipping")
+                    return
+                }
+
+                print("🔍 [RE-VERIFY] Orphan cleanup: checking \(cached.cachedMediaItems.count) cached items against \(visibleOnIG.count / 2) visible IDs")
+
+                // Find items in the profile cache that are NOT in the visible feed
+                let orphanItems = cached.cachedMediaItems.filter { item in
+                    let pkOnly = item.mediaId.split(separator: "_").first.map(String.init) ?? item.mediaId
+                    let found = visibleOnIG.contains(item.mediaId) || visibleOnIG.contains(pkOnly)
+                    if !found {
+                        print("🔍 [RE-VERIFY]   orphan candidate: mediaId=\(item.mediaId)")
+                    }
+                    return !found
+                }
+
+                guard !orphanItems.isEmpty else {
+                    print("🔍 [RE-VERIFY] Orphan cleanup: no orphans found")
+                    return
+                }
+
+                let orphanURLs  = Set(orphanItems.map { $0.imageURL })
+                let cleanedURLs  = cached.cachedMediaURLs.filter  { !orphanURLs.contains($0) }
+                let cleanedItems = cached.cachedMediaItems.filter  { !orphanURLs.contains($0.imageURL) }
+
+                // Write directly to disk via saveProfile so both disk + memory are updated.
+                // Use struct copy so all other fields stay intact.
+                var cleaned = cached
+                cleaned.cachedMediaURLs  = cleanedURLs
+                cleaned.cachedMediaItems = cleanedItems
+                cache.saveProfile(cleaned)
+
+                print("🔍 [RE-VERIFY] Orphan cleanup: removed \(orphanItems.count) ghost post(s) from profile cache ✅")
+                for item in orphanItems {
+                    print("🔍 [RE-VERIFY]   removed ghost mediaId=\(item.mediaId)")
+                }
+                LogManager.shared.info("Re-verify: removed \(orphanItems.count) ghost post(s) from profile cache", category: .general)
+            }
+            // ────────────────────────────────────────────────────────────────────
+
+            // ── GHOST ARCHIVER ────────────────────────────────────────────────────
+            // Detect and archive visible posts that are NOT tracked in this set but
+            // whose media ID falls within the upload range of this set's tracked
+            // photos. These are "ghost" uploads: posts the app sent to Instagram but
+            // failed to persist in the set data (e.g. a crashed retry). Legitimate
+            // old user posts have much lower IDs and are never matched.
+            let allTrackedMediaIds = Set(photoSnapshots.map { $0.mediaId })
+            let trackedInt64s = allTrackedMediaIds.compactMap { Int64($0) }
+            if let minTracked = trackedInt64s.min() {
+                // Collect unique numeric IDs from the live feed
+                let uniqueVisibleNumericIds = visibleOnIG.filter { Int64($0) != nil }
+                let ghostIds = uniqueVisibleNumericIds.filter { id in
+                    guard let idInt = Int64(id) else { return false }
+                    return idInt >= minTracked && !allTrackedMediaIds.contains(id)
+                }
+                if !ghostIds.isEmpty {
+                    print("🔍 [RE-VERIFY] Ghost archiver: found \(ghostIds.count) untracked visible post(s) in upload range — archiving")
+                    for ghostId in ghostIds {
+                        print("🔍 [RE-VERIFY]   archiving ghost: \(ghostId)")
+                        do {
+                            let ok = try await InstagramService.shared.archivePhoto(mediaId: ghostId, skipPreCheck: true)
+                            print("🔍 [RE-VERIFY]   \(ok ? "✅" : "⚠️") archive result for ghost \(ghostId): \(ok)")
+                        } catch {
+                            print("🔍 [RE-VERIFY]   ❌ failed to archive ghost \(ghostId): \(error)")
+                        }
+                    }
+                    // Remove archived ghosts from profile cache
+                    await MainActor.run {
+                        let cache = ProfileCacheService.shared
+                        guard let cached = cache.cachedProfile ?? cache.loadProfile() else { return }
+                        let ghostURLs = Set(cached.cachedMediaItems.filter { ghostIds.contains($0.mediaId) }.map { $0.imageURL })
+                        guard !ghostURLs.isEmpty else { return }
+                        var cleaned = cached
+                        cleaned.cachedMediaURLs  = cached.cachedMediaURLs.filter  { !ghostURLs.contains($0) }
+                        cleaned.cachedMediaItems = cached.cachedMediaItems.filter { !ghostURLs.contains($0.imageURL) }
+                        cache.saveProfile(cleaned)
+                        print("🔍 [RE-VERIFY] Ghost archiver: removed \(ghostURLs.count) ghost URL(s) from profile cache ✅")
+                        LogManager.shared.info("Re-verify: archived and removed \(ghostIds.count) ghost post(s)", category: .general)
+                    }
+                } else {
+                    print("🔍 [RE-VERIFY] Ghost archiver: no untracked posts in upload range")
+                }
+            }
+            // ────────────────────────────────────────────────────────────────────
 
             await MainActor.run {
                 manager.isReverifying = false

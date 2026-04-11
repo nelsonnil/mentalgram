@@ -3,6 +3,8 @@ import SwiftUI
 /// Lets the magician search any Instagram profile, browse their reels,
 /// and select one to be "forced" at a specific position in the Explore grid.
 struct ForceReelPickerView: View {
+    let slotIndex: Int
+
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = ForceReelSettings.shared
     @ObservedObject private var instagram = InstagramService.shared
@@ -13,8 +15,8 @@ struct ForceReelPickerView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var searchedUsername: String = ""
-    // Anti-bot: minimum 8 s between consecutive searches
     @State private var lastSearchTime: Date = .distantPast
+    @State private var showingRelogin = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 1),
@@ -27,7 +29,7 @@ struct ForceReelPickerView: View {
             VStack(spacing: 0) {
                 // Search bar
                 HStack(spacing: 8) {
-                    TextField("Username (e.g. beyonce)", text: $usernameInput)
+                    TextField(String(localized: "force_reel.picker.placeholder"), text: $usernameInput)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                         .padding(.horizontal, 12)
@@ -71,23 +73,23 @@ struct ForceReelPickerView: View {
                             .font(.system(size: 52))
                             .foregroundColor(.secondary)
                         if searchedUsername.isEmpty {
-                            Text("Search a profile to see their reels")
+                            Text("force_reel.picker.empty_state")
                                 .foregroundColor(.secondary)
                         } else {
-                            Text("No reels found for @\(searchedUsername)")
+                            Text(String(format: String(localized: "force_reel.picker.no_reels"), searchedUsername))
                                 .foregroundColor(.secondary)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if isLoading {
                     Spacer()
-                    ProgressView("Loading reels…")
+                    ProgressView(String(localized: "force_reel.picker.loading"))
                     Spacer()
                 } else {
                     // Reels grid
                     ScrollView {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("@\(searchedUsername) · \(reels.count) reels — tap to select")
+                            Text(String(format: String(localized: "force_reel.picker.header"), searchedUsername, reels.count))
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal, 12)
@@ -98,7 +100,7 @@ struct ForceReelPickerView: View {
                                     ReelPickerCell(
                                         reel: reel,
                                         image: cachedImages[reel.imageURL],
-                                        isSelected: settings.mediaId == reel.mediaId,
+                                        isSelected: settings.slots.contains(where: { $0.mediaId == reel.mediaId }),
                                         onTap: { select(reel) }
                                     )
                                 }
@@ -107,20 +109,24 @@ struct ForceReelPickerView: View {
                     }
                 }
             }
-            .navigationTitle("Select Reel to Force")
+            .navigationTitle(String(format: String(localized: "force_reel.picker.nav_title"), slotIndex + 1))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button(String(localized: "action.cancel")) { dismiss() }
                 }
-                if settings.hasReel {
+                if settings.slots.contains(where: { $0.id == slotIndex && $0.hasReel }) {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Clear", role: .destructive) {
-                            settings.clearReel()
+                        Button(String(localized: "force_reel.picker.clear"), role: .destructive) {
+                            settings.clearSlot(slotIndex)
                         }
                         .foregroundColor(.red)
                     }
                 }
+            }
+            // Direct re-login sheet (no disguise — this is a private settings area)
+            .sheet(isPresented: $showingRelogin) {
+                ReloginSheet(isPresented: $showingRelogin)
             }
         }
     }
@@ -146,6 +152,12 @@ struct ForceReelPickerView: View {
             return
         }
 
+        // Session expired — prompt re-login directly (no disguise in private settings)
+        if instagram.isSessionExpired {
+            showingRelogin = true
+            return
+        }
+
         lastSearchTime = now
         errorMessage = nil
         isLoading = true
@@ -159,9 +171,24 @@ struct ForceReelPickerView: View {
                 try await instagram.waitForNetworkStability()
 
                 // Resolve username → userId
-                guard let results = try? await instagram.searchUsers(query: username),
-                      let match = results.first(where: { $0.username.lowercased() == username })
-                            ?? results.first else {
+                let results: [UserSearchResult]
+                do {
+                    results = try await instagram.searchUsers(query: username)
+                } catch {
+                    print("❌ [FORCE] searchUsers failed: \(error)")
+                    await MainActor.run {
+                        isLoading = false
+                        if instagram.isSessionExpired {
+                            showingRelogin = true
+                        } else {
+                            errorMessage = "Search failed: \(error.localizedDescription)"
+                        }
+                    }
+                    return
+                }
+
+                guard let match = results.first(where: { $0.username.lowercased() == username })
+                        ?? results.first else {
                     await MainActor.run {
                         errorMessage = "Profile '@\(username)' not found"
                         isLoading = false
@@ -192,8 +219,12 @@ struct ForceReelPickerView: View {
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = "Error: \(error.localizedDescription)"
                     isLoading = false
+                    if instagram.isSessionExpired {
+                        showingRelogin = true
+                    } else {
+                        errorMessage = "Error: \(error.localizedDescription)"
+                    }
                 }
             }
         }
@@ -201,6 +232,7 @@ struct ForceReelPickerView: View {
 
     private func select(_ reel: InstagramMediaItem) {
         settings.selectReel(
+            slotIndex: slotIndex,
             thumbnailURL: reel.imageURL,
             videoURL: reel.videoURL ?? "",
             mediaId: reel.mediaId,

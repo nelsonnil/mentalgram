@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		20BB7F302F3893500061C002 /* letras in Resources */ = {isa = PBXBuildFile; fileRef = 20BB7F302F3893500061C001 /* letras */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		200E7F302F3893500061C768 /* MentalGram1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MentalGram1.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		20BB7F302F3893500061C001 /* letras */ = {isa = PBXFileReference; lastKnownFileType = folder; path = letras; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -47,6 +52,7 @@
 			children = (
 				200E7F322F3893500061C768 /* MentalGram1 */,
 				200E7F312F3893500061C768 /* Products */,
+				20BB7F302F3893500061C001 /* letras */,
 			);
 			sourceTree = "<group>";
 		};
@@ -136,6 +142,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				20BB7F302F3893500061C002 /* letras in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

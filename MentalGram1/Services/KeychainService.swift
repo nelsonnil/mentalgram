@@ -63,6 +63,33 @@ class KeychainService {
         SecItemDelete(query as CFDictionary)
     }
     
+    // MARK: - Instagram Credentials (for auto-fill re-login)
+
+    private let credentialsUsernameKey = "com.mentalgram.instagram.cred.username"
+    private let credentialsPasswordKey = "com.mentalgram.instagram.cred.password"
+
+    /// Saves username and password in Keychain (AES-256, app-only access).
+    func saveCredentials(username: String, password: String) {
+        saveString(username, forKey: credentialsUsernameKey)
+        saveString(password, forKey: credentialsPasswordKey)
+        print("🔑 [KEYCHAIN] Credentials saved for @\(username)")
+    }
+
+    /// Returns stored (username, password) or nil if not saved.
+    func loadCredentials() -> (username: String, password: String)? {
+        guard let username = loadString(forKey: credentialsUsernameKey),
+              let password = loadString(forKey: credentialsPasswordKey),
+              !username.isEmpty, !password.isEmpty else { return nil }
+        return (username, password)
+    }
+
+    /// Clears saved credentials (call on logout or account change).
+    func clearCredentials() {
+        deleteString(forKey: credentialsUsernameKey)
+        deleteString(forKey: credentialsPasswordKey)
+        print("🔑 [KEYCHAIN] Credentials cleared")
+    }
+
     // MARK: - Generic String Storage (for device IDs that MUST persist across reinstalls)
     
     func saveString(_ value: String, forKey key: String) {

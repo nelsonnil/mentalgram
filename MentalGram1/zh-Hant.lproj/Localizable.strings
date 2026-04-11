@@ -486,3 +486,33 @@
 "Enable **Date Force** in Settings." = "在設定中啟用 **Date Force**。";
 "Select **Auto** mode." = "選擇**自動**模式。";
 "Select **Dual** mode." = "選擇**雙重**模式。";
+
+"Image Template" = "圖片模板";
+"Upload my own" = "上傳我自己的";
+"No templates available. You'll upload your own images." = "暫無模板。您將上傳自己的圖片。";
+"1 bank" = "1 組";
+"%lld banks" = "%lld 組";
+"You can add or remove banks later from the set view." = "您可以稍後在組合視圖中新增或刪除組。";
+"followers.tab.subscriptions" = "訂閱";
+"followers.tab.more" = "更多";
+"followers.section.all" = "所有粉絲";
+"followers.follow_back" = "也追蹤";
+"followers.remove_btn" = "移除";
+"followers.search" = "搜尋";
+
+// Force Reel
+"force_reel.title" = "強制影片";
+"force_reel.subtitle" = "在探索頁放置最多3個影片";
+"force_reel.description" = "從任意帳號預先選擇最多3個影片。在表演介面，滑動格子設定位置，然後開啟探索頁——影片將從該位置開始出現，每隔3個插入一次。";
+"force_reel.add_reel_count" = "新增影片 (%d/3)";
+"force_reel.select_reel" = "選擇影片";
+"force_reel.remove_all" = "全部刪除";
+"force_reel.slot_n" = "位置 %d";
+"force_reel.downloading" = "下載中…";
+"force_reel.picker.placeholder" = "使用者名稱（例如 beyonce）";
+"force_reel.picker.empty_state" = "搜尋帳號以查看其影片";
+"force_reel.picker.no_reels" = "找不到 @%@ 的影片";
+"force_reel.picker.loading" = "載入影片中…";
+"force_reel.picker.header" = "@%1$@ · %2$d 個影片 — 點選以選擇";
+"force_reel.picker.nav_title" = "選擇影片 — 位置 %d";
+"force_reel.picker.clear" = "清除";

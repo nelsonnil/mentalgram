@@ -406,12 +406,30 @@ struct PerformanceView: View {
                 VolumeButtonMonitor.shared.prepareVolume()
                 VolumeButtonMonitor.shared.startMonitoring()
             }
-            checkAndLoadProfile()
+
+            // PRE-FLIGHT: Validate session before any API call.
+            // If the session is expired/challenged, isSessionExpired is set to true
+            // by validateSession() → SessionGuardView overlay takes over automatically.
+            // Network errors are treated as non-blocking (profile loads from cache).
+            Task { @MainActor in
+                let sessionStatus = await instagram.validateSession()
+                guard sessionStatus == .valid || sessionStatus == .networkError else {
+                    print("🚫 [PERF] Session invalid (\(sessionStatus)) — aborting onAppear actions")
+                    return
+                }
+                checkAndLoadProfile()
+            }
 
             // Serialize all auto-actions in a single sequential Task.
             // Running them in parallel creates concurrent API calls from the
             // same session → strong bot signal (especially POST+GET combos).
             Task { @MainActor in
+                // Abort auto-actions if session is expired (validateSession above already
+                // set isSessionExpired = true and the overlay is showing).
+                guard !instagram.isSessionExpired else {
+                    print("🚫 [PERF] Auto-actions skipped — session expired")
+                    return
+                }
                 // 1. Auto profile pic (POST) — wait for loadProfile to finish first
                 if autoProfilePicOnPerformance {
                     // Brief pause so loadProfile's GET finishes or at least starts
@@ -1883,6 +1901,9 @@ struct InstagramProfileView: View {
     @State private var showingPostViewer = false
     @State private var selectedPostIndex = 0
 
+    // Followers list
+    @State private var showFollowersList = false
+
     // Secret number input
     @ObservedObject private var secretManager      = SecretNumberManager.shared
     @ObservedObject private var instagram          = InstagramService.shared
@@ -2120,9 +2141,14 @@ struct InstagramProfileView: View {
                     HStack(spacing: 0) {
                         StatView(number: profile.mediaCount, label: String(localized: "ig.stat.posts"))
                             .frame(maxWidth: .infinity)
-                        StatView(number: profile.followerCount, label: String(localized: "ig.stat.followers"),
-                                 overrideText: effectiveFollowerOverride)
-                            .frame(maxWidth: .infinity)
+
+                        Button { showFollowersList = true } label: {
+                            StatView(number: profile.followerCount, label: String(localized: "ig.stat.followers"),
+                                     overrideText: effectiveFollowerOverride)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+
                         StatView(number: profile.followingCount, label: String(localized: "ig.stat.following"),
                                  overrideText: postsOCRNumberOverride ?? effectiveFollowingOverride,
                                  overrideLabel: postsOCRLabelOverride)
@@ -2298,6 +2324,15 @@ struct InstagramProfileView: View {
                 profileImage: cachedImages[profile.profilePicURL],
                 userId: profile.userId
             )
+        }
+        .fullScreenCover(isPresented: $showFollowersList) {
+            FollowersListView(
+                username: profile.username,
+                followerCount: profile.followerCount,
+                followingCount: profile.followingCount,
+                onClose: { showFollowersList = false }
+            )
+            .preferredColorScheme(.light)
         }
     }
 

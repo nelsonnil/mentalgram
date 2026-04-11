@@ -39,6 +39,15 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: instagram.isLocked)
+                // Session expired overlay — shown whenever session is dead and no lockdown is active.
+                // Disguised as "No Internet" to the spectator; magician accesses re-login via Info button.
+                .overlay {
+                    if instagram.isSessionExpired && !instagram.isLocked {
+                        SessionGuardView()
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: instagram.isSessionExpired)
                 // Restore banner — shown once after auto-restore on first install
                 .overlay(alignment: .top) {
                     if showRestoreBanner {

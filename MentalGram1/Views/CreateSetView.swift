@@ -131,7 +131,9 @@ struct CreateSetView: View {
                                 .font(.headline)
                                 .foregroundColor(VaultTheme.Colors.textPrimary)
                             Stepper(value: $bankCount, in: 1...20) {
-                                Text("\(bankCount) bank\(bankCount == 1 ? "" : "s")")
+                                Text(bankCount == 1
+                                    ? String(localized: "1 bank")
+                                    : String(format: String(localized: "%lld banks"), bankCount))
                                     .foregroundColor(VaultTheme.Colors.textSecondary)
                             }
                             .tint(VaultTheme.Colors.primary)
@@ -235,7 +237,6 @@ private struct TemplatePicker: View {
                 .foregroundColor(VaultTheme.Colors.textPrimary)
 
             if templates.isEmpty {
-                // No templates available for this alphabet yet
                 HStack(spacing: VaultTheme.Spacing.sm) {
                     Image(systemName: "photo.on.rectangle")
                         .foregroundColor(VaultTheme.Colors.textTertiary)
@@ -253,7 +254,7 @@ private struct TemplatePicker: View {
 
                         // "Upload my own" card
                         TemplateCard(
-                            title: "Upload my own",
+                            title: String(localized: "Upload my own"),
                             icon: "photo.badge.plus",
                             previewImages: [],
                             isSelected: selectedTemplate == nil,

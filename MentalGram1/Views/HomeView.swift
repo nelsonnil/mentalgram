@@ -51,6 +51,9 @@ struct HomeView: View {
                         .ignoresSafeArea()
                 }
             }
+            // Force light color scheme on this tab so the status bar always shows
+            // dark (black) icons on the white Instagram-style background.
+            .preferredColorScheme(.light)
             .tabItem {
                 Label("Performance", systemImage: "chart.bar.fill")
             }
@@ -2263,116 +2266,128 @@ struct ForcePostSettingsCard: View {
 struct ForceReelSettingsCard: View {
     @ObservedObject private var settings = ForceReelSettings.shared
     @State private var showingPicker = false
-    @State private var previewImage: UIImage?
+    @State private var editingSlotIndex: Int = 0
     @State private var isExpanded = false
 
     var body: some View {
-        Group {
         CollapsibleCard(icon: "hand.point.up.left.fill", iconColor: SettingsView.colorTricks,
-                        title: "Force Reel",
-                        subtitle: "Place a reel at an exact slot in Explore",
+                        title: "force_reel.title",
+                        subtitle: "force_reel.subtitle",
                         isExpanded: $isExpanded) {
             HStack {
-                Text("Enabled")
+                Text("settings.enabled")
                     .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 Spacer()
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
             }
 
-            Text("Pre-select a reel from any profile. In Performance, swipe the grid to set a position, then open Explore — the reel will appear at that exact slot.")
+            Text("force_reel.description")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
             if settings.isEnabled {
                 Divider()
 
-                if settings.hasReel {
-                        // Show selected reel preview
-                        HStack(spacing: VaultTheme.Spacing.md) {
-                            ZStack(alignment: .bottomLeading) {
-                                if let img = previewImage {
-                                    Image(uiImage: img)
-                                        .resizable()
-                                        .aspectRatio(4/5, contentMode: .fill)
-                                        .frame(width: 64, height: 80)
-                                        .clipped()
-                                        .cornerRadius(8)
-                                } else {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.gray.opacity(0.25))
-                                        .frame(width: 64, height: 80)
-                                        .overlay(ProgressView().scaleEffect(0.7))
-                                }
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white)
-                                    .padding(4)
-                            }
-                            .onAppear { loadPreview() }
+                ForEach(settings.slots.filter(\.hasReel)) { slot in
+                    slotPreview(slot: slot)
+                    if slot.id != settings.slots.filter(\.hasReel).last?.id {
+                        Divider().padding(.vertical, 4)
+                    }
+                }
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Reel selected")
-                                    .font(VaultTheme.Typography.bodyBold())
-                                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                                Text("from @\(settings.sourceUsername)")
-                                    .font(VaultTheme.Typography.caption())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                                Text("ID: \(String(settings.mediaId.prefix(16)))…")
-                                    .font(.system(size: 10).monospaced())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                            }
-                            Spacer()
+                if settings.filledSlotCount < ForceReelSettings.maxSlots {
+                    Button(action: {
+                        if let nextIdx = settings.nextAvailableSlotIndex() {
+                            editingSlotIndex = nextIdx
+                            showingPicker = true
                         }
+                    }) {
+                        Label(settings.hasReel ? String(format: String(localized: "force_reel.add_reel_count"), settings.filledSlotCount) : String(localized: "force_reel.select_reel"),
+                              systemImage: "play.rectangle.on.rectangle.fill")
+                            .font(VaultTheme.Typography.body())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, VaultTheme.Spacing.sm)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
 
-                        HStack(spacing: VaultTheme.Spacing.sm) {
-                            Button(action: { showingPicker = true }) {
-                                Label("Change Reel", systemImage: "arrow.triangle.2.circlepath")
-                                    .font(VaultTheme.Typography.body())
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button(role: .destructive, action: { settings.clearReel() }) {
-                                Label("Remove", systemImage: "trash")
-                                    .font(VaultTheme.Typography.body())
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.red)
-                        }
-                    } else {
-                        // No reel selected yet
-                        Button(action: { showingPicker = true }) {
-                            Label("Select Reel", systemImage: "play.rectangle.on.rectangle.fill")
-                                .font(VaultTheme.Typography.body())
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, VaultTheme.Spacing.sm)
-                        }
-                        .buttonStyle(.borderedProminent)
+                if settings.filledSlotCount > 1 {
+                    Button(role: .destructive, action: { settings.clearAllReels() }) {
+                        Label(String(localized: "force_reel.remove_all"), systemImage: "trash")
+                            .font(VaultTheme.Typography.body())
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
                 }
             }
         }
         .sheet(isPresented: $showingPicker) {
-            ForceReelPickerView()
+            ForceReelPickerView(slotIndex: editingSlotIndex)
         }
-        .onChange(of: settings.thumbnailURL) { _ in loadPreview() }
     }
 
-}
+    @ViewBuilder
+    private func slotPreview(slot: ForceReelSlot) -> some View {
+        HStack(spacing: VaultTheme.Spacing.md) {
+            ZStack(alignment: .bottomLeading) {
+                if let img = settings.thumbnailImages[slot.id] {
+                    Image(uiImage: img)
+                        .resizable()
+                        .aspectRatio(4/5, contentMode: .fill)
+                        .frame(width: 54, height: 68)
+                        .clipped()
+                        .cornerRadius(6)
+                } else {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.gray.opacity(0.25))
+                        .frame(width: 54, height: 68)
+                        .overlay(ProgressView().scaleEffect(0.6))
+                }
+                Image(systemName: "play.fill")
+                    .font(.system(size: 8))
+                    .foregroundColor(.white)
+                    .padding(3)
+            }
 
-private func loadPreview() {
-    guard !settings.thumbnailURL.isEmpty else { previewImage = nil; return }
-    if let cached = ProfileCacheService.shared.loadImage(forURL: settings.thumbnailURL) {
-        previewImage = cached; return
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(format: String(localized: "force_reel.slot_n"), slot.id + 1))
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Text("@\(slot.sourceUsername)")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                if settings.downloadingVideo[slot.id] == true {
+                    HStack(spacing: 4) {
+                        ProgressView().scaleEffect(0.5)
+                        Text("force_reel.downloading")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            VStack(spacing: 6) {
+                Button(action: {
+                    editingSlotIndex = slot.id
+                    showingPicker = true
+                }) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+
+                Button(role: .destructive, action: { settings.clearSlot(slot.id) }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+            }
+        }
     }
-    Task {
-        guard let url = URL(string: settings.thumbnailURL),
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let img = UIImage(data: data) else { return }
-        await MainActor.run { previewImage = img }
-        ProfileCacheService.shared.saveImage(img, forURL: settings.thumbnailURL)
-    }
-}
 }
 
 // MARK: - Force Number Reveal Settings Card

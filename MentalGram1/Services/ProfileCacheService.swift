@@ -159,6 +159,7 @@ class ProfileCacheService: ObservableObject {
     func clearProfile() {
         let fileURL = cacheDirectory.appendingPathComponent("profile.json")
         try? fileManager.removeItem(at: fileURL)
+        DispatchQueue.main.async { self.cachedProfile = nil }
         print("🗑️ Profile cache cleared")
     }
     
