@@ -16,6 +16,7 @@ struct ScrollViewInterceptor: UIViewRepresentable {
     let totalPostCount: Int
     @Binding var hasActivated: Bool
     let isActive: Bool
+    var forcedThumbnail: UIImage? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -40,10 +41,11 @@ struct ScrollViewInterceptor: UIViewRepresentable {
         if c.forcedIndex != forcedIndex || c.totalPostCount != totalPostCount {
             c.invalidateCache()
         }
-        c.forcedIndex    = forcedIndex
-        c.totalPostCount = totalPostCount
-        c.isActive       = isActive
+        c.forcedIndex        = forcedIndex
+        c.totalPostCount     = totalPostCount
+        c.isActive           = isActive
         c.hasActivatedBinding = $hasActivated
+        c.forcedThumbnail    = forcedThumbnail
     }
 
     // MARK: - View hierarchy search
@@ -76,6 +78,7 @@ struct ScrollViewInterceptor: UIViewRepresentable {
         var forcedIndex: Int = 0
         var totalPostCount: Int = 1
         var hasActivatedBinding: Binding<Bool>?
+        var forcedThumbnail: UIImage? = nil
 
         /// Once true, the trick is done and all scrolling is normal.
         private var released = false
@@ -100,10 +103,11 @@ struct ScrollViewInterceptor: UIViewRepresentable {
         func invalidateCache() { cachedForcedY = nil }
 
         init(parent: ScrollViewInterceptor) {
-            self.forcedIndex    = parent.forcedIndex
-            self.totalPostCount = parent.totalPostCount
-            self.isActive       = parent.isActive
-            self.lastIsActive   = parent.isActive
+            self.forcedIndex      = parent.forcedIndex
+            self.totalPostCount   = parent.totalPostCount
+            self.isActive         = parent.isActive
+            self.lastIsActive     = parent.isActive
+            self.forcedThumbnail  = parent.forcedThumbnail
         }
 
         func attach(to scrollView: UIScrollView) {
@@ -182,7 +186,8 @@ struct ScrollViewInterceptor: UIViewRepresentable {
             // PostCardView uses .scaledToFit() at full width, so height = screenW × (h/w).
             // Capped at visibleH so we center the visible portion for very tall reels.
             let imageHeight: CGFloat = {
-                if let img = ForcePostSettings.shared.localThumbnailImage {
+                let thumb = forcedThumbnail
+                if let img = thumb {
                     let ratio = img.size.height / max(img.size.width, 1)
                     let natural = screenW * ratio
                     return min(natural, visibleH - headerHeight)

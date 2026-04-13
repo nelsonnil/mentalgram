@@ -2177,6 +2177,8 @@ struct CollapsibleCard<Content: View, Trailing: View>: View {
 struct ForcePostSettingsCard: View {
     @ObservedObject private var settings = ForcePostSettings.shared
     @State private var showingPicker = false
+    @State private var showingHelp   = false
+    @State private var editingUserId: String? = nil   // nil = new entry
     @State private var isExpanded = false
 
     var body: some View {
@@ -2184,7 +2186,14 @@ struct ForcePostSettingsCard: View {
         CollapsibleCard(icon: "square.grid.2x2", iconColor: SettingsView.colorTricks,
                         title: "Force Post",
                         subtitle: "Force a scroll to stop on a specific post",
-                        isExpanded: $isExpanded) {
+                        isExpanded: $isExpanded,
+                        trailing: {
+                            Button(action: { showingHelp = true }) {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                        }) {
             HStack {
                 Text("Enabled")
                     .font(VaultTheme.Typography.body())
@@ -2193,72 +2202,90 @@ struct ForcePostSettingsCard: View {
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
             }
 
-            Text("Pre-select a post from any profile. During performance, the spectator scrolls through their posts and the scroll always stops on the forced image.")
+            Text("Pre-select a post from any profile. When visiting that profile in Performance, the scroll always stops on the forced image. Add multiple profiles to force different posts per profile.")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
             if settings.isEnabled {
                 Divider()
 
-                if settings.hasPost {
-                        HStack(spacing: VaultTheme.Spacing.md) {
-                            if let img = settings.localThumbnailImage {
-                                Image(uiImage: img)
-                                    .resizable()
-                                    .aspectRatio(1, contentMode: .fill)
-                                    .frame(width: 64, height: 64)
-                                    .clipped()
-                                    .cornerRadius(8)
-                            } else {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.gray.opacity(0.25))
-                                    .frame(width: 64, height: 64)
-                                    .overlay(ProgressView().scaleEffect(0.7))
-                            }
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Post selected")
-                                    .font(VaultTheme.Typography.bodyBold())
-                                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                                Text("from @\(settings.targetUsername)")
-                                    .font(VaultTheme.Typography.caption())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                                Text("ID: \(String(settings.forcedMediaId.prefix(16)))…")
-                                    .font(.system(size: 10).monospaced())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                            }
-                            Spacer()
-                        }
-
-                        HStack(spacing: VaultTheme.Spacing.sm) {
-                            Button(action: { showingPicker = true }) {
-                                Label("Change Post", systemImage: "arrow.triangle.2.circlepath")
-                                    .font(VaultTheme.Typography.body())
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button(role: .destructive, action: { settings.clearPost() }) {
-                                Label("Remove", systemImage: "trash")
-                                    .font(VaultTheme.Typography.body())
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.red)
-                        }
-                    } else {
-                        Button(action: { showingPicker = true }) {
-                            Label("Select Post", systemImage: "photo.on.rectangle.angled")
-                                .font(VaultTheme.Typography.body())
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, VaultTheme.Spacing.sm)
-                        }
-                        .buttonStyle(.borderedProminent)
+                // List of existing entries
+                ForEach(settings.entries) { entry in
+                    entryRow(entry: entry)
+                    if entry.id != settings.entries.last?.id {
+                        Divider().padding(.vertical, 4)
                     }
                 }
+
+                // Add button
+                Button(action: {
+                    editingUserId = nil
+                    showingPicker = true
+                }) {
+                    Label(settings.entries.isEmpty ? "Select Post" : "Add Another Profile",
+                          systemImage: settings.entries.isEmpty ? "photo.on.rectangle.angled" : "plus.circle.fill")
+                        .font(VaultTheme.Typography.body())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, VaultTheme.Spacing.sm)
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
+        }
         .sheet(isPresented: $showingPicker) {
-            ForcePostPickerView()
+            ForcePostPickerView(editingUserId: editingUserId)
+        }
+        .sheet(isPresented: $showingHelp) {
+            ForcePostHelpView(onClose: { showingHelp = false })
+        }
+    }
+
+    @ViewBuilder
+    private func entryRow(entry: ForcedPostEntry) -> some View {
+        HStack(spacing: VaultTheme.Spacing.md) {
+            // Thumbnail
+            if let img = settings.thumbnail(forUserId: entry.userId) {
+                Image(uiImage: img)
+                    .resizable()
+                    .aspectRatio(1, contentMode: .fill)
+                    .frame(width: 54, height: 54)
+                    .clipped()
+                    .cornerRadius(8)
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 54, height: 54)
+                    .overlay(ProgressView().scaleEffect(0.6))
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("@\(entry.username)")
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Text("ID: \(String(entry.mediaId.prefix(14)))…")
+                    .font(.system(size: 10).monospaced())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+            }
+
+            Spacer()
+
+            VStack(spacing: 6) {
+                Button(action: {
+                    editingUserId = entry.userId
+                    showingPicker = true
+                }) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+
+                Button(role: .destructive, action: { settings.clearEntry(userId: entry.userId) }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+            }
         }
     }
 }
@@ -2266,6 +2293,7 @@ struct ForcePostSettingsCard: View {
 struct ForceReelSettingsCard: View {
     @ObservedObject private var settings = ForceReelSettings.shared
     @State private var showingPicker = false
+    @State private var showingHelp   = false
     @State private var editingSlotIndex: Int = 0
     @State private var isExpanded = false
 
@@ -2273,7 +2301,14 @@ struct ForceReelSettingsCard: View {
         CollapsibleCard(icon: "hand.point.up.left.fill", iconColor: SettingsView.colorTricks,
                         title: "force_reel.title",
                         subtitle: "force_reel.subtitle",
-                        isExpanded: $isExpanded) {
+                        isExpanded: $isExpanded,
+                        trailing: {
+                            Button(action: { showingHelp = true }) {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                        }) {
             HStack {
                 Text("settings.enabled")
                     .font(VaultTheme.Typography.body())
@@ -2289,21 +2324,14 @@ struct ForceReelSettingsCard: View {
             if settings.isEnabled {
                 Divider()
 
-                ForEach(settings.slots.filter(\.hasReel)) { slot in
+                if let slot = settings.slots.first(where: \.hasReel) {
                     slotPreview(slot: slot)
-                    if slot.id != settings.slots.filter(\.hasReel).last?.id {
-                        Divider().padding(.vertical, 4)
-                    }
-                }
-
-                if settings.filledSlotCount < ForceReelSettings.maxSlots {
+                } else {
                     Button(action: {
-                        if let nextIdx = settings.nextAvailableSlotIndex() {
-                            editingSlotIndex = nextIdx
-                            showingPicker = true
-                        }
+                        editingSlotIndex = 0
+                        showingPicker = true
                     }) {
-                        Label(settings.hasReel ? String(format: String(localized: "force_reel.add_reel_count"), settings.filledSlotCount) : String(localized: "force_reel.select_reel"),
+                        Label(String(localized: "force_reel.select_reel"),
                               systemImage: "play.rectangle.on.rectangle.fill")
                             .font(VaultTheme.Typography.body())
                             .frame(maxWidth: .infinity)
@@ -2311,19 +2339,13 @@ struct ForceReelSettingsCard: View {
                     }
                     .buttonStyle(.borderedProminent)
                 }
-
-                if settings.filledSlotCount > 1 {
-                    Button(role: .destructive, action: { settings.clearAllReels() }) {
-                        Label(String(localized: "force_reel.remove_all"), systemImage: "trash")
-                            .font(VaultTheme.Typography.body())
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-                }
             }
         }
         .sheet(isPresented: $showingPicker) {
             ForceReelPickerView(slotIndex: editingSlotIndex)
+        }
+        .sheet(isPresented: $showingHelp) {
+            ForceReelHelpView(onClose: { showingHelp = false })
         }
     }
 
@@ -2351,12 +2373,9 @@ struct ForceReelSettingsCard: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: String(localized: "force_reel.slot_n"), slot.id + 1))
+                Text("@\(slot.sourceUsername)")
                     .font(VaultTheme.Typography.bodyBold())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
-                Text("@\(slot.sourceUsername)")
-                    .font(VaultTheme.Typography.caption())
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
                 if settings.downloadingVideo[slot.id] == true {
                     HStack(spacing: 4) {
                         ProgressView().scaleEffect(0.5)
@@ -2397,7 +2416,8 @@ struct ForceNumberRevealSettingsCard: View {
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     @ObservedObject private var dataManager     = DataManager.shared
     @ObservedObject private var secretSettings  = SecretInputSettings.shared
-    @State private var isExpanded = false
+    @State private var isExpanded   = false
+    @State private var showingHelp  = false
 
     @AppStorage("ocr_language")      private var ocrLanguage:      String = "es-ES"
     @AppStorage("ocr_camera")        private var ocrCamera:        Int    = 0
@@ -2439,7 +2459,16 @@ struct ForceNumberRevealSettingsCard: View {
         CollapsibleCard(icon: "number.circle.fill", iconColor: SettingsView.colorTricks,
                         title: "Post Prediction",
                         subtitle: "Unarchive photos from the active set to reveal a prediction",
-                        isExpanded: $isExpanded) {
+                        isExpanded: $isExpanded,
+                        trailing: {
+                            Button(action: { showingHelp = true }) {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.trailing, 4)
+                        }) {
 
             // ── Master enable ────────────────────────────────────────
             HStack {
@@ -2504,6 +2533,9 @@ struct ForceNumberRevealSettingsCard: View {
                 // ── URL Scheme ───────────────────────────────────────
                 PostPredictionURLSchemeView()
             }
+        }
+        .sheet(isPresented: $showingHelp) {
+            PostPredictionHelpView(onClose: { showingHelp = false })
         }
     }
 }

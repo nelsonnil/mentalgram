@@ -61,15 +61,16 @@ struct UserProfileView: View {
 
     // MARK: - Force Post computed helpers
 
-    private var isForcePostTarget: Bool {
-        guard forcePost.isEnabled, !forcePost.forcedMediaURL.isEmpty else { return false }
-        // Compare numerically to handle cases where one ID has leading zeros or different format
-        return forcePost.targetUserId == currentProfile.userId
-            || forcePost.targetUsername.lowercased() == currentProfile.username.lowercased()
+    /// The active forced post entry for the profile currently being viewed.
+    private var activeForceEntry: ForcedPostEntry? {
+        guard forcePost.isEnabled else { return nil }
+        return forcePost.entry(forUserId: currentProfile.userId, orUsername: currentProfile.username)
     }
 
+    private var isForcePostTarget: Bool { activeForceEntry != nil }
+
     private var forcePostActiveURL: String? {
-        isForcePostTarget ? forcePost.forcedMediaURL : nil
+        activeForceEntry?.mediaURL
     }
 
     /// Grid URLs with the forced post removed (spectator doesn't see it in grid)
@@ -82,43 +83,42 @@ struct UserProfileView: View {
 
     /// Checks whether a media URL belongs to the forced post.
     /// CDN URLs expire and change between sessions, so we match by mediaId
-    /// which is stable and embedded in the URL path (e.g. /t51.../3849022646_...).
-    /// We also try direct equality and path equality as fallbacks.
+    /// which is stable and embedded in the URL path.
     private func urlMatchesForced(_ url: String) -> Bool {
-        let forced = forcePost.forcedMediaURL
-        let mediaId = forcePost.forcedMediaId
+        guard let entry = activeForceEntry else { return false }
+        let forced  = entry.mediaURL
+        let mediaId = entry.mediaId
         if url == forced { return true }
-        // Match by mediaId — the numeric ID appears in CDN URL paths
         if !mediaId.isEmpty && (url.contains(mediaId) || forced.contains(mediaId)) {
             return url.contains(mediaId)
         }
-        // Compare path component only (strips CDN query params)
         guard let u1 = URL(string: url), let u2 = URL(string: forced) else { return false }
         return u1.path == u2.path
     }
 
     /// Post viewer URLs with the forced post inserted at the middle
     private var postViewerURLs: [String] {
-        guard isForcePostTarget else { return allMediaURLs }
+        guard let entry = activeForceEntry else { return allMediaURLs }
         var urls = allMediaURLs.filter { !urlMatchesForced($0) }
         let insertAt = min(urls.count / 2, urls.count)
-        urls.insert(forcePost.forcedMediaURL, at: insertAt)
+        urls.insert(entry.mediaURL, at: insertAt)
         return urls
     }
 
     /// Media items dict enriched with the forced post's metadata
     private var postViewerItems: [String: InstagramMediaItem] {
-        guard isForcePostTarget, let item = forcePost.forcedMediaItem else { return mediaItemsByURL }
+        guard let entry = activeForceEntry, let item = entry.mediaItem else { return mediaItemsByURL }
         var items = mediaItemsByURL
-        items[forcePost.forcedMediaURL] = item
+        items[entry.mediaURL] = item
         return items
     }
 
     /// Cached images enriched with the forced post's thumbnail
     private var postViewerCachedImages: [String: UIImage] {
-        guard isForcePostTarget, let img = forcePost.localThumbnailImage else { return cachedImages }
+        guard let entry = activeForceEntry,
+              let img = forcePost.thumbnail(forUserId: entry.userId) else { return cachedImages }
         var images = cachedImages
-        images[forcePost.forcedMediaURL] = img
+        images[entry.mediaURL] = img
         return images
     }
 
@@ -128,6 +128,12 @@ struct UserProfileView: View {
         let filteredURLs = gridURLsForDisplay
         let insertAt = min(filteredURLs.count / 2, filteredURLs.count)
         return gridIndex >= insertAt ? gridIndex + 1 : gridIndex
+    }
+
+    /// Thumbnail of the active forced post, for passing to the scroll interceptor.
+    private var forcePostThumbnail: UIImage? {
+        guard let entry = activeForceEntry else { return nil }
+        return forcePost.thumbnail(forUserId: entry.userId)
     }
 
     var body: some View {
@@ -396,7 +402,8 @@ struct UserProfileView: View {
                             username: currentProfile.username,
                             profileImage: cachedImages[currentProfile.profilePicURL],
                             userId: currentProfile.userId,
-                            forcePostURL: forcePostActiveURL
+                            forcePostURL: forcePostActiveURL,
+                            forcedThumbnail: forcePostThumbnail
                         )
                     }
                 }

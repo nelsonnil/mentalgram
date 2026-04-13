@@ -58,11 +58,11 @@ struct ForceReelSlot: Codable, Identifiable {
     }
 }
 
-// MARK: - ForceReelSettings (manages up to 3 slots)
+// MARK: - ForceReelSettings (manages a single slot)
 
 class ForceReelSettings: ObservableObject {
     static let shared = ForceReelSettings()
-    static let maxSlots = 3
+    static let maxSlots = 1
 
     @Published var isEnabled: Bool {
         didSet { UserDefaults.standard.set(isEnabled, forKey: "forceReel_enabled") }

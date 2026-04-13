@@ -328,10 +328,21 @@ struct PerformanceView: View {
         // cachedImages under the current profilePicURL key so the header and bottom bar
         // update immediately. The override is cleared on the next full profile refresh.
         .onChange(of: profileCache.pendingProfilePic) { newPic in
-            guard let pic = newPic, let url = profile?.profilePicURL, !url.isEmpty else { return }
-            cachedImages[url] = pic
-            print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
-            LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
+            if let pic = newPic {
+                // New local pic available — show immediately regardless of CDN state
+                guard let url = profile?.profilePicURL, !url.isEmpty else { return }
+                cachedImages[url] = pic
+                print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
+                LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
+            } else {
+                // pendingProfilePic cleared → Instagram CDN confirmed the new picture
+                // Fire haptic so the user knows the pic is live on real Instagram
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.prepare()
+                generator.impactOccurred()
+                print("📳 [PERF] Haptic: profile pic confirmed live on Instagram CDN")
+                LogManager.shared.info("Profile pic confirmed live on Instagram (haptic fired)", category: .general)
+            }
         }
         // Instantly reflect a biography update in the fake Instagram profile view.
         // changeBiography() saves to ProfileCacheService on success; we pick it up here.
@@ -1096,18 +1107,27 @@ struct PerformanceView: View {
         
         // Load profile pic
         print("📦 [CACHE] Looking for profile pic: \(String(profile.profilePicURL.prefix(80)))")
-        if let image = ProfileCacheService.shared.loadImage(forURL: profile.profilePicURL) {
+        // If a local pending pic exists (just uploaded, CDN not ready yet) use it immediately.
+        if let pending = ProfileCacheService.shared.pendingProfilePic {
+            cachedImages[profile.profilePicURL] = pending
+            print("⚡️ [CACHE] Profile pic: using pending local image (CDN not waited)")
+        } else if let image = ProfileCacheService.shared.loadImage(forURL: profile.profilePicURL) {
             cachedImages[profile.profilePicURL] = image
             print("✅ [CACHE] Profile pic loaded from cache")
         } else {
             print("⚠️ [CACHE] Profile pic not found in cache, will download")
-            // If not in cache, download it now
             Task {
                 if let image = await downloadImage(from: profile.profilePicURL) {
                     await MainActor.run {
-                        cachedImages[profile.profilePicURL] = image
+                        // Save to disk always (needed for future sessions)
                         ProfileCacheService.shared.saveImage(image, forURL: profile.profilePicURL)
-                        print("✅ [CACHE] Profile pic downloaded and cached")
+                        // Only display from CDN if there's no local pending override
+                        if ProfileCacheService.shared.pendingProfilePic == nil {
+                            cachedImages[profile.profilePicURL] = image
+                            print("✅ [CACHE] Profile pic downloaded and cached")
+                        } else {
+                            print("⚡️ [CACHE] Profile pic downloaded but skipped display (local pending override active)")
+                        }
                     }
                 }
             }
@@ -3179,6 +3199,7 @@ struct PostScrollView: View {
     let profileImage: UIImage?
     let userId: String
     var forcePostURL: String? = nil
+    var forcedThumbnail: UIImage? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var resolvedItems: [String: InstagramMediaItem] = [:]
@@ -3220,7 +3241,8 @@ struct PostScrollView: View {
                             forcedIndex: forcedPostIndex,
                             totalPostCount: mediaURLs.count,
                             hasActivated: $hasForceActivated,
-                            isActive: isForceActive
+                            isActive: isForceActive,
+                            forcedThumbnail: forcedThumbnail
                         )
                         .frame(width: 0, height: 0)
                     }

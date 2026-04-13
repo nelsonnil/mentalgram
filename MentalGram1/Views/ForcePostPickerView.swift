@@ -2,7 +2,10 @@ import SwiftUI
 
 /// Lets the magician search any Instagram profile, browse ALL their posts
 /// (with automatic pagination), and select one to force during the trick.
+/// Pass `editingUserId` when changing an existing entry (pre-fills username).
 struct ForcePostPickerView: View {
+    var editingUserId: String? = nil
+
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = ForcePostSettings.shared
     @ObservedObject private var instagram = InstagramService.shared
@@ -40,17 +43,27 @@ struct ForcePostPickerView: View {
                 Divider()
                 contentArea
             }
-            .navigationTitle("Select Post to Force")
+            .navigationTitle(editingUserId != nil ? "Change Post" : "Add Force Post")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
                 }
-                if settings.hasPost {
+                if let uid = editingUserId, settings.entry(forUserId: uid) != nil {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Clear", role: .destructive) { settings.clearPost() }
-                            .foregroundColor(.red)
+                        Button("Remove", role: .destructive) {
+                            settings.clearEntry(userId: uid)
+                            dismiss()
+                        }
+                        .foregroundColor(.red)
                     }
+                }
+            }
+            .onAppear {
+                // Pre-fill username when editing an existing entry
+                if let uid = editingUserId,
+                   let entry = settings.entry(forUserId: uid) {
+                    usernameInput = entry.username
                 }
             }
             .sheet(isPresented: $showingRelogin) {
@@ -122,7 +135,7 @@ struct ForcePostPickerView: View {
                             PostPickerCell(
                                 post: post,
                                 image: cachedImages[post.imageURL],
-                                isSelected: settings.forcedMediaId == post.mediaId,
+                                isSelected: isPostSelected(post),
                                 onTap: { select(post) }
                             )
                         }
@@ -275,6 +288,15 @@ struct ForcePostPickerView: View {
     }
 
     // MARK: - Helpers
+
+    private func isPostSelected(_ post: InstagramMediaItem) -> Bool {
+        // When editing an existing entry, match against that entry's mediaId.
+        // When adding new, match against any existing entry for the searched user.
+        if let uid = editingUserId {
+            return settings.entry(forUserId: uid)?.mediaId == post.mediaId
+        }
+        return settings.entry(forUserId: searchedUserId)?.mediaId == post.mediaId
+    }
 
     private func select(_ post: InstagramMediaItem) {
         settings.selectPost(item: post, username: searchedUsername, userId: searchedUserId)
