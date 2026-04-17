@@ -76,6 +76,22 @@ struct HomeView: View {
                 Label("Settings", systemImage: "gearshape.fill")
             }
             .tag(2)
+
+            // Guide Tab — only active when logged in
+            Group {
+                if instagram.isLoggedIn {
+                    NavigationView {
+                        UserGuideView()
+                    }
+                } else {
+                    VaultTheme.Colors.background
+                        .ignoresSafeArea()
+                }
+            }
+            .tabItem {
+                Label("Guide", systemImage: "book.fill")
+            }
+            .tag(3)
         }
         .accentColor(selectedTab == 0 ? .primary : VaultTheme.Colors.primary)
         .onChange(of: selectedTab) { newTab in

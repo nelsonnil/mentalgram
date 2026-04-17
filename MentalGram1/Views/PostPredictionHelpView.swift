@@ -294,7 +294,39 @@ struct PostPredictionHelpView: View {
                      text: "postpred.help.tip.upload")
             PPTipRow(icon: "building.columns", color: Color(hex: "A78BFA"),
                      text: "postpred.help.tip.banks")
+            ppRealVsFakeBox
         }
+    }
+
+    private var ppRealVsFakeBox: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color(hex: "FF9F0A"))
+                Text(LocalizedStringKey("postpred.help.tip.fakeapp"))
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "hand.point.right.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color(hex: "30D158"))
+                    .padding(.top, 1)
+                Text(LocalizedStringKey("postpred.help.tip.openprofile"))
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(Color(hex: "FF9F0A").opacity(0.07))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(hex: "FF9F0A").opacity(0.3), lineWidth: 1)
+        )
     }
 }
 

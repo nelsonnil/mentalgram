@@ -201,6 +201,8 @@
 "My Sets" = "Meine Sets";
 "Settings" = "Einstellungen";
 "Performance" = "Auftritt";
+"Guide" = "Guide";
+"User Guide" = "Benutzerhandbuch";
 "Activity" = "Aktivität";
 "Logs" = "Protokolle";
 "Integrations" = "Integrationen";
@@ -797,6 +799,8 @@
 "postpred.help.tip.position" = "**Ursprungliche Position.** Das Foto erscheint genau dort, wo es im Raster war, mit seinem ursprunglichen Datum. Moglicherweise muss gescrollt werden.";
 "postpred.help.tip.upload" = "**Wahrend des Uploads.** Verwenden Sie die App nicht, wechseln Sie nicht das WLAN-Netz und sperren Sie den Bildschirm nicht. Eine Benachrichtigung fordert Sie auf, zwischen den Uploads zuruckzukehren.";
 "postpred.help.tip.banks" = "**Anzahl der Banken.** Jede Bank = eine Buchstaben- oder Ziffernposition. Planen Sie Ihre Sets entsprechend dem langsten Wort oder der langsten Zahl, die Sie enthullen mochten.";
+"postpred.help.tip.fakeapp" = "**Fake-Profil = sofortige Vorschau, echtes Instagram = nach der Vibration.** Die Vorhersage erscheint sofort im App-Fake-Profil – aber sie ist noch nicht auf echtem Instagram verfügbar. Warte auf das haptische Feedback, bevor du fortfährst.";
+"postpred.help.tip.openprofile" = "**Öffne zuerst dein echtes Instagram-Profil.** Nachdem die Vibration den Upload bestätigt, öffne dein eigenes Instagram-Profil, bevor du den Zuschauer einlädst zu schauen. Dadurch wird der Inhalt im Feed geladen. Wenn der Zuschauer zuerst aktualisiert, muss er möglicherweise nach unten scrollen.";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "Schrittweiser Upload";

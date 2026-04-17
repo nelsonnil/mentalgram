@@ -98,6 +98,55 @@ private struct IPHOCRBox: View {
     }
 }
 
+private struct IPHRealVsFakeBox: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color(hex: "FF9F0A"))
+                Text("Fake app vs. real Instagram")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+            }
+
+            Text("The app's fake profile shows the prediction **instantly** — but this is only a local preview. It is not yet live on real Instagram.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "iphone.radiowaves.left.and.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "FF9F0A"))
+                    .padding(.top, 1)
+                Text("The app **vibrates** when the upload or unarchive is confirmed on real Instagram. Wait for that signal before proceeding.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "hand.point.right.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "30D158"))
+                    .padding(.top, 1)
+                Text("**After the vibration**, open the real Instagram profile yourself first — this loads the content in the feed. If the spectator looks before you do, they may need to scroll down to see it.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(Color(hex: "FF9F0A").opacity(0.07))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(hex: "FF9F0A").opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
 private var iphDivider: some View {
     Rectangle()
         .fill(Color(hex: "#2C2C2E"))
@@ -239,15 +288,16 @@ struct ProfilePictureHelpView: View {
     }
 
     private var duringShow: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             IPHBullet(icon: "1.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Prepare the prediction photo in your camera roll before the performance.")
             IPHBullet(icon: "2.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Enable \"Auto on Performance open\" or have a URL Scheme shortcut ready.")
             IPHBullet(icon: "3.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Open the Performance tab — the photo uploads automatically and appears as your Instagram profile picture.")
+                      text: "Open the Performance tab — the photo uploads automatically and appears in the fake profile instantly.")
             IPHBullet(icon: "4.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Show the spectator your Instagram profile to reveal the prediction.")
+                      text: "Wait for the vibration confirming the upload on real Instagram, then open your own Instagram profile before showing the spectator.")
+            IPHRealVsFakeBox()
         }
     }
 
@@ -382,15 +432,16 @@ struct NoteHelpView: View {
     }
 
     private var duringShow: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             IPHBullet(icon: "1.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Ask the spectator to think of or write a short word (max 60 characters).")
             IPHBullet(icon: "2.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Use OCR to read it covertly, or enter it manually before the performance.")
             IPHBullet(icon: "3.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Open Performance — the note posts automatically (with API or URL Scheme) or tap \"Send Note\".")
+                      text: "Open Performance — the note posts automatically (with API or URL Scheme) or tap \"Send Note\". It appears in the fake profile instantly.")
             IPHBullet(icon: "4.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Show the spectator your Instagram profile: your note at the top matches exactly what they thought of.")
+                      text: "Wait for the vibration confirming the note is live on real Instagram, then open your own profile before the spectator looks.")
+            IPHRealVsFakeBox()
         }
     }
 
@@ -527,15 +578,16 @@ struct BiographyHelpView: View {
     }
 
     private var duringShow: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             IPHBullet(icon: "1.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Have the spectator write or choose a word / phrase beforehand (up to 150 characters).")
             IPHBullet(icon: "2.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Capture it via OCR, load it via API, or type it manually before the performance.")
             IPHBullet(icon: "3.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Open Performance (or trigger the URL Scheme) — the biography updates automatically.")
+                      text: "Open Performance (or trigger the URL Scheme) — the biography updates in the fake profile instantly.")
             IPHBullet(icon: "4.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Visit your Instagram profile from any device to show the spectator their prediction in your bio.")
+                      text: "Wait for the vibration confirming the bio is live on real Instagram, then visit your own Instagram profile before showing the spectator.")
+            IPHRealVsFakeBox()
         }
     }
 

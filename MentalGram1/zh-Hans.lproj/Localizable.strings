@@ -193,6 +193,8 @@
 "My Sets" = "我的集合";
 "Settings" = "设置";
 "Performance" = "表演";
+"Guide" = "指南";
+"User Guide" = "用户指南";
 "Activity" = "活动";
 "Logs" = "日志";
 "Integrations" = "集成";
@@ -624,6 +626,8 @@
 "postpred.help.tip.position" = "**原始位置。** 照片在网格的原始位置以原始日期重新出现，可能需要滑动才能找到。";
 "postpred.help.tip.upload" = "**上传期间。** 不要使用应用，不要更换Wi-Fi网络，不要锁屏。";
 "postpred.help.tip.banks" = "**库的数量。** 每个库=一个字母或数字的位置。根据要揭示的最长单词或数字规划您的合集。";
+"postpred.help.tip.fakeapp" = "**虚假档案 = 即时预览，真实 Instagram = 震动后。** 预言在触发后立即显示在应用的虚假档案中——但尚未在真实 Instagram 上发布。在继续之前，请等待触觉反馈。";
+"postpred.help.tip.openprofile" = "**先打开你的真实 Instagram 个人资料。** 震动确认上传后，在邀请观众查看之前，先打开自己的 Instagram 个人资料。这样可以将内容加载到动态中——如果观众先刷新，可能需要向下滚动才能看到。";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "逐步上传";

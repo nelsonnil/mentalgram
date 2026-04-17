@@ -201,6 +201,8 @@
 "My Sets" = "I miei set";
 "Settings" = "Impostazioni";
 "Performance" = "Performance";
+"Guide" = "Guida";
+"User Guide" = "Guida utente";
 "Activity" = "Attività";
 "Logs" = "Registri";
 "Integrations" = "Integrazioni";
@@ -797,6 +799,8 @@
 "postpred.help.tip.position" = "**Posizione originale.** La foto riappare esattamente dove era nella griglia, con la sua data originale. Potrebbe essere necessario scorrere per trovarla.";
 "postpred.help.tip.upload" = "**Durante il caricamento.** Non usare l'app, non cambiare rete Wi-Fi e non bloccare lo schermo. Una notifica ti invita a tornare tra un caricamento e l'altro.";
 "postpred.help.tip.banks" = "**Numero di Banche.** Ogni banca = una posizione di lettera o cifra. Pianifica i set in base alla parola o al numero piu lungo che vuoi rivelare.";
+"postpred.help.tip.fakeapp" = "**Profilo falso = anteprima istantanea, Instagram reale = dopo la vibrazione.** La previsione appare subito nel profilo falso dell'app — ma non è ancora disponibile su Instagram reale. Aspetta il feedback aptico prima di procedere.";
+"postpred.help.tip.openprofile" = "**Apri prima il tuo vero profilo Instagram.** Dopo che la vibrazione conferma il caricamento, apri il tuo profilo Instagram prima di invitare lo spettatore a guardare. Questo carica il contenuto nel feed; se lo spettatore aggiorna per primo, potrebbe dover scorrere verso il basso per vederlo.";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "Upload progressivo";

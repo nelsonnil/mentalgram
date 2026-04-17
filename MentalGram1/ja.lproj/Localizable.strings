@@ -193,6 +193,8 @@
 "My Sets" = "マイセット";
 "Settings" = "設定";
 "Performance" = "パフォーマンス";
+"Guide" = "ガイド";
+"User Guide" = "ユーザーガイド";
 "Activity" = "アクティビティ";
 "Logs" = "ログ";
 "Integrations" = "連携";
@@ -564,6 +566,8 @@
 "postpred.help.tip.position" = "**元の位置。** 写真はグリッドの元の場所に、元の日付で再表示されます。スクロールが必要な場合があります。";
 "postpred.help.tip.upload" = "**アップロード中。** アプリを使用せず、Wi-Fiネットワークを変えず、画面をロックしないでください。";
 "postpred.help.tip.banks" = "**バンク数。** 各バンク = 1つの文字または数字の位置。公開したい最も長い単語や数字に合わせてセットを計画してください。";
+"postpred.help.tip.fakeapp" = "**フェイクプロフィール＝即時プレビュー、本物のInstagram＝バイブレーション後。** 予言はアプリのフェイクプロフィールにすぐ表示されますが、まだ本物のInstagramでは公開されていません。先に進む前にハプティクスフィードバックを待ってください。";
+"postpred.help.tip.openprofile" = "**まず自分の本物のInstagramプロフィールを開いてください。** アップロードを確認するバイブレーションの後、観客を招く前に自分のInstagramプロフィールを開いてください。これによりフィードにコンテンツが読み込まれます。観客が先に更新した場合、下にスクロールする必要があるかもしれません。";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "段階的アップロード";

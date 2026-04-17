@@ -201,6 +201,8 @@
 "My Sets" = "Mis sets";
 "Settings" = "Ajustes";
 "Performance" = "Actuación";
+"Guide" = "Guía";
+"User Guide" = "Guía de usuario";
 "Activity" = "Actividad";
 "Logs" = "Registros";
 "Integrations" = "Integraciones";
@@ -846,6 +848,8 @@
 "postpred.help.tip.position" = "**Posicion original.** La foto reaparece exactamente donde estaba en la cuadricula, con su fecha original. Puede ser necesario desplazarse para encontrarla.";
 "postpred.help.tip.upload" = "**Durante la subida.** No uses la app, no cambies de red Wi-Fi ni bloquees la pantalla. Una notificacion te avisa para que vuelvas entre cada subida.";
 "postpred.help.tip.banks" = "**Numero de Bancos.** Cada banco = una posicion de letra o digito. Planifica tus sets en funcion de la palabra o numero mas largo que quieras revelar.";
+"postpred.help.tip.fakeapp" = "**Vista previa = instantánea, Instagram real = tras la vibración.** La predicción aparece en el perfil falso de la app en el momento en que se activa, pero aún no está disponible en Instagram real. Espera la vibración háptica antes de proceder.";
+"postpred.help.tip.openprofile" = "**Abre tu perfil de Instagram real primero.** Tras la vibración que confirma la subida, abre tu propio perfil de Instagram antes de invitar al espectador a mirar. Esto carga el contenido en el feed; si el espectador refresca antes, puede que tenga que hacer scroll hacia abajo para verlo.";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "Subida progresiva";

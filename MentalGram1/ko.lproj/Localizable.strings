@@ -193,6 +193,8 @@
 "My Sets" = "내 세트";
 "Settings" = "설정";
 "Performance" = "퍼포먼스";
+"Guide" = "가이드";
+"User Guide" = "사용자 가이드";
 "Activity" = "활동";
 "Logs" = "로그";
 "Integrations" = "연동";
@@ -564,6 +566,8 @@
 "postpred.help.tip.position" = "**원래 위치.** 사진은 그리드의 원래 위치에, 원래 날짜로 다시 나타납니다.";
 "postpred.help.tip.upload" = "**업로드 중.** 앱을 사용하지 말고, Wi-Fi 네트워크를 변경하거나 화면을 잠그지 마세요.";
 "postpred.help.tip.banks" = "**뱅크 수.** 각 뱅크 = 문자 또는 숫자 하나의 위치. 공개하려는 가장 긴 단어나 숫자에 맞게 세트를 계획하세요.";
+"postpred.help.tip.fakeapp" = "**가짜 프로필 = 즉시 미리보기, 실제 Instagram = 진동 후.** 예언은 앱의 가짜 프로필에 즉시 나타나지만, 아직 실제 Instagram에 공개된 것은 아닙니다. 계속 진행하기 전에 햅틱 피드백을 기다리세요.";
+"postpred.help.tip.openprofile" = "**먼저 실제 Instagram 프로필을 여세요.** 진동이 업로드를 확인한 후, 관객을 초대하기 전에 자신의 Instagram 프로필을 여세요. 이렇게 하면 피드에 콘텐츠가 로드됩니다. 관객이 먼저 새로고침하면 아래로 스크롤해야 볼 수 있습니다.";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "순차적 업로드";

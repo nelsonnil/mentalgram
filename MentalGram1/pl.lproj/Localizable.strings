@@ -193,6 +193,8 @@
 "My Sets" = "Moje sety";
 "Settings" = "Ustawienia";
 "Performance" = "Występ";
+"Guide" = "Przewodnik";
+"User Guide" = "Przewodnik użytkownika";
 "Activity" = "Aktywność";
 "Logs" = "Dzienniki";
 "Integrations" = "Integracje";
@@ -564,6 +566,8 @@
 "postpred.help.tip.position" = "**Oryginalna pozycja.** Zdjecie pojawia sie tam, gdzie bylo w siatce, z oryginaln. dat..";
 "postpred.help.tip.upload" = "**Podczas przesylania.** Nie uzywaj aplikacji, nie zmieniaj sieci Wi-Fi i nie blokuj ekranu.";
 "postpred.help.tip.banks" = "**Liczba bankow.** Kazdy bank = jedna pozycja litery lub cyfry. Planuj zestawy pod katem najdluzszego slowa lub liczby, ktr. chcesz ujawnic.";
+"postpred.help.tip.fakeapp" = "**Fałszywy profil = natychmiastowy podgląd, prawdziwy Instagram = po wibracjach.** Przepowiednia pojawia się w fałszywym profilu aplikacji w momencie aktywacji — ale nie jest jeszcze dostępna na prawdziwym Instagramie. Poczekaj na wibrację haptyczną przed kontynuowaniem.";
+"postpred.help.tip.openprofile" = "**Najpierw otwórz swój prawdziwy profil na Instagramie.** Po tym jak wibracja potwierdzi przesłanie, otwórz swój własny profil na Instagramie zanim zaprosisz widza do spojrzenia. Dzięki temu treść zostanie załadowana w feedzie — jeśli widz odświeży wcześniej, może potrzebować przewinąć w dół, aby ją zobaczyć.";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "Stopniowe przesyłanie";

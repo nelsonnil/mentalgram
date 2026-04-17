@@ -5,6 +5,7 @@ import WebKit
 
 struct LoginView: View {
     @ObservedObject var instagram = InstagramService.shared
+    @State private var showCookieWarning = false
     @State private var showWebLogin = false
     
     var body: some View {
@@ -29,7 +30,7 @@ struct LoginView: View {
             
             // Login button
             VStack(spacing: 16) {
-                Button(action: { showWebLogin = true }) {
+                Button(action: { showCookieWarning = true }) {
                     HStack {
                         Image(systemName: "person.badge.key.fill")
                         Text("Connect Account")
@@ -50,8 +51,159 @@ struct LoginView: View {
             
             Spacer()
         }
+        .sheet(isPresented: $showCookieWarning) {
+            CookieConsentWarningView {
+                showCookieWarning = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    showWebLogin = true
+                }
+            }
+        }
         .sheet(isPresented: $showWebLogin) {
             InstagramWebLoginView(isPresented: $showWebLogin)
+        }
+    }
+}
+
+// MARK: - Cookie Consent Warning
+
+private struct CookieConsentWarningView: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Handle
+            Capsule()
+                .fill(Color.secondary.opacity(0.4))
+                .frame(width: 36, height: 4)
+                .padding(.top, 10)
+                .padding(.bottom, 20)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+
+                    // Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.orange.opacity(0.15))
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: "hand.raised.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.orange)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Important before logging in")
+                                    .font(.system(size: 18, weight: .bold))
+                                Text("Read this before continuing")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    // Cookie notice
+                    VStack(alignment: .leading, spacing: 14) {
+                        cookieRow(
+                            icon: "checkmark.shield.fill",
+                            iconColor: Color.orange,
+                            title: "Accept all cookies",
+                            body: "Instagram will show a cookie banner when the page loads. You must tap **\"Allow all cookies\"** (or equivalent). Without cookies the session cannot be saved and the login will fail."
+                        )
+
+                        Divider()
+
+                        cookieRow(
+                            icon: "key.fill",
+                            iconColor: Color.purple,
+                            title: "Why are cookies needed?",
+                            body: "This app connects to Instagram using the same session cookies your browser uses. Accepting cookies lets Instagram create the **sessionid** token that the app reads to authenticate your account securely."
+                        )
+
+                        Divider()
+
+                        cookieRow(
+                            icon: "exclamationmark.triangle.fill",
+                            iconColor: Color(hex: "FF9F0A"),
+                            title: "If you see a verification step",
+                            body: "Instagram may ask you to verify your identity (email or phone code). Complete it normally — the app will resume the session automatically once verification is done."
+                        )
+                    }
+                    .padding(16)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(14)
+
+                    // Step summary
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Steps once the page opens")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+
+                        stepRow(number: "1", text: "Tap **\"Allow all cookies\"** on the cookie banner")
+                        stepRow(number: "2", text: "Enter your Instagram username and password")
+                        stepRow(number: "3", text: "Complete any verification Instagram requests")
+                        stepRow(number: "4", text: "The app closes the browser automatically once you are in")
+                    }
+
+                    // Continue button
+                    Button(action: onContinue) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("I understand — open Instagram")
+                        }
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.purple)
+                        .cornerRadius(14)
+                    }
+
+                    Spacer(minLength: 20)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cookieRow(icon: String, iconColor: Color, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundColor(iconColor)
+                .frame(width: 24)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(.init(body))
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func stepRow(number: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color.purple.opacity(0.15))
+                    .frame(width: 24, height: 24)
+                Text(number)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.purple)
+            }
+            Text(.init(text))
+                .font(.system(size: 14))
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 3)
         }
     }
 }

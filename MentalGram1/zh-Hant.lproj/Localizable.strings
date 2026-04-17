@@ -193,6 +193,8 @@
 "My Sets" = "我的集合";
 "Settings" = "設定";
 "Performance" = "表演";
+"Guide" = "指南";
+"User Guide" = "使用者指南";
 "Activity" = "活動";
 "Logs" = "日誌";
 "Integrations" = "整合";
@@ -564,6 +566,8 @@
 "postpred.help.tip.position" = "**原始位置。** 照片在格線的原始位置以原始日期重新出現，可能需要滑動才能找到。";
 "postpred.help.tip.upload" = "**上傳期間。** 不要使用應用程式，不要更換Wi-Fi網路，不要鎖定螢幕。";
 "postpred.help.tip.banks" = "**庫的數量。** 每個庫=一個字母或數字的位置。根據要揭示的最長單詞或數字規劃您的合集。";
+"postpred.help.tip.fakeapp" = "**假側寫 = 即時預覽，真實 Instagram = 震動後。** 預言在觸發後立即顯示在應用程式的假側寫中——但尚未在真實 Instagram 上發佈。在繼續之前，請等待觸覺回饋。";
+"postpred.help.tip.openprofile" = "**先開啟你的真實 Instagram 個人資料。** 震動確認上傳後，在邀請觀眾查看之前，先開啟自己的 Instagram 個人資料。這樣可以將內容載入動態消息中——如果觀眾先重新整理，可能需要向下捲動才能看到。";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "逐步上傳";

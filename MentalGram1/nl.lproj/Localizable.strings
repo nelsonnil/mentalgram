@@ -193,6 +193,8 @@
 "My Sets" = "Mijn sets";
 "Settings" = "Instellingen";
 "Performance" = "Optreden";
+"Guide" = "Gids";
+"User Guide" = "Gebruikershandleiding";
 "Activity" = "Activiteit";
 "Logs" = "Logboeken";
 "Integrations" = "Integraties";
@@ -564,6 +566,8 @@
 "postpred.help.tip.position" = "**Oorspronkelijke positie.** De foto verschijnt op exact dezelfde plek in het raster met de oorspronkelijke datum.";
 "postpred.help.tip.upload" = "**Tijdens het uploaden.** Gebruik de app niet, wissel niet van Wi-Fi-netwerk en vergrendel het scherm niet.";
 "postpred.help.tip.banks" = "**Aantal banken.** Elke bank = een letter- of cijferpositie. Plan uw sets op basis van het langste woord of getal dat u wilt onthullen.";
+"postpred.help.tip.fakeapp" = "**Nepprofiel = directe preview, echt Instagram = na de trilling.** De voorspelling verschijnt meteen in het nepprofiel van de app — maar staat nog niet op echt Instagram. Wacht op de haptische feedback voordat je verdergaat.";
+"postpred.help.tip.openprofile" = "**Open eerst je echte Instagram-profiel.** Nadat de trilling de upload bevestigt, open je eigen Instagram-profiel voordat je de toeschouwer uitnodigt te kijken. Dit laadt de inhoud in de feed — als de toeschouwer eerst ververst, moet hij mogelijk naar beneden scrollen om het te zien.";
 
 // Set upload — progressive upload info banner
 "set.upload.info.title"   = "Progressief uploaden";
