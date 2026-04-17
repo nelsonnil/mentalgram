@@ -886,6 +886,15 @@ struct SettingsView: View {
             noteCard
             biographyCard
         }
+        .sheet(isPresented: $showProfilePicHelp) {
+            ProfilePictureHelpView(onClose: { showProfilePicHelp = false })
+        }
+        .sheet(isPresented: $showNoteHelp) {
+            NoteHelpView(onClose: { showNoteHelp = false })
+        }
+        .sheet(isPresented: $showBioHelp) {
+            BiographyHelpView(onClose: { showBioHelp = false })
+        }
         Spacer().frame(height: 28)
     }
 
@@ -964,7 +973,6 @@ struct SettingsView: View {
     // MARK: - Profile Picture Card
 
     @ViewBuilder private var profilePictureCard: some View {
-        Group {
         collapsibleCard(icon: "person.crop.circle.fill", iconColor: Self.colorProfile,
                         title: "Profile Picture", subtitle: "Change your Instagram profile photo",
                         isExpanded: $profilePicExpanded,
@@ -997,16 +1005,11 @@ struct SettingsView: View {
             modernDivider()
             profilePicURLSchemesContent
         }
-        }
-        .sheet(isPresented: $showProfilePicHelp) {
-            ProfilePictureHelpView(onClose: { showProfilePicHelp = false })
-        }
     }
 
     // MARK: - Note Card
 
     @ViewBuilder private var noteCard: some View {
-        Group {
         collapsibleCard(icon: "bubble.left.fill", iconColor: Self.colorProfile,
                         title: "Note", subtitle: "Visible above your profile picture for 24h",
                         isExpanded: $noteExpanded,
@@ -1038,16 +1041,11 @@ struct SettingsView: View {
                          detail: "Open this URL to send a note when Performance opens",
                          url: noteText.isEmpty ? "vault://note?text=<your text>" : URLActionManager.buildURL(mode: "note", text: noteText))
         }
-        }
-        .sheet(isPresented: $showNoteHelp) {
-            NoteHelpView(onClose: { showNoteHelp = false })
-        }
     }
 
     // MARK: - Biography Card
 
     @ViewBuilder private var biographyCard: some View {
-        Group {
         collapsibleCard(icon: "text.alignleft", iconColor: Self.colorProfile,
                         title: "Biography", subtitle: "Appears on your Instagram profile page",
                         isExpanded: $bioExpanded,
@@ -1090,10 +1088,6 @@ struct SettingsView: View {
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to update biography when Performance opens",
                          url: bioText.isEmpty ? "vault://bio?text=<your text>" : URLActionManager.buildURL(mode: "bio", text: bioText))
-        }
-        }
-        .sheet(isPresented: $showBioHelp) {
-            BiographyHelpView(onClose: { showBioHelp = false })
         }
     }
 
