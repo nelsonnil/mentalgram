@@ -972,8 +972,8 @@ struct SettingsView: View {
 
     // MARK: - Profile Picture Card
 
-    @ViewBuilder private var profilePictureCard: some View {
-        collapsibleCard(icon: "person.crop.circle.fill", iconColor: Self.colorProfile,
+    private var profilePictureCard: some View {
+        AnyView(collapsibleCard(icon: "person.crop.circle.fill", iconColor: Self.colorProfile,
                         title: "Profile Picture", subtitle: "Change your Instagram profile photo",
                         isExpanded: $profilePicExpanded,
                         helpAction: { showProfilePicHelp = true }) {
@@ -1004,13 +1004,13 @@ struct SettingsView: View {
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
             profilePicURLSchemesContent
-        }
+        })
     }
 
     // MARK: - Note Card
 
-    @ViewBuilder private var noteCard: some View {
-        collapsibleCard(icon: "bubble.left.fill", iconColor: Self.colorProfile,
+    private var noteCard: some View {
+        AnyView(collapsibleCard(icon: "bubble.left.fill", iconColor: Self.colorProfile,
                         title: "Note", subtitle: "Visible above your profile picture for 24h",
                         isExpanded: $noteExpanded,
                         helpAction: { showNoteHelp = true }) {
@@ -1040,13 +1040,13 @@ struct SettingsView: View {
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to send a note when Performance opens",
                          url: noteText.isEmpty ? "vault://note?text=<your text>" : URLActionManager.buildURL(mode: "note", text: noteText))
-        }
+        })
     }
 
     // MARK: - Biography Card
 
-    @ViewBuilder private var biographyCard: some View {
-        collapsibleCard(icon: "text.alignleft", iconColor: Self.colorProfile,
+    private var biographyCard: some View {
+        AnyView(collapsibleCard(icon: "text.alignleft", iconColor: Self.colorProfile,
                         title: "Biography", subtitle: "Appears on your Instagram profile page",
                         isExpanded: $bioExpanded,
                         helpAction: { showBioHelp = true }) {
@@ -1088,7 +1088,7 @@ struct SettingsView: View {
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to update biography when Performance opens",
                          url: bioText.isEmpty ? "vault://bio?text=<your text>" : URLActionManager.buildURL(mode: "bio", text: bioText))
-        }
+        })
     }
 
     // MARK: - Section accent colors (internal so CollapsibleCard structs can reference them)
