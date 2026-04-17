@@ -711,6 +711,9 @@ struct SettingsView: View {
     @State private var profilePicExpanded = false
     @State private var noteExpanded = false
     @State private var bioExpanded = false
+    @State private var showProfilePicHelp = false
+    @State private var showNoteHelp = false
+    @State private var showBioHelp = false
     // TEST: Archive access
     
     var body: some View {
@@ -961,9 +964,11 @@ struct SettingsView: View {
     // MARK: - Profile Picture Card
 
     @ViewBuilder private var profilePictureCard: some View {
+        Group {
         collapsibleCard(icon: "person.crop.circle.fill", iconColor: Self.colorProfile,
                         title: "Profile Picture", subtitle: "Change your Instagram profile photo",
-                        isExpanded: $profilePicExpanded) {
+                        isExpanded: $profilePicExpanded,
+                        helpAction: { showProfilePicHelp = true }) {
             modernToggleRow(icon: "wand.and.stars", iconColor: Self.colorProfile,
                             title: "Auto on Performance open",
                             detail: "Uploads the latest gallery photo each time Performance opens",
@@ -992,14 +997,20 @@ struct SettingsView: View {
             modernDivider()
             profilePicURLSchemesContent
         }
+        }
+        .sheet(isPresented: $showProfilePicHelp) {
+            ProfilePictureHelpView(onClose: { showProfilePicHelp = false })
+        }
     }
 
     // MARK: - Note Card
 
     @ViewBuilder private var noteCard: some View {
+        Group {
         collapsibleCard(icon: "bubble.left.fill", iconColor: Self.colorProfile,
                         title: "Note", subtitle: "Visible above your profile picture for 24h",
-                        isExpanded: $noteExpanded) {
+                        isExpanded: $noteExpanded,
+                        helpAction: { showNoteHelp = true }) {
             VStack(alignment: .trailing, spacing: 4) {
                 TextField("Write a note…", text: $noteText)
                     .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
@@ -1027,14 +1038,20 @@ struct SettingsView: View {
                          detail: "Open this URL to send a note when Performance opens",
                          url: noteText.isEmpty ? "vault://note?text=<your text>" : URLActionManager.buildURL(mode: "note", text: noteText))
         }
+        }
+        .sheet(isPresented: $showNoteHelp) {
+            NoteHelpView(onClose: { showNoteHelp = false })
+        }
     }
 
     // MARK: - Biography Card
 
     @ViewBuilder private var biographyCard: some View {
+        Group {
         collapsibleCard(icon: "text.alignleft", iconColor: Self.colorProfile,
                         title: "Biography", subtitle: "Appears on your Instagram profile page",
-                        isExpanded: $bioExpanded) {
+                        isExpanded: $bioExpanded,
+                        helpAction: { showBioHelp = true }) {
             let currentBio = ProfileCacheService.shared.cachedProfile?.biography ?? ""
             VStack(alignment: .trailing, spacing: 4) {
                 ZStack(alignment: .topLeading) {
@@ -1073,6 +1090,10 @@ struct SettingsView: View {
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to update biography when Performance opens",
                          url: bioText.isEmpty ? "vault://bio?text=<your text>" : URLActionManager.buildURL(mode: "bio", text: bioText))
+        }
+        }
+        .sheet(isPresented: $showBioHelp) {
+            BiographyHelpView(onClose: { showBioHelp = false })
         }
     }
 
@@ -1133,6 +1154,7 @@ struct SettingsView: View {
         icon: String, iconColor: Color, title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
         isExpanded: Binding<Bool>,
+        helpAction: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1149,6 +1171,14 @@ struct SettingsView: View {
                     }
                 }
                 Spacer()
+                if let helpAction = helpAction {
+                    Button(action: helpAction) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 18))
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
                 Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.down")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textSecondary)
