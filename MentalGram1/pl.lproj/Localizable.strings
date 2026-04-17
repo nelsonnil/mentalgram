@@ -564,3 +564,8 @@
 "postpred.help.tip.position" = "**Oryginalna pozycja.** Zdjecie pojawia sie tam, gdzie bylo w siatce, z oryginaln. dat..";
 "postpred.help.tip.upload" = "**Podczas przesylania.** Nie uzywaj aplikacji, nie zmieniaj sieci Wi-Fi i nie blokuj ekranu.";
 "postpred.help.tip.banks" = "**Liczba bankow.** Kazdy bank = jedna pozycja litery lub cyfry. Planuj zestawy pod katem najdluzszego slowa lub liczby, ktr. chcesz ujawnic.";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "Stopniowe przesyłanie";
+"set.upload.info.body"    = "Aplikacja będzie przesyłać zdjęcia jedno po drugim, utrzymując ekran aktywny. Jeśli opuścisz aplikację, powiadomienie poinformuje cię przed każdym kolejnym przesyłaniem, abyś mógł wrócić na czas.";
+"set.upload.info.sleep"   = "Trzymaj ekran włączony i pozostań w aplikacji podczas przesyłania.";

@@ -2808,12 +2808,22 @@ private struct PostPredictionURLSchemeView: View {
 struct FollowingMagicSettingsCard: View {
     @ObservedObject private var settings = FollowingMagicSettings.shared
     @State private var isExpanded = false
+    @State private var showingHelp = false
 
     var body: some View {
+        Group {
         CollapsibleCard(icon: "person.2.fill", iconColor: SettingsView.colorTricks,
                         title: "Counter Glitch Effect",
                         subtitle: "Inflate a follower or following count with a countdown",
-                        isExpanded: $isExpanded) {
+                        isExpanded: $isExpanded,
+                        trailing: {
+                            Button { showingHelp = true } label: {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                            }
+                            .buttonStyle(.plain)
+                        }) {
             HStack {
                 Text("Enabled")
                     .font(VaultTheme.Typography.body())
@@ -2915,6 +2925,11 @@ struct FollowingMagicSettingsCard: View {
                 }
             }
         }
+        .sheet(isPresented: $showingHelp) {
+            CounterGlitchHelpView(onClose: { showingHelp = false })
+                .preferredColorScheme(.light)
+        }
+    }
 }
 
 // MARK: - Date Force Settings Card (El Oráculo Social)
@@ -2987,29 +3002,39 @@ struct DateForceSettingsCard: View {
                                 Text(settings.timeOffsetMinutes == 0 ? "Off" : "+\(settings.timeOffsetMinutes) min")
                                     .font(VaultTheme.Typography.captionSmall())
                                     .foregroundColor(VaultTheme.Colors.primary)
+                                    .animation(.easeInOut(duration: 0.15), value: settings.timeOffsetMinutes)
                             }
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(0...5, id: \.self) { n in
-                                        let isSelected = settings.timeOffsetMinutes == n
-                                        Button(action: { settings.timeOffsetMinutes = n }) {
-                                            Text(n == 0 ? "Off" : "+\(n)m")
-                                                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                                                .padding(.horizontal, 14)
-                                                .padding(.vertical, 6)
-                                                .background(isSelected ? VaultTheme.Colors.primary : VaultTheme.Colors.backgroundSecondary)
-                                                .foregroundColor(isSelected ? .white : VaultTheme.Colors.textPrimary)
-                                                .cornerRadius(20)
-                                        }
-                                    }
-                                }
+                            Slider(
+                                value: Binding(
+                                    get: { Double(settings.timeOffsetMinutes) },
+                                    set: { settings.timeOffsetMinutes = Int($0.rounded()) }
+                                ),
+                                in: 0...5,
+                                step: 1
+                            )
+                            .tint(settings.timeOffsetMinutes == 0 ? VaultTheme.Colors.textTertiary : VaultTheme.Colors.primary)
+                            HStack {
+                                Text("Off")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                                Spacer()
+                                Text("+5 min")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
                             }
                         }
                     }
 
                     Divider()
 
-                    // Mode selector
+                    // Mode info (auto only — dual temporarily disabled)
+                    Text("App captures new followers automatically during Performance. Open 'Followed by' to manage spectators.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    #if false
+                    // MARK: - Mode selector (dual mode temporarily disabled)
                     VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                         Text("Mode")
                             .font(VaultTheme.Typography.captionSmall())
@@ -3036,10 +3061,9 @@ struct DateForceSettingsCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    // Auto: spectator count selector
+                    // Spectator count selector (now handled in Performance via baseline snapshot)
                     if settings.mode == .auto {
                         Divider()
-
                         VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                             HStack {
                                 Text("Spectators to capture")
@@ -3076,10 +3100,9 @@ struct DateForceSettingsCard: View {
                         }
                     }
 
-                    // Dual: info row (no selector needed)
+                    // Dual info row
                     if settings.mode == .dual {
                         Divider()
-
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Automatic split")
                                 .font(VaultTheme.Typography.captionSmall())
@@ -3089,6 +3112,7 @@ struct DateForceSettingsCard: View {
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
                     }
+                    #endif
 
                     Divider()
 

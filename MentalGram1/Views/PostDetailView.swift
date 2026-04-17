@@ -486,8 +486,8 @@ struct PostPageView: View {
                 }
             }
 
-            // Forced followers/following stats (Date Force active)
-            if dateForce.isEnabled && dateForce.hasSpectators {
+            // Forced followers/following stats (Date Force active — shown only when fully loaded)
+            if dateForce.isEnabled && dateForce.hasSpectators && !dateForce.isAutoLoading {
                 HStack(spacing: 16) {
                     HStack(spacing: 4) {
                         Text(DateForceSettings.formatExact(dateForce.overrideFollowers))

@@ -797,3 +797,8 @@
 "postpred.help.tip.position" = "**Ursprungliche Position.** Das Foto erscheint genau dort, wo es im Raster war, mit seinem ursprunglichen Datum. Moglicherweise muss gescrollt werden.";
 "postpred.help.tip.upload" = "**Wahrend des Uploads.** Verwenden Sie die App nicht, wechseln Sie nicht das WLAN-Netz und sperren Sie den Bildschirm nicht. Eine Benachrichtigung fordert Sie auf, zwischen den Uploads zuruckzukehren.";
 "postpred.help.tip.banks" = "**Anzahl der Banken.** Jede Bank = eine Buchstaben- oder Ziffernposition. Planen Sie Ihre Sets entsprechend dem langsten Wort oder der langsten Zahl, die Sie enthullen mochten.";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "Schrittweiser Upload";
+"set.upload.info.body"    = "Die App lädt Fotos nacheinander hoch und hält den Bildschirm aktiv. Wenn du die App verlässt, wirst du vor jedem nächsten Upload benachrichtigt, damit du rechtzeitig zurückkehren kannst.";
+"set.upload.info.sleep"   = "Halte den Bildschirm aktiv und bleibe während des Uploads in der App.";

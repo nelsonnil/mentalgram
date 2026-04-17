@@ -797,3 +797,8 @@
 "postpred.help.tip.position" = "**Posizione originale.** La foto riappare esattamente dove era nella griglia, con la sua data originale. Potrebbe essere necessario scorrere per trovarla.";
 "postpred.help.tip.upload" = "**Durante il caricamento.** Non usare l'app, non cambiare rete Wi-Fi e non bloccare lo schermo. Una notifica ti invita a tornare tra un caricamento e l'altro.";
 "postpred.help.tip.banks" = "**Numero di Banche.** Ogni banca = una posizione di lettera o cifra. Pianifica i set in base alla parola o al numero piu lungo che vuoi rivelare.";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "Upload progressivo";
+"set.upload.info.body"    = "L'app caricherà le foto una alla volta mantenendo lo schermo attivo. Se esci dall'app, riceverai una notifica prima di ogni upload successivo per tornare in tempo.";
+"set.upload.info.sleep"   = "Mantieni lo schermo acceso e rimani nell'app durante l'upload.";

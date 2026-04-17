@@ -624,3 +624,8 @@
 "postpred.help.tip.position" = "**原始位置。** 照片在网格的原始位置以原始日期重新出现，可能需要滑动才能找到。";
 "postpred.help.tip.upload" = "**上传期间。** 不要使用应用，不要更换Wi-Fi网络，不要锁屏。";
 "postpred.help.tip.banks" = "**库的数量。** 每个库=一个字母或数字的位置。根据要揭示的最长单词或数字规划您的合集。";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "逐步上传";
+"set.upload.info.body"    = "应用将逐张上传照片并保持屏幕常亮。若退出应用，系统将在每次下一张上传前发送通知，以便您及时返回。";
+"set.upload.info.sleep"   = "上传期间请保持屏幕常亮并留在应用内。";

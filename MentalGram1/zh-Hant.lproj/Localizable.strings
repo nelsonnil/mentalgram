@@ -564,3 +564,8 @@
 "postpred.help.tip.position" = "**原始位置。** 照片在格線的原始位置以原始日期重新出現，可能需要滑動才能找到。";
 "postpred.help.tip.upload" = "**上傳期間。** 不要使用應用程式，不要更換Wi-Fi網路，不要鎖定螢幕。";
 "postpred.help.tip.banks" = "**庫的數量。** 每個庫=一個字母或數字的位置。根據要揭示的最長單詞或數字規劃您的合集。";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "逐步上傳";
+"set.upload.info.body"    = "應用程式將逐張上傳照片並保持螢幕常亮。若您離開應用程式，系統將在每次下一張上傳前發送通知，以便您及時返回。";
+"set.upload.info.sleep"   = "上傳期間請保持螢幕常亮並留在應用程式內。";

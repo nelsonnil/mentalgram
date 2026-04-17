@@ -564,3 +564,8 @@
 "postpred.help.tip.position" = "**원래 위치.** 사진은 그리드의 원래 위치에, 원래 날짜로 다시 나타납니다.";
 "postpred.help.tip.upload" = "**업로드 중.** 앱을 사용하지 말고, Wi-Fi 네트워크를 변경하거나 화면을 잠그지 마세요.";
 "postpred.help.tip.banks" = "**뱅크 수.** 각 뱅크 = 문자 또는 숫자 하나의 위치. 공개하려는 가장 긴 단어나 숫자에 맞게 세트를 계획하세요.";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "순차적 업로드";
+"set.upload.info.body"    = "앱은 화면을 활성 상태로 유지하며 사진을 하나씩 업로드합니다. 앱을 나가면 다음 업로드 전에 알림을 받으므로 제때 돌아올 수 있습니다.";
+"set.upload.info.sleep"   = "업로드 중에는 화면을 켜두고 앱에 머물러 주세요.";

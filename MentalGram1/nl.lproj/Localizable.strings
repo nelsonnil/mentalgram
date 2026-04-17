@@ -564,3 +564,8 @@
 "postpred.help.tip.position" = "**Oorspronkelijke positie.** De foto verschijnt op exact dezelfde plek in het raster met de oorspronkelijke datum.";
 "postpred.help.tip.upload" = "**Tijdens het uploaden.** Gebruik de app niet, wissel niet van Wi-Fi-netwerk en vergrendel het scherm niet.";
 "postpred.help.tip.banks" = "**Aantal banken.** Elke bank = een letter- of cijferpositie. Plan uw sets op basis van het langste woord of getal dat u wilt onthullen.";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "Progressief uploaden";
+"set.upload.info.body"    = "De app uploadt foto's één voor één en houdt het scherm actief. Als je de app verlaat, ontvang je een melding vóór elke volgende upload zodat je op tijd kunt terugkeren.";
+"set.upload.info.sleep"   = "Houd het scherm aan en blijf in de app tijdens het uploaden.";

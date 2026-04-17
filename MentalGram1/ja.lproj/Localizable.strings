@@ -564,3 +564,8 @@
 "postpred.help.tip.position" = "**元の位置。** 写真はグリッドの元の場所に、元の日付で再表示されます。スクロールが必要な場合があります。";
 "postpred.help.tip.upload" = "**アップロード中。** アプリを使用せず、Wi-Fiネットワークを変えず、画面をロックしないでください。";
 "postpred.help.tip.banks" = "**バンク数。** 各バンク = 1つの文字または数字の位置。公開したい最も長い単語や数字に合わせてセットを計画してください。";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "段階的アップロード";
+"set.upload.info.body"    = "アプリは画面をアクティブに保ちながら写真を1枚ずつアップロードします。アプリを離れた場合、次のアップロード前に通知が届くので、時間内に戻ることができます。";
+"set.upload.info.sleep"   = "アップロード中は画面をオンにしてアプリに留まってください。";

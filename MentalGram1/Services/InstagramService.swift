@@ -231,15 +231,19 @@ class InstagramService: ObservableObject {
         if json["challenge"] != nil || messageLower.contains("challenge_required") {
             print("🚨 BOT DETECTED: Challenge required")
             LogManager.shared.bot("Challenge required - Instagram wants verification")
-            await markSessionChallenged(duration: 60)
+            await markSessionChallenged(duration: 120)
+            // Both GET and POST trigger a visible lockdown so the magician always knows
+            // to open the Instagram app and complete any pending verification prompt.
+            // POST operations get a longer lockdown (3 min); GET gets a shorter one (2 min)
+            // since GET challenges are often transient soft-checks that self-clear.
+            let lockDuration: TimeInterval = isWriteOperation ? 180 : 120
+            await triggerLockdown(
+                reason: "Instagram ha pedido verificación. Abre la app de Instagram — si ves un aviso de verificación, complétalo. Si no aparece nada, la sesión se reanudará automáticamente en 2 minutos.",
+                duration: lockDuration
+            )
             if isWriteOperation {
-                await triggerLockdown(
-                    reason: "Instagram returned a verification challenge. Open the Instagram app — if you see a verification prompt, complete it. If not, this was likely a transient check and will clear in ~3 minutes.",
-                    duration: 180 // 3 minutes — often transient after network changes / re-login
-                )
                 throw InstagramError.botDetected("Challenge required - complete verification in Instagram app")
             } else {
-                print("⚠️ [API] challenge_required on GET — transient soft-check, no lockdown")
                 throw InstagramError.challengeRequired
             }
         }
@@ -1074,30 +1078,28 @@ class InstagramService: ObservableObject {
                 // For POST/write operations the lockdown is still required.
                 if message.contains("challenge_required") {
                     await MainActor.run { challengeRequiredStreak += 1 }
-                    // After 2+ consecutive challenges, escalate to session expired so
+                    // After 3+ consecutive challenges, escalate to session expired so
                     // SessionGuardView appears and prompts the magician to re-login.
-                    if challengeRequiredStreak >= 2 {
+                    if challengeRequiredStreak >= 3 {
                         await MainActor.run { isSessionExpired = true }
                         print("🔴 [SESSION] challengeRequiredStreak=\(challengeRequiredStreak) — escalating to isSessionExpired")
                     }
+                    // Always notify the magician regardless of GET/POST, so they can
+                    // open Instagram and complete any pending verification prompt manually.
+                    // GET challenges use a shorter lockdown (2 min) since they are often
+                    // transient; undo the consecutive-error increment so they don't also
+                    // cascade into a precautionary lockdown.
                     if method == "GET" {
-                        // Transient soft-check on read endpoint — no lockdown, no alarm.
-                        // Undo the consecutiveErrors increment done above (HTTP != 200 path)
-                        // so GET soft-checks don't cascade into a precautionary lockdown.
                         consecutiveErrors = max(0, consecutiveErrors - 1)
-                        print("⚠️ [API] challenge_required on GET (transient) — skipping lockdown (streak: \(challengeRequiredStreak))")
-                        LogManager.shared.warning("GET challenge_required (transient) — no lockdown triggered (streak: \(challengeRequiredStreak))", category: .api)
-                        // Signal other views to pause non-essential API calls for 5 min
-                        await markSessionChallenged(duration: 60)
-                    } else {
-                        print("🚨 [API] Instagram requires verification challenge")
-                        print("🚨 [API] Go to Instagram app/website to complete verification")
-                        await triggerLockdown(
-                            reason: "Instagram returned a verification challenge. Open the Instagram app — if you see a verification prompt, complete it. If not, this was likely a transient check (common after network changes or re-login) and will clear in ~3 minutes.",
-                            duration: 180
-                        )
-                        await markSessionChallenged(duration: 60)
                     }
+                    let lockDuration: TimeInterval = (method == "GET") ? 120 : 180
+                    print("🚨 [API] challenge_required (\(method)) — streak \(challengeRequiredStreak) — triggering \(Int(lockDuration))s lockdown")
+                    LogManager.shared.warning("challenge_required (\(method)) streak:\(challengeRequiredStreak) — lockdown \(Int(lockDuration))s", category: .api)
+                    await markSessionChallenged(duration: lockDuration)
+                    await triggerLockdown(
+                        reason: "Instagram ha pedido verificación. Abre la app de Instagram — si ves un aviso de verificación, complétalo. Si no aparece nada, la sesión se reanudará automáticamente en 2 minutos.",
+                        duration: lockDuration
+                    )
                     throw InstagramError.challengeRequired
                 }
                 
@@ -1315,8 +1317,10 @@ class InstagramService: ObservableObject {
     
     // MARK: - Unarchive Photo
     
-    func unarchivePhoto(mediaId: String) async throws -> Bool {
-        print("📤 [UNARCHIVE] Starting unarchive for media ID: \(mediaId)")
+    /// - Parameter skipPreCheck: Pass `true` when the caller already knows the photo is archived
+    ///   (e.g. photos just uploaded via this app and never publicly shown). Saves 1 GET per call.
+    func unarchivePhoto(mediaId: String, skipPreCheck: Bool = false) async throws -> Bool {
+        print("📤 [UNARCHIVE] Starting unarchive for media ID: \(mediaId) (skipPreCheck: \(skipPreCheck))")
         
         // ANTI-BOT: Check lockdown IMMEDIATELY (don't waste time on delay)
         if isLocked {
@@ -1330,12 +1334,13 @@ class InstagramService: ObservableObject {
         }
 
         // PRE-CHECK: verify Instagram's real state before unarchiving.
-        // If photo is already public, skip the API call to avoid a redundant unarchive.
-        // Also catches state-desync: local says "archived" but Instagram already shows it public.
-        if let isArchived = try await getMediaIsArchived(mediaId: mediaId), !isArchived {
-            print("ℹ️ [UNARCHIVE] Pre-check: already public on Instagram — skipping API call (ID: \(mediaId))")
-            LogManager.shared.info("Unarchive skipped: already public on Instagram (ID: \(mediaId))", category: .api)
-            return true
+        // Skip when caller guarantees the photo is archived (avoids 1 extra GET per letter).
+        if !skipPreCheck {
+            if let isArchived = try await getMediaIsArchived(mediaId: mediaId), !isArchived {
+                print("ℹ️ [UNARCHIVE] Pre-check: already public on Instagram — skipping API call (ID: \(mediaId))")
+                LogManager.shared.info("Unarchive skipped: already public on Instagram (ID: \(mediaId))", category: .api)
+                return true
+            }
         }
 
         // ANTI-BOT: Shorter delay for unarchive (used during performance/trick)
@@ -2484,7 +2489,7 @@ class InstagramService: ObservableObject {
     
     // MARK: - Upload Photo
     
-    func uploadPhoto(imageData: Data, caption: String = "", allowDuplicates: Bool = false, photoIndex: Int? = nil) async throws -> String? {
+    func uploadPhoto(imageData: Data, caption: String = "", allowDuplicates: Bool = false, photoIndex: Int? = nil, takenAt: Date? = nil) async throws -> String? {
         print("📤 [UPLOAD] Starting photo upload...")
         let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
         LogManager.shared.upload("Starting upload: \(photoDesc) (\(imageData.count / 1024)KB)")
@@ -2666,13 +2671,20 @@ class InstagramService: ObservableObject {
         try await Task.sleep(nanoseconds: configDelay)
         
         // Step 4: Configure media (with more complete data like instagrapi)
-        let configBody: [String: String] = [
+        var configBody: [String: String] = [
             "upload_id": uploadIdResponse,
             "caption": caption,
             "source_type": "4",
             "media_folder": "Camera",
             "device_id": deviceId
         ]
+        // Grid position anchor: override taken_at so the photo slots into the correct
+        // chronological position in the grid when it is later unarchived.
+        // Without this, Instagram uses the current time → photo appears at the top.
+        if let anchorDate = takenAt {
+            configBody["taken_at"] = String(Int(anchorDate.timeIntervalSince1970))
+            print("📍 [UPLOAD] taken_at overridden to \(anchorDate) for grid position anchoring")
+        }
         
         print("   Configuring media...")
         let configData = try await apiRequest(
@@ -2749,9 +2761,9 @@ class InstagramService: ObservableObject {
             throw InstagramError.botDetected("Lockdown active. Cannot reveal photos during lockdown.")
         }
         
-        // Step 1: Unarchive
-        print("   Step 1: Unarchiving...")
-        let unarchived = try await unarchivePhoto(mediaId: mediaId)
+        // Step 1: Unarchive — skipPreCheck because caller already confirmed photo.isArchived == true
+        print("   Step 1: Unarchiving (skipPreCheck=true — photo confirmed archived by DataManager)...")
+        let unarchived = try await unarchivePhoto(mediaId: mediaId, skipPreCheck: true)
         
         guard unarchived else {
             print("❌ [REVEAL] Unarchive failed")

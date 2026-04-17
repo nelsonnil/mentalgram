@@ -59,13 +59,32 @@ class DateForceSettings: ObservableObject {
         didSet { UserDefaults.standard.set(timeOffsetMinutes, forKey: "dateForce_timeOffset") }
     }
 
-    /// Auto mode: total spectators to capture. Must be even (2, 4, 6, 8).
-    /// Half go to date group, half to time group.
+    /// Auto mode: total spectators captured. Set dynamically in Performance via manual selection.
     @Published var autoSpectatorCount: Int {
         didSet { UserDefaults.standard.set(autoSpectatorCount, forKey: "dateForce_autoCount") }
     }
 
+    /// Ordered follower IDs manually selected in FollowersListView.
+    /// Position in array = selection rank. First half → date group; second half → time group.
+    @Published var selectedFollowerIds: [String] {
+        didSet { UserDefaults.standard.set(selectedFollowerIds, forKey: "dateForce_selectedIds") }
+    }
+
+    /// Follower IDs captured at baseline (before the show). Used to auto-detect new followers.
+    @Published var baselineFollowerIds: Set<String> {
+        didSet {
+            UserDefaults.standard.set(Array(baselineFollowerIds), forKey: "dateForce_baselineIds")
+        }
+    }
+
+    var hasBaseline: Bool { !baselineFollowerIds.isEmpty }
+
     // MARK: - Runtime (not persisted)
+
+    /// Pre-loaded spectator profiles, keyed by userId.
+    /// Populated by FollowersListView as each spectator is selected — so by the
+    /// time the user opens a reel, the data is already available with no delay.
+    var preloadedProfiles: [String: (username: String, followerCount: Int, followingCount: Int)] = [:]
 
     @Published private(set) var spectators: [DateForceSpectator] = []
 
@@ -82,12 +101,12 @@ class DateForceSettings: ObservableObject {
     private init() {
         self.isEnabled = UserDefaults.standard.bool(forKey: "dateForce_enabled")
 
-        // Migrate legacy modes (simple → dual, mixed → dual)
-        let modeStr = UserDefaults.standard.string(forKey: "dateForce_mode") ?? DateForceMode.dual.rawValue
-        if modeStr == "simple" || modeStr == "mixed" {
-            self.mode = .dual
+        // Migrate legacy modes (simple/mixed/dual → auto)
+        let modeStr = UserDefaults.standard.string(forKey: "dateForce_mode") ?? DateForceMode.auto.rawValue
+        if modeStr == "simple" || modeStr == "mixed" || modeStr == "dual" {
+            self.mode = .auto
         } else {
-            self.mode = DateForceMode(rawValue: modeStr) ?? .dual
+            self.mode = DateForceMode(rawValue: modeStr) ?? .auto
         }
 
         let fmtStr = UserDefaults.standard.string(forKey: "dateForce_format") ?? DateForceFormat.ddmm.rawValue
@@ -96,15 +115,14 @@ class DateForceSettings: ObservableObject {
         let savedOffset = UserDefaults.standard.object(forKey: "dateForce_timeOffset") as? Int
         self.timeOffsetMinutes = savedOffset ?? 0
 
-        // Migrate legacy autoMaxFollowers to autoSpectatorCount (must be even, max 8)
         let savedCount = UserDefaults.standard.object(forKey: "dateForce_autoCount") as? Int
                       ?? UserDefaults.standard.object(forKey: "dateForce_autoMax") as? Int
-        let validCounts = [2, 4, 6, 8]
-        if let c = savedCount, validCounts.contains(c) {
-            self.autoSpectatorCount = c
-        } else {
-            self.autoSpectatorCount = 4
-        }
+        self.autoSpectatorCount = savedCount ?? 4
+
+        self.selectedFollowerIds = UserDefaults.standard.stringArray(forKey: "dateForce_selectedIds") ?? []
+
+        let savedBaseline = UserDefaults.standard.stringArray(forKey: "dateForce_baselineIds") ?? []
+        self.baselineFollowerIds = Set(savedBaseline)
     }
 
     // MARK: - Spectator Management (Dual mode — manual registration)
@@ -137,6 +155,27 @@ class DateForceSettings: ObservableObject {
         spectators.removeAll()
         autoDisplayGroup = .date
         print("🎯 [DATE FORCE] All spectators reset")
+    }
+
+    // MARK: - Baseline Snapshot (Performance follower detection)
+
+    /// Captures current follower IDs as the baseline (call before the show starts).
+    func takeBaseline(_ followers: [InstagramFollower]) {
+        baselineFollowerIds = Set(followers.map { $0.userId })
+        print("📸 [DATE FORCE] Baseline taken — \(baselineFollowerIds.count) followers")
+    }
+
+    /// Returns followers whose IDs are NOT in the baseline (followed during the show).
+    func newFollowers(from all: [InstagramFollower]) -> [InstagramFollower] {
+        guard hasBaseline else { return [] }
+        return all.filter { !baselineFollowerIds.contains($0.userId) }
+    }
+
+    /// Clears the baseline so a new snapshot can be taken.
+    func clearBaseline() {
+        baselineFollowerIds = []
+        UserDefaults.standard.removeObject(forKey: "dateForce_baselineIds")
+        print("🗑 [DATE FORCE] Baseline cleared")
     }
 
     // MARK: - Auto Mode (API-based capture)

@@ -797,3 +797,8 @@
 "postpred.help.tip.position" = "**Position originale.** La photo reapparait exactement la ou elle etait dans la grille, avec sa date d'origine. Il peut etre necessaire de faire defiler pour la trouver.";
 "postpred.help.tip.upload" = "**Pendant le telechargement.** N'utilisez pas l'app, ne changez pas de reseau Wi-Fi et ne laissez pas l'ecran se verrouiller. Une notification vous invite a revenir entre chaque telechargement.";
 "postpred.help.tip.banks" = "**Nombre de Banques.** Chaque banque = une position de lettre ou de chiffre. Planifiez vos sets en fonction du mot ou nombre le plus long que vous souhaitez reveler.";
+
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "Téléchargement progressif";
+"set.upload.info.body"    = "L'app téléchargera les photos une par une en maintenant l'écran actif. Si vous quittez l'app, une notification vous avertira avant chaque prochain téléchargement pour vous permettre de revenir à temps.";
+"set.upload.info.sleep"   = "Gardez l'écran allumé et restez dans l'app pendant le téléchargement.";

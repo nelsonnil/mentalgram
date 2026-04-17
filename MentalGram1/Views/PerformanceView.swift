@@ -76,6 +76,18 @@ struct PerformanceView: View {
     // MARK: - Refresh throttle (prevent rapid consecutive API calls)
     @State private var lastRefreshDate: Date? = nil
     private let minRefreshInterval: TimeInterval = 10
+
+    // MARK: - Auto-refresh on Performance entry
+    /// Persisted timestamp of the last full profile refresh. Used to decide whether
+    /// to auto-refresh silently when the user opens Performance view.
+    @AppStorage("perf_lastAutoRefreshTimestamp") private var lastAutoRefreshTimestamp: Double = 0
+    private let autoRefreshInterval: TimeInterval = 5 * 60   // 5 minutes
+
+    // MARK: - Inter-reveal cooldown (anti-bot)
+    /// Persisted timestamp set after every successful reveal (unarchive+comment).
+    /// Prevents back-to-back reveal operations that look automated to Instagram.
+    @AppStorage("perf_lastRevealCompletedTimestamp") private var lastRevealCompletedTimestamp: Double = 0
+    private let interRevealCooldown: TimeInterval = 90   // seconds
     
     // MARK: - Sub-views (split to help Swift type-checker)
 
@@ -187,6 +199,10 @@ struct PerformanceView: View {
                     print("⚡️ [PERF] \(revealedPhotos.count) photo(s) inserted from local storage")
                     LogManager.shared.info("Grid updated from local images: \(revealedPhotos.count) photo(s)", category: .general)
                 }
+                // Mark reveal completion timestamp for inter-reveal anti-bot cooldown.
+                // The next reveal (new trick) will be blocked for `interRevealCooldown` seconds.
+                lastRevealCompletedTimestamp = Date().timeIntervalSince1970
+                lastAutoRefreshTimestamp = Date().timeIntervalSince1970 // suppress auto-refresh too
                 // Double full-power vibration (notification-level) — magician confirms photos live on Instagram
                 AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
                 Task {
@@ -204,6 +220,13 @@ struct PerformanceView: View {
             onUploadConflict: { showUploadConflictAlert = true },
             onFollowerTap: { follower in
                 withAnimation(.easeInOut(duration: 0.25)) { selectedSpectator = follower }
+            },
+            onFollowersListDismiss: {
+                guard dateForce.isEnabled,
+                      !dateForce.selectedFollowerIds.isEmpty,
+                      !dateForce.hasSpectators,
+                      !dateForce.isAutoLoading else { return }
+                loadAutoFollowers()
             },
             pendingOCRWord: $pendingOCRWord
         )
@@ -249,6 +272,18 @@ struct PerformanceView: View {
             .onChange(of: ocrCoordinator.recognizedText) { text in
                 guard let text = text, !text.isEmpty else { return }
                 print("📷 [OCR] Recognized: \"\(text)\"")
+
+                // INTER-REVEAL COOLDOWN (anti-bot): block reveal if the previous one
+                // finished less than `interRevealCooldown` seconds ago. This prevents
+                // back-to-back unarchive+comment POST pairs that Instagram flags.
+                let timeSinceLastReveal = Date().timeIntervalSince1970 - lastRevealCompletedTimestamp
+                if timeSinceLastReveal < interRevealCooldown {
+                    let remaining = Int(interRevealCooldown - timeSinceLastReveal)
+                    print("🚫 [OCR] Reveal blocked — inter-reveal cooldown active (\(remaining)s remaining)")
+                    LogManager.shared.warning("Reveal blocked: cooldown \(remaining)s remaining (anti-bot)", category: .api)
+                    return
+                }
+
                 // Full-power vibration: confirms recognition to the magician
                 AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
                 // Lock OCR for the rest of this Performance session — one reveal per trick.
@@ -429,6 +464,31 @@ struct PerformanceView: View {
                     return
                 }
                 checkAndLoadProfile()
+
+                // AUTO-REFRESH: silently update the grid if the profile data is stale
+                // (older than 5 minutes) so new posts uploaded in real Instagram appear
+                // immediately without the user needing to pull-to-refresh.
+                // Skipped if: session challenged, upload active, or a reveal just finished
+                // (the reveal's own silent-refresh already covers freshness).
+                let timeSinceAutoRefresh = Date().timeIntervalSince1970 - lastAutoRefreshTimestamp
+                let timeSinceReveal = Date().timeIntervalSince1970 - lastRevealCompletedTimestamp
+                let autoRefreshNeeded = timeSinceAutoRefresh > autoRefreshInterval
+                let recentReveal = timeSinceReveal < (interRevealCooldown + 30) // reveal refresh still fresh
+                if autoRefreshNeeded && !recentReveal
+                    && !instagram.isSessionChallenged
+                    && !instagram.isLocked
+                    && !uploadManager.isActive {
+                    print("🔄 [AUTO-REFRESH] Stale data (\(Int(timeSinceAutoRefresh))s old) — refreshing grid silently")
+                    lastAutoRefreshTimestamp = Date().timeIntervalSince1970
+                    await refreshMediaGridSilently()
+                } else {
+                    let reason = !autoRefreshNeeded ? "data fresh (\(Int(timeSinceAutoRefresh))s)"
+                               : recentReveal ? "recent reveal (\(Int(timeSinceReveal))s ago)"
+                               : instagram.isSessionChallenged ? "session challenged"
+                               : instagram.isLocked ? "locked"
+                               : "upload active"
+                    print("🔄 [AUTO-REFRESH] Skipped — \(reason)")
+                }
             }
 
             // Serialize all auto-actions in a single sequential Task.
@@ -1045,14 +1105,7 @@ struct PerformanceView: View {
         LogManager.shared.info("Profile refresh started", category: .general)
 
         isLoading = true
-        
-        // Clear old cache first
-        print("🗑️ [CACHE] Clearing old cache before fresh load")
-        ProfileCacheService.shared.clearAll()
-        cachedImages.removeAll()
-        mediaItemsByURL.removeAll()
-        revealDates.removeAll()
-        
+
         do {
             // ANTI-BOT: Wait if network changed recently
             try await instagram.waitForNetworkStability()
@@ -1060,6 +1113,13 @@ struct PerformanceView: View {
             let fetchedProfile = try await instagram.getProfileInfo()
             
             if let fetchedProfile = fetchedProfile {
+                // Clear old cache only after we have fresh data — prevents blank screen on error
+                print("🗑️ [CACHE] Clearing old cache (fresh data ready)")
+                ProfileCacheService.shared.clearAll()
+                mediaItemsByURL.removeAll()
+                revealDates.removeAll()
+                // Keep cachedImages so existing thumbnails stay visible during transition
+                
                 self.profile = fetchedProfile
                 self.allMediaURLs = fetchedProfile.cachedMediaURLs
                 self.hasMorePages = fetchedProfile.cachedMediaURLs.count >= 18
@@ -1519,25 +1579,58 @@ struct PerformanceView: View {
 
         let mediaId = String(pseudoURL.dropFirst("reveal://".count))
 
-        // Look up the upload date from DataManager — this is the closest approximation
-        // to Instagram's `taken_at` that we have without an extra API call.
+        // Look up the upload date from DataManager — equals the taken_at sent to Instagram
+        // (or the actual upload time for older sets uploaded before the grid-anchor feature).
         let uploadDate: Date? = DataManager.shared.sets
             .flatMap { $0.photos }
             .first(where: { $0.mediaId == mediaId })
             .flatMap { $0.uploadDate }
 
         guard let revealDate = uploadDate else {
-            // No date available — fall back to prepend (old behavior).
             allMediaURLs.insert(pseudoURL, at: 0)
             print("⚡️ [REVEAL] No uploadDate for \(mediaId) — inserted at position 0 (fallback)")
             return
         }
 
-        // Cache the date so future siblings can compare against this reveal.
         revealDates[pseudoURL] = revealDate
 
-        // Scan grid newest-first: insert before the first item that is strictly OLDER.
+        // ── Detect pinned-post prefix ─────────────────────────────────────────
+        // Instagram places pinned posts at the top of the grid regardless of their
+        // taken_at. They can appear in ANY order (not necessarily descending).
+        //
+        // Strategy: find the index of the GLOBALLY NEWEST item in the grid.
+        // That item is always the first non-pinned post (the most recent regular post).
+        // Everything before it may be pinned (or simply an older pinned post that
+        // happens to precede it). This is more robust than "first jump" detection,
+        // which fails when pinned posts are not in monotonically decreasing order.
+        //
+        // Example: [pinned 2023-06] [pinned 2025-01] [pinned 2023-06] [today 2026] [2d ago] …
+        //           maxDate index = 3 ─────────────────────────────────^
+        //           pinnedEnd = 3 → scan starts after the 3 pinned posts ✓
+        var maxDate: Date = .distantPast
+        var maxDateIndex = 0
         for (i, url) in allMediaURLs.enumerated() {
+            let d: Date?
+            if url.hasPrefix("reveal://") {
+                d = revealDates[url]
+            } else {
+                d = mediaItemsByURL[url]?.takenAt
+            }
+            if let itemDate = d, itemDate > maxDate {
+                maxDate = itemDate
+                maxDateIndex = i
+            }
+        }
+        let pinnedEnd = maxDateIndex
+        print("⚡️ [REVEAL] Pinned prefix: \(pinnedEnd) item(s) (maxDate=\(maxDate) at pos \(maxDateIndex)) — scanning from pos \(pinnedEnd)")
+        // ──────────────────────────────────────────────────────────────────────
+
+        // Scan only the non-pinned portion for the chronological insertion point.
+        // Using `<=` (not `<`) so that sibling reveal photos with the SAME uploadDate
+        // each insert BEFORE the previous one → final order is correct word direction.
+        // (Without `<=`, all same-date photos would append sequentially → reversed word.)
+        for i in pinnedEnd..<allMediaURLs.count {
+            let url = allMediaURLs[i]
             let itemDate: Date?
             if url.hasPrefix("reveal://") {
                 itemDate = revealDates[url]
@@ -1545,16 +1638,16 @@ struct PerformanceView: View {
                 itemDate = mediaItemsByURL[url]?.takenAt
             }
             guard let d = itemDate else { continue }
-            if d < revealDate {
+            if d <= revealDate {
                 allMediaURLs.insert(pseudoURL, at: i)
-                print("⚡️ [REVEAL] \(mediaId) (uploadDate=\(revealDate)) → inserted at pos \(i)")
+                print("⚡️ [REVEAL] \(mediaId) (taken_at≈\(revealDate)) → inserted at pos \(i) (pinnedEnd=\(pinnedEnd))")
                 return
             }
         }
 
-        // All existing items are newer — this is the oldest; append at the end.
+        // Older than everything in the non-pinned section → append at the end.
         allMediaURLs.append(pseudoURL)
-        print("⚡️ [REVEAL] \(mediaId) (uploadDate=\(revealDate)) → appended at end (all existing are newer)")
+        print("⚡️ [REVEAL] \(mediaId) (taken_at≈\(revealDate)) → appended at end")
     }
 
     /// Does NOT touch profile stats, bio, follower count, etc. — zero visible disruption.
@@ -1627,7 +1720,64 @@ struct PerformanceView: View {
                 guard let item = mediaItemsByURL[url] else { return false }
                 return !newMediaIds.contains(item.mediaId)
             }
-            let merged = newURLs + existingTail
+            var merged = newURLs + existingTail
+
+            // ── Preserve unconfirmed reveal:// placeholders ───────────────────────
+            // When a photo was uploaded with an old taken_at (grid anchor), it lives
+            // BELOW the first 21 posts Instagram returns. The silent refresh won't
+            // include its real CDN URL, so without this step the reveal:// placeholder
+            // would simply be dropped and the photo would disappear from the fake grid.
+            // Solution: any reveal:// whose mediaId is NOT yet in the CDN results is
+            // re-inserted at the chronologically correct position so it stays visible
+            // until a later refresh (or full reload) brings the real CDN URL.
+            for revealURL in revealURLsBefore {
+                let mediaId = String(revealURL.dropFirst("reveal://".count))
+                // Already confirmed: real CDN URL for this mediaId is in merged → skip
+                if newMediaIds.contains(mediaId) { continue }
+                // Already present (shouldn't happen): skip
+                if merged.contains(revealURL) { continue }
+
+                // Determine the date to use for positioning
+                let revealDate: Date? = revealDates[revealURL] ?? {
+                    DataManager.shared.sets
+                        .flatMap { $0.photos }
+                        .first(where: { $0.mediaId == mediaId })
+                        .flatMap { $0.uploadDate }
+                }()
+
+                guard let anchorDate = revealDate else {
+                    // No date info — prepend as fallback
+                    merged.insert(revealURL, at: 0)
+                    print("⚡️ [REVEAL PRESERVE] \(mediaId) — no date, re-inserted at 0")
+                    continue
+                }
+
+                // Find the correct insertion point: first item strictly older than anchorDate
+                var inserted = false
+                for (i, url) in merged.enumerated() {
+                    let d: Date?
+                    if url.hasPrefix("reveal://") {
+                        d = revealDates[url] ?? {
+                            let mid = String(url.dropFirst("reveal://".count))
+                            return DataManager.shared.sets.flatMap { $0.photos }.first(where: { $0.mediaId == mid })?.uploadDate
+                        }()
+                    } else {
+                        d = mediaItemsByURL[url]?.takenAt
+                    }
+                    guard let itemDate = d else { continue }
+                    if itemDate < anchorDate {
+                        merged.insert(revealURL, at: i)
+                        print("⚡️ [REVEAL PRESERVE] \(mediaId) — not yet in CDN, re-inserted at pos \(i) (anchor=\(anchorDate))")
+                        inserted = true
+                        break
+                    }
+                }
+                if !inserted {
+                    merged.append(revealURL)
+                    print("⚡️ [REVEAL PRESERVE] \(mediaId) — not yet in CDN, appended at end")
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────────
             
             // ── Diagnostic logs ──────────────────────────────────────────────
             print("🔄 [SWAP] allMediaURLs BEFORE (\(allMediaURLs.count) total, \(revealURLsBefore.count) reveal://):")
@@ -1651,8 +1801,10 @@ struct PerformanceView: View {
 
             allMediaURLs = merged
 
-            // reveal:// placeholders have been replaced by real CDN URLs — clear cached dates.
-            revealDates.removeAll()
+            // Clear cached reveal dates only for placeholders that WERE replaced by real CDN URLs.
+            // Preserved reveal:// URLs (still in merged) keep their cached date for future refreshes.
+            let stillPresentRevealURLs = Set(merged.filter { $0.hasPrefix("reveal://") })
+            revealDates = revealDates.filter { stillPresentRevealURLs.contains($0.key) }
 
             // Keep mediaItemsByURL in sync so removeMediaItem(byMediaId:) can resolve fresh URLs.
             for item in items { mediaItemsByURL[item.imageURL] = item }
@@ -1828,31 +1980,79 @@ struct PerformanceView: View {
 
         Task {
             do {
-                let count = dateForce.autoSpectatorCount
-                print("🤖 [AUTO] Fetching \(count) recent followers...")
-                let followers = try await instagram.getRecentFollowers(count: count)
-                print("🤖 [AUTO] Got \(followers.count) followers, fetching profiles one by one...")
+                let manualIds = dateForce.selectedFollowerIds
 
-                await MainActor.run {
-                    dateForce.beginAutoLoad(totalExpected: followers.count)
-                }
+                if !manualIds.isEmpty {
+                    // ── Manual selection: use pre-loaded cache when available ──
+                    let half = manualIds.count / 2
+                    print("🤖 [AUTO] Loading \(manualIds.count) selected spectators — rank 1-\(half) → 📅 date, rank \(half+1)-\(manualIds.count) → 🕐 time")
 
-                for (i, follower) in followers.enumerated() {
-                    if i > 0 {
-                        try? await Task.sleep(nanoseconds: UInt64.random(in: 700_000_000...1_500_000_000))
+                    await MainActor.run {
+                        dateForce.beginAutoLoad(totalExpected: manualIds.count)
                     }
 
-                    if let p = try? await instagram.getProfileInfo(userId: follower.userId) {
-                        await MainActor.run {
-                            dateForce.appendAutoSpectator(
-                                username: follower.username,
-                                followingCount: p.followingCount,
-                                followerCount: p.followerCount
-                            )
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    var needsAPIDelay = false
+                    for userId in manualIds {
+                        if let cached = dateForce.preloadedProfiles[userId] {
+                            // Already pre-loaded while user was in the followers list — instant, no API call
+                            await MainActor.run {
+                                dateForce.appendAutoSpectator(
+                                    username: cached.username,
+                                    followingCount: cached.followingCount,
+                                    followerCount: cached.followerCount
+                                )
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
+                            print("⚡️ [AUTO] \(cached.username) from cache — no API call")
+                        } else {
+                            // Not in cache yet — fetch from API with rate-limit delay
+                            if needsAPIDelay {
+                                try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_400_000_000))
+                            }
+                            needsAPIDelay = true
+                            if let p = try? await instagram.getProfileInfo(userId: userId) {
+                                await MainActor.run {
+                                    dateForce.appendAutoSpectator(
+                                        username: p.username,
+                                        followingCount: p.followingCount,
+                                        followerCount: p.followerCount
+                                    )
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                            } else {
+                                print("⚠️ [AUTO] Could not fetch profile for userId \(userId)")
+                            }
                         }
-                    } else {
-                        print("⚠️ [AUTO] Could not fetch profile for @\(follower.username)")
+                    }
+                } else {
+                    // ── Auto mode: take the N most recent followers ──
+                    let count = dateForce.autoSpectatorCount
+                    print("🤖 [AUTO] Fetching \(count) most recent followers...")
+                    let followers = try await instagram.getRecentFollowers(count: count)
+
+                    let half = followers.count / 2
+                    print("🤖 [AUTO] \(followers.count) spectators — rank 1-\(half) → 📅 date, rank \(half+1)-\(followers.count) → 🕐 time")
+
+                    await MainActor.run {
+                        dateForce.beginAutoLoad(totalExpected: followers.count)
+                    }
+
+                    for (i, follower) in followers.enumerated() {
+                        if i > 0 {
+                            try? await Task.sleep(nanoseconds: UInt64.random(in: 700_000_000...1_500_000_000))
+                        }
+                        if let p = try? await instagram.getProfileInfo(userId: follower.userId) {
+                            await MainActor.run {
+                                dateForce.appendAutoSpectator(
+                                    username: follower.username,
+                                    followingCount: p.followingCount,
+                                    followerCount: p.followerCount
+                                )
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
+                        } else {
+                            print("⚠️ [AUTO] Could not fetch profile for @\(follower.username)")
+                        }
                     }
                 }
 
@@ -1892,6 +2092,15 @@ struct InstagramProfileView: View {
     @AppStorage("last_note_text")           private var lastNoteText: String = ""
     @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
 
+    // Inter-reveal cooldown — shared via AppStorage with PerformanceView (anti-bot)
+    @AppStorage("perf_lastRevealCompletedTimestamp") private var lastRevealCompletedTimestamp: Double = 0
+    private let interRevealCooldown: TimeInterval = 90
+
+    // Error alert for when reveal fails (e.g. set not uploaded)
+    @State private var revealErrorTitle: String = ""
+    @State private var revealErrorMessage: String = ""
+    @State private var showRevealError: Bool = false
+
     // Called after a successful Force Number Reveal with local images already loaded.
     // Each element: pseudo-URL key + optional UIImage from local storage.
     // PerformanceView inserts them into the grid immediately (no GET needed).
@@ -1912,6 +2121,9 @@ struct InstagramProfileView: View {
     var onUploadConflict: (() -> Void)? = nil
     // Called when user taps a follower — PerformanceView handles the overlay.
     var onFollowerTap: ((InstagramFollower) -> Void)? = nil
+
+    // Called when the followers list sheet is dismissed — lets PerformanceView auto-load spectators.
+    var onFollowersListDismiss: (() -> Void)? = nil
 
     /// Set by PerformanceView when OCR recognizes text for Post Prediction.
     /// InstagramProfileView consumes it, routes to word or digit reveal, then clears it.
@@ -1976,6 +2188,9 @@ struct InstagramProfileView: View {
                 tabBarSection
                 Divider()
                 tabContentSection
+                // Bottom spacer so the last row of the grid can always be scrolled
+                // fully above the fixed bottom bar (which overlaps ~54 pts from the bottom).
+                Color.clear.frame(height: 60)
             }
         }
         // Pull-to-refresh: runs load in an unstructured Task so SwiftUI
@@ -2028,6 +2243,14 @@ struct InstagramProfileView: View {
                 print("⚠️ [OCR-PP] Reveal blocked: upload is active")
                 return
             }
+            // INTER-REVEAL COOLDOWN (anti-bot)
+            let timeSinceLastReveal = Date().timeIntervalSince1970 - lastRevealCompletedTimestamp
+            if timeSinceLastReveal < interRevealCooldown {
+                let remaining = Int(interRevealCooldown - timeSinceLastReveal)
+                print("🚫 [OCR-PP] Reveal blocked — inter-reveal cooldown active (\(remaining)s remaining)")
+                LogManager.shared.warning("PP reveal blocked: cooldown \(remaining)s remaining (anti-bot)", category: .api)
+                return
+            }
             // Anti-bot: if a profile pic upload is running, delay reveal until it finishes.
             // Two simultaneous POST operations from the same session is a bot signal.
             guard !InstagramService.shared.isUploadingProfilePic else {
@@ -2062,8 +2285,10 @@ struct InstagramProfileView: View {
             } else {
                 guard let set = {
                     let dm = DataManager.shared
+                    // Prefer pinned active set (even if not uploaded — revealByLetters will diagnose)
                     if let id = ActiveSetSettings.shared.activeWordSetId,
                        let s = dm.sets.first(where: { $0.id == id && $0.type == .word }) { return s }
+                    // Fallback: any word set that has uploadd+archived photos ready to reveal
                     return dm.sets.first { $0.type == .word && !$0.banks.isEmpty &&
                         $0.photos.contains(where: { $0.mediaId != nil && $0.isArchived }) }
                 }() else {
@@ -2076,6 +2301,11 @@ struct InstagramProfileView: View {
                 showOCRPeek(label: cleaned)
                 Task { await revealByLetters(cleaned, fromSet: set) }
             }
+        }
+        .alert(revealErrorTitle, isPresented: $showRevealError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(revealErrorMessage)
         }
     }
 
@@ -2345,7 +2575,9 @@ struct InstagramProfileView: View {
                 userId: profile.userId
             )
         }
-        .fullScreenCover(isPresented: $showFollowersList) {
+        .fullScreenCover(isPresented: $showFollowersList, onDismiss: {
+            onFollowersListDismiss?()
+        }) {
             FollowersListView(
                 username: profile.username,
                 followerCount: profile.followerCount,
@@ -2520,7 +2752,8 @@ struct InstagramProfileView: View {
             try? await Task.sleep(nanoseconds: delay)
 
             do {
-                let unarchived = try await instagram.unarchivePhoto(mediaId: mediaId)
+                // skipPreCheck: photo.isArchived == true already verified at line 2729
+                let unarchived = try await instagram.unarchivePhoto(mediaId: mediaId, skipPreCheck: true)
                 if unarchived {
                     dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId,
                                             isArchived: false, uploadStatus: .completed, errorMessage: nil)
@@ -2627,6 +2860,26 @@ struct InstagramProfileView: View {
             let localImage = photo.imageData.flatMap { UIImage(data: $0) }
             jobs.append(LetterJob(letter: letter, photo: photo, mediaId: mediaId,
                                   pseudoURL: "reveal://\(mediaId)", localImage: localImage))
+        }
+
+        // ── Diagnose failure when no jobs were found ──────────────────────────────
+        if jobs.isEmpty {
+            let allPhotos = set.photos
+            let anyUploaded = allPhotos.contains { $0.mediaId != nil }
+            if !anyUploaded {
+                // Set exists but has never been uploaded — give a clear error to the magician
+                print("❌ [OCR-PP] Set '\(set.name)' has no uploaded photos (mediaId=nil for all)")
+                LogManager.shared.warning("Reveal blocked: set '\(set.name)' has no uploaded photos", category: .general)
+                await MainActor.run {
+                    revealErrorTitle = "Set not uploaded"
+                    revealErrorMessage = "The set '\(set.name)' hasn't been uploaded to Instagram yet. Go to Sets and upload it first."
+                    showRevealError = true
+                    clearOCRPeek()
+                }
+            } else {
+                print("⚠️ [OCR-PP] '\(word)' — no matching archived photos found in '\(set.name)' (0 jobs)")
+            }
+            return
         }
 
         // Insert ALL local images into grid immediately (before any API call)

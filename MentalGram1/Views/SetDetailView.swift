@@ -120,6 +120,12 @@ struct SetDetailView: View {
     /// Seconds remaining in the current pause or inter-archive cooldown (shown as countdown).
     @State private var saCountdownSeconds: Int = 0
 
+    // GRID ANCHOR — taken_at override computed automatically at upload time.
+    // Set to (oldest post in the current first-page fetch) - 1 second so the prediction
+    // slots in just below all existing posts. Any posts pinned or uploaded afterwards
+    // naturally appear above it without any manual configuration.
+    @State private var uploadTakenAt: Date? = nil
+
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
     }
@@ -614,20 +620,47 @@ struct SetDetailView: View {
 
                 // ── Idle: main action button ───────────────────────────
                 } else {
+                    let rateCheck = instagram.checkRateLimit()
+                    let saRateLimited = rateCheck.limited || rateCheck.remaining < 3
+
+                    // Rate limit warning banner
+                    if saRateLimited {
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.octagon.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Rate limit reached (\(rateCheck.actionsUsed)/55 actions)")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.orange)
+                                Text("Wait a few minutes before syncing. Instagram limits API calls per hour.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.orange.opacity(0.08))
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 1))
+                    }
+
                     // PRIMARY: Sync & Archive (single safe action)
                     Button(action: {
                         guard !isSyncing, !isArchivingAll else { return }
                         Task { await syncThenArchiveAll() }
                     }) {
                         HStack(spacing: 10) {
-                            Image(systemName: "archivebox.circle.fill")
+                            Image(systemName: saRateLimited ? "clock.badge.exclamationmark" : "archivebox.circle.fill")
                                 .font(.system(size: 22))
-                                .foregroundColor(.purple)
+                                .foregroundColor(saRateLimited ? .orange : .purple)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Sync & Archive (\(visibleUploadedPhotos.count) visible)")
                                     .font(.subheadline.bold())
-                                    .foregroundColor(.primary)
-                                Text("Verifies state · then archives with safe delays · no duplicate API calls")
+                                    .foregroundColor(saRateLimited ? .secondary : .primary)
+                                Text(saRateLimited
+                                     ? "Rate limit active — wait a few minutes"
+                                     : "Verifies state · then archives with safe delays · no duplicate API calls")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(2)
@@ -638,12 +671,13 @@ struct SetDetailView: View {
                                 .foregroundColor(.secondary)
                         }
                         .padding(12)
-                        .background(Color.purple.opacity(0.08))
+                        .background((saRateLimited ? Color.orange : Color.purple).opacity(0.08))
                         .cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.purple.opacity(0.25), lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(
+                            (saRateLimited ? Color.orange : Color.purple).opacity(0.25), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .disabled(isSyncing || isArchivingAll || uploadManager.isSyncArchiveActive)
+                    .disabled(isSyncing || isArchivingAll || uploadManager.isSyncArchiveActive || saRateLimited)
 
                     // SECONDARY: Verify only (read-only, no archive)
                     Button(action: {
@@ -1691,6 +1725,7 @@ struct SetDetailView: View {
         } else {
             // No active upload or this set isn't active — show Start if pending photos exist
             if currentSet.photos.contains(where: { $0.mediaId == nil }) && uploadManager.activeSetId == nil {
+
                 Button(action: startUpload) {
                     Label("Start Upload", systemImage: "arrow.up.circle.fill")
                         .font(.headline)
@@ -1701,10 +1736,53 @@ struct SetDetailView: View {
                         .cornerRadius(VaultTheme.CornerRadius.md)
                 }
                 .disabled(uploadManager.isActive || uploadManager.activeTask != nil)
+
+                uploadInfoBanner
             }
         }
     }
     
+    // MARK: - Upload Info Banner
+
+    private var uploadInfoBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.subheadline)
+                    .foregroundColor(.orange)
+                Text(LocalizedStringKey("set.upload.info.title"))
+                    .font(.subheadline.bold())
+                    .foregroundColor(.orange)
+            }
+
+            Text(LocalizedStringKey("set.upload.info.body"))
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 5) {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                Text(LocalizedStringKey("set.upload.info.sleep"))
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                .fill(Color(.systemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                        .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+                )
+        )
+        .padding(.top, 4)
+    }
+
     // MARK: - Quick Actions Section
     
     private var quickActionsSection: some View {
@@ -2559,6 +2637,27 @@ struct SetDetailView: View {
         uploadManager.currentPhaseDescription = String(localized: "Starting upload...")
 
         let task = Task {
+            // GRID ANCHOR (automatic): fetch the first page of visible media and anchor
+            // taken_at to 1 second BEFORE the oldest post in that page.
+            // Result: when unarchived, the prediction always appears just below every
+            // post that existed at upload time — pinned posts stay at top, any new posts
+            // uploaded afterwards also stay above it, all without manual configuration.
+            do {
+                let (mediaItems, _) = try await instagram.getUserMediaItems(amount: 21)
+                let datedItems = mediaItems.compactMap { $0.takenAt != nil ? $0 : nil }
+                                           .sorted { ($0.takenAt ?? .distantPast) > ($1.takenAt ?? .distantPast) }
+                if let oldestDate = datedItems.last?.takenAt {
+                    uploadTakenAt = oldestDate.addingTimeInterval(-1)
+                    print("📍 [GRID ANCHOR] Auto anchor: \(datedItems.count) posts fetched, oldest=\(oldestDate) → taken_at=\(uploadTakenAt!)")
+                } else {
+                    // No visible posts yet: no override (Instagram places at top, which is correct)
+                    uploadTakenAt = nil
+                    print("📍 [GRID ANCHOR] No existing posts found — uploading without taken_at override")
+                }
+            } catch {
+                print("⚠️ [GRID ANCHOR] Media fetch failed (\(error)) — uploading without taken_at override")
+                uploadTakenAt = nil
+            }
             await uploadAllPhotos()
         }
         uploadManager.activeTask = task
@@ -2854,14 +2953,24 @@ struct SetDetailView: View {
                         imageData: imageData,
                         caption: "",
                         allowDuplicates: allowDuplicates,
-                        photoIndex: index
+                        photoIndex: index,
+                        takenAt: uploadTakenAt
                     )
                     
                     if let mediaId = mediaId {
                         print("✅ [UPLOAD] Photo #\(index + 1) uploaded. Media ID: \(mediaId)")
                         
-                        // Update status: uploaded (waiting for archive)
-                        dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .uploaded, errorMessage: nil)
+                        // Update status: uploaded (waiting for archive).
+                        // Pass uploadTakenAt as uploadDate so insertRevealURL later positions
+                        // the reveal:// placeholder at the same chronological slot as taken_at,
+                        // matching where Instagram will place the photo when unarchived.
+                        dataManager.updatePhoto(
+                            photoId: photo.id,
+                            mediaId: mediaId,
+                            uploadStatus: .uploaded,
+                            errorMessage: nil,
+                            uploadDate: uploadTakenAt   // nil → DataManager defaults to Date()
+                        )
                         
                         // Wait before archiving (human-like delay)
                         let waitSeconds = Double.random(in: 5...10)

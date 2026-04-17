@@ -286,3 +286,22 @@
 "postpred.help.tip.position"           = "**Original position.** The photo reappears exactly where it was in the grid, with its original date — it may require scrolling to find it.";
 "postpred.help.tip.upload"             = "**During upload.** Do not use the app, change Wi-Fi networks, or let the screen lock. A notification prompts you to return between each upload.";
 "postpred.help.tip.banks"              = "**Number of Banks.** Each bank = one letter or digit position. Plan your sets around the longest word or number you want to reveal.";
+
+// Post Prediction — Input method group headers
+"postpred.help.inputs.group.numeric"   = "FOR NUMERIC / CUSTOM SETS";
+"postpred.help.inputs.group.alpha"     = "FOR ALPHABETIC SETS";
+"postpred.help.inputs.group.universal" = "UNIVERSAL — ALL SET TYPES";
+
+// Post Prediction — Covert Typing input method
+"postpred.help.input.covert.label"     = "COVERT TYPING";
+"postpred.help.input.covert.step1"     = "Enable **Covert Typing** in Post Prediction settings and define a cover word — what the spectator will see displayed.";
+"postpred.help.input.covert.step2"     = "Type the spectator's word normally. The screen shows the cover word while the app silently records the real one.";
+
+// Post Prediction — API / Automation input method
+"postpred.help.input.api.label"        = "API / AUTOMATION";
+"postpred.help.input.api.step1"        = "Use an external automation tool (Shortcuts, NFC tag, companion app) to send the word or number to Post Prediction via URL scheme.";
+"postpred.help.input.api.step2"        = "Useful when a third-party trigger or physical prop automatically fires the reveal at the right moment.";
+// Set upload — progressive upload info banner
+"set.upload.info.title"   = "Progressive upload";
+"set.upload.info.body"    = "The app will upload photos one by one, keeping the screen active. If you leave the app, a notification will alert you before each next upload so you can return in time.";
+"set.upload.info.sleep"   = "Keep the screen on and stay in the app during upload.";

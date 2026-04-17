@@ -223,30 +223,39 @@ struct LockdownDetailsSheet: View {
     @State private var timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var timeRemaining: String = ""
     @Environment(\.dismiss) var dismiss
-    
+
+    /// True when the lockdown was triggered by a challenge_required response.
+    /// In this case the magician MUST open Instagram to verify, not avoid it.
+    private var isChallengeLockdown: Bool {
+        instagram.challengeRequiredStreak > 0
+    }
+
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
+
+                // ── Icon + title ──────────────────────────────────────────
                 VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.shield.fill")
+                    Image(systemName: isChallengeLockdown ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
                         .font(.system(size: 50))
-                        .foregroundColor(.red)
-                    
-                    Text("Safety Lock Active")
+                        .foregroundColor(isChallengeLockdown ? .blue : .red)
+
+                    Text(isChallengeLockdown ? "Verificación requerida" : "Safety Lock Active")
                         .font(.title2.weight(.bold))
-                    
+
                     Text(instagram.lockReason)
                         .font(.body)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
-                
+
+                // ── Countdown ─────────────────────────────────────────────
                 VStack(spacing: 8) {
-                    Text("Auto-unlock in:")
+                    Text("Desbloqueo automático en:")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     Text(timeRemaining)
                         .font(.system(size: 48, weight: .bold, design: .monospaced))
                         .foregroundColor(.orange)
@@ -254,29 +263,64 @@ struct LockdownDetailsSheet: View {
                 .padding()
                 .background(Color.orange.opacity(0.1))
                 .cornerRadius(16)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Do NOT open Instagram", systemImage: "xmark.circle")
-                    Label("Do NOT retry any action", systemImage: "xmark.circle")
-                    Label("Wait for countdown to finish", systemImage: "clock")
-                    Label("Then wait 5 more minutes", systemImage: "hourglass")
-                }
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(12)
-                
-                Spacer()
-                
-                VStack(spacing: 12) {
-                    Button("Force Unlock (Risky)") {
-                        instagram.unlock()
-                        dismiss()
+
+                // ── Instructions (differ by lockdown type) ────────────────
+                if isChallengeLockdown {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Abre la app de Instagram", systemImage: "arrow.up.right.square")
+                            .foregroundColor(.blue)
+                        Label("Completa cualquier verificación que aparezca", systemImage: "checkmark.circle")
+                            .foregroundColor(.blue)
+                        Label("Si no aparece nada, vuelve aquí y pulsa «Ya verifiqué»", systemImage: "arrow.uturn.left.circle")
+                            .foregroundColor(.secondary)
+                        Label("La sesión se reanudará automáticamente si esperas", systemImage: "clock")
+                            .foregroundColor(.secondary)
                     }
                     .font(.subheadline)
-                    .foregroundColor(.orange)
-                    
+                    .padding()
+                    .background(Color.blue.opacity(0.07))
+                    .cornerRadius(12)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Do NOT open Instagram", systemImage: "xmark.circle")
+                        Label("Do NOT retry any action", systemImage: "xmark.circle")
+                        Label("Wait for countdown to finish", systemImage: "clock")
+                        Label("Then wait 5 more minutes", systemImage: "hourglass")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding()
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(12)
+                }
+
+                Spacer()
+
+                // ── Action buttons ────────────────────────────────────────
+                VStack(spacing: 12) {
+                    if isChallengeLockdown {
+                        Button {
+                            instagram.unlock()
+                            dismiss()
+                        } label: {
+                            Label("Ya verifiqué — Reanudar", systemImage: "checkmark.circle.fill")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color.blue)
+                                .cornerRadius(12)
+                        }
+                        .padding(.horizontal)
+                    } else {
+                        Button("Force Unlock (Risky)") {
+                            instagram.unlock()
+                            dismiss()
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.orange)
+                    }
+
                     Button("Emergency Logout") {
                         instagram.emergencyLogout()
                         dismiss()
@@ -298,7 +342,7 @@ struct LockdownDetailsSheet: View {
             }
         }
     }
-    
+
     private func updateTimeRemaining() {
         guard let lockUntil = instagram.lockUntil else {
             timeRemaining = "--:--"
