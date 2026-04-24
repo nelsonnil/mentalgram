@@ -222,6 +222,11 @@ struct ForcePostHelpView: View {
                 color: VaultTheme.Colors.textSecondary,
                 text: "**Public profiles only.** The target account must be public — or one you already follow — for its posts to appear in the picker."
             )
+            FPHTip(
+                icon: "lightbulb.fill",
+                color: Color(hex: "F59E0B"),
+                text: "**Create a dedicated account.** A great strategy is to create a real Instagram profile exclusively for your magic — fill it with poker cards, city photos, drink brands, flags, or any themed content. You can then force a specific card, city, or brand with total conviction. The spectator sees a real public Instagram account with real posts."
+            )
         }
     }
 }
@@ -298,8 +303,8 @@ private struct ForcePostAnimatedDemo: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack(spacing: 6) {
-                scenePill(number: "1", label: "Settings", active: scene == .settings)
-                scenePill(number: "2", label: "Perform",  active: scene == .performance)
+                scenePill(number: "1", label: "fph.pill.settings", active: scene == .settings)
+                scenePill(number: "2", label: "fph.pill.perform",   active: scene == .performance)
             }
 
             phoneMockup
@@ -631,7 +636,7 @@ private struct ForcePostAnimatedDemo: View {
 
     // MARK: - Scene pill
 
-    private func scenePill(number: String, label: String, active: Bool) -> some View {
+    private func scenePill(number: String, label: LocalizedStringKey, active: Bool) -> some View {
         HStack(spacing: 5) {
             ZStack {
                 Circle().fill(active ? Color(hex: "F97316") : Color(hex: "F97316").opacity(0.2)).frame(width: 20, height: 20)
@@ -760,10 +765,10 @@ private struct ForcePostAnimatedDemo: View {
 private struct FPHSection<Content: View>: View {
     let icon: String
     let iconColor: Color
-    let title: String
+    let title: LocalizedStringKey
     let content: Content
 
-    init(icon: String, iconColor: Color, title: String, @ViewBuilder content: () -> Content) {
+    init(icon: String, iconColor: Color, title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.icon      = icon
         self.iconColor = iconColor
         self.title     = title
@@ -786,8 +791,8 @@ private struct FPHSection<Content: View>: View {
 }
 
 private struct FPHBody: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         Text(text)
             .font(VaultTheme.Typography.body())
@@ -799,8 +804,8 @@ private struct FPHBody: View {
 private struct FPHMetric: View {
     let icon: String
     let color: Color
-    let label: String
-    let desc: String
+    let label: LocalizedStringKey
+    let desc: LocalizedStringKey
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.md) {
             Image(systemName: icon)
@@ -825,8 +830,8 @@ private struct FPHMetric: View {
 }
 
 private struct FPHInfoBox: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
             Image(systemName: "info.circle.fill")
@@ -868,10 +873,10 @@ private struct FPHStep: View {
 }
 
 private struct FPHShowStep: View {
-    let label: String
+    let label: LocalizedStringKey
     let color: Color
-    let action: String
-    let dialogue: String?
+    let action: LocalizedStringKey
+    let dialogue: LocalizedStringKey?
 
     var body: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
@@ -903,6 +908,7 @@ private struct FPHShowStep: View {
                             .italic()
                             .foregroundColor(VaultTheme.Colors.textPrimary.opacity(0.85))
                             .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.leading, VaultTheme.Spacing.md)
                 }

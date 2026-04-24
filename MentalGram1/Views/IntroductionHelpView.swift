@@ -176,7 +176,7 @@ struct IntroductionHelpView: View {
     // MARK: - Shared helpers
 
     private func introSection<Content: View>(
-        icon: String, iconColor: Color, title: String,
+        icon: String, iconColor: Color, title: LocalizedStringKey,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -197,7 +197,7 @@ struct IntroductionHelpView: View {
         }
     }
 
-    private func introBullet(icon: String, iconColor: Color, text: String) -> some View {
+    private func introBullet(icon: String, iconColor: Color, text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .medium))
@@ -211,7 +211,7 @@ struct IntroductionHelpView: View {
         }
     }
 
-    private func quoteBox(text: String, color: Color) -> some View {
+    private func quoteBox(text: LocalizedStringKey, color: Color) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Rectangle()
                 .fill(color.opacity(0.6))
@@ -226,7 +226,7 @@ struct IntroductionHelpView: View {
         .padding(.vertical, 4)
     }
 
-    private func pillarCard(icon: String, color: Color, title: String, body: String, tags: [String]) -> some View {
+    private func pillarCard(icon: String, color: Color, title: LocalizedStringKey, body: LocalizedStringKey, tags: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: icon)

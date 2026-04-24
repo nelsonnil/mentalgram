@@ -40,7 +40,7 @@ class CloudBackupService: ObservableObject {
         // Misc
         "autoProfilePicOnPerformance", "last_note_text",
         // Active set IDs
-        "activeWordSetId", "activeNumberSetId", "activeCustomSetId",
+        "activeWordSetId", "activeNumberSetId", "activeCustomSetId", "activeCardSetId",
         // Sets metadata (JSON encoded by DataManager)
         "com.vault.sets",
     ]

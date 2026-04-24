@@ -19,7 +19,7 @@ struct LogsView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                TextField("Search logs...", text: $searchText)
+                TextField("logs.search_placeholder", text: $searchText)
                     .textFieldStyle(.roundedBorder)
                 
                 if !searchText.isEmpty {
@@ -40,7 +40,7 @@ struct LogsView: View {
                     }
                     
                     ForEach([LogLevel.error, .warning, .upload, .network, .bot], id: \.self) { level in
-                        FilterButton(title: level.rawValue, isSelected: selectedLevel == level) {
+                        FilterButton(title: LocalizedStringKey(level.rawValue), isSelected: selectedLevel == level) {
                             selectedLevel = selectedLevel == level ? nil : level
                         }
                     }
@@ -137,7 +137,7 @@ struct LogsView: View {
 // MARK: - Filter Button
 
 struct FilterButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let isSelected: Bool
     let action: () -> Void
     

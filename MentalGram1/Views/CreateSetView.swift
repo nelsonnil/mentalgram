@@ -12,9 +12,11 @@ struct CreateSetView: View {
     @State private var selectedType: SetType = .word
     @State private var bankCount = 1
     @State private var selectedAlphabet: AlphabetType = .latin
-    @State private var selectedTemplate: LetterTemplate? = nil   // nil = upload own
+    @State private var selectedTemplate: LetterTemplate? = nil       // nil = upload own (word)
+    @State private var selectedNumberTemplate: NumberTemplate? = nil  // nil = upload own (number)
     @State private var isCreating = false
     @State private var availableTemplates: [LetterTemplate] = []
+    @State private var availableNumberTemplates: [NumberTemplate] = []
 
     private var canCreate: Bool {
         !setName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -117,15 +119,52 @@ struct CreateSetView: View {
                             }
                         }
 
-                        // ── Template picker ───────────────────────────────────
+                        // ── Template picker (word) ────────────────────────────
                         TemplatePicker(
                             templates: availableTemplates,
                             selectedTemplate: $selectedTemplate
                         )
                     }
 
-                    // ── Bank count (word/number only) ─────────────────────────
-                    if selectedType != .custom {
+                    // ── Number template picker ────────────────────────────────
+                    if selectedType == .number {
+                        NumberTemplatePicker(
+                            templates: availableNumberTemplates,
+                            selectedTemplate: $selectedNumberTemplate
+                        )
+                    }
+
+                    // ── Bank / slot count ─────────────────────────────────────
+                    if selectedType == .card {
+                        // Card sets are always 52 slots — no configuration needed
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Image(systemName: "suit.spade.fill")
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                            Text("52 fixed slots (A–K × ♠♥♣♦)")
+                                .font(.caption)
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        .padding(VaultTheme.Spacing.md)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(VaultTheme.Colors.cardBorder.opacity(0.3))
+                        .cornerRadius(VaultTheme.CornerRadius.sm)
+                    } else if selectedType == .custom {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            Text("Number of image slots")
+                                .font(.headline)
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Stepper(value: $bankCount, in: 1...100) {
+                                Text(bankCount == 1
+                                    ? String(localized: "1 slot")
+                                    : String(format: String(localized: "%lld slots"), bankCount))
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            .tint(VaultTheme.Colors.primary)
+                            Text("Each slot holds one image (up to 100). Select with 1–3 grid swipes.")
+                                .font(.caption)
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                    } else {
                         VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                             Text("Number of Banks")
                                 .font(.headline)
@@ -182,7 +221,10 @@ struct CreateSetView: View {
             .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .onAppear { refreshTemplates(for: selectedAlphabet) }
+            .onAppear {
+            refreshTemplates(for: selectedAlphabet)
+            availableNumberTemplates = TemplateManager.shared.numberTemplates()
+        }
         }
         .navigationViewStyle(.stack)
         .preferredColorScheme(.dark)
@@ -203,11 +245,13 @@ struct CreateSetView: View {
         isCreating = true
 
         let alphabet: AlphabetType? = selectedType == .word ? selectedAlphabet : nil
-        let count = selectedType == .custom ? 1 : bankCount
+        let count = bankCount
 
         // Load template photos if one was chosen, otherwise create empty slots
         var templatePhotos: [(symbol: String, filename: String, imageData: Data)] = []
         if selectedType == .word, let template = selectedTemplate {
+            templatePhotos = TemplateManager.shared.photos(for: template)
+        } else if selectedType == .number, let template = selectedNumberTemplate {
             templatePhotos = TemplateManager.shared.photos(for: template)
         }
 
@@ -382,5 +426,86 @@ private struct TemplateCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Number Template Picker
+
+private struct NumberTemplatePicker: View {
+    let templates: [NumberTemplate]
+    @Binding var selectedTemplate: NumberTemplate?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            Text("Image Template")
+                .font(.headline)
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+
+            if templates.isEmpty {
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "photo.on.rectangle")
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                    Text("No templates available. You'll upload your own images.")
+                        .font(.caption)
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                .padding(VaultTheme.Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(VaultTheme.Colors.cardBackground)
+                .cornerRadius(VaultTheme.CornerRadius.sm)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: VaultTheme.Spacing.md) {
+
+                        // "Upload my own" card
+                        TemplateCard(
+                            title: String(localized: "Upload my own"),
+                            icon: "photo.badge.plus",
+                            previewImages: [],
+                            isSelected: selectedTemplate == nil,
+                            isCustom: true
+                        ) {
+                            selectedTemplate = nil
+                        }
+
+                        // One card per number template
+                        ForEach(templates) { template in
+                            NumberTemplateCardFromDisk(
+                                template: template,
+                                isSelected: selectedTemplate == template
+                            ) {
+                                selectedTemplate = template
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Number Template Card (from disk images)
+
+private struct NumberTemplateCardFromDisk: View {
+    let template: NumberTemplate
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    @State private var previewImages: [UIImage] = []
+
+    var body: some View {
+        TemplateCard(
+            title: template.name,
+            icon: nil,
+            previewImages: previewImages,
+            isSelected: isSelected,
+            isCustom: false,
+            onTap: onTap
+        )
+        .onAppear {
+            previewImages = TemplateManager.shared.previewImages(for: template, count: 4)
+        }
     }
 }

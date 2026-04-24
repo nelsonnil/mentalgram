@@ -490,11 +490,13 @@
 "followers.follow_back" = "फ़ॉलो करें";
 "followers.remove_btn" = "हटाएं";
 "followers.search" = "खोजें";
+"followers.section.following" = "सभी अनुसरण";
+"followers.following_btn" = "फ़ॉलो हो रहा है";
 
 // Force Reel
 "force_reel.title" = "Force Reel";
-"force_reel.subtitle" = "Explore में 3 तक Reels रखें";
-"force_reel.description" = "किसी भी प्रोफाइल से 3 तक Reels पहले से चुनें। Performance में, स्थिति सेट करने के लिए ग्रिड स्वाइप करें, फिर Explore खोलें — Reels उस slot से शुरू होकर 3-3 की दूरी पर दिखेंगे।";
+"force_reel.subtitle" = "Explore में एक विशेष Reel दिखाएं";
+"force_reel.description" = "किसी भी प्रोफाइल से एक Reel पहले से चुनें। Performance में Explore खोलें — चुना हुआ Reel feed में दिखेगा।";
 "force_reel.add_reel_count" = "Reel जोड़ें (%d/3)";
 "force_reel.select_reel" = "Reel चुनें";
 "force_reel.remove_all" = "सभी हटाएं";
@@ -517,6 +519,9 @@
 "postpred.help.section.before" = "शो से पहले";
 "postpred.help.section.during" = "शो के दौरान";
 "postpred.help.section.tips" = "सुझाव";
+"postpred.help.howitworks.step1" = "अपना **सेट** तैयार करें — पहले से फोटो अपलोड करें और ऐप को स्वचालित रूप से संग्रहित करने दें। जब तक आप प्रकट नहीं करते, वे Instagram पर अदृश्य रहते हैं।";
+"postpred.help.howitworks.step2" = "दर्शक स्वतंत्र रूप से एक शब्द, संख्या, छवि या कार्ड चुनता है। आप इनपुट विधियों में से एक का उपयोग करके उसकी पसंद चुपचाप कैप्चर करते हैं।";
+"postpred.help.howitworks.step3" = "प्रकटीकरण शुरू करें। संबंधित फोटो वास्तविक Instagram पर **मूल स्थान और मूल तारीख** के साथ फिर से दिखती है — जैसे वह हमेशा वहाँ थी।";
 "postpred.help.howitworks.body1" = "आप एक **सेट** तैयार करते हैं, हर अक्षर या अंक के लिए एक फोटो का संग्रह। फोटो पहले से अपलोड होती हैं और स्वचालित रूप से संग्रहित हो जाती हैं।";
 "postpred.help.howitworks.body2" = "जब आप प्रकटीकरण शुरू करते हैं, ऐप संबंधित फोटो का संग्रह हटा देती है। वह **मूल ग्रिड स्थिति** पर, **मूल तारीख** के साथ फिर दिखती है।";
 "postpred.help.howitworks.info" = "दर्शक एक असली Instagram प्रोफाइल पर एक असली पोस्ट देखता है। कोई ऐप दिखाई नहीं देती।";
@@ -525,17 +530,35 @@
 "postpred.help.metric.banks" = "बैंक";
 "postpred.help.metric.banks.desc" = "प्रत्येक बैंक = शब्द या संख्या में एक स्थान। बैंक 1 -> पहला अक्षर, बैंक 2 -> दूसरा अक्षर। बैंकों की संख्या अधिकतम लंबाई निर्धारित करती है।";
 "postpred.help.inputs.body1" = "दर्शक स्वतंत्र रूप से एक शब्द या संख्या सोचता है। आप तीन विधियों में से एक से उसकी पसंद चुपचाप कैप्चर करते हैं:";
+"postpred.help.inputs.intro" = "प्रत्येक इनपुट विधि विशिष्ट सेट प्रकारों के साथ संगत है। अपने प्रदर्शन के लिए सबसे उपयुक्त विधि चुनें।";
 "postpred.help.input.grid.label" = "ग्रिड इनपुट";
+"postpred.help.input.grid.intro" = "प्रदर्शन में, फोटो ग्रिड पर बाएँ या दाएँ स्वाइप करें। पोस्ट 1–9 अंक 1–9 से मेल खाती हैं; पोस्ट 10+ अंक 0 से। अधिकतम 3 अंक जमा करें, फिर पोस्ट आइकन टैप करें।";
+"postpred.help.input.grid.case.number" = "प्रत्येक अंक अपने बैंक में स्लॉट चुनता है — बैंक 1 → 1वां अंक, बैंक 2 → 2रा अंक, आदि।";
+"postpred.help.input.grid.case.custom" = "सभी जमा अंक स्लॉट नंबर (1–100) बनाते हैं। जैसे: 7→2 = स्लॉट 72। 1→0→0 = स्लॉट 100।";
+"postpred.help.input.grid.case.card" = "2 अंक: [मूल्य + सूट]। 3 अंक: [दहाई + इकाई + सूट]। सूट: 1=♠  2=♥  3=♣  4=♦। जैसे: 4→2 = 4♥ · 1→1→1 = J♠।";
 "postpred.help.input.grid.step1" = "Post Prediction सेटिंग्स में **अंक ग्रिड** सक्षम करें।";
 "postpred.help.input.grid.step2" = "परफॉर्मेंस में, फोटो ग्रिड पर बाएँ या दाएँ स्वाइप करें। पोस्ट 1-9 अंक 1-9 से मेल खाती हैं। पोस्ट 10, 11 और 12 अंक 0 से मेल खाती हैं।";
 "postpred.help.input.grid.step3" = "पोस्ट आइकन टैप करके पुष्टि करें और प्रकटीकरण शुरू करें।";
-"postpred.help.input.ocr.label" = "OCR - कैमरा पहचान";
+"postpred.help.input.ocr.label" = "OCR — कैमरा";
+"postpred.help.input.covert.label" = "गुप्त टाइपिंग";
+"postpred.help.input.covert.step1" = "सेटिंग्स में **गुप्त टाइपिंग** सक्षम करें और कवर शब्द सेट करें — जो दर्शक स्क्रीन पर देखेगा।";
+"postpred.help.input.covert.step2" = "Explore के सर्च फील्ड में दर्शक का शब्द टाइप करें। दर्शक को कवर शब्द दिखता है; ऐप असली शब्द चुपचाप रिकॉर्ड करती है।";
+"postpred.help.input.covert.step3" = "पूरा होने पर **एक बार स्पेस** दबाएं। स्पेस फील्ड से गायब हो जाता है — यह सामान्य है। हल्की वाइब्रेशन पुष्टि करती है कि शब्द कैप्चर हो गया और रिवील शुरू हो गया।";
+"postpred.help.input.url.label" = "URL स्कीम / स्वचालन";
+"postpred.help.input.url.intro" = "किसी भी स्वचालन टूल से दूरस्थ रूप से प्रकटीकरण शुरू करें — Apple Shortcuts, NFC टैग, QR कोड या साथी ऐप्स। सभी सेट प्रकारों के साथ संगत।";
+"postpred.help.input.url.example.word" = "Word Reveal";
+"postpred.help.input.url.example.slot" = "Custom Set — स्लॉट नंबर (1–100)";
+"postpred.help.input.url.example.card" = "Playing Cards — कार्ड चिह्न (जैसे J♠, 10♥, K♦)";
+"postpred.help.settype.word.desc" = "**26 स्लॉट (A–Z) × N बैंक।** प्रत्येक बैंक एक अक्षर प्रकट करता है। बैंक 1 = 1वां अक्षर, बैंक 2 = 2रा अक्षर।";
+"postpred.help.settype.number.desc" = "**10 स्लॉट (0–9) × N बैंक।** प्रत्येक बैंक एक अंक प्रकट करता है। बैंक 1 = 1वां अंक, बैंक 2 = 2रा अंक।";
+"postpred.help.settype.custom.desc" = "**1–100 कस्टम छवियाँ, 1 बैंक।** स्लॉट नंबर (1–100) चुनने के लिए 1–3 अंक स्वाइप करें। मैच परिणाम, टैरो या दृश्य विकल्प के लिए आदर्श।";
+"postpred.help.settype.card.desc" = "**52 स्लॉट (A–K × ♠♥♣♦), 1 बैंक।** कार्ड चुनने के लिए 2–3 अंक स्वाइप करें। सूट: 1=♠ 2=♥ 3=♣ 4=♦। जैसे: 4→2 = 4♥ · 1→1→1 = J♠।";
 "postpred.help.input.ocr.step1" = "Post Prediction सेटिंग्स में **OCR** सक्षम करें।";
 "postpred.help.input.ocr.step2" = "कैमरा किसी हस्तलिखित या मुद्रित शब्द की ओर करें। ऐप स्वचालित रूप से पढ़ती है।";
 "postpred.help.input.url.label" = "URL स्कीम";
 "postpred.help.input.url.step1" = "Post Prediction सेटिंग्स में **URL Scheme** सक्षम करें।";
 "postpred.help.input.url.step2" = "कस्टम URL से दूरस्थ रूप से प्रकटीकरण शुरू करें।";
-"postpred.help.before.1" = "Sets सेक्शन में एक **सेट** बनाएं। अक्षर प्रकार चुनें और इमेज टेम्पलेट चुनें या अपनी फोटो अपलोड करें।";
+"postpred.help.before.1" = "Sets सेक्शन में एक **सेट** बनाएं। Word Reveal, Number Reveal, Custom Set या Playing Cards चुनें। इमेज टेम्पलेट चुनें या अपनी फोटो अपलोड करें।";
 "postpred.help.before.2" = "इमेज अपलोड करें और **स्वचालित रूप से संग्रहित** होने की प्रतीक्षा करें। इसमें कई घंटे लग सकते हैं।";
 "postpred.help.before.3" = "अपलोड के दौरान **ऐप का उपयोग न करें**, नेटवर्क न बदलें, प्रक्रिया बाधित न करें।";
 "postpred.help.before.4" = "अपलोड किए गए सेट को Post Prediction सेटिंग्स में **सक्रिय** के रूप में सेट करें।";
@@ -562,3 +585,283 @@
 "set.upload.info.title"   = "क्रमिक अपलोड";
 "set.upload.info.body"    = "ऐप एक-एक करके फ़ोटो अपलोड करेगा और स्क्रीन को सक्रिय रखेगा। यदि आप ऐप छोड़ते हैं, तो हर अगले अपलोड से पहले एक सूचना आपको वापस आने के लिए सचेत करेगी।";
 "set.upload.info.sleep"   = "अपलोड के दौरान स्क्रीन चालू रखें और ऐप में बने रहें।";
+
+// Lockdown Details Sheet
+"lockdown.challenge.title"      = "Instagram को पुष्टि चाहिए";
+"lockdown.challenge.subtitle"   = "Instagram ने असामान्य गतिविधि देखी है और यह सुनिश्चित करना चाहता है कि यह आप हैं।";
+"lockdown.challenge.nav"        = "पुष्टि लंबित";
+"lockdown.challenge.step1"      = "अपने फोन पर Instagram ऐप खोलें";
+"lockdown.challenge.step2"      = "अगर कोई सुरक्षा सूचना दिखे, उसे पूरा करें (आमतौर पर SMS या ईमेल से कोड)";
+"lockdown.challenge.step3"      = "यहाँ वापस आएं और नीचे बटन दबाएं";
+"lockdown.challenge.step4"      = "अगर Instagram में कोई सूचना नहीं आई, तो बस काउंटडाउन का इंतज़ार करें — ऐप अपने आप शुरू हो जाएगा";
+"lockdown.challenge.btn.resume" = "मैंने पुष्टि कर दी — फिर शुरू करें";
+"lockdown.challenge.btn.skip"   = "बिना पुष्टि के जारी रखें (अनुशंसित नहीं)";
+"lockdown.safety.title"         = "सुरक्षा विराम";
+"lockdown.safety.subtitle"      = "ऐप ने आपके Instagram अकाउंट की सुरक्षा के लिए अपने आप रुक गया।";
+"lockdown.safety.step1"         = "कुछ न करें — ऐप आपके अकाउंट की सुरक्षा के लिए प्रतीक्षा कर रहा है";
+"lockdown.safety.step2"         = "Instagram न खोलें और कोई भी क्रिया दोहराएं नहीं";
+"lockdown.safety.step3"         = "जब काउंटडाउन शून्य पर पहुंचे, ऐप अपने आप फिर शुरू हो जाएगा";
+"lockdown.safety.btn.skip"      = "प्रतीक्षा छोड़ें (अनुशंसित नहीं)";
+"lockdown.countdown.ready"      = "जारी रखने के लिए तैयार!";
+"lockdown.countdown.label"      = "फिर शुरू होगा";
+"lockdown.btn.logout"           = "लॉग आउट";
+"lockdown.btn.logout.note"      = "«लॉग आउट» केवल तब उपयोग करें जब कोई अन्य विकल्प काम न करे। आपको फिर से लॉग इन करना होगा।";
+"lockdown.btn.close"            = "बंद करें";
+
+// Post Prediction input method keys (missing)
+"postpred.help.inputs.group.numeric" = "संख्यात्मक / कस्टम सेट के लिए";
+"postpred.help.inputs.group.alpha" = "वर्णमाला सेट के लिए";
+"postpred.help.inputs.group.universal" = "सार्वभौमिक — सभी सेट प्रकार";
+"postpred.help.input.covert.label" = "गुप्त टाइपिंग";
+"postpred.help.input.api.label" = "API / स्वचालन";
+"postpred.help.input.api.step1" = "URL Scheme के माध्यम से Post Prediction को शब्द या संख्या भेजने के लिए बाहरी ऑटोमेशन टूल (शॉर्टकट, NFC टैग, कम्पेनियन ऐप) का उपयोग करें।";
+"postpred.help.input.api.step2" = "उपयोगी जब तृतीय-पक्ष ट्रिगर या भौतिक प्रोप सही समय पर स्वचालित रूप से रहस्योद्घाटन शुरू करता है।";
+"explore.load_error" = "सामग्री लोड नहीं हो सकी";
+
+// General UI strings (auto-generated)
+"Loading profile…" = "प्रोफ़ाइल लोड हो रही है…";
+"Capturing followers…" = "फ़ॉलोअर्स कैप्चर हो रहे हैं…";
+"Digit Grid Disabled" = "डिजिट ग्रिड अक्षम है";
+"You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid." = "आपके पास एक सक्रिय नंबर सेट है लेकिन डिजिट ग्रिड इनपुट बंद है। ग्रिड स्वाइप करके फ़ोटो अनार्काइव करने के लिए इसे सक्षम करें।";
+"Upload in progress" = "अपलोड प्रगति में है";
+"A photo upload is currently running. Wait for it to finish before revealing numbers — both actions share the same hourly Instagram limit and triggering both together can cause bot detection." = "अभी एक फ़ोटो अपलोड चल रहा है। नंबर प्रकट करने से पहले इसके पूरा होने का इंतज़ार करें — दोनों क्रियाएं Instagram की समान घंटेवार सीमा साझा करती हैं और दोनों को एक साथ ट्रिगर करने से बॉट डिटेक्शन हो सकता है।";
+"No Internet Connection" = "इंटरनेट कनेक्शन नहीं है";
+"Check your connection and try again." = "अपना कनेक्शन जांचें और पुनः प्रयास करें।";
+"Try Again" = "पुनः प्रयास करें";
+"This keeps happening. Try logging out and back in." = "यह बार-बार हो रहा है। लॉग आउट करके फिर से लॉग इन करें।";
+"Log Out & Retry" = "लॉग आउट करें और पुनः प्रयास करें";
+"Session Problem" = "सत्र समस्या";
+"The Instagram session has expired. This happens after a password change, prolonged inactivity, or suspicious activity detection." = "Instagram सत्र समाप्त हो गया है। यह पासवर्ड परिवर्तन, लंबे समय तक निष्क्रियता, या संदिग्ध गतिविधि का पता लगाने के बाद होता है।";
+"Re-login to Instagram" = "Instagram में पुनः लॉग इन करें";
+"Saved credentials will be auto-filled." = "सहेजे गए क्रेडेंशियल स्वचालित रूप से भरे जाएंगे।";
+"No saved credentials. You will need to type them manually." = "कोई सहेजे गए क्रेडेंशियल नहीं हैं। आपको उन्हें मैन्युअल रूप से टाइप करना होगा।";
+"Emergency Logout" = "आपातकालीन लॉग आउट";
+"Emergency logout clears the session and requires a full login." = "आपातकालीन लॉग आउट सत्र साफ़ करता है और पूर्ण लॉगिन की आवश्यकता होती है।";
+"Session Info" = "सत्र जानकारी";
+"Latest Follower" = "नवीनतम फ़ॉलोअर";
+"Visible Photos Detected" = "दृश्यमान फ़ोटो मिलीं";
+"Upload Complete" = "अपलोड पूर्ण";
+"Re-login" = "पुनः लॉग इन करें";
+"OK" = "ठीक है";
+
+// Dynamic format string keys
+"ig.set_not_uploaded_title" = "सेट अपलोड नहीं हुआ";
+"ig.set_not_uploaded_body" = "सेट \"%@\" अभी तक Instagram पर अपलोड नहीं हुआ है। Sets में जाएं और पहले इसे अपलोड करें।";
+"session.reason.challenge" = "Instagram ने बार-बार सुरक्षा सत्यापन का अनुरोध किया (%lld बार)। सत्र पुनर्स्थापित करने के लिए पुनः लॉग इन करें।";
+
+// Tab and context menu labels
+"Sets" = "सेट";
+
+// CreateSetView strings
+"Enter a set name to continue" = "जारी रखने के लिए सेट का नाम दर्ज करें";
+"Your photos" = "आपकी फ़ोटो";
+
+// SetDetailView strings
+"Log out and log in again to continue uploading." = "अपलोड जारी रखने के लिए लॉग आउट करें और फिर से लॉग इन करें।";
+"Remove this photo from all banks? This cannot be undone." = "सभी बैंकों से यह फ़ोटो हटाएं? इसे पूर्ववत नहीं किया जा सकता।";
+"Checking real state on Instagram" = "Instagram पर वास्तविक स्थिति जांच रहे हैं";
+"Short pause before sending archive requests" = "आर्काइव अनुरोध भेजने से पहले छोटा विराम";
+"Wait a few minutes before syncing. Instagram limits API calls per hour." = "सिंक करने से पहले कुछ मिनट प्रतीक्षा करें। Instagram प्रति घंटे API कॉल सीमित करता है।";
+"Another set is currently uploading" = "एक अन्य सेट वर्तमान में अपलोड हो रहा है";
+"Upload will resume automatically after this wait" = "इस प्रतीक्षा के बाद अपलोड स्वचालित रूप से फिर से शुरू होगा";
+"Go to Settings and re-login to continue" = "जारी रखने के लिए सेटिंग्स में जाएं और पुनः लॉग इन करें";
+"Now tap the photo to swap with" = "अब स्वैप करने के लिए फ़ोटो टैप करें";
+"Tap a photo, then tap another to swap them" = "एक फ़ोटो टैप करें, फिर उन्हें स्वैप करने के लिए दूसरा टैप करें";
+"Identical photos next to each other will trigger bot detection. Reorder to fix." = "पास-पास एक जैसी फ़ोटो बॉट डिटेक्शन को ट्रिगर करेंगी। ठीक करने के लिए पुनः क्रमबद्ध करें।";
+
+// ConnectionErrorAlert strings
+"No Connection" = "कोई कनेक्शन नहीं";
+"No Internet connection. Please try again later." = "इंटरनेट कनेक्शन नहीं है। कृपया बाद में पुनः प्रयास करें।";
+"Error Details" = "त्रुटि विवरण";
+"Copy Log" = "लॉग कॉपी करें";
+"Info" = "जानकारी";
+
+// Session panel dismiss keys
+"session.panel.return_to_app" = "ऐप पर वापस जाएं";
+"session.panel.return_to_app.hint" = "इस स्क्रीन को बंद करें ताकि आप सेटिंग्स में जाकर पुनः लॉग इन कर सकें।";
+
+// Help views (Introduction, Limits, UserGuide)
+"What is Vault?" = "Vault क्या है?";
+"Vault — Instagram Magic" = "Vault — Instagram जादू";
+"Hybrid app · Real account · Real results" = "हाइब्रिड ऐप · वास्तविक खाता · वास्तविक परिणाम";
+"Vault se conecta directamente a tu cuenta de Instagram real sin necesitar un perfil separado, un público especial ni ninguna configuración visible." = "Vault आपके असली Instagram खाते से सीधे जुड़ता है — कोई अलग प्रोफ़ाइल नहीं, कोई विशेष दर्शक नहीं, कोई दृश्यमान सेटअप नहीं।";
+"Todo lo que ejecutas ocurre en la misma cuenta que tus espectadores ya siguen — y lo que ven ellos es Instagram, no la app." = "आप जो कुछ भी करते हैं वह उसी खाते पर होता है जिसे आपके दर्शक पहले से फ़ॉलो करते हैं — और वे जो देखते हैं वह Instagram है, ऐप नहीं।";
+"Cómo funciona" = "यह कैसे काम करता है";
+"Sube, archiva y desarchiva fotos en el momento exacto que eliges" = "आपके चुने हुए सटीक समय पर फ़ोटो अपलोड, आर्काइव और अनआर्काइव करें";
+"Cambia tu foto de perfil al instante desde la app" = "ऐप से तुरंत अपनी प्रोफ़ाइल फ़ोटो बदलें";
+"Publica o actualiza tu nota e Instagram en tiempo real" = "अपना Instagram नोट रीयल-टाइम में पोस्ट करें या अपडेट करें";
+"Edita tu biografía para que coincida con lo que el espectador está pensando" = "अपनी जीवनी संपादित करें ताकि यह दर्शक की सोच से मेल खाए";
+"Consulta seguidores y seguidos para efectos de counter glitch" = "काउंटर ग्लिच प्रभावों के लिए फ़ॉलोअर और फ़ॉलोइंग जांचें";
+"Recupera metadatos — fechas, posición en grid, subtítulos — para forzajes de fecha" = "मेटाडेटा प्राप्त करें — तारीखें, ग्रिड स्थिति, कैप्शन — दिनांक बलों के लिए";
+"Por qué importa en magia" = "जादू में यह क्यों मायने रखता है";
+"Cuando el espectador abre Instagram en su propio móvil ve el resultado real — no una captura de pantalla, no una simulación." = "जब दर्शक अपने फोन पर Instagram खोलता है तो उन्हें असली परिणाम दिखता है — स्क्रीनशॉट नहीं, सिमुलेशन नहीं।";
+"La predicción estaba ahí desde el principio, archivada e invisible hasta que tú decidiste revelarla. El forzaje lo confirmó el algoritmo de Instagram. La fecha estaba grabada en una publicación de hace meses." = "भविष्यवाणी शुरू से ही वहाँ थी, आर्काइव की गई और अदृश्य, जब तक आपने इसे प्रकट करने का फैसला नहीं किया। फोर्स को Instagram के एल्गोरिदम ने पुष्टि की। तारीख महीनों पहले की एक पोस्ट में दर्ज थी।";
+"Vault te da el control de una capa de Instagram que ningún espectador puede cuestionar — porque no es la app, es Instagram mismo." = "Vault आपको Instagram की एक परत का नियंत्रण देता है जिसे कोई भी दर्शक सवाल नहीं कर सकता — क्योंकि यह ऐप नहीं है, यह Instagram ही है।";
+"Tres pilares" = "तीन स्तंभ";
+"Forzajes" = "फ़ोर्सेस";
+"Dirige al espectador hacia un número, fecha o post que ya conoces." = "दर्शक को उस संख्या, तारीख या पोस्ट की ओर निर्देशित करें जो आप पहले से जानते हैं।";
+"Predicciones" = "भविष्यवाणियाँ";
+"Pre-sube una foto que coincide con la elección del espectador, archívala, y desarchívala en el clímax." = "दर्शक की पसंद से मेल खाती फ़ोटो पहले से अपलोड करें, उसे आर्काइव करें, और चरमोत्कर्ष पर अनआर्काइव करें।";
+"Reveals de perfil" = "प्रोफ़ाइल प्रकाशन";
+"Cambia tu foto, nota o biografía en tiempo real para que coincida con lo que el espectador está pensando." = "दर्शक जो सोच रहा है उससे मेल खाने के लिए अपनी फ़ोटो, नोट या जीवनी को रीयल-टाइम में बदलें।";
+"Límites & Seguridad" = "सीमाएं और सुरक्षा";
+"Por qué existen los límites" = "सीमाएं क्यों हैं";
+"Instagram impone límites de uso en su API para evitar spam y comportamiento automatizado. Es una medida de seguridad normal que aplica a cualquier app conectada a la plataforma." = "Instagram स्पैम और स्वचालित व्यवहार को रोकने के लिए अपने API पर उपयोग सीमाएं लगाता है। यह एक सामान्य सुरक्षा उपाय है जो प्लेटफ़ॉर्म से जुड़े किसी भी ऐप पर लागू होता है।";
+"Vault está diseñado con tiempos de espera y espaciados automáticos que respetan esos límites. El mago no tiene que hacer nada — la app lo gestiona por él." = "Vault को स्वचालित प्रतीक्षा समय और अंतराल के साथ डिज़ाइन किया गया है जो उन सीमाओं का सम्मान करते हैं। जादूगर को कुछ नहीं करना है — ऐप उनके लिए संभाल लेती है।";
+"Si pulsas una función y parece que no responde de inmediato, lo más probable es que la app esté esperando el tiempo de seguridad antes de la siguiente acción. Espera unos segundos y vuelve a intentarlo." = "यदि आप किसी फ़ंक्शन पर टैप करते हैं और यह तुरंत प्रतिक्रिया नहीं देता है, तो ऐप संभवतः अगली क्रिया से पहले सुरक्षा अंतराल की प्रतीक्षा कर रही है। कुछ सेकंड प्रतीक्षा करें और पुनः प्रयास करें।";
+"Tiempos de espera de la app" = "ऐप प्रतीक्षा समय";
+"Estos valores están integrados automáticamente — no requieren ninguna acción por tu parte:" = "ये मान स्वचालित रूप से बनाए गए हैं — इनके लिए आपकी ओर से कोई कार्रवाई की आवश्यकता नहीं है:";
+"Entre fotos de un set al subir" = "अपलोड के दौरान सेट में फ़ोटो के बीच";
+"160–220 s aleatorio por foto" = "प्रति फ़ोटो 160–220 सेकंड यादृच्छिक";
+"Entre reveals consecutivos" = "लगातार प्रकाशन के बीच";
+"Mínimo entre un reveal y el siguiente" = "एक प्रकाशन और अगले के बीच न्यूनतम";
+"Entre archivados (Sync & Archive)" = "आर्काइव के बीच (Sync & Archive)";
+"Por cada foto archivada" = "प्रति आर्काइव फ़ोटो";
+"Límite de acciones por hora" = "प्रति घंटे क्रियाओं की सीमा";
+"La app deja de actuar si se acerca al límite" = "ऐप सीमा के करीब आने पर काम करना बंद कर देती है";
+"Qué es una detección y cuándo ocurre" = "डिटेक्शन क्या है और यह कब होता है";
+"De vez en cuando Instagram puede pedir una verificación de identidad si detecta actividad inusual. Esto es completamente temporal y no supone ningún riesgo real para la cuenta." = "कभी-कभी Instagram असामान्य गतिविधि का पता लगाने पर पहचान सत्यापन का अनुरोध कर सकता है। यह पूरी तरह से अस्थायी है और खाते के लिए कोई वास्तविक जोखिम नहीं है।";
+"La app reacciona automáticamente pausando la sesión durante el tiempo necesario:" = "ऐप स्वचालित रूप से आवश्यक समय के लिए सत्र को रोककर प्रतिक्रिया करती है:";
+"En todos los casos excepto la sesión expirada, la app se recupera sola sin intervención." = "समाप्त सत्र को छोड़कर सभी मामलों में, ऐप बिना हस्तक्षेप के अपने आप ठीक हो जाती है।";
+"Durante la actuación" = "प्रदर्शन के दौरान";
+"Si ocurre una detección mientras el espectador está mirando, la app oculta los detalles técnicos y muestra una pantalla genérica de \"Sin conexión a Internet\"." = "यदि दर्शक देख रहे हों तो डिटेक्शन होने पर, ऐप तकनीकी विवरण छिपाती है और एक सामान्य \"इंटरनेट कनेक्शन नहीं\" स्क्रीन दिखाती है।";
+"Es una excusa natural y creíble: \"Ah, la conexión de Instagram falla un momento, no pasa nada.\" Ningún espectador verá nada técnico." = "यह एक स्वाभाविक और विश्वसनीय बहाना है: \"अरे, Instagram का कनेक्शन एक पल के लिए टूट गया, कोई बात नहीं।\" कोई भी दर्शक कुछ भी तकनीकी नहीं देखेगा।";
+"Qué hacer en ese momento:" = "उस समय क्या करें:";
+"Señala la pantalla con naturalidad: \"Ah, Instagram falla un segundo\"" = "स्वाभाविक रूप से स्क्रीन की ओर इशारा करें: \"अरे, Instagram एक सेकंड के लिए अटक गया\"";
+"Espera 2–3 minutos — la app se recupera sola en la mayoría de casos" = "2–3 मिनट प्रतीक्षा करें — ज्यादातर मामलों में ऐप अपने आप ठीक हो जाती है";
+"Si el problema persiste, continúa con otra parte de la actuación y retoma después" = "यदि समस्या बनी रहती है, तो प्रदर्शन के दूसरे हिस्से को जारी रखें और बाद में वापस आएं";
+"Regla de oro" = "स्वर्णिम नियम";
+"Si la app no responde o algo parece bloqueado, ve directamente a la app oficial de Instagram. Instagram puede haber mostrado un aviso de actividad inusual que requiere tu atención. Hasta que no lo resuelvas allí, Vault no podrá continuar." = "यदि ऐप प्रतिक्रिया नहीं दे रही है या कुछ अवरुद्ध लगता है, तो सीधे आधिकारिक Instagram ऐप पर जाएं। Instagram ने असामान्य गतिविधि की सूचना दिखाई हो सकती है जिसके लिए आपकी ध्यान की जरूरत है। जब तक आप इसे वहाँ हल नहीं करते, Vault जारी नहीं कर सकता।";
+"Cómo recuperar la sesión" = "सत्र कैसे पुनर्स्थापित करें";
+"El ciclo reveal→archive→reveal" = "प्रकट→आर्काइव→प्रकट चक्र";
+"Cuándo hacer re-login manualmente" = "मैन्युअल रूप से पुनः लॉग इन कब करें";
+"Recomendaciones:" = "सिफारिशें:";
+"Aviso importante — scroll hacia abajo" = "महत्वपूर्ण सूचना — नीचे स्क्रॉल करें";
+"Verificación puntual" = "एकल सत्यापन";
+"Demasiadas peticiones (429)" = "अत्यधिक अनुरोध (429)";
+"Acción bloqueada" = "क्रिया अवरुद्ध";
+"Spam detectado" = "स्पैम पाया गया";
+"Sesión expirada" = "सत्र समाप्त";
+"Re-login necesario" = "पुनः लॉगिन आवश्यक";
+"Escenario A" = "परिदृश्य A";
+"Verificación puntual — el más habitual" = "एकल सत्यापन — सबसे आम";
+"Escenario B" = "परिदृश्य B";
+"Sesión expirada — poco frecuente" = "सत्र समाप्त — कम सामान्य";
+"Nunca practicar más de un ciclo completo reveal→archive con el mismo set en media hora" = "आधे घंटे में एक ही सेट के साथ एक से अधिक पूर्ण प्रकट→आर्काइव चक्र का अभ्यास कभी न करें";
+"Esperar al menos 15 minutos entre un reveal y el siguiente Archive All del mismo set" = "एक प्रकाशन और उसी सेट के अगले Archive All के बीच कम से कम 15 मिनट प्रतीक्षा करें";
+"Preparar el set (Archive All) la noche anterior o al menos 1 hora antes de la actuación, no inmediatamente después de practicar" = "प्रदर्शन से पहले की रात या कम से कम 1 घंटे पहले सेट (Archive All) तैयार करें, अभ्यास के तुरंत बाद नहीं";
+"La app avisará en el botón Sync & Archive si el set fue revelado hace menos de 30 minutos" = "यदि सेट 30 मिनट से कम समय पहले प्रकट किया गया था तो ऐप Sync & Archive बटन में चेतावनी देगी";
+"No te preocupes — esto rara vez ocurre en una actuación real. Solo puede aparecer durante los tests cuando se repite el mismo efecto con frecuencia. La mejor estrategia es familiarizarte con la app y, si alguna vez notas un comportamiento inusual o detección de bot, compartir los logs con el desarrollador (los encontrarás en Ajustes → Logs)." = "चिंता मत करें — यह वास्तविक प्रदर्शन में बहुत कम होता है। यह केवल परीक्षण के दौरान दिख सकता है जब एक ही प्रभाव बार-बार दोहराया जाता है। सबसे अच्छी रणनीति यह है कि ऐप से परिचित हों और यदि आप कभी असामान्य व्यवहार या बॉट डिटेक्शन देखें, तो लॉग डेवलपर के साथ साझा करें (आप उन्हें सेटिंग्स → लॉग्स में पाएंगे)।";
+"La causa más frecuente de detección durante los tests es practicar el mismo truco varias veces seguidas en la misma sesión." = "परीक्षण के दौरान डिटेक्शन का सबसे सामान्य कारण एक ही सत्र में एक ही ट्रिक को लगातार कई बार अभ्यास करना है।";
+"Cuando las mismas fotos se archivan y desarchivan 2–3 veces en 30 minutos, Instagram lo identifica como comportamiento automatizado — aunque cada operación individual respete los cooldowns." = "जब एक ही फ़ोटो को 30 मिनट में 2–3 बार आर्काइव और अनआर्काइव किया जाता है, तो Instagram इसे स्वचालित व्यवहार के रूप में पहचानता है — भले ही प्रत्येक व्यक्तिगत ऑपरेशन कूलडाउन का सम्मान करे।";
+"No es necesario hacer logout antes de cada actuación. Una sesión activa puede durar semanas. Haz re-login solo si:" = "प्रत्येक प्रदर्शन से पहले लॉगआउट करना जरूरी नहीं है। एक सक्रिय सत्र हफ्तों तक चल सकता है। केवल तब पुनः लॉगिन करें यदि:";
+"La app lleva más de 24 h sin responder correctamente a ninguna acción" = "ऐप 24 घंटे से अधिक समय से किसी भी क्रिया का सही ढंग से जवाब नहीं दे रही है";
+"Se producen 3 o más detecciones seguidas en la misma sesión" = "एक ही सत्र में 3 या अधिक लगातार डिटेक्शन होते हैं";
+"El botón \"Reconnect\" aparece persistentemente en Settings" = "सेटिंग्स में \"Reconnect\" बटन लगातार दिखाई देता है";
+"En el resto de situaciones, la app gestiona la sesión de forma automática." = "अन्य सभी स्थितियों में, ऐप स्वचालित रूप से सत्र का प्रबंधन करती है।";
+"Tras reconectar, si no ves las fotos que esperabas en tu perfil de Instagram, haz scroll hacia abajo para forzar la actualización." = "पुनः कनेक्ट करने के बाद, यदि आप अपनी Instagram प्रोफ़ाइल पर अपेक्षित फ़ोटो नहीं देखते हैं, तो ताज़ा करने के लिए नीचे स्क्रॉल करें।";
+"Instagram muestra a veces la versión en caché hasta que se refresca manualmente con un deslizamiento hacia abajo." = "Instagram कभी-कभी कैश संस्करण दिखाता है जब तक इसे नीचे खींचकर मैन्युअल रूप से ताज़ा नहीं किया जाता।";
+"La app no responde o muestra un aviso de bloqueo" = "ऐप प्रतिक्रिया नहीं दे रही है या ब्लॉक नोटिस दिखा रही है";
+"Abre la app oficial de Instagram" = "आधिकारिक Instagram ऐप खोलें";
+"Si aparece un aviso de actividad inusual, pulsa \"Dismiss\" o completa el código de verificación (email o SMS)" = "यदि असामान्य गतिविधि की सूचना दिखे, तो \"Dismiss\" टैप करें या सत्यापन कोड दर्ज करें (ईमेल या SMS)";
+"Si no aparece nada, espera 2 minutos — la sesión se restablece sola en Vault" = "यदि कुछ भी नहीं दिखता है, 2 मिनट प्रतीक्षा करें — Vault में सत्र अपने आप रीसेट हो जाता है";
+"Vuelve a Vault: todo continúa con normalidad" = "Vault पर वापस जाएं: सब कुछ सामान्य रूप से जारी रहता है";
+"Vault muestra la pantalla de re-login" = "Vault पुनः लॉगिन स्क्रीन दिखाता है";
+"Ve primero a Instagram real para descartar cualquier aviso pendiente y pulsa \"Dismiss\" si lo hay" = "पहले असली Instagram पर जाएं किसी भी लंबित नोटिस को खारिज करने के लिए और \"Dismiss\" टैप करें यदि है";
+"Vuelve a Vault y pulsa \"Connect Account\"" = "Vault पर वापस जाएं और \"Connect Account\" टैप करें";
+"Entra con tu usuario y contraseña" = "अपने उपयोगकर्ता नाम और पासवर्ड से साइन इन करें";
+"Acepta las cookies cuando Instagram lo pida — es indispensable" = "जब Instagram मांगे तो cookies स्वीकार करें — यह आवश्यक है";
+"La sesión se restaura automáticamente" = "सत्र स्वचालित रूप से पुनर्स्थापित हो जाता है";
+"API limits, cooldowns, bot detection and how to recover" = "API सीमाएं, कूलडाउन, बॉट डिटेक्शन और रिकवरी";
+"Change your Instagram profile photo as a prediction" = "अपनी Instagram प्रोफ़ाइल फ़ोटो को भविष्यवाणी के रूप में बदलें";
+"Force a specific reel to appear in Explore" = "किसी विशिष्ट Reel को Explore में दिखाने के लिए बाध्य करें";
+"Glitch the follower or following count for a spectator" = "दर्शक के फ़ॉलोअर या फ़ॉलोइंग काउंटर को ग्लिच करें";
+"Predict a spectator's post from weeks ago" = "हफ्तों पहले दर्शक की पोस्ट की भविष्यवाणी करें";
+"How Vault works, what it can do, and why it matters for magic" = "Vault कैसे काम करता है, यह क्या कर सकता है, और जादू के लिए यह क्यों मायने रखता है";
+"Note and biography prediction using API, OCR or URL Scheme" = "API, OCR या URL Scheme का उपयोग करके नोट और जीवनी भविष्यवाणी";
+
+// Help views (CounterGlitch, DateForce, InstagramProfile, PostPrediction)
+"Consejos" = "सुझाव";
+"Convicción" = "विश्वास";
+"Dígitos" = "अंक";
+"Dígito secreto vía swipe" = "स्वाइप द्वारा गुप्त अंक";
+"Espectador" = "दर्शक";
+"Fase 1 — Deflación" = "चरण 1 — कमी";
+"Fase 2 — Inflación" = "चरण 2 — वृद्धि";
+"**No enseñes la pantalla hasta tener el número inflado.** Navega el grid con el móvil hacia ti para que nadie más vea los swipes secretos." = "**बढ़ाई हुई संख्या मिलने तक स्क्रीन न दिखाएं।** ग्रिड को अपनी ओर फोन घुमाकर नेविगेट करें ताकि कोई और गुप्त स्वाइप न देख सके।";
+"**Perfil propio o ajeno.** Con el perfil del espectador el impacto es mayor porque puede verificarlo él mismo." = "**अपना प्रोफ़ाइल या किसी और का।** दर्शक के अपने प्रोफ़ाइल से प्रभाव अधिक होता है क्योंकि वे इसे स्वयं सत्यापित कर सकते हैं।";
+"Antes de empezar" = "शुरू करने से पहले";
+"Durante el show" = "शो के दौरान";
+"Dos grupos secretos" = "दो गुप्त समूह";
+"Cálculo interno" = "आंतरिक गणना";
+"El espectador lo descifra" = "दर्शक इसे समझता है";
+"Aparece en Explore" = "Explore में दिखाई देता है";
+"El Mago 🎩" = "जादूगर 🎩";
+"El espectador hace la resta:" = "दर्शक घटाव करता है:";
+"EL REVEAL" = "प्रकाशन";
+"CIERRA Y ESPERA" = "बंद करें और प्रतीक्षा करें";
+"**Antes del show**, activa **Date Force** en Settings y configura el formato de fecha (DD/MM/AAAA o MM/DD/AAAA)." = "**शो से पहले**, सेटिंग्स में **Date Force** सक्षम करें और तारीख प्रारूप (DD/MM/YYYY या MM/DD/YYYY) कॉन्फ़िगर करें।";
+"**Cuentas privadas.** Si un espectador tiene la cuenta privada y no te sigue de vuelta, es posible que no puedas cargar su perfil. Pídele que te siga momentáneamente o usa una cuenta pública." = "**निजी खाते।** यदि दर्शक के पास निजी खाता है और वे आपको वापस फ़ॉलो नहीं करते, तो आप उनका प्रोफ़ाइल लोड नहीं कर पाएंगे। उनसे अस्थायी रूप से फ़ॉलो करने के लिए कहें या सार्वजनिक खाते का उपयोग करें।";
+"**Número par de espectadores.** Con 2 espectadores: 1 grupo fecha + 1 grupo hora. Con 4: 2 grupos fecha + 2 grupos hora. Con 6: 3 grupos de cada tipo." = "**दर्शकों की सम संख्या।** 2 दर्शकों के साथ: 1 तारीख समूह + 1 समय समूह। 4 के साथ: प्रत्येक 2 समूह। 6 के साथ: प्रत्येक 3 समूह।";
+"Profile Picture Prediction" = "प्रोफ़ाइल फ़ोटो भविष्यवाणी";
+"Biography Prediction" = "जीवनी भविष्यवाणी";
+"Note Prediction" = "नोट भविष्यवाणी";
+"How it works" = "यह कैसे काम करता है";
+"Input Method" = "इनपुट विधि";
+"upload.error.no_images" = "कोई छवि लोड नहीं हुई। अपलोड करने से पहले सभी स्लॉट में छवियाँ जोड़ें।";
+
+// ── Limits & Safety help (simplified) ──
+"limits.help.title" = "सीमाएँ और सुरक्षा";
+
+"limits.help.calm.title" = "आराम करें — सब कुछ नियंत्रण में है";
+"limits.help.calm.body" = "Instagram कभी-कभी एक संक्षिप्त सूचना दिखाता है जिसमें पुष्टि करनी होती है कि यह आप ही हैं। यह प्लेटफ़ॉर्म से जुड़े किसी भी ऐप के लिए पूरी तरह सामान्य है और बैन से इसका कोई संबंध नहीं है। Vault को उन्हीं एंटी-बॉट सुरक्षा उपायों के साथ डिज़ाइन किया गया है जो असली ऐप उपयोग करते हैं, और प्रत्येक का गहन परीक्षण किया गया है।";
+"limits.help.calm.infobox" = "मैंने व्यक्तिगत रूप से विकास के दौरान इस तरह की चेतावनी 100 से अधिक बार ट्रिगर की है और मेरे अकाउंट को कभी भी बैन नहीं किया गया। उसी दृष्टिकोण वाले अन्य ऐप बिना किसी समस्या के काम करते हैं — यदि कोई वास्तविक जोखिम होता, तो Vault प्रकाशित नहीं होता।";
+
+"limits.help.warning.title" = "यदि \"असामान्य गतिविधि\" की चेतावनी दिखे";
+"limits.help.warning.intro" = "चिंता न करें — यह बैन नहीं है। यह सिर्फ़ Instagram की पुष्टि है कि यह वाकई आप हैं। इन चरणों का पालन करें:";
+"limits.help.warning.step1" = "आधिकारिक Instagram ऐप खोलें और चेतावनी पर \"Dismiss\" टैप करें।";
+"limits.help.warning.step2" = "यदि सत्यापन मांगे, तो ईमेल या SMS कोड से पूरा करें।";
+"limits.help.warning.step3" = "Vault में सेटिंग्स से लॉग आउट करें, लगभग एक मिनट रुकें, और फिर से लॉग इन करें।";
+"limits.help.warning.step4" = "जारी रखने के लिए तैयार — आपका अकाउंट सुरक्षित है।";
+"limits.help.warning.reassure" = "आपका अकाउंट बिल्कुल ठीक से काम करता रहता है। यह केवल कुछ मिनटों के लिए Vault को रोकता है, और कुछ नहीं।";
+
+"limits.help.show.title" = "प्रदर्शन के दौरान";
+"limits.help.show.body" = "यदि दर्शक स्क्रीन देख रहा हो और कोई चेतावनी आए, तो Vault सभी तकनीकी विवरण छिपाकर एक सामान्य \"कोई इंटरनेट कनेक्शन नहीं\" स्क्रीन दिखाता है।";
+"limits.help.show.infobox" = "सही बहाना: \"अरे, Instagram एक पल के लिए गड़बड़ा गया, कोई बड़ी बात नहीं।\" कोई भी दर्शक तकनीकी कुछ नहीं देखेगा।";
+
+"limits.help.best.title" = "सर्वोत्तम प्रथाएँ";
+"limits.help.best.item1" = "एक ही सत्र में एक ही प्रभाव को कई बार लगातार न दोहराएँ — एल्गोरिथम इसे स्वचालित मान सकता है।";
+"limits.help.best.item2" = "अपने सेट (Sync & Archive) को शो से एक रात पहले या कम से कम एक घंटे पहले तैयार करें, अभ्यास के तुरंत बाद नहीं।";
+"limits.help.best.item3" = "यदि आप अक्सर प्रदर्शन करते हैं, तो मुख्य से अलग एक समर्पित Instagram अकाउंट का उपयोग करें।";
+"limits.help.best.item4" = "Vault सभी प्रतीक्षा समयों को स्वचालित रूप से प्रबंधित करता है — आपको कुछ भी सोचने की आवश्यकता नहीं।";
+
+// ── Counter Glitch demo ──
+"Espectador" = "दर्शक";
+"Ilusionista profesional" = "पेशेवर जादूगर";
+"Espectador · 🎭" = "दर्शक · 🎭";
+"El número de siempre ✓" = "हमेशा की संख्या ✓";
+"El espectador ve %lld · Real: %lld + %lld" = "दर्शक को दिखता है %lld · वास्तविक: %lld + %lld";
+"+%lld recibidos 🎩" = "+%lld प्राप्त 🎩";
+
+// ── Guide: Camouflage section ──
+"guide.section.camouflage" = "छलावरण";
+"guide.fakehome.title" = "नकली होम स्क्रीन";
+"guide.fakehome.subtitle" = "Performance खोलने पर होम स्क्रीन का स्क्रीनशॉट दिखाता है";
+"guide.fakehome.help.what.title" = "नकली होम स्क्रीन क्या है?";
+"guide.fakehome.help.what.body" = "Performance खोलने पर सीधे प्रोफाइल पर जाने की बजाय ऐप पहले आपके असली iPhone होम स्क्रीन का स्क्रीनशॉट दिखाता है। दर्शक को लगेगा कि आप सामान्य रूप से Instagram खोल रहे हैं।";
+"guide.fakehome.help.how.title" = "इसका उपयोग कैसे करें";
+"guide.fakehome.help.how.body" = "1. Instagram आइकन दिखाई देने के साथ होम स्क्रीन का असली स्क्रीनशॉट लें।\n\n2. Settings › Other › Fake Home Screen में अपलोड करें।\n\n3. टॉगल चालू करें।\n\n4. अगली बार Performance खोलने पर वह स्क्रीनशॉट पूरी स्क्रीन पर आएगा — अपना प्रोफाइल दिखाने के लिए कहीं भी टैप करें (Instagram आइकन पर टैप करना आदर्श है)।";
+"guide.fakehome.help.why.title" = "इसका उपयोग क्यों करें?";
+"guide.fakehome.help.why.body" = "यह भ्रम पैदा करता है कि आप बस असली Instagram ऐप खोल रहे हैं। आपकी स्क्रीन देखने वाले किसी भी व्यक्ति को आपका प्रोफाइल दिखने से पहले केवल सामान्य होम स्क्रीन दिखेगी।";
+"guide.lockscreen.title" = "लॉकस्क्रीन इनपुट";
+"guide.lockscreen.subtitle" = "गुप्त अंक प्रविष्टि के लिए नकली iOS लॉकस्क्रीन";
+"guide.lockscreen.help.what.title" = "लॉकस्क्रीन इनपुट क्या है?";
+"guide.lockscreen.help.what.body" = "Performance खोलने पर ऐप प्रोफाइल दिखाने से पहले एक नकली iOS-शैली का पासकोड स्क्रीन दिखाता है। किसी भी दर्शक को लगेगा कि आप बस फोन अनलॉक कर रहे हैं।";
+"guide.lockscreen.help.how.title" = "अपना गुप्त नंबर कैसे दर्ज करें";
+"guide.lockscreen.help.how.body" = "1. नंबर पैड पर अपने गुप्त नंबर के अंक टैप करें — वे चुपचाप दर्ज होते हैं।\n\n2. उन अंकों को लॉक करने के लिए नंबर पैड के बाहर टैप करें।\n\n3. बचे हुए बिंदुओं को किसी भी अंक से भरें — उन्हें अनदेखा किया जाता है।\n\n4. सभी 4 बिंदु भर जाने पर लॉकस्क्रीन बंद हो जाती है और Performance खुलता है।";
+"guide.lockscreen.help.wallpaper.title" = "वॉलपेपर";
+"guide.lockscreen.help.wallpaper.body" = "नकली लॉकस्क्रीन को असली जैसा दिखाने के लिए अपनी असली लॉक स्क्रीन का वही वॉलपेपर अपलोड करें। वॉलपेपर के बिना लॉकस्क्रीन इनपुट सक्षम नहीं किया जा सकता।";
+"guide.lockscreen.help.why.title" = "इसका उपयोग क्यों करें?";
+"guide.lockscreen.help.why.body" = "गुप्त नंबर दर्ज करने को सामान्य फोन अनलॉक के रूप में छिपाता है। नकली होम स्क्रीन के साथ मिलाने पर पूरा क्रम इस तरह दिखता है: फोन अनलॉक → होम स्क्रीन → Instagram खोलना।";
+"guide.lockscreen.help.tricks.title" = "वही गुप्त नंबर — कई ट्रिक्स";
+"guide.lockscreen.help.tricks.body" = "यहाँ दर्ज नंबर वही गुप्त नंबर है जो Grid Input और अन्य सभी जादू की ट्रिक्स में उपयोग किया जाता है:\n\n• किसी न्यूमेरिक सेट से फोटो अनआर्काइव करें\n• ताश का पत्ता दिखाएं\n• कस्टम इमेज दिखाएं\n• काउंटर ग्लिच प्रभाव चालू करें\n• Explore में रील फोर्स करें";

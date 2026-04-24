@@ -20,7 +20,6 @@ struct SessionGuardView: View {
             VStack(spacing: 30) {
                 Spacer()
 
-                // Identical look to system "No Internet" screen
                 Image(systemName: "wifi.slash")
                     .font(.system(size: 70))
                     .foregroundColor(.gray)
@@ -52,35 +51,30 @@ struct SessionGuardView: View {
 
                 Spacer()
 
-                // Subtle magician-only info button (matches LockdownView style)
+                // Subtle magician-only info button (bottom-right corner).
                 HStack {
                     Spacer()
                     Button(action: { showMagicianPanel = true }) {
                         Image(systemName: "info.circle")
-                            .font(.caption)
-                            .foregroundColor(.gray.opacity(0.4))
+                            .font(.callout)
+                            .foregroundColor(.gray.opacity(0.35))
                     }
                     .padding(.trailing, 20)
                     .padding(.bottom, 20)
                 }
             }
         }
-        // Force light scheme so status bar icons are dark (black) on the white background
         .preferredColorScheme(.light)
-        // Magician-only sheet: real reason + re-login button
         .sheet(isPresented: $showMagicianPanel) {
             MagicianSessionPanel(showRelogin: $showRelogin, dismissPanel: {
                 showMagicianPanel = false
             })
         }
-        // Re-login WebView sheet (auto-fills credentials from Keychain)
         .sheet(isPresented: $showRelogin) {
             ReloginSheet(isPresented: $showRelogin)
         }
     }
 
-    /// Validates the session; if it comes back valid the overlay disappears automatically
-    /// (because `isSessionExpired` will be set to false by `apiRequest`).
     private func retryConnection() {
         guard !isRetrying else { return }
         isRetrying = true
@@ -101,9 +95,9 @@ private struct MagicianSessionPanel: View {
 
     private var reason: String {
         if instagram.challengeRequiredStreak >= 2 {
-            return "Instagram has requested repeated security verification (\(instagram.challengeRequiredStreak) times). Re-login to restore the session."
+            return String(format: String(localized: "session.reason.challenge"), instagram.challengeRequiredStreak)
         }
-        return "The Instagram session has expired. This happens after a password change, prolonged inactivity, or suspicious activity detection."
+        return String(localized: "The Instagram session has expired. This happens after a password change, prolonged inactivity, or suspicious activity detection.")
     }
 
     var body: some View {
@@ -157,8 +151,33 @@ private struct MagicianSessionPanel: View {
 
                 Divider()
 
+                // Return to app without logout (to navigate to Settings and re-login)
+                VStack(spacing: 10) {
+                    Button(action: {
+                        instagram.dismissSessionExpiredOverlay()
+                        dismiss()
+                    }) {
+                        Label(String(localized: "session.panel.return_to_app"), systemImage: "arrow.uturn.backward")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.indigo)
+                            .cornerRadius(12)
+                    }
+
+                    Text(String(localized: "session.panel.return_to_app.hint"))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .padding(.horizontal)
+
+                Divider()
+
                 // Emergency options
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     Button(action: {
                         instagram.emergencyLogout()
                         dismiss()

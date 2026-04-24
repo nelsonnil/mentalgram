@@ -27,6 +27,8 @@ enum DateForceFormat: String, CaseIterable {
 struct DateForceSpectator: Identifiable, Equatable {
     let id = UUID()
     let username: String
+    let userId: String
+    let profilePicURL: String?
     let rawFollowerCount: Int   // seguidores — date group metric
     let rawFollowingCount: Int  // seguidos   — time group metric
     let group: DateForceGroup
@@ -84,7 +86,7 @@ class DateForceSettings: ObservableObject {
     /// Pre-loaded spectator profiles, keyed by userId.
     /// Populated by FollowersListView as each spectator is selected — so by the
     /// time the user opens a reel, the data is already available with no delay.
-    var preloadedProfiles: [String: (username: String, followerCount: Int, followingCount: Int)] = [:]
+    var preloadedProfiles: [String: (username: String, userId: String, profilePicURL: String?, followerCount: Int, followingCount: Int)] = [:]
 
     @Published private(set) var spectators: [DateForceSpectator] = []
 
@@ -127,12 +129,12 @@ class DateForceSettings: ObservableObject {
 
     // MARK: - Spectator Management (Dual mode — manual registration)
 
-    func addSpectator(username: String, followingCount: Int, followerCount: Int) {
-        // Group is assigned by position at registration time for display purposes.
-        // sumDate / sumTime recalculate dynamically from position anyway.
+    func addSpectator(username: String, userId: String, profilePicURL: String? = nil, followingCount: Int, followerCount: Int) {
         let group = nextDualGroup()
         let spectator = DateForceSpectator(
             username: username,
+            userId: userId,
+            profilePicURL: profilePicURL,
             rawFollowerCount: followerCount,
             rawFollowingCount: followingCount,
             group: group
@@ -188,12 +190,14 @@ class DateForceSettings: ObservableObject {
         print("🤖 [AUTO] Begin load — expecting \(totalExpected) (date: \(half), time: \(totalExpected - half))")
     }
 
-    func appendAutoSpectator(username: String, followingCount: Int, followerCount: Int) {
+    func appendAutoSpectator(username: String, userId: String, profilePicURL: String? = nil, followingCount: Int, followerCount: Int) {
         let index = spectators.count
         let half = autoExpectedTotal / 2
         let group: DateForceGroup = index < half ? .date : .time
         let s = DateForceSpectator(
             username: username,
+            userId: userId,
+            profilePicURL: profilePicURL,
             rawFollowerCount: followerCount,
             rawFollowingCount: followingCount,
             group: group

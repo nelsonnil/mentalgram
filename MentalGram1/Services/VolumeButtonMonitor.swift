@@ -22,43 +22,37 @@ class VolumeButtonMonitor: ObservableObject {
     private var persistentVolumeView: MPVolumeView?
     private var cachedSlider: UISlider?
     private var isResetting = false
+    private var hasPrepared = false
 
     private init() {}
 
     // MARK: - Public API
 
-    /// Activates the audio session and warms up the volume view.
-    /// Call when entering Performance view so the slider is ready before startMonitoring.
-    /// If monitoring is already active this only reactivates the session — it does NOT
-    /// reset the slider (which would cause a spurious KVO and block the next real press).
+    /// Marks that the volume system should be prepared.
+    /// Does NOT touch the audio session or the window here — that happens
+    /// lazily in startMonitoring() to avoid view-hierarchy side effects
+    /// that can cause flicker on some devices.
     func prepareVolume() {
-        activateSession()
-        guard volumeObservation == nil else {
-            // Already monitoring: no-op beyond session reactivation.
-            // Resetting the slider here would fire a spurious KVO that temporarily
-            // sets isResetting=true and blocks the next user press for ~0.35s.
-            return
-        }
-        setupPersistentVolumeView()
-        // Suppress the KVO that fires when we reset the slider below
-        isResetting = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?.resetVolume()
-        }
+        hasPrepared = true
     }
 
     /// Starts listening for volume button presses (up or down).
+    /// All audio-session and MPVolumeView setup happens here (deferred from prepareVolume)
+    /// so we never touch the window hierarchy during PerformanceView's .onAppear.
     func startMonitoring() {
         guard volumeObservation == nil else { return }
         activateSession()
         if cachedSlider == nil { setupPersistentVolumeView() }
 
-        // isResetting is already set to true by prepareVolume(); set it again here
-        // in case startMonitoring is called standalone without prepareVolume.
         isResetting = true
 
+        // Set volume to 50% so both up and down are always detectable
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.resetVolume()
+        }
+
         volumeObservation = AVAudioSession.sharedInstance()
-            .observe(\.outputVolume, options: [.old, .new]) { [weak self] session, change in
+            .observe(\.outputVolume, options: [.old, .new]) { [weak self] _, change in
                 guard let self, !self.isResetting else { return }
                 let oldVol = change.oldValue ?? 0.5
                 let newVol = change.newValue ?? 0.5
@@ -72,30 +66,17 @@ class VolumeButtonMonitor: ObservableObject {
                         self.downCount += 1
                         print("🔊 [VOLUME] DOWN — trigger #\(self.triggerCount) (down #\(self.downCount))")
                     }
-                    // Reset immediately using cached slider (no async view creation)
                     self.isResetting = true
                     self.resetVolume()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         self.isResetting = false
                     }
                 }
             }
 
-        // Open the gate after the prepareVolume reset (0.1s) has settled.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            guard let self else { return }
-            // Safety: if volume is at or near maximum, pressing UP won't fire KVO.
-            // Bring it back to 0.5 so the next UP press always works.
-            let vol = AVAudioSession.sharedInstance().outputVolume
-            if vol >= 0.95 {
-                self.resetVolume()
-                // Hold gate closed a tiny bit longer for the safety reset to settle
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    self.isResetting = false
-                }
-            } else {
-                self.isResetting = false
-            }
+        // Open the gate after the initial reset has settled
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            self?.isResetting = false
         }
     }
 
@@ -106,6 +87,7 @@ class VolumeButtonMonitor: ObservableObject {
         persistentVolumeView?.removeFromSuperview()
         persistentVolumeView = nil
         cachedSlider = nil
+        hasPrepared = false
     }
 
     // MARK: - Private Helpers

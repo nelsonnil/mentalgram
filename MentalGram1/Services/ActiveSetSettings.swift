@@ -16,11 +16,15 @@ class ActiveSetSettings: ObservableObject {
     @Published var activeCustomSetId: UUID? {
         didSet { save(activeCustomSetId, key: "activeCustomSetId") }
     }
+    @Published var activeCardSetId: UUID? {
+        didSet { save(activeCardSetId, key: "activeCardSetId") }
+    }
 
     private init() {
         activeWordSetId   = load(key: "activeWordSetId")
         activeNumberSetId = load(key: "activeNumberSetId")
         activeCustomSetId = load(key: "activeCustomSetId")
+        activeCardSetId   = load(key: "activeCardSetId")
     }
 
     // MARK: - Helpers
@@ -30,6 +34,7 @@ class ActiveSetSettings: ObservableObject {
         case .word:   return activeWordSetId
         case .number: return activeNumberSetId
         case .custom: return activeCustomSetId
+        case .card:   return activeCardSetId
         }
     }
 
@@ -38,6 +43,7 @@ class ActiveSetSettings: ObservableObject {
         case .word:   activeWordSetId   = id
         case .number: activeNumberSetId = id
         case .custom: activeCustomSetId = id
+        case .card:   activeCardSetId   = id
         }
     }
 

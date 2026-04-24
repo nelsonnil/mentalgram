@@ -53,7 +53,7 @@ struct ExploreView: View {
                             .foregroundColor(.gray)
                             .font(.system(size: 16))
                         
-                        TextField("Buscar", text: $searchText)
+                        TextField("ig.searching", text: $searchText)
                             .font(.system(size: 16))
                             .autocapitalization(.none)
                             .disableAutocorrection(true)

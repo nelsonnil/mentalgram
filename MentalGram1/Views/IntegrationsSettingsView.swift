@@ -20,7 +20,7 @@ struct IntegrationsSettingsView: View {
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                     divider()
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Inject ID")
+                        Text("integrations.inject_id")
                             .font(VaultTheme.Typography.caption())
                             .foregroundColor(VaultTheme.Colors.textSecondary)
                         TextField("e.g. abc123", text: $settings.injectID)
@@ -92,7 +92,7 @@ struct IntegrationsSettingsView: View {
                 .keyboardType(.URL)
         }
         VStack(alignment: .leading, spacing: 6) {
-            Text("JSON field name")
+            Text("integrations.json_field")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
             TextField("e.g. word", text: field)
@@ -119,11 +119,13 @@ struct IntegrationsSettingsView: View {
                 await MainActor.run {
                     testingSource = nil
                     if let v = value, !v.isEmpty {
-                        alertTitle = "✅ Connection OK"
-                        alertMessage = "Response received:\n\"\(v)\""
+                        alertTitle = String(localized: "integrations.connection_ok")
+                        alertMessage = String(localized: "integrations.response_received") + "\n\"\(v)\""
                     } else {
-                        alertTitle = "❌ No response"
-                        alertMessage = "No value was received. Check that the \(source == .inject ? "Inject ID" : "URL and field name") are correct."
+                        alertTitle = String(localized: "integrations.no_response")
+                        alertMessage = source == .inject
+                            ? String(localized: "integrations.check_inject_id")
+                            : String(localized: "integrations.check_url_field")
                     }
                     showingAlert = true
                 }
@@ -135,7 +137,7 @@ struct IntegrationsSettingsView: View {
                 } else {
                     Image(systemName: "play.fill")
                 }
-                Text(isLoading ? "Testing…" : "Test connection")
+                Text(isLoading ? "integrations.testing" : "integrations.test_connection")
                     .font(VaultTheme.Typography.bodyBold())
             }
             .foregroundColor(.white)
@@ -150,7 +152,7 @@ struct IntegrationsSettingsView: View {
     // MARK: - UI Helpers
 
     @ViewBuilder
-    private func sectionLabel(_ title: String, icon: String) -> some View {
+    private func sectionLabel(_ title: LocalizedStringKey, icon: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .semibold))
@@ -176,7 +178,7 @@ struct IntegrationsSettingsView: View {
     }
 
     @ViewBuilder
-    private func cardHeader(icon: String, iconColor: Color, title: String) -> some View {
+    private func cardHeader(icon: String, iconColor: Color, title: LocalizedStringKey) -> some View {
         HStack(spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7).fill(iconColor.opacity(0.15)).frame(width: 30, height: 30)

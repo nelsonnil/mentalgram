@@ -214,7 +214,6 @@ struct DateForceHelpView: View {
             )
 
             scriptBlock(
-                tag: "",
                 tagColor: Color(hex: "F97316"),
                 icon: "clock.fill",
                 stage: nil,
@@ -227,15 +226,15 @@ struct DateForceHelpView: View {
     }
 
     private func scriptBlock(
-        tag: String,
+        tag: LocalizedStringKey? = nil,
         tagColor: Color,
         icon: String,
-        stage: String?,
-        lines: [String],
-        note: String? = nil
+        stage: LocalizedStringKey? = nil,
+        lines: [LocalizedStringKey],
+        note: LocalizedStringKey? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !tag.isEmpty {
+            if let tag {
                 HStack(spacing: 6) {
                     Image(systemName: icon)
                         .font(.system(size: 11, weight: .semibold))
@@ -257,22 +256,15 @@ struct DateForceHelpView: View {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(lines.indices, id: \.self) { i in
                     let line = lines[i]
-                    let isDialogue = line.hasPrefix("«") || line.hasPrefix("\"")
                     HStack(alignment: .top, spacing: 8) {
-                        if isDialogue {
-                            Rectangle()
-                                .fill(tagColor)
-                                .frame(width: 3)
-                                .cornerRadius(2)
-                                .padding(.top, 2)
-                        }
+                        Rectangle()
+                            .fill(tagColor)
+                            .frame(width: 3)
+                            .cornerRadius(2)
+                            .padding(.top, 2)
                         Text(line)
-                            .font(isDialogue
-                                  ? .system(size: 12, weight: .medium).italic()
-                                  : .system(size: 11))
-                            .foregroundColor(isDialogue
-                                             ? VaultTheme.Colors.textPrimary
-                                             : VaultTheme.Colors.textSecondary)
+                            .font(.system(size: 12, weight: .medium).italic())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -295,13 +287,13 @@ struct DateForceHelpView: View {
             }
         }
         .padding(12)
-        .background(tag.isEmpty
+        .background(tag == nil
                     ? Color(hex: "F97316").opacity(0.04)
                     : tagColor.opacity(0.04))
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(tag.isEmpty
+                .stroke(tag == nil
                         ? Color(hex: "F97316").opacity(0.15)
                         : tagColor.opacity(0.15), lineWidth: 1)
         )
@@ -407,10 +399,10 @@ private struct DateForceAnimatedDemo: View {
 
             // ── Scene pills ─────────────────────────────────────────────────
             HStack(spacing: 6) {
-                scenePill(n: "1", label: "Selección",  active: scene == .select)
-                scenePill(n: "2", label: "Suma",       active: scene == .math)
-                scenePill(n: "3", label: "Explore",    active: scene == .explore)
-                scenePill(n: "4", label: "Reveal",     active: scene == .reveal)
+                scenePill(n: "1", label: "dfh.pill.selection", active: scene == .select)
+                scenePill(n: "2", label: "dfh.pill.sum",       active: scene == .math)
+                scenePill(n: "3", label: "dfh.pill.explore",   active: scene == .explore)
+                scenePill(n: "4", label: "dfh.pill.reveal",    active: scene == .reveal)
             }
 
             phoneMockup
@@ -440,7 +432,7 @@ private struct DateForceAnimatedDemo: View {
             if sceneAnimDone {
                 Button(action: nextScene) {
                     HStack(spacing: 6) {
-                        Text(scene == .reveal ? "Reiniciar" : "Siguiente")
+                        Text(scene == .reveal ? "action.restart" : "action.next")
                             .font(.system(size: 13, weight: .semibold))
                         Image(systemName: scene == .reveal ? "arrow.counterclockwise" : "arrow.right")
                             .font(.system(size: 12, weight: .semibold))
@@ -1193,7 +1185,7 @@ private struct DateForceAnimatedDemo: View {
                 // ── DATE row ──────────────────────────────────────────────
                 revealRow(
                     emoji: "📅",
-                    label: "Fecha",
+                    label: "dfh.label.date",
                     shown: followerShown,
                     sum: dateSum,
                     strike: dateStrike,
@@ -1206,7 +1198,7 @@ private struct DateForceAnimatedDemo: View {
                 // ── TIME row ──────────────────────────────────────────────
                 revealRow(
                     emoji: "🕐",
-                    label: "Hora",
+                    label: "dfh.label.time",
                     shown: followingShown,
                     sum: timeSum,
                     strike: timeStrike,
@@ -1251,7 +1243,7 @@ private struct DateForceAnimatedDemo: View {
 
     private func revealRow(
         emoji: String,
-        label: String,
+        label: LocalizedStringKey,
         shown: Int,
         sum: Int,
         strike: Bool,
@@ -1262,7 +1254,10 @@ private struct DateForceAnimatedDemo: View {
         VStack(spacing: 6) {
             HStack(spacing: 5) {
                 Text(emoji).font(.system(size: 12))
-                Text("Grupo \(label)")
+                Text("dfh.group_prefix")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(accentColor)
+                Text(label)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(accentColor)
                 Spacer()
@@ -1337,7 +1332,7 @@ private struct DateForceAnimatedDemo: View {
 
     // MARK: - Scene pill
 
-    private func scenePill(n: String, label: String, active: Bool) -> some View {
+    private func scenePill(n: String, label: LocalizedStringKey, active: Bool) -> some View {
         HStack(spacing: 4) {
             Text(n)
                 .font(.system(size: 10, weight: .bold))
@@ -1596,8 +1591,8 @@ private struct DateForceAnimatedDemo: View {
 // MARK: - ── Reusable helpers (DFH-prefixed) ──────────────────────────────────
 
 private struct DFHSection<Content: View>: View {
-    let icon: String; let iconColor: Color; let title: String; let content: Content
-    init(icon: String, iconColor: Color, title: String, @ViewBuilder content: () -> Content) {
+    let icon: String; let iconColor: Color; let title: LocalizedStringKey; let content: Content
+    init(icon: String, iconColor: Color, title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.icon = icon; self.iconColor = iconColor; self.title = title; self.content = content()
     }
     var body: some View {
@@ -1612,8 +1607,8 @@ private struct DFHSection<Content: View>: View {
 }
 
 private struct DFHBody: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         Text(text).font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -1621,7 +1616,7 @@ private struct DFHBody: View {
 }
 
 private struct DFHMetric: View {
-    let icon: String; let color: Color; let label: String; let desc: String
+    let icon: String; let color: Color; let label: LocalizedStringKey; let desc: LocalizedStringKey
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.md) {
             Image(systemName: icon).font(.system(size: 14)).foregroundColor(color).frame(width: 22).padding(.top, 2)
@@ -1636,8 +1631,8 @@ private struct DFHMetric: View {
 }
 
 private struct DFHInfoBox: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
             Image(systemName: "info.circle.fill").foregroundColor(VaultTheme.Colors.info).font(.system(size: 14)).padding(.top, 1)
@@ -1650,19 +1645,19 @@ private struct DFHInfoBox: View {
 }
 
 private struct DFHStep: View {
-    let n: Int; let text: String
+    let n: Int; let text: LocalizedStringKey
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.md) {
             Text("\(n)").font(.system(size: 12, weight: .bold)).foregroundColor(Color(hex: "BF5AF2"))
                 .frame(width: 22, height: 22).background(Color(hex: "BF5AF2").opacity(0.15)).clipShape(Circle())
-            Text(LocalizedStringKey(text)).font(VaultTheme.Typography.body())
+            Text(text).font(VaultTheme.Typography.body())
                 .foregroundColor(VaultTheme.Colors.textSecondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
 private struct DFHShowStep: View {
-    let label: String; let color: Color; let action: String; let dialogue: String?
+    let label: String; let color: Color; let action: LocalizedStringKey; let dialogue: LocalizedStringKey?
     var body: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
             Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(color).tracking(1.5)
@@ -1689,11 +1684,11 @@ private struct DFHShowStep: View {
 }
 
 private struct DFHTip: View {
-    let icon: String; let color: Color; let text: String
+    let icon: String; let color: Color; let text: LocalizedStringKey
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.md) {
             Image(systemName: icon).foregroundColor(color).font(.system(size: 16)).frame(width: 22).padding(.top, 1)
-            Text(LocalizedStringKey(text)).font(VaultTheme.Typography.body())
+            Text(text).font(VaultTheme.Typography.body())
                 .foregroundColor(VaultTheme.Colors.textSecondary).fixedSize(horizontal: false, vertical: true)
         }
     }

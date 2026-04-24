@@ -182,9 +182,9 @@ private struct ForceReelAnimatedDemo: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack(spacing: 6) {
-                phasePill(n: "1", label: "Grid",    active: phase == .map)
-                phasePill(n: "2", label: "Dial",    active: phase == .swipe)
-                phasePill(n: "3", label: "Explore", active: phase == .explore)
+                phasePill(n: "1", label: "frh.pill.grid",    active: phase == .map)
+                phasePill(n: "2", label: "frh.pill.dial",    active: phase == .swipe)
+                phasePill(n: "3", label: "frh.pill.explore", active: phase == .explore)
             }
 
             phoneMockup
@@ -657,7 +657,7 @@ private struct ForceReelAnimatedDemo: View {
 
     // MARK: - Phase pill
 
-    private func phasePill(n: String, label: String, active: Bool) -> some View {
+    private func phasePill(n: String, label: LocalizedStringKey, active: Bool) -> some View {
         HStack(spacing: 5) {
             ZStack {
                 Circle().fill(active ? Color(hex: "6366F1") : Color(hex: "6366F1").opacity(0.2)).frame(width: 20, height: 20)
@@ -867,8 +867,8 @@ private struct ForceReelAnimatedDemo: View {
 // MARK: - ── Reusable helpers (FRH-prefixed) ──────────────────────────────────
 
 private struct FRHSection<Content: View>: View {
-    let icon: String; let iconColor: Color; let title: String; let content: Content
-    init(icon: String, iconColor: Color, title: String, @ViewBuilder content: () -> Content) {
+    let icon: String; let iconColor: Color; let title: LocalizedStringKey; let content: Content
+    init(icon: String, iconColor: Color, title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.icon = icon; self.iconColor = iconColor; self.title = title; self.content = content()
     }
     var body: some View {
@@ -883,8 +883,8 @@ private struct FRHSection<Content: View>: View {
 }
 
 private struct FRHBody: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         Text(text).font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -892,7 +892,7 @@ private struct FRHBody: View {
 }
 
 private struct FRHMetric: View {
-    let icon: String; let color: Color; let label: String; let desc: String
+    let icon: String; let color: Color; let label: LocalizedStringKey; let desc: LocalizedStringKey
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.md) {
             Image(systemName: icon).font(.system(size: 14)).foregroundColor(color).frame(width: 22).padding(.top, 2)
@@ -907,8 +907,8 @@ private struct FRHMetric: View {
 }
 
 private struct FRHInfoBox: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
             Image(systemName: "info.circle.fill").foregroundColor(VaultTheme.Colors.info).font(.system(size: 14)).padding(.top, 1)
@@ -933,7 +933,7 @@ private struct FRHStep: View {
 }
 
 private struct FRHShowStep: View {
-    let label: String; let color: Color; let action: String; let dialogue: String?
+    let label: LocalizedStringKey; let color: Color; let action: LocalizedStringKey; let dialogue: LocalizedStringKey?
     var body: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
             Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(color).tracking(1.5)
@@ -948,6 +948,7 @@ private struct FRHShowStep: View {
                         Rectangle().fill(color).frame(width: 2).cornerRadius(1)
                         Text(d).font(.system(size: 13)).italic().foregroundColor(VaultTheme.Colors.textPrimary.opacity(0.85))
                             .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.leading, VaultTheme.Spacing.md)
                 }

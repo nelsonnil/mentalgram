@@ -170,7 +170,7 @@ private struct CookieConsentWarningView: View {
     }
 
     @ViewBuilder
-    private func cookieRow(icon: String, iconColor: Color, title: String, body: String) -> some View {
+    private func cookieRow(icon: String, iconColor: Color, title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 18))
@@ -180,7 +180,7 @@ private struct CookieConsentWarningView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
-                Text(.init(body))
+                Text(body)
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -189,7 +189,7 @@ private struct CookieConsentWarningView: View {
     }
 
     @ViewBuilder
-    private func stepRow(number: String, text: String) -> some View {
+    private func stepRow(number: String, text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
             ZStack {
                 Circle()
@@ -199,7 +199,7 @@ private struct CookieConsentWarningView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.purple)
             }
-            Text(.init(text))
+            Text(text)
                 .font(.system(size: 14))
                 .foregroundColor(.primary)
                 .fixedSize(horizontal: false, vertical: true)

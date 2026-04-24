@@ -12,3 +12,15 @@ extension View {
         return self.padding(.horizontal, padding)
     }
 }
+
+// MARK: - Screen size helpers
+
+extension UIScreen {
+    /// true on iPhone SE 2nd/3rd gen (375 pt) and smaller — use to scale down fixed sizes
+    static var isSmall: Bool { main.bounds.width < 390 }
+}
+
+/// Returns one value on iPhone SE / small screens, another on standard and large screens.
+func seAdapt<T>(_ small: T, _ standard: T) -> T {
+    UIScreen.isSmall ? small : standard
+}

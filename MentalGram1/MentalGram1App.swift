@@ -221,140 +221,210 @@ struct LockdownView: View {
 struct LockdownDetailsSheet: View {
     @ObservedObject var instagram = InstagramService.shared
     @State private var timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    @State private var timeRemaining: String = ""
+    @State private var secondsRemaining: Int = 0
+    @State private var isUnlocked = false
     @Environment(\.dismiss) var dismiss
 
-    /// True when the lockdown was triggered by a challenge_required response.
-    /// In this case the magician MUST open Instagram to verify, not avoid it.
+    // challenge_required → el mago debe ir a Instagram a verificar
+    // otro motivo        → solo hay que esperar el contador
     private var isChallengeLockdown: Bool {
         instagram.challengeRequiredStreak > 0
     }
 
+    private var countdownText: String {
+        if isUnlocked { return "0:00" }
+        let m = secondsRemaining / 60
+        let s = secondsRemaining % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
     var body: some View {
         NavigationView {
-            VStack(spacing: 20) {
+            ScrollView {
+                VStack(spacing: 24) {
 
-                // ── Icon + title ──────────────────────────────────────────
-                VStack(spacing: 12) {
-                    Image(systemName: isChallengeLockdown ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                        .font(.system(size: 50))
-                        .foregroundColor(isChallengeLockdown ? .blue : .red)
+                    // ── Icono + título ────────────────────────────────────
+                    VStack(spacing: 10) {
+                        Image(systemName: isChallengeLockdown
+                              ? "hand.raised.fill"
+                              : "shield.fill")
+                            .font(.system(size: 52))
+                            .foregroundColor(isChallengeLockdown ? .orange : .red)
 
-                    Text(isChallengeLockdown ? "Verificación requerida" : "Safety Lock Active")
-                        .font(.title2.weight(.bold))
+                        Text(isChallengeLockdown
+                             ? String(localized: "lockdown.challenge.title")
+                             : String(localized: "lockdown.safety.title"))
+                            .font(.title2.weight(.bold))
+                            .multilineTextAlignment(.center)
 
-                    Text(instagram.lockReason)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-
-                // ── Countdown ─────────────────────────────────────────────
-                VStack(spacing: 8) {
-                    Text("Desbloqueo automático en:")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    Text(timeRemaining)
-                        .font(.system(size: 48, weight: .bold, design: .monospaced))
-                        .foregroundColor(.orange)
-                }
-                .padding()
-                .background(Color.orange.opacity(0.1))
-                .cornerRadius(16)
-
-                // ── Instructions (differ by lockdown type) ────────────────
-                if isChallengeLockdown {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Abre la app de Instagram", systemImage: "arrow.up.right.square")
-                            .foregroundColor(.blue)
-                        Label("Completa cualquier verificación que aparezca", systemImage: "checkmark.circle")
-                            .foregroundColor(.blue)
-                        Label("Si no aparece nada, vuelve aquí y pulsa «Ya verifiqué»", systemImage: "arrow.uturn.left.circle")
+                        Text(isChallengeLockdown
+                             ? String(localized: "lockdown.challenge.subtitle")
+                             : String(localized: "lockdown.safety.subtitle"))
+                            .font(.subheadline)
                             .foregroundColor(.secondary)
-                        Label("La sesión se reanudará automáticamente si esperas", systemImage: "clock")
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding(.top, 8)
+
+                    // ── Contador regresivo ────────────────────────────────
+                    VStack(spacing: 6) {
+                        Text(isUnlocked
+                             ? String(localized: "lockdown.countdown.ready")
+                             : String(localized: "lockdown.countdown.label"))
+                            .font(.caption)
                             .foregroundColor(.secondary)
-                    }
-                    .font(.subheadline)
-                    .padding()
-                    .background(Color.blue.opacity(0.07))
-                    .cornerRadius(12)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Do NOT open Instagram", systemImage: "xmark.circle")
-                        Label("Do NOT retry any action", systemImage: "xmark.circle")
-                        Label("Wait for countdown to finish", systemImage: "clock")
-                        Label("Then wait 5 more minutes", systemImage: "hourglass")
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(12)
-                }
 
-                Spacer()
+                        Text(countdownText)
+                            .font(.system(size: 52, weight: .bold, design: .monospaced))
+                            .foregroundColor(isUnlocked ? .green : .orange)
+                            .animation(.easeInOut, value: isUnlocked)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .background((isUnlocked ? Color.green : Color.orange).opacity(0.08))
+                    .cornerRadius(16)
 
-                // ── Action buttons ────────────────────────────────────────
-                VStack(spacing: 12) {
+                    // ── Pasos a seguir ────────────────────────────────────
                     if isChallengeLockdown {
+                        ldStepBox(color: .orange) {
+                            ldStep(n: "1", icon: "arrow.up.right.square",
+                                   text: String(localized: "lockdown.challenge.step1"))
+                            ldStep(n: "2", icon: "checkmark.shield",
+                                   text: String(localized: "lockdown.challenge.step2"))
+                            ldStep(n: "3", icon: "arrow.uturn.left",
+                                   text: String(localized: "lockdown.challenge.step3"))
+                            ldStep(n: "4", icon: "clock",
+                                   text: String(localized: "lockdown.challenge.step4"))
+                        }
+                    } else {
+                        ldStepBox(color: .blue) {
+                            ldStep(n: "1", icon: "hand.raised",
+                                   text: String(localized: "lockdown.safety.step1"))
+                            ldStep(n: "2", icon: "iphone.slash",
+                                   text: String(localized: "lockdown.safety.step2"))
+                            ldStep(n: "3", icon: "checkmark.circle",
+                                   text: String(localized: "lockdown.safety.step3"))
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    // ── Botones ───────────────────────────────────────────
+                    VStack(spacing: 12) {
+
+                        if isChallengeLockdown {
+                            Button {
+                                instagram.unlock()
+                                instagram.isSessionChallenged = false
+                                dismiss()
+                            } label: {
+                                Label(String(localized: "lockdown.challenge.btn.resume"),
+                                      systemImage: "checkmark.circle.fill")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color.orange)
+                                    .cornerRadius(12)
+                            }
+                        }
+
                         Button {
                             instagram.unlock()
+                            instagram.isSessionChallenged = false
                             dismiss()
                         } label: {
-                            Label("Ya verifiqué — Reanudar", systemImage: "checkmark.circle.fill")
-                                .font(.headline)
-                                .foregroundColor(.white)
+                            Text(isChallengeLockdown
+                                 ? String(localized: "lockdown.challenge.btn.skip")
+                                 : String(localized: "lockdown.safety.btn.skip"))
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color.blue)
+                                .padding(.vertical, 12)
+                                .background(Color(.systemGray6))
                                 .cornerRadius(12)
                         }
-                        .padding(.horizontal)
-                    } else {
-                        Button("Force Unlock (Risky)") {
-                            instagram.unlock()
-                            dismiss()
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.orange)
-                    }
 
-                    Button("Emergency Logout") {
-                        instagram.emergencyLogout()
-                        dismiss()
+                        Button {
+                            instagram.emergencyLogout()
+                            dismiss()
+                        } label: {
+                            Text(String(localized: "lockdown.btn.logout"))
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.red.opacity(0.08))
+                                .cornerRadius(12)
+                        }
+
+                        Text(String(localized: "lockdown.btn.logout.note"))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                     }
-                    .font(.subheadline)
-                    .foregroundColor(.red)
                 }
+                .padding()
             }
-            .padding()
-            .navigationTitle("Safety Details")
+            .navigationTitle(isChallengeLockdown
+                             ? String(localized: "lockdown.challenge.nav")
+                             : String(localized: "lockdown.safety.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Close") { dismiss() }
+                    Button(String(localized: "lockdown.btn.close")) { dismiss() }
                 }
             }
-            .onReceive(timer) { _ in
-                updateTimeRemaining()
-            }
+            .onReceive(timer) { _ in updateCountdown() }
+            .onAppear { updateCountdown() }
         }
     }
 
-    private func updateTimeRemaining() {
+    // MARK: - Helpers
+
+    private func updateCountdown() {
         guard let lockUntil = instagram.lockUntil else {
-            timeRemaining = "--:--"
+            secondsRemaining = 0
+            isUnlocked = true
             return
         }
         let remaining = lockUntil.timeIntervalSinceNow
         if remaining <= 0 {
-            timeRemaining = "0:00"
+            secondsRemaining = 0
+            isUnlocked = true
+            instagram.unlock()
         } else {
-            let minutes = Int(remaining) / 60
-            let seconds = Int(remaining) % 60
-            timeRemaining = String(format: "%d:%02d", minutes, seconds)
+            secondsRemaining = Int(remaining)
+            isUnlocked = false
+        }
+    }
+
+    @ViewBuilder
+    private func ldStepBox(color: Color, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content()
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.07))
+        .cornerRadius(14)
+    }
+
+    private func ldStep(n: String, icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color(.systemGray5))
+                    .frame(width: 26, height: 26)
+                Text(n)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.primary)
+            }
+            Label(text, systemImage: icon)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

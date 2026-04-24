@@ -77,7 +77,7 @@ struct CounterGlitchHelpView: View {
             CGHMetric(icon: "hand.point.left.fill", color: Color(hex: "6366F1"), label: "Dígito secreto vía swipe",
                       desc: "En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel.")
             CGHMetric(icon: "plus.circle.fill", color: VaultTheme.Colors.primary, label: "Inflado invisible",
-                      desc: "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537.")
+                      desc: "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K).")
             CGHMetric(icon: "bolt.fill", color: Color(hex: "F97316"), label: "Glitch + cuenta regresiva",
                       desc: "Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos.")
             CGHMetric(icon: "checkmark.seal.fill", color: VaultTheme.Colors.success, label: "La convicción",
@@ -181,18 +181,20 @@ struct CounterGlitchHelpView: View {
                    text: "**No enseñes la pantalla hasta tener el número inflado.** Navega el grid con el móvil hacia ti, después gíralo.")
             CGHTip(icon: "arrow.left.arrow.right.circle", color: Color(hex: "F97316"),
                    text: "**Transfer mode** funciona mejor en shows pequeños donde el público puede ver ambos perfiles y el \"viaje\" del número.")
+            CGHTip(icon: "k.circle.fill", color: Color(hex: "BF5AF2"),
+                   text: "**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K).")
         }
     }
 
     // MARK: - Script block helper
 
     private func cghScriptBlock(
-        tag: String,
+        tag: LocalizedStringKey,
         tagColor: Color,
         icon: String,
-        stage: String?,
-        lines: [String],
-        note: String? = nil
+        stage: LocalizedStringKey? = nil,
+        lines: [LocalizedStringKey],
+        note: LocalizedStringKey? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -210,14 +212,11 @@ struct CounterGlitchHelpView: View {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(lines.indices, id: \.self) { i in
                     let line = lines[i]
-                    let isDialogue = line.hasPrefix("«") || line.hasPrefix("\"") || line.hasPrefix("[")
                     HStack(alignment: .top, spacing: 8) {
-                        if isDialogue {
-                            Rectangle().fill(tagColor).frame(width: 3).cornerRadius(2).padding(.top, 2)
-                        }
+                        Rectangle().fill(tagColor).frame(width: 3).cornerRadius(2).padding(.top, 2)
                         Text(line)
-                            .font(isDialogue ? .system(size: 12, weight: .medium).italic() : .system(size: 11))
-                            .foregroundColor(isDialogue ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.textSecondary)
+                            .font(.system(size: 12, weight: .medium).italic())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -339,11 +338,42 @@ private struct CounterGlitchAnimatedDemo: View {
 
             // Scene pills
             HStack(spacing: 6) {
-                scenePill(n: "1", label: "Dígitos",   active: scene == .digits)
-                scenePill(n: "2", label: "Inflado",   active: scene == .inflated)
-                scenePill(n: "3", label: "Glitch",    active: scene == .glitch)
-                scenePill(n: "4", label: "Convicción",active: scene == .conviction)
+                scenePill(n: "1", label: "cgdemo.pill.your_profile", active: scene == .digits)
+                scenePill(n: "2", label: "cgdemo.pill.spectator",    active: scene == .inflated)
+                scenePill(n: "3", label: "Glitch",                   active: scene == .glitch)
+                scenePill(n: "4", label: "cgdemo.pill.conviction",   active: scene == .conviction)
             }
+
+            // Phone owner badge — shows whose phone/profile is on screen
+            Group {
+                switch scene {
+                case .digits:
+                    phoneOwnerBadge(
+                        label: "cgdemo.badge.your_phone",
+                        sublabel: "cgdemo.badge.your_phone_sub",
+                        icon: "iphone", color: Color(hex: "6366F1")
+                    )
+                case .inflated:
+                    phoneOwnerBadge(
+                        label: "cgdemo.badge.spectator_profile",
+                        sublabel: "cgdemo.badge.spectator_profile_sub",
+                        icon: "person.fill", color: Color(hex: "BF5AF2")
+                    )
+                case .glitch:
+                    phoneOwnerBadge(
+                        label: "cgdemo.badge.spectator_glitch",
+                        sublabel: "cgdemo.badge.spectator_glitch_sub",
+                        icon: "bolt.fill", color: Color(hex: "F97316")
+                    )
+                case .conviction:
+                    phoneOwnerBadge(
+                        label: "cgdemo.badge.conviction",
+                        sublabel: "cgdemo.badge.conviction_sub",
+                        icon: "checkmark.circle.fill", color: VaultTheme.Colors.success
+                    )
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: scene)
 
             phoneMockup
                 .shadow(color: Color(hex: "6366F1").opacity(glitchPhase == .done ? 0.5 : inflatedGlow * 0.4), radius: 28)
@@ -352,13 +382,13 @@ private struct CounterGlitchAnimatedDemo: View {
             Group {
                 switch scene {
                 case .digits:
-                    Text("El mago registra **3** y **7** con swipes secretos. El contador **Following** muestra el acumulado")
+                    Text("cgdemo.caption.digits")
                 case .inflated:
-                    Text("El perfil muestra **\(inflated)** (real \(realCount) + \(secretNum) del espectador). Nadie sabe de dónde sale")
+                    Text("cgdemo.caption.inflated")
                 case .glitch:
-                    Text("Botón de volumen → glitch → el contador baja de **\(inflated)** a **\(realCount)**")
+                    Text("cgdemo.caption.glitch")
                 case .conviction:
-                    Text("El espectador comprueba su móvil: ve **\(realCount)**. ¡Los \(secretNum) desaparecieron!")
+                    Text("cgdemo.caption.conviction")
                 }
             }
             .font(.system(size: 12, weight: .medium))
@@ -371,9 +401,9 @@ private struct CounterGlitchAnimatedDemo: View {
             if sceneAnimDone {
                 Button(action: nextScene) {
                     HStack(spacing: 6) {
-                        Text(scene == .conviction ? "Reiniciar" : "Siguiente")
+                        Text(scene == .conviction ? "action.restart" : "action.next")
                             .font(.system(size: 13, weight: .semibold))
-                        Image(systemName: scene == .conviction ? "arrow.counterclockwise" : "arrow.right")
+                        Image(systemName: scene == .conviction ? "arrow.counterclockwise" : "arrow.right")  
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundColor(.white)
@@ -451,18 +481,19 @@ private struct CounterGlitchAnimatedDemo: View {
         }
     }
 
-    // MARK: - Scene 1: Digit input
+    // MARK: - Scene 1: Digit input (magician's own profile during Performance)
 
     private var digitsScene: some View {
         ZStack {
             Color(hex: "060606")
             VStack(spacing: 0) {
-                igNavBar
+                igNavBar(username: "magician_ig")
                 igProfileStats(following: accumDigits.isEmpty ? "68" : accumDigits.map { "\($0)" }.joined(),
                                followingIsAccum: !accumDigits.isEmpty,
-                               followingBounce: followingBounce)
-                igBioLine
-                igActionButtons
+                               followingBounce: followingBounce,
+                               accentColor: Color(hex: "6366F1"))
+                igBioLine(text: "Ilusionista profesional")
+                igActionButtonsOwn
                 igTabBar
                 ZStack {
                     pagedTabContent
@@ -478,19 +509,19 @@ private struct CounterGlitchAnimatedDemo: View {
         }
     }
 
-    // MARK: - Scene 2: Inflated profile
+    // MARK: - Scene 2: Inflated profile (spectator's profile)
 
     private var inflatedScene: some View {
         ZStack {
             Color(hex: "060606")
             VStack(spacing: 0) {
-                igNavBar
+                igNavBar(username: "spectator_ig")
                 igProfileStats(following: "\(inflated)",
                                followingIsAccum: true,
                                followingBounce: 1.0,
                                accentColor: Color(hex: "BF5AF2"),
                                glowIntensity: inflatedGlow)
-                igBioLine
+                igBioLine(text: "Espectador · 🎭")
                 igActionButtons
                 igTabBar
                 // Mini post grid
@@ -523,19 +554,19 @@ private struct CounterGlitchAnimatedDemo: View {
         }
     }
 
-    // MARK: - Scene 3: Glitch + countdown
+    // MARK: - Scene 3: Glitch + countdown (still spectator's profile)
 
     private var glitchScene: some View {
         ZStack {
             Color(hex: "060606")
             VStack(spacing: 0) {
-                igNavBar
+                igNavBar(username: "spectator_ig")
                 igProfileStats(following: "\(countdownValue)",
                                followingIsAccum: glitchPhase != .idle,
                                followingBounce: 1.0,
                                accentColor: glitchPhase == .done ? VaultTheme.Colors.success : Color(hex: "F97316"),
                                glowIntensity: glitchPhase == .counting ? 0.6 : 0)
-                igBioLine
+                igBioLine(text: "Espectador · 🎭")
                 igActionButtons
                 igTabBar
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 1), count: 3), spacing: 1) {
@@ -588,7 +619,7 @@ private struct CounterGlitchAnimatedDemo: View {
             LinearGradient(colors: [Color(hex: "0d0820"), Color(hex: "060606")], startPoint: .top, endPoint: .bottom)
 
             VStack(spacing: 20) {
-                Text("La convicción")
+                Text("cgdemo.pill.conviction")
                     .font(.system(size: 12, weight: .semibold)).foregroundColor(Color(white: 0.5))
                     .padding(.top, 24)
 
@@ -599,7 +630,7 @@ private struct CounterGlitchAnimatedDemo: View {
                         icon: "person.fill",
                         iconColor: Color(hex: "6366F1"),
                         stat: "\(realCount)",
-                        statLabel: "seguidores",
+                        statLabel: "ig.stat.followers",
                         note: "El número de siempre ✓",
                         accentColor: VaultTheme.Colors.success
                     )
@@ -627,11 +658,11 @@ private struct CounterGlitchAnimatedDemo: View {
                 // Magician phone (Transfer mode)
                 if magicianPhoneVisible {
                     miniPhoneCard(
-                        label: "Mago (Transfer)",
+                        label: "cgdemo.label.magician_transfer",
                         icon: "wand.and.stars",
                         iconColor: Color(hex: "F97316"),
                         stat: "\(1240 + secretNum)",
-                        statLabel: "seguidores",
+                        statLabel: "ig.stat.followers",
                         note: "+\(secretNum) recibidos 🎩",
                         accentColor: Color(hex: "F97316")
                     )
@@ -643,7 +674,7 @@ private struct CounterGlitchAnimatedDemo: View {
         }
     }
 
-    private func miniPhoneCard(label: String, icon: String, iconColor: Color, stat: String, statLabel: String, note: String, accentColor: Color) -> some View {
+    private func miniPhoneCard(label: LocalizedStringKey, icon: String, iconColor: Color, stat: String, statLabel: LocalizedStringKey, note: LocalizedStringKey, accentColor: Color) -> some View {
         HStack(spacing: 12) {
             ZStack {
                 Circle().fill(iconColor.opacity(0.15)).frame(width: 40, height: 40)
@@ -727,13 +758,14 @@ private struct CounterGlitchAnimatedDemo: View {
         }
     }
 
-    private var igNavBar: some View {
+    // Nav bar – username configurable so Scene 1 shows magician, others show spectator
+    private func igNavBar(username: String) -> some View {
         ZStack {
             Color(hex: "060606")
             HStack {
                 Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundColor(.white)
                 Spacer()
-                Text("spectator_ig").font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                Text(username).font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                 Spacer()
                 Image(systemName: "ellipsis").font(.system(size: 17)).foregroundColor(.white)
             }
@@ -742,17 +774,19 @@ private struct CounterGlitchAnimatedDemo: View {
         .frame(height: 48)
     }
 
-    private var igBioLine: some View {
+    // Bio line – configurable text (LocalizedStringKey so string literals get translated)
+    private func igBioLine(text: LocalizedStringKey) -> some View {
         HStack {
-            Text("Espectador · 🎭").font(.system(size: 11.5)).foregroundColor(.white.opacity(0.65)).padding(.leading, 18)
+            Text(text).font(.system(size: 11.5)).foregroundColor(.white.opacity(0.65)).padding(.leading, 18)
             Spacer()
         }
         .frame(height: 20)
     }
 
+    // Action buttons for another user's profile (Follow / Message)
     private var igActionButtons: some View {
         HStack(spacing: 8) {
-            Text("Follow").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+            Text("ig.follow").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
                 .frame(maxWidth: .infinity).frame(height: 30).background(Color(hex: "6366F1")).cornerRadius(8)
             Text("Message").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
                 .frame(maxWidth: .infinity).frame(height: 30).background(Color.white.opacity(0.12)).cornerRadius(8)
@@ -760,6 +794,42 @@ private struct CounterGlitchAnimatedDemo: View {
                 .frame(width: 34, height: 30).background(Color.white.opacity(0.12)).cornerRadius(8)
         }
         .padding(.horizontal, 16).frame(height: 48)
+    }
+
+    // Action buttons for the magician's OWN profile (Edit Profile / Share Profile)
+    private var igActionButtonsOwn: some View {
+        HStack(spacing: 8) {
+            Text("ig.edit_profile").font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                .frame(maxWidth: .infinity).frame(height: 30)
+                .background(Color.white.opacity(0.12)).cornerRadius(8)
+            Text("ig.share_profile").font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                .frame(maxWidth: .infinity).frame(height: 30)
+                .background(Color.white.opacity(0.12)).cornerRadius(8)
+        }
+        .padding(.horizontal, 16).frame(height: 48)
+    }
+
+    // Badge shown above the phone to clarify whose screen is visible
+    private func phoneOwnerBadge(label: LocalizedStringKey, sublabel: LocalizedStringKey, icon: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle().fill(color.opacity(0.15)).frame(width: 28, height: 28)
+                Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundColor(color)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(color)
+                Text(sublabel)
+                    .font(.system(size: 9))
+                    .foregroundColor(color.opacity(0.75))
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(color.opacity(0.07))
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.2), lineWidth: 1))
     }
 
     private var igTabBar: some View {
@@ -870,7 +940,7 @@ private struct CounterGlitchAnimatedDemo: View {
 
     // MARK: - Scene pill
 
-    private func scenePill(n: String, label: String, active: Bool) -> some View {
+    private func scenePill(n: String, label: LocalizedStringKey, active: Bool) -> some View {
         HStack(spacing: 4) {
             Text(n).font(.system(size: 10, weight: .bold))
                 .foregroundColor(active ? .white : VaultTheme.Colors.textSecondary)
@@ -1072,8 +1142,8 @@ private struct GlitchStrip: Identifiable {
 // MARK: - ── Reusable helper components (CGH-prefixed) ──────────────────────────
 
 private struct CGHSection<Content: View>: View {
-    let icon: String; let iconColor: Color; let title: String; let content: Content
-    init(icon: String, iconColor: Color, title: String, @ViewBuilder content: () -> Content) {
+    let icon: String; let iconColor: Color; let title: LocalizedStringKey; let content: Content
+    init(icon: String, iconColor: Color, title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.icon = icon; self.iconColor = iconColor; self.title = title; self.content = content()
     }
     var body: some View {
@@ -1088,8 +1158,8 @@ private struct CGHSection<Content: View>: View {
 }
 
 private struct CGHBody: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         Text(text).font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -1097,7 +1167,7 @@ private struct CGHBody: View {
 }
 
 private struct CGHMetric: View {
-    let icon: String; let color: Color; let label: String; let desc: String
+    let icon: String; let color: Color; let label: LocalizedStringKey; let desc: LocalizedStringKey
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.md) {
             Image(systemName: icon).font(.system(size: 14)).foregroundColor(color).frame(width: 22).padding(.top, 2)
@@ -1125,8 +1195,8 @@ private struct CGHStep: View {
 }
 
 private struct CGHInfoBox: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
             Image(systemName: "info.circle.fill").foregroundColor(Color(hex: "6366F1")).font(.system(size: 14)).padding(.top, 1)

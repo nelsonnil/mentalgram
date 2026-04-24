@@ -490,11 +490,13 @@
 "followers.follow_back" = "ติดตามด้วย";
 "followers.remove_btn" = "ลบ";
 "followers.search" = "ค้นหา";
+"followers.section.following" = "ทั้งหมดที่ติดตาม";
+"followers.following_btn" = "กำลังติดตาม";
 
 // Force Reel
 "force_reel.title" = "Force Reel";
-"force_reel.subtitle" = "วางรีลได้สูงสุด 3 รายการในหน้าสำรวจ";
-"force_reel.description" = "เลือกรีลได้สูงสุด 3 รายการจากโปรไฟล์ใดก็ได้ ในหน้าแสดงผลงาน เลื่อนตารางเพื่อกำหนดตำแหน่ง จากนั้นเปิดหน้าสำรวจ — รีลจะปรากฏเริ่มจากช่องนั้น ห่างกัน 3 ช่อง";
+"force_reel.subtitle" = "บังคับให้รีลที่เลือกปรากฏในหน้าสำรวจ";
+"force_reel.description" = "เลือกรีลจากโปรไฟล์ใดก็ได้ล่วงหน้า ในหน้าแสดงผลงาน เปิดหน้าสำรวจ — รีลที่บังคับจะปรากฏในฟีด";
 "force_reel.add_reel_count" = "เพิ่มรีล (%d/3)";
 "force_reel.select_reel" = "เลือกรีล";
 "force_reel.remove_all" = "ลบทั้งหมด";
@@ -517,6 +519,9 @@
 "postpred.help.section.before" = "ก่อนการแสดง";
 "postpred.help.section.during" = "ระหว่างการแสดง";
 "postpred.help.section.tips" = "เคล็ดลับ";
+"postpred.help.howitworks.step1" = "เตรียม**เซต**ของคุณ — อัพโหลดภาพล่วงหน้าและปล่อยให้แอปเก็บถาวรโดยอัตโนมัติ ภาพจะมองไม่เห็นบน Instagram จนกว่าคุณจะเลือกเปิดเผย";
+"postpred.help.howitworks.step2" = "ผู้ชมเลือกคำ ตัวเลข ภาพ หรือไพ่ได้อย่างอิสระ คุณบันทึกตัวเลือกของเขาอย่างเงียบๆ ด้วยหนึ่งในวิธีการป้อนข้อมูล";
+"postpred.help.howitworks.step3" = "เปิดใช้การเปิดเผย ภาพที่ตรงกันปรากฏบน Instagram จริง**ที่ตำแหน่งเดิม พร้อมวันที่เดิม** — ราวกับว่ามันอยู่ที่นั่นเสมอ";
 "postpred.help.howitworks.body1" = "คุณเตรียม**เซต** คอลเลกชันภาพถ่าย หนึ่งภาพต่อหนึ่งตัวอักษรหรือตัวเลข ภาพถ่ายถูกอัพโหลดล่วงหน้าและเก็บถาวรโดยอัตโนมัติ มองไม่เห็นบน Instagram จนกว่าคุณจะเลือกเปิดเผย";
 "postpred.help.howitworks.body2" = "เมื่อคุณเปิดใช้การเปิดเผย แอปจะยกเลิกการเก็บถาวรภาพที่ตรงกัน มันปรากฏขึ้นที่**ตำแหน่งกริดเดิม**พร้อม**วันที่เดิม**";
 "postpred.help.howitworks.info" = "ผู้ชมเห็นโพสต์จริงบนโปรไฟล์ Instagram จริง ไม่มีแอปให้เห็น";
@@ -525,17 +530,35 @@
 "postpred.help.metric.banks" = "แบงก์";
 "postpred.help.metric.banks.desc" = "แต่ละแบงก์ = หนึ่งตำแหน่งในคำหรือตัวเลข แบงก์ 1 -> ตัวอักษรที่ 1, แบงก์ 2 -> ตัวอักษรที่ 2 จำนวนแบงก์กำหนดความยาวสูงสุดที่สามารถเปิดเผยได้";
 "postpred.help.inputs.body1" = "ผู้ชมคิดคำหรือตัวเลขได้อย่างอิสระ คุณจับทางเลือกของเขาอย่างเงียบๆ ด้วยหนึ่งในสามวิธี:";
+"postpred.help.inputs.intro" = "วิธีการป้อนข้อมูลแต่ละอย่างเข้ากันได้กับประเภทเซตที่เฉพาะเจาะจง เลือกวิธีที่เหมาะกับการแสดงของคุณมากที่สุด";
 "postpred.help.input.grid.label" = "การป้อนข้อมูลด้วยกริด";
+"postpred.help.input.grid.intro" = "ในการแสดง ปัดซ้ายหรือขวาบนกริดภาพถ่าย โพสต์ 1–9 ตรงกับตัวเลข 1–9; โพสต์ 10+ ตรงกับตัวเลข 0 สะสมได้สูงสุด 3 หลัก จากนั้นแตะไอคอนโพสต์เพื่อเปิดเผย";
+"postpred.help.input.grid.case.number" = "แต่ละตัวเลขเลือกสล็อตในแบงก์ของตัวเอง — แบงก์ 1 → ตัวเลขที่ 1, แบงก์ 2 → ตัวเลขที่ 2 เป็นต้น";
+"postpred.help.input.grid.case.custom" = "ตัวเลขที่สะสมทั้งหมดก่อให้เกิดหมายเลขสล็อต (1–100) เช่น: ปัด 7 แล้ว 2 = สล็อต 72. ปัด 1, 0, 0 = สล็อต 100.";
+"postpred.help.input.grid.case.card" = "2 หลัก: [ค่า + ดอก]. 3 หลัก: [สิบ + หน่วย + ดอก]. ดอก: 1=♠  2=♥  3=♣  4=♦. เช่น: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "เปิดใช้ **กริดตัวเลข** ในการตั้งค่า Post Prediction";
 "postpred.help.input.grid.step2" = "ในหน้าแสดงผล ปัดซ้ายหรือขวาบนกริดภาพถ่าย โพสต์ 1-9 ตรงกับตัวเลข 1-9 โพสต์ 10, 11 และ 12 ตรงกับตัวเลข 0";
 "postpred.help.input.grid.step3" = "แตะไอคอนโพสต์เพื่อยืนยันและเปิดใช้การเปิดเผย";
-"postpred.help.input.ocr.label" = "OCR - การรู้จำด้วยกล้อง";
+"postpred.help.input.ocr.label" = "OCR — กล้อง";
+"postpred.help.input.covert.label" = "การพิมพ์แบบลับ";
+"postpred.help.input.covert.step1" = "เปิดใช้ **การพิมพ์แบบลับ** ในการตั้งค่าและกำหนดคำปกปิด — สิ่งที่ผู้ชมจะเห็นบนหน้าจอ";
+"postpred.help.input.covert.step2" = "พิมพ์คำของผู้ชมในช่องค้นหา Explore ผู้ชมเห็นคำปกปิด แอปบันทึกคำจริงอย่างเงียบๆ";
+"postpred.help.input.covert.step3" = "เมื่อเสร็จแล้ว กด **Space หนึ่งครั้ง** Space จะหายไปจากช่อง — เป็นเรื่องปกติ การสั่นเบาๆ ยืนยันว่าคำถูกจับได้และการเปิดเผยถูกเรียกใช้งานแล้ว";
+"postpred.help.input.url.label" = "URL SCHEME / ระบบอัตโนมัติ";
+"postpred.help.input.url.intro" = "เปิดใช้การเปิดเผยจากระยะไกลจากเครื่องมือระบบอัตโนมัติใดก็ได้ — Apple Shortcuts, แท็ก NFC, QR code หรือแอปเสริม รองรับเซตทุกประเภท";
+"postpred.help.input.url.example.word" = "Word Reveal";
+"postpred.help.input.url.example.slot" = "Custom Set — หมายเลขสล็อต (1–100)";
+"postpred.help.input.url.example.card" = "Playing Cards — สัญลักษณ์ไพ่ (เช่น J♠, 10♥, K♦)";
+"postpred.help.settype.word.desc" = "**26 สล็อต (A–Z) × N แบงก์** แต่ละแบงก์เปิดเผยตัวอักษรหนึ่งตัว แบงก์ 1 = ตัวอักษรที่ 1, แบงก์ 2 = ตัวอักษรที่ 2";
+"postpred.help.settype.number.desc" = "**10 สล็อต (0–9) × N แบงก์** แต่ละแบงก์เปิดเผยตัวเลขหนึ่งตัว แบงก์ 1 = หลักที่ 1, แบงก์ 2 = หลักที่ 2";
+"postpred.help.settype.custom.desc" = "**ภาพที่กำหนดเอง 1–100 ภาพ 1 แบงก์** ปัด 1–3 หลักเพื่อเลือกหมายเลขสล็อต (1–100) เหมาะสำหรับผลการแข่งขัน ไพ่ทาโร่ หรือทางเลือกแบบภาพ";
+"postpred.help.settype.card.desc" = "**52 สล็อต (A–K × ♠♥♣♦) 1 แบงก์** ปัด 2–3 หลักเพื่อเลือกไพ่ ดอก: 1=♠ 2=♥ 3=♣ 4=♦ เช่น: 4→2 = 4♥ · 1→1→1 = J♠";
 "postpred.help.input.ocr.step1" = "เปิดใช้ **OCR** ในการตั้งค่า Post Prediction";
 "postpred.help.input.ocr.step2" = "ชี้กล้องไปที่คำที่เขียนด้วยมือหรือพิมพ์ แอปอ่านโดยอัตโนมัติและเปิดใช้การเปิดเผยที่ตรงกัน";
 "postpred.help.input.url.label" = "URL สคีม";
 "postpred.help.input.url.step1" = "เปิดใช้ **URL Scheme** ในการตั้งค่า Post Prediction";
 "postpred.help.input.url.step2" = "เปิดใช้การเปิดเผยจากระยะไกลผ่าน URL ที่กำหนดเอง มีประโยชน์กับแท็ก NFC, QR code หรือทางลัดอัตโนมัติ";
-"postpred.help.before.1" = "สร้าง**เซต**ในส่วน Sets เลือกประเภทตัวอักษร และเลือกเทมเพลตภาพหรืออัพโหลดภาพของคุณเอง";
+"postpred.help.before.1" = "สร้าง**เซต**ในส่วน Sets เลือก Word Reveal, Number Reveal, Custom Set หรือ Playing Cards เลือกเทมเพลตภาพหรืออัพโหลดภาพของคุณเอง";
 "postpred.help.before.2" = "อัพโหลดภาพและรอให้**เก็บถาวรโดยอัตโนมัติ** อาจใช้เวลาหลายชั่วโมง";
 "postpred.help.before.3" = "ระหว่างการอัพโหลด **อย่าใช้แอป** อย่าเปลี่ยนเครือข่าย และอย่าหยุดกระบวนการ";
 "postpred.help.before.4" = "ตั้งเซตที่อัพโหลดแล้วเป็น**ใช้งาน**ในการตั้งค่า Post Prediction";
@@ -562,3 +585,283 @@
 "set.upload.info.title"   = "อัปโหลดแบบต่อเนื่อง";
 "set.upload.info.body"    = "แอปจะอัปโหลดรูปภาพทีละรูปโดยรักษาหน้าจอให้ทำงานอยู่ หากคุณออกจากแอป การแจ้งเตือนจะแจ้งให้คุณทราบก่อนการอัปโหลดครั้งถัดไปเพื่อให้คุณกลับมาทันเวลา";
 "set.upload.info.sleep"   = "รักษาหน้าจอให้เปิดอยู่และอยู่ในแอประหว่างการอัปโหลด";
+
+// Lockdown Details Sheet
+"lockdown.challenge.title"      = "Instagram ต้องการการยืนยัน";
+"lockdown.challenge.subtitle"   = "Instagram ตรวจพบกิจกรรมผิดปกติและต้องการยืนยันว่าเป็นคุณ";
+"lockdown.challenge.nav"        = "รอการยืนยัน";
+"lockdown.challenge.step1"      = "เปิดแอป Instagram บนโทรศัพท์ของคุณ";
+"lockdown.challenge.step2"      = "หากมีการแจ้งเตือนด้านความปลอดภัย ให้ดำเนินการให้เสร็จสิ้น (มักเป็นรหัสทาง SMS หรืออีเมล)";
+"lockdown.challenge.step3"      = "กลับมาที่นี่และแตะปุ่มด้านล่าง";
+"lockdown.challenge.step4"      = "หากไม่มีการแจ้งเตือนใน Instagram เพียงรอจนนับถอยหลังสิ้นสุด — แอปจะกลับมาทำงานเอง";
+"lockdown.challenge.btn.resume" = "ยืนยันแล้ว — กลับมาทำงาน";
+"lockdown.challenge.btn.skip"   = "ดำเนินการต่อโดยไม่ยืนยัน (ไม่แนะนำ)";
+"lockdown.safety.title"         = "หยุดพักเพื่อความปลอดภัย";
+"lockdown.safety.subtitle"      = "แอปหยุดทำงานโดยอัตโนมัติเพื่อปกป้องบัญชี Instagram ของคุณ";
+"lockdown.safety.step1"         = "อย่าทำอะไร — แอปกำลังรอเพื่อปกป้องบัญชีของคุณ";
+"lockdown.safety.step2"         = "อย่าเปิด Instagram หรือทำซ้ำการกระทำใด ๆ";
+"lockdown.safety.step3"         = "เมื่อนับถอยหลังถึงศูนย์ แอปจะกลับมาทำงานโดยอัตโนมัติ";
+"lockdown.safety.btn.skip"      = "ข้ามการรอ (ไม่แนะนำ)";
+"lockdown.countdown.ready"      = "พร้อมดำเนินการต่อ!";
+"lockdown.countdown.label"      = "กลับมาทำงานใน";
+"lockdown.btn.logout"           = "ออกจากระบบ";
+"lockdown.btn.logout.note"      = "ใช้ «ออกจากระบบ» เฉพาะเมื่อไม่มีตัวเลือกอื่นใดที่ใช้งานได้ คุณจะต้องลงชื่อเข้าใช้ใหม่";
+"lockdown.btn.close"            = "ปิด";
+
+// Post Prediction input method keys (missing)
+"postpred.help.inputs.group.numeric" = "สำหรับชุดตัวเลข / กำหนดเอง";
+"postpred.help.inputs.group.alpha" = "สำหรับชุดตัวอักษร";
+"postpred.help.inputs.group.universal" = "สากล — ทุกประเภทชุด";
+"postpred.help.input.covert.label" = "การพิมพ์แบบลับ";
+"postpred.help.input.api.label" = "API / การทำงานอัตโนมัติ";
+"postpred.help.input.api.step1" = "ใช้เครื่องมืออัตโนมัติภายนอก (คำสั่งลัด, แท็ก NFC, แอปคู่หู) เพื่อส่งคำหรือตัวเลขไปยัง Post Prediction ผ่าน URL Scheme";
+"postpred.help.input.api.step2" = "มีประโยชน์เมื่อตัวกระตุ้นของบุคคลที่สามหรืออุปกรณ์ประกอบฉากทางกายภาพเปิดใช้การเปิดเผยโดยอัตโนมัติในเวลาที่เหมาะสม";
+"explore.load_error" = "ไม่สามารถโหลดเนื้อหาได้";
+
+// General UI strings (auto-generated)
+"Loading profile…" = "กำลังโหลดโปรไฟล์…";
+"Capturing followers…" = "กำลังดึงข้อมูลผู้ติดตาม…";
+"Digit Grid Disabled" = "ตาราง Digit ถูกปิดใช้งาน";
+"You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid." = "คุณมีชุดตัวเลขที่ใช้งานอยู่แต่การป้อนข้อมูลผ่านตาราง Digit ถูกปิดใช้งาน เปิดใช้งานเพื่อยกเลิกการเก็บถาวรรูปภาพโดยการปัดตาราง";
+"Upload in progress" = "กำลังอัปโหลด";
+"A photo upload is currently running. Wait for it to finish before revealing numbers — both actions share the same hourly Instagram limit and triggering both together can cause bot detection." = "การอัปโหลดรูปภาพกำลังดำเนินการอยู่ รอให้เสร็จก่อนที่จะเปิดเผยตัวเลข — ทั้งสองการกระทำใช้ขีดจำกัดรายชั่วโมงของ Instagram เดียวกัน และการเรียกใช้งานพร้อมกันอาจทำให้เกิดการตรวจจับบอต";
+"No Internet Connection" = "ไม่มีการเชื่อมต่ออินเทอร์เน็ต";
+"Check your connection and try again." = "ตรวจสอบการเชื่อมต่อของคุณแล้วลองอีกครั้ง";
+"Try Again" = "ลองอีกครั้ง";
+"This keeps happening. Try logging out and back in." = "สิ่งนี้ยังคงเกิดขึ้น ลองออกจากระบบและเข้าสู่ระบบใหม่";
+"Log Out & Retry" = "ออกจากระบบและลองอีกครั้ง";
+"Session Problem" = "ปัญหาเซสชัน";
+"The Instagram session has expired. This happens after a password change, prolonged inactivity, or suspicious activity detection." = "เซสชัน Instagram หมดอายุแล้ว สิ่งนี้เกิดขึ้นหลังจากการเปลี่ยนรหัสผ่าน การไม่ใช้งานเป็นเวลานาน หรือการตรวจจับกิจกรรมที่น่าสงสัย";
+"Re-login to Instagram" = "เข้าสู่ระบบ Instagram ใหม่";
+"Saved credentials will be auto-filled." = "ข้อมูลรับรองที่บันทึกไว้จะถูกกรอกโดยอัตโนมัติ";
+"No saved credentials. You will need to type them manually." = "ไม่มีข้อมูลรับรองที่บันทึกไว้ คุณจะต้องพิมพ์ด้วยตนเอง";
+"Emergency Logout" = "ออกจากระบบฉุกเฉิน";
+"Emergency logout clears the session and requires a full login." = "การออกจากระบบฉุกเฉินจะล้างเซสชันและต้องเข้าสู่ระบบใหม่ทั้งหมด";
+"Session Info" = "ข้อมูลเซสชัน";
+"Latest Follower" = "ผู้ติดตามล่าสุด";
+"Visible Photos Detected" = "ตรวจพบรูปภาพที่มองเห็นได้";
+"Upload Complete" = "อัปโหลดเสร็จสมบูรณ์";
+"Re-login" = "เข้าสู่ระบบใหม่";
+"OK" = "ตกลง";
+
+// Dynamic format string keys
+"ig.set_not_uploaded_title" = "ชุดยังไม่ถูกอัปโหลด";
+"ig.set_not_uploaded_body" = "ชุด \"%@\" ยังไม่ได้อัปโหลดไปยัง Instagram ไปที่ Sets แล้วอัปโหลดก่อน";
+"session.reason.challenge" = "Instagram ขอการยืนยันความปลอดภัยซ้ำๆ (%lld ครั้ง) เข้าสู่ระบบใหม่เพื่อกู้คืนเซสชัน";
+
+// Tab and context menu labels
+"Sets" = "ชุด";
+
+// CreateSetView strings
+"Enter a set name to continue" = "ป้อนชื่อชุดเพื่อดำเนินการต่อ";
+"Your photos" = "รูปภาพของคุณ";
+
+// SetDetailView strings
+"Log out and log in again to continue uploading." = "ออกจากระบบและเข้าสู่ระบบอีกครั้งเพื่อดำเนินการอัปโหลดต่อ";
+"Remove this photo from all banks? This cannot be undone." = "ลบรูปภาพนี้จาก Banks ทั้งหมด? ไม่สามารถยกเลิกได้";
+"Checking real state on Instagram" = "กำลังตรวจสอบสถานะจริงบน Instagram";
+"Short pause before sending archive requests" = "หยุดชั่วคราวสั้นๆ ก่อนส่งคำขอจัดเก็บถาวร";
+"Wait a few minutes before syncing. Instagram limits API calls per hour." = "รอสองสามนาทีก่อนซิงค์ Instagram จำกัดการเรียก API ต่อชั่วโมง";
+"Another set is currently uploading" = "กำลังอัปโหลดชุดอื่นอยู่";
+"Upload will resume automatically after this wait" = "การอัปโหลดจะดำเนินต่อโดยอัตโนมัติหลังจากการรอนี้";
+"Go to Settings and re-login to continue" = "ไปที่การตั้งค่าและเข้าสู่ระบบใหม่เพื่อดำเนินการต่อ";
+"Now tap the photo to swap with" = "แตะรูปภาพที่ต้องการสลับตอนนี้";
+"Tap a photo, then tap another to swap them" = "แตะรูปภาพ จากนั้นแตะรูปอื่นเพื่อสลับ";
+"Identical photos next to each other will trigger bot detection. Reorder to fix." = "รูปภาพที่เหมือนกันติดกันจะทำให้เกิดการตรวจจับบอต จัดเรียงใหม่เพื่อแก้ไข";
+
+// ConnectionErrorAlert strings
+"No Connection" = "ไม่มีการเชื่อมต่อ";
+"No Internet connection. Please try again later." = "ไม่มีการเชื่อมต่ออินเทอร์เน็ต โปรดลองอีกครั้งในภายหลัง";
+"Error Details" = "รายละเอียดข้อผิดพลาด";
+"Copy Log" = "คัดลอก Log";
+"Info" = "ข้อมูล";
+
+// Session panel dismiss keys
+"session.panel.return_to_app" = "กลับสู่แอป";
+"session.panel.return_to_app.hint" = "ปิดหน้าจอนี้เพื่อไปที่การตั้งค่าและเข้าสู่ระบบใหม่";
+
+// Help views (Introduction, Limits, UserGuide)
+"What is Vault?" = "Vault คืออะไร?";
+"Vault — Instagram Magic" = "Vault — Instagram Magic";
+"Hybrid app · Real account · Real results" = "แอปแบบไฮบริด · บัญชีจริง · ผลลัพธ์จริง";
+"Vault se conecta directamente a tu cuenta de Instagram real sin necesitar un perfil separado, un público especial ni ninguna configuración visible." = "Vault เชื่อมต่อโดยตรงกับบัญชี Instagram จริงของคุณ — ไม่ต้องใช้โปรไฟล์แยก ผู้ชมพิเศษ หรือการตั้งค่าที่มองเห็นได้";
+"Todo lo que ejecutas ocurre en la misma cuenta que tus espectadores ya siguen — y lo que ven ellos es Instagram, no la app." = "ทุกสิ่งที่คุณแสดงเกิดขึ้นในบัญชีเดียวกับที่ผู้ชมของคุณติดตามอยู่แล้ว — และสิ่งที่พวกเขาเห็นคือ Instagram ไม่ใช่แอป";
+"Cómo funciona" = "วิธีการทำงาน";
+"Sube, archiva y desarchiva fotos en el momento exacto que eliges" = "อัปโหลด เก็บถาวร และยกเลิกการเก็บถาวรรูปภาพในเวลาที่คุณเลือก";
+"Cambia tu foto de perfil al instante desde la app" = "เปลี่ยนรูปโปรไฟล์ทันทีจากแอป";
+"Publica o actualiza tu nota e Instagram en tiempo real" = "โพสต์หรืออัปเดตบันทึกย่อ Instagram ของคุณแบบเรียลไทม์";
+"Edita tu biografía para que coincida con lo que el espectador está pensando" = "แก้ไขชีวประวัติของคุณให้ตรงกับสิ่งที่ผู้ชมกำลังคิด";
+"Consulta seguidores y seguidos para efectos de counter glitch" = "ตรวจสอบผู้ติดตามและที่ติดตามสำหรับเอฟเฟกต์ counter glitch";
+"Recupera metadatos — fechas, posición en grid, subtítulos — para forzajes de fecha" = "ดึงข้อมูลเมตา — วันที่ ตำแหน่งในกริด คำบรรยาย — สำหรับ date force";
+"Por qué importa en magia" = "ทำไมมันสำคัญในการแสดงกล";
+"Cuando el espectador abre Instagram en su propio móvil ve el resultado real — no una captura de pantalla, no una simulación." = "เมื่อผู้ชมเปิด Instagram บนโทรศัพท์ของตนเอง พวกเขาเห็นผลลัพธ์จริง — ไม่ใช่ภาพหน้าจอ ไม่ใช่การจำลอง";
+"La predicción estaba ahí desde el principio, archivada e invisible hasta que tú decidiste revelarla. El forzaje lo confirmó el algoritmo de Instagram. La fecha estaba grabada en una publicación de hace meses." = "การทำนายอยู่ที่นั่นตั้งแต่ต้น ถูกเก็บถาวรและมองไม่เห็นจนกว่าคุณจะตัดสินใจเปิดเผย การบังคับถูกยืนยันโดยอัลกอริทึมของ Instagram วันที่ถูกบันทึกไว้ในโพสต์เมื่อหลายเดือนก่อน";
+"Vault te da el control de una capa de Instagram que ningún espectador puede cuestionar — porque no es la app, es Instagram mismo." = "Vault ให้คุณควบคุมชั้น Instagram ที่ผู้ชมคนใดไม่สามารถตั้งคำถามได้ — เพราะมันไม่ใช่แอป มันคือ Instagram เอง";
+"Tres pilares" = "สามเสาหลัก";
+"Forzajes" = "Forces";
+"Dirige al espectador hacia un número, fecha o post que ya conoces." = "นำทางผู้ชมไปยังตัวเลข วันที่ หรือโพสต์ที่คุณรู้อยู่แล้ว";
+"Predicciones" = "การทำนาย";
+"Pre-sube una foto que coincide con la elección del espectador, archívala, y desarchívala en el clímax." = "อัปโหลดรูปภาพที่ตรงกับตัวเลือกของผู้ชมล่วงหน้า เก็บถาวรไว้ แล้วยกเลิกการเก็บถาวรในจุดสูงสุด";
+"Reveals de perfil" = "การเปิดเผยโปรไฟล์";
+"Cambia tu foto, nota o biografía en tiempo real para que coincida con lo que el espectador está pensando." = "เปลี่ยนรูปภาพ บันทึกย่อ หรือชีวประวัติของคุณแบบเรียลไทม์ให้ตรงกับสิ่งที่ผู้ชมกำลังคิด";
+"Límites & Seguridad" = "ขีดจำกัด & ความปลอดภัย";
+"Por qué existen los límites" = "ทำไมขีดจำกัดจึงมีอยู่";
+"Instagram impone límites de uso en su API para evitar spam y comportamiento automatizado. Es una medida de seguridad normal que aplica a cualquier app conectada a la plataforma." = "Instagram กำหนดขีดจำกัดการใช้งาน API เพื่อป้องกันสแปมและพฤติกรรมอัตโนมัติ นี่เป็นมาตรการรักษาความปลอดภัยปกติที่ใช้กับแอปใดก็ตามที่เชื่อมต่อกับแพลตฟอร์ม";
+"Vault está diseñado con tiempos de espera y espaciados automáticos que respetan esos límites. El mago no tiene que hacer nada — la app lo gestiona por él." = "Vault ออกแบบมาพร้อมเวลารอและการเว้นระยะอัตโนมัติที่เคารพขีดจำกัดเหล่านั้น นักมายากลไม่ต้องทำอะไร — แอปจัดการให้";
+"Si pulsas una función y parece que no responde de inmediato, lo más probable es que la app esté esperando el tiempo de seguridad antes de la siguiente acción. Espera unos segundos y vuelve a intentarlo." = "หากคุณแตะฟังก์ชันและดูเหมือนไม่ตอบสนอง แอปอาจกำลังรอช่วงความปลอดภัยก่อนการดำเนินการครั้งถัดไป รอสักครู่แล้วลองอีกครั้ง";
+"Tiempos de espera de la app" = "เวลารอของแอป";
+"Estos valores están integrados automáticamente — no requieren ninguna acción por tu parte:" = "ค่าเหล่านี้ถูกสร้างขึ้นโดยอัตโนมัติ — ไม่ต้องการการดำเนินการใดๆ จากคุณ:";
+"Entre fotos de un set al subir" = "ระหว่างรูปภาพในชุดขณะอัปโหลด";
+"160–220 s aleatorio por foto" = "160–220 วินาทีแบบสุ่มต่อรูปภาพ";
+"Entre reveals consecutivos" = "ระหว่างการเปิดเผยต่อเนื่อง";
+"Mínimo entre un reveal y el siguiente" = "ขั้นต่ำระหว่างการเปิดเผยหนึ่งครั้งกับครั้งถัดไป";
+"Entre archivados (Sync & Archive)" = "ระหว่างการจัดเก็บถาวร (Sync & Archive)";
+"Por cada foto archivada" = "ต่อรูปภาพที่จัดเก็บถาวร";
+"Límite de acciones por hora" = "ขีดจำกัดการดำเนินการต่อชั่วโมง";
+"La app deja de actuar si se acerca al límite" = "แอปหยุดทำงานหากเข้าใกล้ขีดจำกัด";
+"Qué es una detección y cuándo ocurre" = "การตรวจจับคืออะไรและเกิดขึ้นเมื่อใด";
+"De vez en cuando Instagram puede pedir una verificación de identidad si detecta actividad inusual. Esto es completamente temporal y no supone ningún riesgo real para la cuenta." = "บางครั้ง Instagram อาจขอการยืนยันตัวตนหากตรวจพบกิจกรรมที่ผิดปกติ ซึ่งเป็นเพียงชั่วคราวและไม่มีความเสี่ยงจริงต่อบัญชี";
+"La app reacciona automáticamente pausando la sesión durante el tiempo necesario:" = "แอปตอบสนองโดยอัตโนมัติโดยหยุดเซสชันชั่วคราวตามเวลาที่จำเป็น:";
+"En todos los casos excepto la sesión expirada, la app se recupera sola sin intervención." = "ในทุกกรณียกเว้นเซสชันหมดอายุ แอปจะกู้คืนด้วยตัวเองโดยไม่ต้องมีการแทรกแซง";
+"Durante la actuación" = "ระหว่างการแสดง";
+"Si ocurre una detección mientras el espectador está mirando, la app oculta los detalles técnicos y muestra una pantalla genérica de \"Sin conexión a Internet\"." = "หากเกิดการตรวจจับขณะผู้ชมกำลังดู แอปจะซ่อนรายละเอียดทางเทคนิคและแสดงหน้าจอ \"ไม่มีการเชื่อมต่ออินเทอร์เน็ต\" ทั่วไป";
+"Es una excusa natural y creíble: \"Ah, la conexión de Instagram falla un momento, no pasa nada.\" Ningún espectador verá nada técnico." = "เป็นข้ออ้างที่เป็นธรรมชาติและน่าเชื่อถือ: \"อ่า การเชื่อมต่อ Instagram หลุดไปชั่วขณะ ไม่เป็นไร\" ไม่มีผู้ชมคนใดจะเห็นอะไรที่เป็นเทคนิค";
+"Qué hacer en ese momento:" = "สิ่งที่ต้องทำในขณะนั้น:";
+"Señala la pantalla con naturalidad: \"Ah, Instagram falla un segundo\"" = "ชี้ไปที่หน้าจออย่างเป็นธรรมชาติ: \"อ่า Instagram กำลัง glitch อยู่สักครู่\"";
+"Espera 2–3 minutos — la app se recupera sola en la mayoría de casos" = "รอ 2–3 นาที — แอปจะกู้คืนด้วยตัวเองในกรณีส่วนใหญ่";
+"Si el problema persiste, continúa con otra parte de la actuación y retoma después" = "หากปัญหายังคงอยู่ ให้ดำเนินการแสดงในส่วนอื่นต่อไปแล้วค่อยกลับมา";
+"Regla de oro" = "กฎทองคำ";
+"Si la app no responde o algo parece bloqueado, ve directamente a la app oficial de Instagram. Instagram puede haber mostrado un aviso de actividad inusual que requiere tu atención. Hasta que no lo resuelvas allí, Vault no podrá continuar." = "หากแอปไม่ตอบสนองหรือบางอย่างดูเหมือนถูกบล็อก ให้ไปที่แอป Instagram อย่างเป็นทางการโดยตรง Instagram อาจแสดงการแจ้งเตือนกิจกรรมที่ผิดปกติที่ต้องการความสนใจของคุณ จนกว่าคุณจะแก้ไขได้ที่นั่น Vault จะไม่สามารถดำเนินการต่อได้";
+"Cómo recuperar la sesión" = "วิธีกู้คืนเซสชัน";
+"El ciclo reveal→archive→reveal" = "วงจร เปิดเผย→เก็บถาวร→เปิดเผย";
+"Cuándo hacer re-login manualmente" = "เมื่อใดควรเข้าสู่ระบบใหม่ด้วยตนเอง";
+"Recomendaciones:" = "คำแนะนำ:";
+"Aviso importante — scroll hacia abajo" = "ประกาศสำคัญ — เลื่อนลง";
+"Verificación puntual" = "การยืนยันครั้งเดียว";
+"Demasiadas peticiones (429)" = "คำขอมากเกินไป (429)";
+"Acción bloqueada" = "การดำเนินการถูกบล็อก";
+"Spam detectado" = "ตรวจพบสแปม";
+"Sesión expirada" = "เซสชันหมดอายุ";
+"Re-login necesario" = "จำเป็นต้องเข้าสู่ระบบใหม่";
+"Escenario A" = "สถานการณ์ A";
+"Verificación puntual — el más habitual" = "การยืนยันครั้งเดียว — ที่พบบ่อยที่สุด";
+"Escenario B" = "สถานการณ์ B";
+"Sesión expirada — poco frecuente" = "เซสชันหมดอายุ — ไม่บ่อย";
+"Nunca practicar más de un ciclo completo reveal→archive con el mismo set en media hora" = "อย่าฝึกมากกว่าหนึ่งรอบสมบูรณ์ เปิดเผย→เก็บถาวร กับชุดเดียวกันในครึ่งชั่วโมง";
+"Esperar al menos 15 minutos entre un reveal y el siguiente Archive All del mismo set" = "รอนาน 15 นาทีระหว่างการเปิดเผยและ Archive All ครั้งถัดไปของชุดเดียวกัน";
+"Preparar el set (Archive All) la noche anterior o al menos 1 hora antes de la actuación, no inmediatamente después de practicar" = "เตรียมชุด (Archive All) คืนก่อนหน้าหรืออย่างน้อย 1 ชั่วโมงก่อนการแสดง ไม่ใช่ทันทีหลังการฝึก";
+"La app avisará en el botón Sync & Archive si el set fue revelado hace menos de 30 minutos" = "แอปจะเตือนในปุ่ม Sync & Archive หากชุดถูกเปิดเผยน้อยกว่า 30 นาทีที่แล้ว";
+"No te preocupes — esto rara vez ocurre en una actuación real. Solo puede aparecer durante los tests cuando se repite el mismo efecto con frecuencia. La mejor estrategia es familiarizarte con la app y, si alguna vez notas un comportamiento inusual o detección de bot, compartir los logs con el desarrollador (los encontrarás en Ajustes → Logs)." = "ไม่ต้องกังวล — สิ่งนี้แทบไม่เกิดขึ้นในการแสดงจริง อาจปรากฏขึ้นเฉพาะระหว่างการทดสอบเมื่อเอฟเฟกต์เดียวกันถูกทำซ้ำบ่อยๆ กลยุทธ์ที่ดีที่สุดคือทำความคุ้นเคยกับแอป และหากคุณสังเกตเห็นพฤติกรรมที่ผิดปกติหรือการตรวจจับบอต ให้แชร์ล็อกกับนักพัฒนา (คุณจะพบได้ในการตั้งค่า → ล็อก)";
+"La causa más frecuente de detección durante los tests es practicar el mismo truco varias veces seguidas en la misma sesión." = "สาเหตุที่พบบ่อยที่สุดของการตรวจจับระหว่างการทดสอบคือการฝึกเล่นกลเดียวกันหลายครั้งติดต่อกันในเซสชันเดียวกัน";
+"Cuando las mismas fotos se archivan y desarchivan 2–3 veces en 30 minutos, Instagram lo identifica como comportamiento automatizado — aunque cada operación individual respete los cooldowns." = "เมื่อรูปภาพเดียวกันถูกเก็บถาวรและยกเลิกการเก็บถาวร 2–3 ครั้งใน 30 นาที Instagram จะระบุว่าเป็นพฤติกรรมอัตโนมัติ — แม้ว่าการดำเนินการแต่ละอย่างจะเคารพ cooldown";
+"No es necesario hacer logout antes de cada actuación. Una sesión activa puede durar semanas. Haz re-login solo si:" = "ไม่จำเป็นต้องออกจากระบบก่อนการแสดงแต่ละครั้ง เซสชันที่ใช้งานอยู่สามารถอยู่ได้หลายสัปดาห์ เข้าสู่ระบบใหม่เฉพาะเมื่อ:";
+"La app lleva más de 24 h sin responder correctamente a ninguna acción" = "แอปไม่ตอบสนองต่อการดำเนินการใดๆ อย่างถูกต้องมานานกว่า 24 ชั่วโมง";
+"Se producen 3 o más detecciones seguidas en la misma sesión" = "เกิดการตรวจจับ 3 ครั้งหรือมากกว่าติดต่อกันในเซสชันเดียวกัน";
+"El botón \"Reconnect\" aparece persistentemente en Settings" = "ปุ่ม \"Reconnect\" ปรากฏอยู่ตลอดในการตั้งค่า";
+"En el resto de situaciones, la app gestiona la sesión de forma automática." = "ในทุกสถานการณ์อื่น แอปจัดการเซสชันโดยอัตโนมัติ";
+"Tras reconectar, si no ves las fotos que esperabas en tu perfil de Instagram, haz scroll hacia abajo para forzar la actualización." = "หลังจากเชื่อมต่อใหม่ หากคุณไม่เห็นรูปภาพที่คาดหวังในโปรไฟล์ Instagram ของคุณ ให้เลื่อนลงเพื่อบังคับให้รีเฟรช";
+"Instagram muestra a veces la versión en caché hasta que se refresca manualmente con un deslizamiento hacia abajo." = "Instagram บางครั้งแสดงเวอร์ชันที่แคชไว้จนกว่าจะรีเฟรชด้วยตนเองโดยดึงลง";
+"La app no responde o muestra un aviso de bloqueo" = "แอปไม่ตอบสนองหรือแสดงการแจ้งเตือนการบล็อก";
+"Abre la app oficial de Instagram" = "เปิดแอป Instagram อย่างเป็นทางการ";
+"Si aparece un aviso de actividad inusual, pulsa \"Dismiss\" o completa el código de verificación (email o SMS)" = "หากปรากฏการแจ้งเตือนกิจกรรมที่ผิดปกติ ให้แตะ \"Dismiss\" หรือป้อนรหัสยืนยัน (อีเมลหรือ SMS)";
+"Si no aparece nada, espera 2 minutos — la sesión se restablece sola en Vault" = "หากไม่มีอะไรปรากฏ ให้รอ 2 นาที — เซสชันจะรีเซ็ตตัวเองใน Vault";
+"Vuelve a Vault: todo continúa con normalidad" = "กลับไปที่ Vault: ทุกอย่างดำเนินต่อไปตามปกติ";
+"Vault muestra la pantalla de re-login" = "Vault แสดงหน้าจอเข้าสู่ระบบใหม่";
+"Ve primero a Instagram real para descartar cualquier aviso pendiente y pulsa \"Dismiss\" si lo hay" = "ไปที่ Instagram จริงก่อนเพื่อปิดการแจ้งเตือนที่รอดำเนินการ และแตะ \"Dismiss\" หากมี";
+"Vuelve a Vault y pulsa \"Connect Account\"" = "กลับไปที่ Vault และแตะ \"Connect Account\"";
+"Entra con tu usuario y contraseña" = "ลงชื่อเข้าใช้ด้วยชื่อผู้ใช้และรหัสผ่านของคุณ";
+"Acepta las cookies cuando Instagram lo pida — es indispensable" = "ยอมรับคุกกี้เมื่อ Instagram ถาม — จำเป็นอย่างยิ่ง";
+"La sesión se restaura automáticamente" = "เซสชันถูกกู้คืนโดยอัตโนมัติ";
+"API limits, cooldowns, bot detection and how to recover" = "ขีดจำกัด API, cooldown, การตรวจจับบอต และวิธีกู้คืน";
+"Change your Instagram profile photo as a prediction" = "เปลี่ยนรูปโปรไฟล์ Instagram ของคุณเป็นการทำนาย";
+"Force a specific reel to appear in Explore" = "บังคับให้ Reel ที่ระบุปรากฏใน Explore";
+"Glitch the follower or following count for a spectator" = "Glitch ตัวนับผู้ติดตามหรือที่ติดตามของผู้ชม";
+"Predict a spectator's post from weeks ago" = "ทำนายโพสต์ของผู้ชมจากหลายสัปดาห์ก่อน";
+"How Vault works, what it can do, and why it matters for magic" = "วิธีการทำงานของ Vault สิ่งที่ทำได้ และทำไมมันสำคัญสำหรับการแสดงกล";
+"Note and biography prediction using API, OCR or URL Scheme" = "การทำนายบันทึกย่อและชีวประวัติโดยใช้ API, OCR หรือ URL Scheme";
+
+// Help views (CounterGlitch, DateForce, InstagramProfile, PostPrediction)
+"Consejos" = "เคล็ดลับ";
+"Convicción" = "ความเชื่อมั่น";
+"Dígitos" = "ตัวเลข";
+"Dígito secreto vía swipe" = "ตัวเลขลับผ่านการปัด";
+"Espectador" = "ผู้ชม";
+"Fase 1 — Deflación" = "ระยะที่ 1 — การลด";
+"Fase 2 — Inflación" = "ระยะที่ 2 — การเพิ่ม";
+"**No enseñes la pantalla hasta tener el número inflado.** Navega el grid con el móvil hacia ti para que nadie más vea los swipes secretos." = "**อย่าแสดงหน้าจอจนกว่าจะได้ตัวเลขที่เพิ่มขึ้น** นำทางกริดด้วยโทรศัพท์หันหน้าเข้าหาคุณเพื่อไม่ให้ใครเห็นการปัดลับ";
+"**Perfil propio o ajeno.** Con el perfil del espectador el impacto es mayor porque puede verificarlo él mismo." = "**โปรไฟล์ตัวเองหรือของผู้อื่น** ด้วยโปรไฟล์ของผู้ชมเอง ผลกระทบจะมากกว่าเพราะพวกเขาสามารถยืนยันได้เอง";
+"Antes de empezar" = "ก่อนเริ่มต้น";
+"Durante el show" = "ระหว่างการแสดง";
+"Dos grupos secretos" = "สองกลุ่มลับ";
+"Cálculo interno" = "การคำนวณภายใน";
+"El espectador lo descifra" = "ผู้ชมถอดรหัสมัน";
+"Aparece en Explore" = "ปรากฏใน Explore";
+"El Mago 🎩" = "นักมายากล 🎩";
+"El espectador hace la resta:" = "ผู้ชมทำการลบ:";
+"EL REVEAL" = "การเปิดเผย";
+"CIERRA Y ESPERA" = "ปิดและรอ";
+"**Antes del show**, activa **Date Force** en Settings y configura el formato de fecha (DD/MM/AAAA o MM/DD/AAAA)." = "**ก่อนการแสดง** เปิดใช้ **Date Force** ในการตั้งค่าและกำหนดรูปแบบวันที่ (วว/ดด/ปปปป หรือ ดด/วว/ปปปป)";
+"**Cuentas privadas.** Si un espectador tiene la cuenta privada y no te sigue de vuelta, es posible que no puedas cargar su perfil. Pídele que te siga momentáneamente o usa una cuenta pública." = "**บัญชีส่วนตัว** หากผู้ชมมีบัญชีส่วนตัวและไม่ได้ติดตามคุณกลับ คุณอาจไม่สามารถโหลดโปรไฟล์ของพวกเขาได้ ขอให้พวกเขาติดตามคุณชั่วคราวหรือใช้บัญชีสาธารณะ";
+"**Número par de espectadores.** Con 2 espectadores: 1 grupo fecha + 1 grupo hora. Con 4: 2 grupos fecha + 2 grupos hora. Con 6: 3 grupos de cada tipo." = "**ผู้ชมจำนวนคู่** กับผู้ชม 2 คน: 1 กลุ่มวันที่ + 1 กลุ่มเวลา กับ 4 คน: กลุ่มละ 2. กับ 6 คน: กลุ่มละ 3";
+"Profile Picture Prediction" = "การทำนายรูปโปรไฟล์";
+"Biography Prediction" = "การทำนายชีวประวัติ";
+"Note Prediction" = "การทำนายบันทึกย่อ";
+"How it works" = "วิธีการทำงาน";
+"Input Method" = "วิธีการป้อนข้อมูล";
+"upload.error.no_images" = "ไม่มีรูปภาพที่โหลด โปรดเพิ่มรูปภาพในทุกช่องก่อนอัปโหลด";
+
+// ── Limits & Safety help (simplified) ──
+"limits.help.title" = "ข้อจำกัดและความปลอดภัย";
+
+"limits.help.calm.title" = "ใจเย็น — ทุกอย่างอยู่ในการควบคุม";
+"limits.help.calm.body" = "Instagram จะแสดงคำเตือนสั้น ๆ เป็นครั้งคราวเพื่อขอยืนยันว่าเป็นคุณจริง นี่เป็นเรื่องปกติสำหรับแอปที่เชื่อมต่อกับแพลตฟอร์ม และไม่เกี่ยวกับการแบนเลย Vault ออกแบบด้วยมาตรการป้องกันบอทแบบเดียวกับที่แอปจริงใช้ และทุกมาตรการได้รับการทดสอบอย่างละเอียด";
+"limits.help.calm.infobox" = "ผมเคยกระตุ้นคำเตือนแบบนี้มากกว่า 100 ครั้งระหว่างการพัฒนา และบัญชีของผมไม่เคยถูกแบน แอปอื่น ๆ ที่ใช้วิธีเดียวกันก็ทำงานได้ไม่มีปัญหา — หากมีความเสี่ยงจริง Vault คงไม่ถูกเผยแพร่";
+
+"limits.help.warning.title" = "หากเห็นคำเตือน \"กิจกรรมผิดปกติ\"";
+"limits.help.warning.intro" = "อย่ากังวล — นี่ไม่ใช่การแบน เป็นเพียง Instagram ยืนยันว่าเป็นคุณจริง ทำตามขั้นตอนเหล่านี้:";
+"limits.help.warning.step1" = "เปิดแอป Instagram อย่างเป็นทางการและแตะ \"Dismiss\" บนคำเตือน";
+"limits.help.warning.step2" = "หากขอให้ยืนยันตัวตน ให้ทำตามด้วยรหัสจากอีเมลหรือ SMS";
+"limits.help.warning.step3" = "ใน Vault ให้ออกจากระบบจากการตั้งค่า รอประมาณหนึ่งนาที แล้วเข้าสู่ระบบอีกครั้ง";
+"limits.help.warning.step4" = "พร้อมดำเนินการต่อ — บัญชีของคุณปลอดภัย";
+"limits.help.warning.reassure" = "บัญชีของคุณยังทำงานได้ตามปกติ สิ่งนี้แค่หยุด Vault ชั่วคราวไม่กี่นาทีเท่านั้น";
+
+"limits.help.show.title" = "ระหว่างการแสดง";
+"limits.help.show.body" = "หากมีคำเตือนปรากฏขณะผู้ชมกำลังดูหน้าจอ Vault จะซ่อนรายละเอียดทางเทคนิคทั้งหมดและแสดงหน้าจอทั่วไปว่า \"ไม่มีการเชื่อมต่ออินเทอร์เน็ต\"";
+"limits.help.show.infobox" = "ข้ออ้างที่สมบูรณ์แบบ: \"อุ้ย Instagram ขัดข้องแป๊บเดียว ไม่มีอะไร\" ผู้ชมจะไม่เห็นอะไรทางเทคนิคเลย";
+
+"limits.help.best.title" = "แนวทางปฏิบัติที่ดี";
+"limits.help.best.item1" = "อย่าทำเอฟเฟกต์เดียวกันซ้ำ ๆ ติดกันในเซสชันเดียว — อัลกอริทึมอาจมองว่าเป็นระบบอัตโนมัติ";
+"limits.help.best.item2" = "เตรียมเซ็ต (Sync & Archive) ในคืนก่อนหรืออย่างน้อยหนึ่งชั่วโมงก่อนการแสดง ไม่ใช่ทันทีหลังซ้อม";
+"limits.help.best.item3" = "หากคุณแสดงบ่อย ให้ใช้บัญชี Instagram เฉพาะแยกจากบัญชีหลัก";
+"limits.help.best.item4" = "Vault จัดการเวลารออัตโนมัติทั้งหมด — คุณไม่ต้องคิดอะไรเลย";
+
+// ── Counter Glitch demo ──
+"Espectador" = "ผู้ชม";
+"Ilusionista profesional" = "นักมายากลมืออาชีพ";
+"Espectador · 🎭" = "ผู้ชม · 🎭";
+"El número de siempre ✓" = "ตัวเลขตามปกติ ✓";
+"El espectador ve %lld · Real: %lld + %lld" = "ผู้ชมเห็น %lld · จริง: %lld + %lld";
+"+%lld recibidos 🎩" = "+%lld ได้รับ 🎩";
+
+// ── Guide: Camouflage section ──
+"guide.section.camouflage" = "CAMOUFLAGE";
+"guide.fakehome.title" = "Fake Home Screen";
+"guide.fakehome.subtitle" = "Show a home screen screenshot when Performance opens";
+"guide.fakehome.help.what.title" = "What is Fake Home Screen?";
+"guide.fakehome.help.what.body" = "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally.";
+"guide.fakehome.help.how.title" = "How to use it";
+"guide.fakehome.help.how.body" = "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.\n\n2. Upload it in Settings › Other › Fake Home Screen.\n\n3. Enable the toggle.\n\n4. Next time you open Performance, that screenshot appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile.";
+"guide.fakehome.help.why.title" = "Why use it?";
+"guide.fakehome.help.why.body" = "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears.";
+"guide.lockscreen.title" = "Lockscreen Input";
+"guide.lockscreen.subtitle" = "Fake iOS lockscreen for secret digit entry";
+"guide.lockscreen.help.what.title" = "What is Lockscreen Input?";
+"guide.lockscreen.help.what.body" = "When you open Performance, the app shows a fake iOS-style passcode screen before revealing your profile. To anyone watching it looks like you are simply unlocking your phone.";
+"guide.lockscreen.help.how.title" = "How to enter your secret number";
+"guide.lockscreen.help.how.body" = "1. Tap the digits of your secret number on the numpad — they register silently.\n\n2. Tap anywhere outside the numpad to lock those digits in place.\n\n3. Fill the remaining dots by tapping any digits — they are ignored.\n\n4. Once all 4 dots are filled the lockscreen dismisses and Performance opens.";
+"guide.lockscreen.help.wallpaper.title" = "Wallpaper";
+"guide.lockscreen.help.wallpaper.body" = "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Without a wallpaper the lockscreen input cannot be enabled.";
+"guide.lockscreen.help.why.title" = "Why use it?";
+"guide.lockscreen.help.why.body" = "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram.";
+"guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
+"guide.lockscreen.help.tricks.body" = "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore";

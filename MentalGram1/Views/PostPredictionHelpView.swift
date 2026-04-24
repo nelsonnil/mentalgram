@@ -22,6 +22,12 @@ struct PostPredictionHelpView: View {
 
                         divider
 
+                        HelpSection(icon: "square.grid.2x2.fill", iconColor: Color(hex: "34D399"), title: "postpred.help.section.settypes") {
+                            setTypesSection
+                        }
+
+                        divider
+
                         HelpSection(icon: "hand.tap.fill", iconColor: VaultTheme.Colors.secondary, title: "postpred.help.section.inputs") {
                             inputMethods
                         }
@@ -113,20 +119,73 @@ struct PostPredictionHelpView: View {
     // MARK: - How It Works
 
     private var howItWorks: some View {
-        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
-            PPBodyText("postpred.help.howitworks.body1")
-            PPMetricRow(icon: "photo.stack.fill", color: Color(hex: "A78BFA"),
-                        label: "postpred.help.metric.sets",
-                        description: "postpred.help.metric.sets.desc")
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.lg) {
+            PPFlowStep(step: 1, icon: "arrow.up.to.line.circle.fill",
+                       color: Color(hex: "A78BFA"),
+                       label: "postpred.help.howitworks.step1")
+            PPFlowStep(step: 2, icon: "person.fill.viewfinder",
+                       color: VaultTheme.Colors.secondary,
+                       label: "postpred.help.howitworks.step2")
+            PPFlowStep(step: 3, icon: "checkmark.circle.fill",
+                       color: VaultTheme.Colors.success,
+                       label: "postpred.help.howitworks.step3")
+            PPInfoBox(text: "postpred.help.howitworks.info")
+        }
+    }
+
+    // MARK: - Set Types
+
+    private var setTypesSection: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.lg) {
+            PPBodyText("postpred.help.settypes.intro")
+
+            // Word & Number share the Banks concept — show it here with the animated demo
+            PPSetTypeRow(
+                icon: "textformat.abc", color: Color(hex: "7C3AED"),
+                title: "Word Reveal",
+                description: "postpred.help.settype.word.desc",
+                badges: [
+                    PPBadgeItem(label: "Grid",   color: Color(hex: "818CF8")),
+                    PPBadgeItem(label: "OCR",    color: Color(hex: "34D399")),
+                    PPBadgeItem(label: "Covert", color: Color(hex: "0095F6")),
+                    PPBadgeItem(label: "URL",    color: Color(hex: "FB923C"))
+                ]
+            )
+            PPSetTypeRow(
+                icon: "number", color: Color(hex: "0EA5E9"),
+                title: "Number Reveal",
+                description: "postpred.help.settype.number.desc",
+                badges: [
+                    PPBadgeItem(label: "Grid", color: Color(hex: "818CF8")),
+                    PPBadgeItem(label: "OCR",  color: Color(hex: "34D399")),
+                    PPBadgeItem(label: "URL",  color: Color(hex: "FB923C"))
+                ]
+            )
+
+            // Banks explanation with animated demo — only applies to Word & Number
             PPMetricRow(icon: "building.columns.fill", color: VaultTheme.Colors.secondary,
                         label: "postpred.help.metric.banks",
                         description: "postpred.help.metric.banks.desc")
-            PPBodyText("postpred.help.howitworks.body2")
-
-            // Animated explanation of how Banks and Sets work together
             PPBanksDemo()
 
-            PPInfoBox(text: "postpred.help.howitworks.info")
+            PPSetTypeRow(
+                icon: "square.grid.2x2", color: Color(hex: "F97316"),
+                title: "Custom Set",
+                description: "postpred.help.settype.custom.desc",
+                badges: [
+                    PPBadgeItem(label: "Grid", color: Color(hex: "818CF8")),
+                    PPBadgeItem(label: "URL",  color: Color(hex: "FB923C"))
+                ]
+            )
+            PPSetTypeRow(
+                icon: "suit.spade.fill", color: Color(hex: "16A34A"),
+                title: "Playing Cards",
+                description: "postpred.help.settype.card.desc",
+                badges: [
+                    PPBadgeItem(label: "Grid", color: Color(hex: "818CF8")),
+                    PPBadgeItem(label: "URL",  color: Color(hex: "FB923C"))
+                ]
+            )
         }
     }
 
@@ -134,104 +193,89 @@ struct PostPredictionHelpView: View {
 
     private var inputMethods: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.xl) {
-            PPBodyText("postpred.help.inputs.body1")
+            PPBodyText("postpred.help.inputs.intro")
 
-            // ── Group 1: Numeric / Custom sets ──────────────────────────
-            ppInputGroupHeader(
-                icon: "number.circle.fill",
-                label: "postpred.help.inputs.group.numeric",
-                color: Color(hex: "A78BFA")
-            )
-
-            PPGridInputDemo()
-
-            PPShowStep(
+            // ── A: Grid Swipe ────────────────────────────────────────────
+            PPInputMethodBlock(
                 label: "postpred.help.input.grid.label",
                 labelColor: VaultTheme.Colors.primary,
-                steps: [
-                    PPShowStepItem(action: "postpred.help.input.grid.step1", dialogue: nil),
-                    PPShowStepItem(action: "postpred.help.input.grid.step2", dialogue: nil),
-                    PPShowStepItem(action: "postpred.help.input.grid.step3", dialogue: nil)
+                badges: [
+                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9")),
+                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
+                    PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
                 ]
-            )
+            ) {
+                PPBodyText("postpred.help.input.grid.intro")
+                PPGridInputDemo()
+                VStack(alignment: .leading, spacing: 10) {
+                    PPGridCaseRow(color: Color(hex: "0EA5E9"), setType: "Number",
+                                  detail: "postpred.help.input.grid.case.number")
+                    PPGridCaseRow(color: Color(hex: "F97316"), setType: "Custom",
+                                  detail: "postpred.help.input.grid.case.custom")
+                    PPGridCaseRow(color: Color(hex: "16A34A"), setType: "Cards",
+                                  detail: "postpred.help.input.grid.case.card")
+                }
+                .padding(10)
+                .background(VaultTheme.Colors.background.opacity(0.5))
+                .cornerRadius(VaultTheme.CornerRadius.sm)
+                PPStepBullet("postpred.help.input.grid.step3", color: VaultTheme.Colors.primary)
+            }
 
-            // ── Group 2: Alphabetic sets ─────────────────────────────────
-            ppInputGroupHeader(
-                icon: "character.cursor.ibeam",
-                label: "postpred.help.inputs.group.alpha",
-                color: VaultTheme.Colors.secondary
-            )
-
-            PPShowStep(
+            // ── B: OCR — Camera ──────────────────────────────────────────
+            PPInputMethodBlock(
                 label: "postpred.help.input.ocr.label",
                 labelColor: VaultTheme.Colors.success,
-                steps: [
-                    PPShowStepItem(action: "postpred.help.input.ocr.step1", dialogue: nil),
-                    PPShowStepItem(action: "postpred.help.input.ocr.step2", dialogue: nil)
+                badges: [
+                    PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
+                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9"))
                 ]
-            )
+            ) {
+                PPStepBullet("postpred.help.input.ocr.step1", color: VaultTheme.Colors.success)
+                PPStepBullet("postpred.help.input.ocr.step2", color: VaultTheme.Colors.success)
+            }
 
-            PPCovertTypingDemo()
-
-            PPShowStep(
+            // ── C: Covert Typing ─────────────────────────────────────────
+            PPInputMethodBlock(
                 label: "postpred.help.input.covert.label",
                 labelColor: Color(hex: "0095F6"),
-                steps: [
-                    PPShowStepItem(action: "postpred.help.input.covert.step1", dialogue: nil),
-                    PPShowStepItem(action: "postpred.help.input.covert.step2", dialogue: nil)
+                badges: [
+                    PPBadgeItem(label: "Word", color: Color(hex: "7C3AED"))
                 ]
-            )
+            ) {
+                PPCovertTypingDemo()
+                PPStepBullet("postpred.help.input.covert.step1", color: Color(hex: "0095F6"))
+                PPStepBullet("postpred.help.input.covert.step2", color: Color(hex: "0095F6"))
+                PPStepBullet("postpred.help.input.covert.step3", color: Color(hex: "0095F6"))
+            }
 
-            PPShowStep(
-                label: "postpred.help.input.api.label",
-                labelColor: VaultTheme.Colors.textSecondary,
-                steps: [
-                    PPShowStepItem(action: "postpred.help.input.api.step1", dialogue: nil),
-                    PPShowStepItem(action: "postpred.help.input.api.step2", dialogue: nil)
-                ]
-            )
-
-            // ── Group 3: Universal ───────────────────────────────────────
-            ppInputGroupHeader(
-                icon: "link",
-                label: "postpred.help.inputs.group.universal",
-                color: VaultTheme.Colors.warning
-            )
-
-            PPShowStep(
+            // ── D: URL Scheme / Automation ───────────────────────────────
+            PPInputMethodBlock(
                 label: "postpred.help.input.url.label",
                 labelColor: VaultTheme.Colors.warning,
-                steps: [
-                    PPShowStepItem(action: "postpred.help.input.url.step1", dialogue: nil),
-                    PPShowStepItem(action: "postpred.help.input.url.step2", dialogue: nil)
+                badges: [
+                    PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
+                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9")),
+                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
+                    PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
                 ]
-            )
+            ) {
+                PPBodyText("postpred.help.input.url.intro")
+                VStack(alignment: .leading, spacing: 10) {
+                    PPURLExample(url: "vault://reveal?word=COCHE",
+                                 description: "postpred.help.input.url.example.word")
+                    PPURLExample(url: "vault://reveal?slot=15",
+                                 description: "postpred.help.input.url.example.slot")
+                    PPURLExample(url: "vault://reveal?card=J\u{2660}",
+                                 description: "postpred.help.input.url.example.card")
+                }
+            }
         }
-    }
-
-    @ViewBuilder
-    private func ppInputGroupHeader(icon: String, label: LocalizedStringKey, color: Color) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundColor(color)
-            Text(label)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(color)
-                .tracking(0.6)
-            Spacer()
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(color.opacity(0.06))
-        .cornerRadius(8)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(color.opacity(0.15), lineWidth: 1))
     }
 
     // MARK: - Before the Show
 
     private var beforeShow: some View {
-        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
             PPNumberedStep(number: 1, text: "postpred.help.before.1")
             PPNumberedStep(number: 2, text: "postpred.help.before.2")
             PPNumberedStep(number: 3, text: "postpred.help.before.3")
@@ -331,6 +375,215 @@ struct PostPredictionHelpView: View {
 }
 
 // MARK: - Private Reusable Components (PP-prefixed to avoid conflicts)
+
+// MARK: - PPBadgeItem
+
+private struct PPBadgeItem {
+    let label: String
+    let color: Color
+}
+
+// MARK: - PPBadge (input method pill)
+
+private struct PPBadge: View {
+    let item: PPBadgeItem
+    var body: some View {
+        Text(item.label)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundColor(item.color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(item.color.opacity(0.12))
+            .cornerRadius(4)
+    }
+}
+
+// MARK: - Set Type Row
+
+private struct PPSetTypeRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let description: LocalizedStringKey
+    var badges: [PPBadgeItem] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(color.opacity(0.12))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(color)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text(description)
+                        .font(.system(size: 12))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if !badges.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(badges.indices, id: \.self) { i in
+                        PPBadge(item: badges[i])
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .padding(12)
+        .background(color.opacity(0.04))
+        .cornerRadius(10)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.15), lineWidth: 1))
+    }
+}
+
+// MARK: - PPFlowStep (numbered step in How It Works)
+
+private struct PPFlowStep: View {
+    let step: Int
+    let icon: String
+    let color: Color
+    let label: LocalizedStringKey
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(color)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(String(format: String(localized: "Step %lld"), step))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(color)
+                    .tracking(0.5)
+                Text(label)
+                    .font(VaultTheme.Typography.body())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 9)
+        }
+    }
+}
+
+// MARK: - PPInputMethodBlock (wrapper for each input method)
+
+private struct PPInputMethodBlock<Content: View>: View {
+    let label: LocalizedStringKey
+    let labelColor: Color
+    let badges: [PPBadgeItem]
+    let content: Content
+
+    init(label: LocalizedStringKey, labelColor: Color, badges: [PPBadgeItem],
+         @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.labelColor = labelColor
+        self.badges = badges
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(labelColor)
+                    .tracking(1.2)
+                Spacer()
+                HStack(spacing: 4) {
+                    ForEach(badges.indices, id: \.self) { i in
+                        PPBadge(item: badges[i])
+                    }
+                }
+            }
+            content
+        }
+        .padding(VaultTheme.Spacing.md)
+        .background(VaultTheme.Colors.backgroundSecondary)
+        .cornerRadius(VaultTheme.CornerRadius.md)
+        .overlay(RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+            .stroke(labelColor.opacity(0.2), lineWidth: 1))
+    }
+}
+
+// MARK: - PPGridCaseRow (one grid sub-case inside the Grid Input block)
+
+private struct PPGridCaseRow: View {
+    let color: Color
+    let setType: String
+    let detail: LocalizedStringKey
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+                .padding(.top, 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(setType)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(color)
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+// MARK: - PPURLExample (one URL scheme example row)
+
+private struct PPURLExample: View {
+    let url: String
+    let description: LocalizedStringKey
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(url)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(Color(hex: "FB923C"))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(hex: "FB923C").opacity(0.08))
+                .cornerRadius(5)
+            Text(description)
+                .font(.system(size: 11))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+        }
+    }
+}
+
+// MARK: - PPStepBullet (single bullet step for input blocks)
+
+private struct PPStepBullet: View {
+    let text: LocalizedStringKey
+    let color: Color
+    init(_ text: LocalizedStringKey, color: Color) { self.text = text; self.color = color }
+    var body: some View {
+        HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
+            Circle()
+                .fill(color.opacity(0.5))
+                .frame(width: 4, height: 4)
+                .padding(.top, 8)
+            Text(text)
+                .font(VaultTheme.Typography.body())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
 
 private struct PPHelpSection<Content: View>: View {
     let icon: String

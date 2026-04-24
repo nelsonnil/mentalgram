@@ -51,6 +51,10 @@ class InstagramService: ObservableObject {
     @Published var isNetworkStabilizing: Bool = false
     @Published var networkChangedDuringUpload: Bool = false // Alert for active uploads
     private let networkStabilizationDelay: TimeInterval = 4.0 // seconds
+
+    // Cold-start warm-up (anti-bot: avoid API calls immediately after session restore)
+    private var sessionRestoredAt: Date? = nil
+    private let sessionWarmupDelay: TimeInterval = 3.0 // seconds
     
     private let baseURL = "https://i.instagram.com/api/v1"
     private lazy var userAgent = DeviceInfo.shared.instagramUserAgent
@@ -86,6 +90,9 @@ class InstagramService: ObservableObject {
     private var bandwidthSpeedKbps: String = "\(Int.random(in: 2500...8000))"
     private var bandwidthTotalBytesB: Int = 0
     private var bandwidthTotalTimeMs: Int = 0
+
+    // MARK: - WWW-Claim (anti-bot: Instagram rotates this per session; "0" only valid before first call)
+    private var wwwClaim: String = "0"
     
     // MARK: - Rate Limiting (anti-bot: max 60 actions/hour)
     private var actionTimestamps: [Date] = []
@@ -139,6 +146,7 @@ class InstagramService: ObservableObject {
         if let saved = KeychainService.shared.loadSession(), saved.isLoggedIn {
             self.session = saved
             self.isLoggedIn = true
+            self.sessionRestoredAt = Date()  // Mark cold-start time for warm-up delay
             print("✅ Session restored for @\(saved.username)")
         }
         
@@ -352,12 +360,51 @@ class InstagramService: ObservableObject {
         consecutiveErrors = 0
         consecutiveBotSignalErrors = 0
     }
+
+    /// Lightweight session probe: makes a single minimal GET request to Instagram.
+    /// Returns `true` if the session is valid (200 OK with user data), `false` if
+    /// the session is expired or the challenge is still pending.
+    /// Used by the auto-recovery mechanism when the app returns from background
+    /// after a lockdown — if the user dismissed the challenge in the real Instagram
+    /// app, this probe will succeed and the lockdown is cleared automatically.
+    func probeSession() async -> Bool {
+        guard isLoggedIn, !session.sessionId.isEmpty else { return false }
+        do {
+            // Use the accounts/current_user endpoint — minimal payload, no side effects.
+            let url = URL(string: "https://i.instagram.com/api/v1/accounts/current_user/?edit=true")!
+            var req = URLRequest(url: url)
+            req.setValue("sessionid=\(session.sessionId); ds_user_id=\(session.userId)", forHTTPHeaderField: "Cookie")
+            req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            req.timeoutInterval = 10
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse else { return false }
+            if http.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               json["user"] != nil {
+                print("✅ [PROBE] Session valid — challenge was resolved")
+                return true
+            }
+            print("⚠️ [PROBE] Session probe failed — status \(http.statusCode)")
+            return false
+        } catch {
+            print("⚠️ [PROBE] Session probe error: \(error.localizedDescription)")
+            return false
+        }
+    }
     
     @MainActor
+    /// Dismiss the session-expired overlay without logging out.
+    /// Use this to let the magician navigate to Settings and re-login manually.
+    func dismissSessionExpiredOverlay() {
+        isSessionExpired = false
+    }
+
     func emergencyLogout() {
-        // Clear session
+        // Clear session state
         session = .empty
         isLoggedIn = false
+        isSessionExpired = false   // ← dismiss the SessionGuardView overlay
         KeychainService.shared.deleteSession()
         KeychainService.shared.clearCredentials()
 
@@ -457,6 +504,23 @@ class InstagramService: ObservableObject {
                 print("✅ [NETWORK] Network stable, proceeding...")
             }
         }
+    }
+
+    /// Waits until at least `sessionWarmupDelay` seconds have elapsed since the app
+    /// restored its session from Keychain (cold start). Prevents the first API call
+    /// from firing too quickly after launch, which Instagram flags as bot behaviour.
+    func waitForSessionWarmup() async throws {
+        guard let restoredAt = sessionRestoredAt else { return }
+        let elapsed = Date().timeIntervalSince(restoredAt)
+        guard elapsed < sessionWarmupDelay else {
+            sessionRestoredAt = nil  // Warm-up complete — clear to avoid future waits
+            return
+        }
+        let remaining = sessionWarmupDelay - elapsed
+        print("⏳ [WARMUP] Cold-start detected — waiting \(String(format: "%.1f", remaining))s before first API call...")
+        try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+        sessionRestoredAt = nil
+        print("✅ [WARMUP] Session warm-up complete, proceeding with API call.")
     }
     
     // MARK: - Session from WebView Login
@@ -685,6 +749,36 @@ class InstagramService: ObservableObject {
         }
     }
     
+    /// Builds the Cookie header from ALL cookies stored by the WebView login.
+    /// Previously only 3 cookies were sent (sessionid, csrftoken, ds_user_id), which
+    /// caused Notes (and other newer endpoints) to fail — they require cookies like
+    /// `rur` (region routing), `mid` (machine id), `ig_did`, etc.
+    private func buildCookieHeader() -> String {
+        let igDomains = ["https://i.instagram.com", "https://www.instagram.com", "https://instagram.com"]
+        var seen = Set<String>()
+        var parts: [String] = []
+
+        for domain in igDomains {
+            guard let url = URL(string: domain) else { continue }
+            let domainCookies = HTTPCookieStorage.shared.cookies(for: url) ?? []
+            for cookie in domainCookies {
+                guard !seen.contains(cookie.name) else { continue }
+                seen.insert(cookie.name)
+                parts.append("\(cookie.name)=\(cookie.value)")
+            }
+        }
+
+        // Always ensure the three critical session cookies are present
+        // (in case the cookie storage is empty — e.g. first launch before any response)
+        if !seen.contains("sessionid")  { parts.append("sessionid=\(session.sessionId)") }
+        if !seen.contains("csrftoken")  { parts.append("csrftoken=\(session.csrfToken)") }
+        if !seen.contains("ds_user_id") { parts.append("ds_user_id=\(session.userId)") }
+
+        let header = parts.joined(separator: "; ")
+        print("🍪 [COOKIE] Sending \(parts.count) cookies: \(seen.sorted().joined(separator: ", "))")
+        return header
+    }
+
     private func buildHeaders() -> [String: String] {
         let device = DeviceInfo.shared
         
@@ -726,15 +820,15 @@ class InstagramService: ObservableObject {
             "X-Bloks-Version-Id": bloksVersionId,
             "X-Bloks-Is-Layout-RTL": "false",
             
-            // ANTI-BOT: WWW Claim (real app sends this)
-            "X-IG-WWW-Claim": "0",
+            // ANTI-BOT: WWW Claim — updated from response headers after each successful call
+            "X-IG-WWW-Claim": wwwClaim,
             
             // Standard headers
             "X-Requested-With": "XMLHttpRequest",
             "Accept-Language": "\(device.deviceLanguage)-\(Locale.current.region?.identifier ?? "US"),\(device.deviceLanguage);q=0.9",
             "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/x-www-form-urlencoded",
-            "Cookie": "sessionid=\(session.sessionId); csrftoken=\(session.csrfToken); ds_user_id=\(session.userId)"
+            "Cookie": buildCookieHeader()
         ]
         
         // ANTI-BOT: Add X-MID if available (Machine ID, set by Instagram after first request)
@@ -957,6 +1051,51 @@ class InstagramService: ObservableObject {
             print("🔑 [MID] Captured Machine ID from header: \(String(mid.prefix(8)))...")
         }
     }
+
+    /// Extracts rotated CSRF token and X-IG-WWW-Claim from response headers.
+    /// Instagram rotates both periodically; sending stale values causes silent POST failures
+    /// on newer endpoints (Notes, DMs…).
+    private func extractAndUpdateCSRF(from response: URLResponse?) {
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+
+        // ── CSRF token ────────────────────────────────────────────────────────────
+        // HTTPURLResponse.allHeaderFields collapses multiple Set-Cookie into one
+        // comma-separated string on iOS, so we also check HTTPCookieStorage.shared.
+        var newToken: String?
+
+        if let cookieHeader = httpResponse.allHeaderFields["Set-Cookie"] as? String {
+            if let range = cookieHeader.range(of: "csrftoken=") {
+                let after = cookieHeader[range.upperBound...]
+                let token = after.prefix(while: { $0 != ";" && $0 != "," }).trimmingCharacters(in: .whitespaces)
+                if !token.isEmpty { newToken = token }
+            }
+        }
+
+        if newToken == nil,
+           let url = URL(string: "https://i.instagram.com"),
+           let storedCookie = HTTPCookieStorage.shared.cookies(for: url)?.first(where: { $0.name == "csrftoken" }) {
+            newToken = storedCookie.value
+        }
+
+        if let token = newToken, !token.isEmpty, token != session.csrfToken {
+            print("🔑 [CSRF] Token rotated — updating session (\(String(token.prefix(8)))...)")
+            session.csrfToken = token
+            KeychainService.shared.saveSession(session)
+        }
+
+        // ── X-IG-WWW-Claim ───────────────────────────────────────────────────────
+        // Instagram sends the updated claim in response headers.
+        // Without the real value, newer endpoints (Notes, Direct…) return status:fail.
+        let claimHeaders = ["ig-set-ig-u-ig-igHeader", "X-IG-WWW-Claim", "ig-set-ig-www-claim"]
+        for headerName in claimHeaders {
+            if let claim = httpResponse.allHeaderFields[headerName] as? String,
+               !claim.isEmpty, claim != "0", claim != wwwClaim {
+                print("🔑 [CLAIM] X-IG-WWW-Claim updated: \(String(claim.prefix(20)))...")
+                wwwClaim = claim
+                break
+            }
+        }
+    }
     
     // MARK: - Generate Signature (HMAC-SHA256)
     
@@ -1043,7 +1182,10 @@ class InstagramService: ObservableObject {
         
         // ANTI-BOT: Extract MID (Machine ID) from response if present
         extractMID(from: response)
-        
+
+        // Auth: refresh CSRF token if Instagram rotated it (prevents POST failures)
+        extractAndUpdateCSRF(from: response)
+
         // ANTI-BOT: Reset consecutive errors on success
         if httpResponse.statusCode == 200 {
             consecutiveErrors = 0
@@ -1663,6 +1805,44 @@ class InstagramService: ObservableObject {
 
         print("✅ [FOLLOWERS] Got \(followers.count) followers")
         return followers
+    }
+
+    func getRecentFollowing(count: Int) async throws -> [InstagramFollower] {
+        print("👥 [FOLLOWING] Fetching latest \(count) following...")
+
+        if isLocked {
+            throw InstagramError.botDetected("Lockdown active.")
+        }
+
+        let data = try await apiRequest(
+            method: "GET",
+            path: "/friendships/\(session.userId)/following/?count=\(count)"
+        )
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let users = json["users"] as? [[String: Any]] else {
+            print("❌ [FOLLOWING] Failed to parse")
+            return []
+        }
+
+        var following: [InstagramFollower] = []
+        for user in users.prefix(count) {
+            let userId: String
+            if let s = user["pk"] as? String { userId = s }
+            else if let i = user["pk"] as? Int64 { userId = String(i) }
+            else if let i = user["pk"] as? Int { userId = String(i) }
+            else { continue }
+
+            following.append(InstagramFollower(
+                userId: userId,
+                username: user["username"] as? String ?? "",
+                fullName: user["full_name"] as? String ?? "",
+                profilePicURL: user["profile_pic_url"] as? String
+            ))
+        }
+
+        print("✅ [FOLLOWING] Got \(following.count) following")
+        return following
     }
 
     // MARK: - Get User Full Info (with followers count, following, posts, etc.)
@@ -2916,40 +3096,82 @@ class InstagramService: ObservableObject {
         
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
-        
+
         // ANTI-BOT: Human delay (1-3 seconds) - longer than before
         let delay = UInt64.random(in: 1_000_000_000...3_000_000_000)
         print("   Waiting \(delay / 1_000_000_000)s (human delay)...")
         try await Task.sleep(nanoseconds: delay)
-        
+
+        print("   [NOTE] csrfToken=\(String(session.csrfToken.prefix(8)))... len=\(session.csrfToken.count) audience=\(audience)")
+        print("   [NOTE] wwwClaim=\(String(wwwClaim.prefix(20)))")
+
+        // Notes uses www.instagram.com (where the WebView session was established).
+        // i.instagram.com returns web-style CORS headers for this endpoint, suggesting
+        // the Notes backend lives under www. Using www directly avoids any routing mismatch.
+        let notesBase = "https://www.instagram.com/api/v1"
+
+        // ── Step 1: warm up ──────────────────────────────────────────────────────────────
+        if let warmupURL = URL(string: "\(notesBase)/notes/update_notes_last_seen_timestamp/") {
+            var warmupReq = URLRequest(url: warmupURL)
+            warmupReq.httpMethod = "POST"
+            warmupReq.timeoutInterval = 20
+            var warmupHeaders = buildHeaders()
+            warmupHeaders.removeValue(forKey: "Cookie") // let URLSession use stored cookies
+            for (k, v) in warmupHeaders { warmupReq.setValue(v, forHTTPHeaderField: k) }
+            let warmupBodyStr = "_uuid=\(clientUUID)&_uid=\(session.userId)&_csrftoken=\(session.csrfToken)"
+            warmupReq.httpBody = warmupBodyStr.data(using: .utf8)
+            if let (wd, wr) = try? await postSession.data(for: warmupReq),
+               let wHttp = wr as? HTTPURLResponse {
+                let ws = (try? JSONSerialization.jsonObject(with: wd) as? [String: Any])?["status"] as? String ?? "?"
+                print("   [NOTE] Warm-up HTTP \(wHttp.statusCode) status=\(ws)")
+                extractAndUpdateCSRF(from: wr)
+            }
+        }
+
+        // ── Step 2: create the note ──────────────────────────────────────────────────────
         let body: [String: String] = [
-            "audience": String(audience),
-            "text": text,
-            "_csrftoken": session.csrfToken,
-            "_uid": session.userId,
-            "_uuid": clientUUID,
-            "uuid": UUID().uuidString
+            "_csrftoken":   session.csrfToken,
+            "_uid":         session.userId,
+            "_uuid":        clientUUID,
+            "device_id":    deviceId,
+            "audience":     String(audience),
+            "note_style":   "0",
+            "text":         text
         ]
-        
-        let data = try await apiRequest(
-            method: "POST",
-            path: "/notes/create_note/",
-            body: body
-        )
-        
+        print("   [NOTE] Body params: \(body.keys.sorted().joined(separator: ", "))")
+
+        guard let noteURL = URL(string: "\(notesBase)/notes/create_note/") else {
+            throw InstagramError.invalidURL
+        }
+        var noteRequest = URLRequest(url: noteURL)
+        noteRequest.httpMethod = "POST"
+        noteRequest.timeoutInterval = 30
+        var createHeaders = buildHeaders()
+        createHeaders.removeValue(forKey: "Cookie") // let URLSession use stored cookies
+        for (k, v) in createHeaders { noteRequest.setValue(v, forHTTPHeaderField: k) }
+        let bodyString = body.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        noteRequest.httpBody = bodyString.data(using: .utf8)
+        trackAction()
+        let (data, noteResponse) = try await postSession.data(for: noteRequest)
+        if let http = noteResponse as? HTTPURLResponse {
+            print("   [NOTE] HTTP \(http.statusCode)")
+            extractAndUpdateCSRF(from: noteResponse)
+            extractMID(from: noteResponse)
+        }
+
+        if let rawResponse = String(data: data, encoding: .utf8) {
+            print("   [NOTE] Raw response: \(rawResponse.prefix(400))")
+        }
+
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let status = json["status"] as? String, status == "ok" {
                 print("✅ [NOTE] Note created successfully")
-                
-                // ANTI-BOT: Save text to prevent duplicates
+
                 UserDefaults.standard.set(text, forKey: "last_note_text")
-                // Track when note was sent (notes expire after 24h on Instagram)
                 UserDefaults.standard.set(Date(), forKey: "last_note_sent_date")
-                
-                // ANTI-BOT: Set cooldown (60 seconds between notes)
                 let cooldownUntil = Date().addingTimeInterval(60)
                 UserDefaults.standard.set(cooldownUntil, forKey: "note_cooldown_until")
-                
+
                 return true
             } else {
                 let message = json["message"] as? String ?? "Unknown error"
@@ -2957,7 +3179,7 @@ class InstagramService: ObservableObject {
                 throw InstagramError.apiError("Note failed: \(message)")
             }
         }
-        
+
         return false
     }
     

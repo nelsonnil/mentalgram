@@ -138,17 +138,19 @@ struct QuickRevealView: View {
     
     private func placeholderForSet(_ set: PhotoSet) -> String {
         switch set.type {
-        case .word: return "COCHE"
+        case .word:   return "COCHE"
         case .number: return "393"
         case .custom: return "7_corazones"
+        case .card:   return "J♠"
         }
     }
     
     private func hintForSet(_ set: PhotoSet) -> String {
         switch set.type {
-        case .word: return "Enter a word (one letter per bank)"
+        case .word:   return "Enter a word (one letter per bank)"
         case .number: return "Enter a number (one digit per bank)"
         case .custom: return "Enter the exact filename (without extension)"
+        case .card:   return "Enter a card symbol (e.g. A♠, 10♥, K♦)"
         }
     }
     

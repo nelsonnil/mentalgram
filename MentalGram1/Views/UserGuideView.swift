@@ -10,6 +10,7 @@ struct UserGuideView: View {
     private enum GuideSheet: Identifiable {
         case introduction
         case limits
+        case performance
         case profilePicture
         case note
         case biography
@@ -18,19 +19,24 @@ struct UserGuideView: View {
         case postPrediction
         case counterGlitch
         case dateForce
+        case fakeHomeScreen
+        case lockscreenInput
 
         var id: Int {
             switch self {
             case .introduction:   return 0
             case .limits:         return 1
-            case .profilePicture: return 2
-            case .note:           return 3
-            case .biography:      return 4
-            case .forcePost:      return 5
-            case .forceReel:      return 6
-            case .postPrediction: return 7
-            case .counterGlitch:  return 8
-            case .dateForce:      return 9
+            case .performance:    return 2
+            case .profilePicture: return 3
+            case .note:           return 4
+            case .biography:      return 5
+            case .forcePost:      return 6
+            case .forceReel:      return 7
+            case .postPrediction: return 8
+            case .counterGlitch:  return 9
+            case .dateForce:      return 10
+            case .fakeHomeScreen: return 11
+            case .lockscreenInput: return 12
             }
         }
     }
@@ -39,6 +45,7 @@ struct UserGuideView: View {
     private let colorProfile = Color(hex: "FF9F0A")
     private let colorTricks  = Color(hex: "BF5AF2")
     private let colorStart   = Color(hex: "0A84FF")
+    private let colorData    = Color(hex: "30D158")
 
     var body: some View {
         ZStack {
@@ -57,6 +64,15 @@ struct UserGuideView: View {
                             subtitle: "Introduction, features and the three pillars of Vault",
                             isFirst: true, isLast: false
                         ) { activeSheet = .introduction }
+
+                        guideDivider
+                        guideRow(
+                            icon: "iphone",
+                            iconColor: colorStart,
+                            title: "Performance",
+                            subtitle: "How the Instagram emulator works — navigation, profiles and Explore",
+                            isFirst: false, isLast: false
+                        ) { activeSheet = .performance }
 
                         guideDivider
                         guideRow(
@@ -102,7 +118,7 @@ struct UserGuideView: View {
                     guideSectionLabel("TRICKS", icon: "wand.and.stars", color: colorTricks)
                     guideCardGroup {
                         guideRow(
-                            icon: "square.grid.2x2",
+                            icon: "hand.point.up.left.fill",
                             iconColor: colorTricks,
                             title: "Force Post",
                             subtitle: "Force a scroll to stop on a specific post",
@@ -111,10 +127,10 @@ struct UserGuideView: View {
 
                         guideDivider
                         guideRow(
-                            icon: "hand.point.up.left.fill",
+                            icon: "square.grid.2x2",
                             iconColor: colorTricks,
                             title: "Force Reel",
-                            subtitle: "Place up to 3 reels in Explore to control the choice",
+                            subtitle: "Force a specific reel to appear in Explore",
                             isFirst: false, isLast: false
                         ) { activeSheet = .forceReel }
 
@@ -124,6 +140,7 @@ struct UserGuideView: View {
                             iconColor: colorTricks,
                             title: "Post Prediction",
                             subtitle: "Unarchive photos from the active set to reveal a prediction",
+                            badge: "⭐ Sets",
                             isFirst: false, isLast: false
                         ) { activeSheet = .postPrediction }
 
@@ -144,6 +161,27 @@ struct UserGuideView: View {
                             subtitle: "Force followers/following to reveal today's date",
                             isFirst: false, isLast: true
                         ) { activeSheet = .dateForce }
+                    }
+
+                    // CAMOUFLAGE
+                    guideSectionLabel("guide.section.camouflage", icon: "theatermasks.fill", color: colorData)
+                    guideCardGroup {
+                        guideRow(
+                            icon: "iphone.homebutton",
+                            iconColor: colorData,
+                            title: "guide.fakehome.title",
+                            subtitle: "guide.fakehome.subtitle",
+                            isFirst: true, isLast: false
+                        ) { activeSheet = .fakeHomeScreen }
+
+                        guideDivider
+                        guideRow(
+                            icon: "lock.fill",
+                            iconColor: colorData,
+                            title: "guide.lockscreen.title",
+                            subtitle: "guide.lockscreen.subtitle",
+                            isFirst: false, isLast: true
+                        ) { activeSheet = .lockscreenInput }
                     }
 
                     Color.clear.frame(height: 30)
@@ -167,6 +205,8 @@ struct UserGuideView: View {
         switch sheet {
         case .introduction:
             IntroductionHelpView(onClose: { activeSheet = nil })
+        case .performance:
+            PerformanceHelpView(onClose: { activeSheet = nil })
         case .limits:
             LimitsHelpView(onClose: { activeSheet = nil })
         case .profilePicture:
@@ -185,12 +225,16 @@ struct UserGuideView: View {
             CounterGlitchHelpView(onClose: { activeSheet = nil })
         case .dateForce:
             DateForceHelpView(onClose: { activeSheet = nil })
+        case .fakeHomeScreen:
+            FakeHomeScreenGuideView(onClose: { activeSheet = nil })
+        case .lockscreenInput:
+            LockscreenInputGuideView(onClose: { activeSheet = nil })
         }
     }
 
     // MARK: - Section label
 
-    private func guideSectionLabel(_ title: String, icon: String, color: Color) -> some View {
+    private func guideSectionLabel(_ title: LocalizedStringKey, icon: String, color: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .bold))
@@ -223,8 +267,10 @@ struct UserGuideView: View {
     private func guideRow(
         icon: String,
         iconColor: Color,
-        title: String,
-        subtitle: String,
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
+        badge: String? = nil,
+        badgeColor: Color = .yellow,
         isFirst: Bool,
         isLast: Bool,
         action: @escaping () -> Void
@@ -241,9 +287,20 @@ struct UserGuideView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    HStack(spacing: 5) {
+                        Text(title)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        if let badge {
+                            Text(badge)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(badgeColor)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(badgeColor.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
                     Text(subtitle)
                         .font(.system(size: 12))
                         .foregroundColor(VaultTheme.Colors.textSecondary)

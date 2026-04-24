@@ -106,6 +106,8 @@ struct HomeView: View {
         }
         .onAppear {
             updateTabBarAppearance(forTab: selectedTab)
+            // Clean up any stuck upload state (e.g. deleted active set from infinite-loop bug)
+            UploadManager.shared.clearStuckState()
         }
         .alert("Visible Photos Detected", isPresented: $showVisiblePhotosAlert) {
             Button("Continue Anyway") {
@@ -449,6 +451,7 @@ struct SetRowView: View {
         case .word:   return Color(hex: "7C3AED")  // purple
         case .number: return Color(hex: "0EA5E9")  // sky blue
         case .custom: return Color(hex: "F97316")  // orange
+        case .card:   return Color(hex: "16A34A")  // green
         }
     }
 
@@ -457,6 +460,7 @@ struct SetRowView: View {
         case .word:   return [Color(hex: "7C3AED"), Color(hex: "6D28D9")]
         case .number: return [Color(hex: "0EA5E9"), Color(hex: "0369A1")]
         case .custom: return [Color(hex: "F97316"), Color(hex: "EA580C")]
+        case .card:   return [Color(hex: "16A34A"), Color(hex: "15803D")]
         }
     }
 
@@ -465,6 +469,7 @@ struct SetRowView: View {
         case .word:   return "textformat.abc"
         case .number: return "123.rectangle.fill"
         case .custom: return "square.grid.2x2.fill"
+        case .card:   return "suit.spade.fill"
         }
     }
 
@@ -955,6 +960,7 @@ struct SettingsView: View {
         settingsSectionLabel("OTHER", icon: "gearshape.2.fill", color: Self.colorData)
         accentedSection(color: Self.colorData) {
             FakeHomeScreenCard(showingPicker: $showingHomeScreenPicker)
+            LockscreenInputSettingsCard()
         }
         Spacer().frame(height: 28)
     }
@@ -2143,11 +2149,14 @@ struct CollapsibleCard<Content: View, Trailing: View>: View {
     let iconColor: Color
     let title: LocalizedStringKey
     let subtitle: LocalizedStringKey
+    var badge: String? = nil          // Optional inline badge next to the title
+    var badgeColor: Color = .yellow   // Badge accent color
     @Binding var isExpanded: Bool
     @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let content: () -> Content
 
     init(icon: String, iconColor: Color, title: LocalizedStringKey, subtitle: LocalizedStringKey,
+         badge: String? = nil, badgeColor: Color = .yellow,
          isExpanded: Binding<Bool>,
          @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
          @ViewBuilder content: @escaping () -> Content) {
@@ -2155,6 +2164,8 @@ struct CollapsibleCard<Content: View, Trailing: View>: View {
         self.iconColor = iconColor
         self.title = title
         self.subtitle = subtitle
+        self.badge = badge
+        self.badgeColor = badgeColor
         self._isExpanded = isExpanded
         self.trailing = trailing
         self.content = content
@@ -2168,9 +2179,20 @@ struct CollapsibleCard<Content: View, Trailing: View>: View {
                     Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundColor(iconColor)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    HStack(spacing: 5) {
+                        Text(title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        if let badge {
+                            Text(badge)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(badgeColor)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(badgeColor.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
                     Text(subtitle)
                         .font(VaultTheme.Typography.caption())
                         .foregroundColor(VaultTheme.Colors.textSecondary)
@@ -2223,7 +2245,7 @@ struct ForcePostSettingsCard: View {
 
     var body: some View {
         Group {
-        CollapsibleCard(icon: "square.grid.2x2", iconColor: SettingsView.colorTricks,
+        CollapsibleCard(icon: "hand.point.up.left.fill", iconColor: SettingsView.colorTricks,
                         title: "Force Post",
                         subtitle: "Force a scroll to stop on a specific post",
                         isExpanded: $isExpanded,
@@ -2338,7 +2360,7 @@ struct ForceReelSettingsCard: View {
     @State private var isExpanded = false
 
     var body: some View {
-        CollapsibleCard(icon: "hand.point.up.left.fill", iconColor: SettingsView.colorTricks,
+        CollapsibleCard(icon: "square.grid.2x2", iconColor: SettingsView.colorTricks,
                         title: "force_reel.title",
                         subtitle: "force_reel.subtitle",
                         isExpanded: $isExpanded,
@@ -2499,6 +2521,7 @@ struct ForceNumberRevealSettingsCard: View {
         CollapsibleCard(icon: "number.circle.fill", iconColor: SettingsView.colorTricks,
                         title: "Post Prediction",
                         subtitle: "Unarchive photos from the active set to reveal a prediction",
+                        badge: "⭐ Sets",
                         isExpanded: $isExpanded,
                         trailing: {
                             Button(action: { showingHelp = true }) {
@@ -2871,7 +2894,7 @@ struct FollowingMagicSettingsCard: View {
                 Spacer()
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
             }
-            Text("Swipe the grid to secretly build a number (1–100), then open Explore. When you visit an audience member's profile the selected counter appears inflated. Press a volume button to start the countdown back to the real number.")
+            Text("Swipe the grid to secretly build a number (1–100), then open Explore. When you visit an audience member's profile the selected counter appears inflated. Press a volume button to start the countdown back to the real number.\n\nProfiles with 10K+ followers: each unit counts as 1K automatically (e.g. input 6 on a 200K profile → shows 206K → counts down to 200K).")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
@@ -3360,6 +3383,7 @@ struct FakeHomeScreenCard: View {
     @ObservedObject private var illusionService = HomeScreenIllusionService.shared
     @AppStorage("fakeHomeScreenEnabled") private var fakeHomeScreenEnabled = false
     @State private var isExpanded = false
+    @State private var showingHelp = false
 
     private static let accent = SettingsView.colorData
 
@@ -3369,11 +3393,22 @@ struct FakeHomeScreenCard: View {
             iconColor: Self.accent,
             title: "Fake Home Screen",
             subtitle: "Show a home screen screenshot when Performance opens",
-            isExpanded: $isExpanded
+            isExpanded: $isExpanded,
+            trailing: {
+                Button { showingHelp = true } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
         ) {
             toggleRow
             modernDivider()
             imagePickerRow
+        }
+        .sheet(isPresented: $showingHelp) {
+            FakeHomeScreenHelpSheet()
         }
     }
 
@@ -3463,6 +3498,275 @@ struct FakeHomeScreenCard: View {
 
     @ViewBuilder private func modernDivider() -> some View {
         Divider().background(Color(hex: "#3A3A3C"))
+    }
+}
+
+// MARK: - Fake Home Screen Help Sheet
+
+private struct FakeHomeScreenHelpSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+
+                    helpSection(
+                        icon: "iphone.homebutton",
+                        iconColor: SettingsView.colorData,
+                        title: "What is Fake Home Screen?",
+                        body: "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally."
+                    )
+
+                    helpSection(
+                        icon: "hand.tap.fill",
+                        iconColor: SettingsView.colorData,
+                        title: "How to use it",
+                        body: "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.\n\n2. Upload it here using \"Select screenshot\".\n\n3. Enable the toggle.\n\n4. Next time you open Performance, that screenshot appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile."
+                    )
+
+                    helpSection(
+                        icon: "eye.slash.fill",
+                        iconColor: SettingsView.colorData,
+                        title: "Why use it?",
+                        body: "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears, making the experience look completely natural."
+                    )
+                }
+                .padding(20)
+            }
+            .navigationTitle("Fake Home Screen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private func helpSection(icon: String, iconColor: Color, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(iconColor.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(iconColor)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(body)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+// MARK: - Lockscreen Input Settings Card
+
+struct LockscreenInputSettingsCard: View {
+    @ObservedObject private var settings = LockscreenInputSettings.shared
+    @State private var isExpanded = false
+    @State private var showingPicker = false
+    @State private var showingHelp = false
+
+    var body: some View {
+        CollapsibleCard(icon: "lock.fill", iconColor: SettingsView.colorData,
+                        title: "Lockscreen Input",
+                        subtitle: "Fake iOS lockscreen for secret digit entry",
+                        isExpanded: $isExpanded,
+                        trailing: {
+                            Button { showingHelp = true } label: {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            .buttonStyle(.plain)
+                        }) {
+            HStack {
+                Text("Enabled")
+                    .font(VaultTheme.Typography.body())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { settings.isEnabled },
+                    set: { newValue in
+                        if newValue && settings.wallpaperData == nil {
+                            return
+                        }
+                        settings.isEnabled = newValue
+                    }
+                )).labelsHidden()
+            }
+
+            Text("Shows a fake lockscreen when entering Performance. Tap digits for your secret number, tap outside the numpad to lock it, then fill the remaining dots.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                Text("Wallpaper")
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+
+                if let img = settings.wallpaperImage {
+                    HStack(spacing: 12) {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 80, height: 140)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button {
+                                showingPicker = true
+                            } label: {
+                                Label("Change", systemImage: "photo.on.rectangle")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(SettingsView.colorTricks)
+                                    .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                settings.clearWallpaper()
+                                settings.isEnabled = false
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(VaultTheme.Colors.error)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                } else {
+                    Button {
+                        showingPicker = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "photo.badge.plus")
+                                .font(.system(size: 16))
+                            Text("Choose Wallpaper")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(SettingsView.colorTricks)
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+
+                    if settings.isEnabled {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(VaultTheme.Colors.warning)
+                                .font(.system(size: 12))
+                            Text("Select a wallpaper to activate")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.warning)
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingPicker) {
+            HomeScreenImagePicker { image in
+                settings.saveWallpaper(image)
+            }
+        }
+        .sheet(isPresented: $showingHelp) {
+            LockscreenInputHelpSheet()
+        }
+    }
+}
+
+// MARK: - Lockscreen Input Help Sheet
+
+private struct LockscreenInputHelpSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+
+                    helpSection(
+                        icon: "lock.fill",
+                        iconColor: SettingsView.colorData,
+                        title: "What is Lockscreen Input?",
+                        body: "When you open Performance, the app shows a fake iOS-style passcode screen before revealing your profile. To anyone watching it looks like you are simply unlocking your phone."
+                    )
+
+                    helpSection(
+                        icon: "hand.point.up.left.fill",
+                        iconColor: SettingsView.colorData,
+                        title: "How to enter your secret number",
+                        body: "1. Tap the digits of your secret number on the numpad — they register silently.\n\n2. Tap anywhere outside the numpad to \"lock\" those digits in place.\n\n3. Fill the remaining dots by tapping any digits — they are ignored.\n\n4. Once all 4 dots are filled the lockscreen dismisses and Performance opens."
+                    )
+
+                    helpSection(
+                        icon: "photo.fill",
+                        iconColor: SettingsView.colorData,
+                        title: "Wallpaper",
+                        body: "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Without a wallpaper the lockscreen input cannot be enabled."
+                    )
+
+                    helpSection(
+                        icon: "eye.slash.fill",
+                        iconColor: SettingsView.colorData,
+                        title: "Why use it?",
+                        body: "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram — completely natural to any observer."
+                    )
+
+                    helpSection(
+                        icon: "square.grid.2x2.fill",
+                        iconColor: SettingsView.colorData,
+                        title: "Same secret number — many tricks",
+                        body: "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore"
+                    )
+                }
+                .padding(20)
+            }
+            .navigationTitle("Lockscreen Input")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private func helpSection(icon: String, iconColor: Color, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(iconColor.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(iconColor)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(body)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

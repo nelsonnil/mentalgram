@@ -53,7 +53,7 @@ struct UserProfileView: View {
         self._isFollowRequested = State(initialValue: profile.isFollowRequested)
         self._currentProfile = State(initialValue: profile)
         self._allMediaURLs = State(initialValue: profile.cachedMediaURLs)
-        self._hasMorePages = State(initialValue: profile.cachedMediaURLs.count >= 18)
+        self._hasMorePages = State(initialValue: true)  // let the API decide; deduplication handles the first page
         var initialItems: [String: InstagramMediaItem] = [:]
         for item in profile.cachedMediaItems { initialItems[item.imageURL] = item }
         self._mediaItemsByURL = State(initialValue: initialItems)
@@ -346,65 +346,71 @@ struct UserProfileView: View {
                         .padding(.vertical, 8)
                     }
 
-                    // Tabs — tapping a tab resets the secret digit buffer
-                    HStack(spacing: 0) {
-                        TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
-                            selectedTab = 0
-                            secretManager.reset()
-                            followingOverride = nil
+                    // Private & not following → show lock wall (no tabs)
+                    // Public or following → show tabs + grid as normal
+                    if currentProfile.isPrivate && !isFollowing {
+                        privateAccountEmptyState
+                    } else {
+                        // Tabs
+                        HStack(spacing: 0) {
+                            TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
+                                selectedTab = 0
+                                secretManager.reset()
+                                followingOverride = nil
+                            }
+                            TabButton(icon: "play.rectangle", activeAsset: "instagram_reels_active", inactiveAsset: "instagram_reels_inactive", isSelected: selectedTab == 1) {
+                                selectedTab = 1
+                                secretManager.reset()
+                                followingOverride = nil
+                            }
+                            TabButton(icon: "person.crop.square", activeAsset: "instagram_tagged_active", inactiveAsset: "instagram_tagged_inactive", isSelected: selectedTab == 2) {
+                                selectedTab = 2
+                                secretManager.reset()
+                                followingOverride = nil
+                            }
                         }
-                        TabButton(icon: "play.rectangle", activeAsset: "instagram_reels_active", inactiveAsset: "instagram_reels_inactive", isSelected: selectedTab == 1) {
-                            selectedTab = 1
-                            secretManager.reset()
-                            followingOverride = nil
+                        .frame(height: 44)
+
+                        Divider()
+
+                        // Tab content
+                        Group {
+                            switch selectedTab {
+                            case 0:
+                                PhotosGridView(
+                                    mediaURLs: gridURLsForDisplay,
+                                    cachedImages: cachedImages,
+                                    onMediaAppear: loadMoreIfNeeded,
+                                    onTapIndex: { index in
+                                        selectedPostIndex = index
+                                        showingPostViewer = true
+                                    }
+                                )
+                            case 1:
+                                ReelsGridView(reelURLs: currentProfile.cachedReelURLs, cachedImages: cachedImages)
+                            case 2:
+                                PhotosGridView(mediaURLs: currentProfile.cachedTaggedURLs, cachedImages: cachedImages)
+                            default:
+                                EmptyView()
+                            }
                         }
-                        TabButton(icon: "person.crop.square", activeAsset: "instagram_tagged_active", inactiveAsset: "instagram_tagged_inactive", isSelected: selectedTab == 2) {
-                            selectedTab = 2
-                            secretManager.reset()
-                            followingOverride = nil
-                        }
-                    }
-                    .frame(height: 44)
-                    
-                    Divider()
-                    
-                    // Tab content — always show the full grid (with placeholders if needed)
-                    Group {
-                        switch selectedTab {
-                        case 0:
-                            PhotosGridView(
-                                mediaURLs: gridURLsForDisplay,
-                                cachedImages: cachedImages,
-                                onMediaAppear: loadMoreIfNeeded,
-                                onTapIndex: { index in
-                                    selectedPostIndex = index
-                                    showingPostViewer = true
-                                }
-                            )
-                        case 1:
-                            ReelsGridView(reelURLs: currentProfile.cachedReelURLs, cachedImages: cachedImages)
-                        case 2:
-                            PhotosGridView(mediaURLs: currentProfile.cachedTaggedURLs, cachedImages: cachedImages)
-                        default:
-                            EmptyView()
-                        }
-                    }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 20, coordinateSpace: .local)
-                            .onEnded { value in handleGridSwipe(value) }
-                    )
-                    .fullScreenCover(isPresented: $showingPostViewer) {
-                        PostScrollView(
-                            mediaURLs: postViewerURLs,
-                            mediaItemsByURL: postViewerItems,
-                            cachedImages: postViewerCachedImages,
-                            initialIndex: mappedPostViewerIndex(selectedPostIndex),
-                            username: currentProfile.username,
-                            profileImage: cachedImages[currentProfile.profilePicURL],
-                            userId: currentProfile.userId,
-                            forcePostURL: forcePostActiveURL,
-                            forcedThumbnail: forcePostThumbnail
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 20, coordinateSpace: .local)
+                                .onEnded { value in handleGridSwipe(value) }
                         )
+                        .fullScreenCover(isPresented: $showingPostViewer) {
+                            PostScrollView(
+                                mediaURLs: postViewerURLs,
+                                mediaItemsByURL: postViewerItems,
+                                cachedImages: postViewerCachedImages,
+                                initialIndex: mappedPostViewerIndex(selectedPostIndex),
+                                username: currentProfile.username,
+                                profileImage: cachedImages[currentProfile.profilePicURL],
+                                userId: currentProfile.userId,
+                                forcePostURL: forcePostActiveURL,
+                                forcedThumbnail: forcePostThumbnail
+                            )
+                        }
                     }
                 }
             }
@@ -429,16 +435,17 @@ struct UserProfileView: View {
             if followingMagic.isEnabled && followingMagic.pendingOffset > 0 {
                 let useFollowers = followingMagic.targetFollowers
                 let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-                // Both classic and transfer: pre-show the inflated number (real + steps).
-                // Classic deflates to real and stops. Transfer deflates to real, saves
-                // offset so own profile can then inflate from real-steps back to real.
+                // Auto K-mode: if >= 10K, each unit of offset represents 1K
+                if realCount >= 10_000 {
+                    followingMagic.applyKModeScaling()
+                }
                 let inflated = realCount + followingMagic.pendingOffset
                 if useFollowers { magicFollowerText  = formatFollowing(inflated) }
                 else            { magicFollowingText = formatFollowing(inflated) }
                 if followingMagic.transferEnabled {
-                    print("🎩 [TRANSFER] Pre-inflated to \(inflated) (real:\(realCount) +\(followingMagic.pendingOffset)) — deflate to real on volume press")
+                    print("🎩 [TRANSFER] Pre-inflated to \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(followingMagic.pendingOffset)) — deflate to real on volume press")
                 } else {
-                    print("🎩 [MAGIC] Showing inflated: \(inflated) (real:\(realCount) +\(followingMagic.pendingOffset))")
+                    print("🎩 [MAGIC] Showing inflated: \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(followingMagic.pendingOffset))")
                 }
                 VolumeButtonMonitor.shared.startMonitoring()
             }
@@ -465,7 +472,7 @@ struct UserProfileView: View {
                     // Don't register the forced reel profile or duplicates
                     let isAlreadyRegistered = dateForce.spectators.contains { $0.username == currentProfile.username }
                     if !isAlreadyRegistered {
-                        dateForce.addSpectator(username: currentProfile.username, followingCount: currentProfile.followingCount, followerCount: currentProfile.followerCount)
+                        dateForce.addSpectator(username: currentProfile.username, userId: currentProfile.userId, profilePicURL: currentProfile.profilePicURL, followingCount: currentProfile.followingCount, followerCount: currentProfile.followerCount)
                     }
                 }
             }
@@ -513,7 +520,17 @@ struct UserProfileView: View {
 
     // MARK: - Following Counter Magic
 
+    /// Formats a count for the magic countdown display.
+    /// For counts >= 10K, uses K notation (e.g. "206K") so the countdown looks natural.
+    /// For counts < 10K, shows the raw integer (e.g. "1025").
     private func formatFollowing(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            let value = Double(count) / 1_000_000
+            return value == value.rounded() ? String(format: "%.0fM", value) : String(format: "%.1fM", value)
+        } else if count >= 10_000 {
+            let value = Double(count) / 1_000
+            return value == value.rounded() ? String(format: "%.0fK", value) : String(format: "%.1fK", value)
+        }
         return "\(count)"
     }
 
@@ -531,48 +548,46 @@ struct UserProfileView: View {
         guard followingMagic.pendingOffset > 0 else { return }
         isCountingDown = true
 
-        let steps = followingMagic.pendingOffset
+        let offset = followingMagic.pendingOffset
+        let useFollowers = followingMagic.targetFollowers
+        let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
+        // K-mode: step by 1000 so each tick changes the K digit (e.g. 206K→205K)
+        let stepSize = realCount >= 10_000 ? 1_000 : 1
+        let visibleSteps = offset / stepSize
         let totalMs = followingMagic.countdownDuration * 1000
-        let intervalMs = max(16, totalMs / steps)
+        let intervalMs = max(16, totalMs / max(1, visibleSteps))
 
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
-        let useFollowers = followingMagic.targetFollowers
-
-        // Helper: write count to the correct column
         func setMagicText(_ value: String?) {
             if useFollowers { magicFollowerText  = value }
             else            { magicFollowingText = value }
         }
 
         if followingMagic.transferEnabled {
-            // Transfer phase 1: DEFLATE from (realCount + steps) down to realCount.
-            // The inflated value was already pre-shown in onAppear.
-            let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-            var current = realCount + steps
+            var current = realCount + offset
 
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
-                current -= 1
+                current -= stepSize
                 setMagicText(self.formatFollowing(current))
 
                 if current <= realCount {
                     timer.invalidate()
                     self.countdownTimer = nil
                     self.isCountingDown = false
-                    setMagicText(nil)  // clear override — real count shows through
-                    self.followingMagic.transferOffset = steps  // save for phase 2 (own profile)
+                    setMagicText(nil)
+                    self.followingMagic.transferOffset = offset
                     self.followingMagic.clear()
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    print("🎩 [TRANSFER] Deflation complete — back to real: \(realCount), offset \(steps) saved for phase 2")
+                    print("🎩 [TRANSFER] Deflation complete — back to real: \(self.formatFollowing(realCount)), offset \(offset) saved for phase 2")
                 }
             }
         } else {
-            // Classic mode: INFLATE then count down to real count
-            let target = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-            var current = target + steps
+            let target = realCount
+            var current = target + offset
 
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
-                current -= 1
+                current -= stepSize
                 setMagicText(self.formatFollowing(current))
 
                 if current <= target {
@@ -583,7 +598,7 @@ struct UserProfileView: View {
                     self.followingMagic.clear()
                     VolumeButtonMonitor.shared.stopMonitoring()
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    print("🎩 [MAGIC] Countdown complete — showing real count: \(target)")
+                    print("🎩 [MAGIC] Countdown complete — showing real count: \(self.formatFollowing(target))")
                 }
             }
         }
@@ -665,6 +680,60 @@ struct UserProfileView: View {
         }
     }
     
+    // MARK: - Private account empty state (matches real Instagram layout)
+
+    private var privateAccountEmptyState: some View {
+        VStack(spacing: 0) {
+            // Thin separator that replaces the tabs line
+            Rectangle()
+                .fill(Color(white: 0.88))
+                .frame(height: 1)
+
+            VStack(spacing: 12) {
+                // Lock circle — matches Instagram's private account icon
+                Image(systemName: "lock.circle")
+                    .font(.system(size: 62, weight: .light))
+                    .foregroundColor(.black)
+                    .padding(.top, 36)
+
+                Text("ig.private.title")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.black)
+
+                Text("ig.private.subtitle")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color(white: 0.45))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 260)
+
+                // Follow button — same style as Instagram's blue CTA
+                Button(action: toggleFollow) {
+                    Group {
+                        if isFollowActionLoading {
+                            ProgressView().scaleEffect(0.8).tint(.white)
+                        } else if isFollowRequested {
+                            Text("ig.follow_requested")
+                        } else {
+                            Text("ig.follow")
+                        }
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+                    .background(isFollowRequested ? Color(white: 0.7) : Color(hex: "0095F6"))
+                    .cornerRadius(8)
+                }
+                .disabled(isFollowActionLoading || isFollowRequested)
+                .padding(.horizontal, 40)
+                .padding(.top, 4)
+
+                Spacer(minLength: 40)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     // MARK: - Infinite Scroll
     
     private func loadMoreMedia() {
@@ -686,24 +755,27 @@ struct UserProfileView: View {
                 let (mediaItems, newMaxId) = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 21, maxId: nextMaxId)
                 
                 await MainActor.run {
-                    // Calculate how many we can add without exceeding limit
+                    // Deduplicate: skip URLs already shown (handles first page re-fetch when nextMaxId starts nil)
+                    let existingSet = Set(allMediaURLs)
+                    let freshItems = mediaItems.filter { !existingSet.contains($0.imageURL) }
+
+                    for item in freshItems { mediaItemsByURL[item.imageURL] = item }
+
+                    // Respect limit
                     let remainingSlots = maxPhotosOtherProfile - allMediaURLs.count
-                    let itemsToAdd = min(mediaItems.count, remainingSlots)
-                    let newItems = Array(mediaItems.prefix(itemsToAdd))
-                    for item in newItems { mediaItemsByURL[item.imageURL] = item }
-                    let newURLs = newItems.map { $0.imageURL }
-                    
+                    let urlsToAppend = Array(freshItems.prefix(remainingSlots).map { $0.imageURL })
+
                     // Filter to multiples of 3 to avoid UI gaps
-                    let totalAfterAdd = allMediaURLs.count + newURLs.count
+                    let totalAfterAdd = allMediaURLs.count + urlsToAppend.count
                     let remainder = totalAfterAdd % 3
-                    let urlsToDisplay = remainder == 0 ? newURLs : Array(newURLs.dropLast(remainder))
-                    
+                    let urlsToDisplay = remainder == 0 ? urlsToAppend : Array(urlsToAppend.dropLast(remainder))
+
                     allMediaURLs.append(contentsOf: urlsToDisplay)
                     nextMaxId = newMaxId
                     hasMorePages = (newMaxId != nil) && (allMediaURLs.count < maxPhotosOtherProfile)
                     isLoadingMore = false
-                    
-                    print("📜 [USER] Loaded \(urlsToDisplay.count) more, total now: \(allMediaURLs.count), hasMore: \(hasMorePages)")
+
+                    print("📜 [USER] Loaded \(urlsToDisplay.count) new (skipped \(mediaItems.count - freshItems.count) dupes), total: \(allMediaURLs.count), hasMore: \(hasMorePages)")
                     
                     // Download images for new URLs
                     downloadImagesForURLs(urlsToDisplay)

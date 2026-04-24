@@ -31,20 +31,24 @@ struct DeviceInfo {
         self.screenWidth = Int(screen.nativeBounds.width)
         self.screenHeight = Int(screen.nativeBounds.height)
         
-        // Detectar versión de iOS
-        let version = UIDevice.current.systemVersion
-        self.iosVersion = version.replacingOccurrences(of: ".", with: "_")
+        // Detectar versión de iOS — clamp a 18.x si el dispositivo ejecuta un iOS futuro
+        // (iOS 19+ no existía cuando se publicó el Instagram app version actual;
+        //  reportar una versión desconocida haría fallar endpoints sensibles como Notes)
+        let rawVersion = UIDevice.current.systemVersion
+        let major = Int(rawVersion.split(separator: ".").first ?? "0") ?? 0
+        let clampedVersion = major >= 19 ? "18.0" : rawVersion
+        self.iosVersion = clampedVersion.replacingOccurrences(of: ".", with: "_")
         
         print("📱 [DEVICE] Model: \(modelName) (\(modelIdentifier))")
         print("📱 [DEVICE] Screen: \(screenWidth)x\(screenHeight) @\(scale)x")
-        print("📱 [DEVICE] iOS: \(version)")
+        print("📱 [DEVICE] iOS: \(rawVersion)\(major >= 19 ? " → clamped to 18.0 in User-Agent" : "")")
     }
     
     /// Instagram app version - MUST be updated periodically to stay current
-    /// Last verified: Feb 2026 (from real user agent data)
+    /// Last verified: Apr 20 2026 (from https://releasealert.dev/appstore/Instagram)
     /// Check latest at: https://apps.apple.com/app/instagram/id389801252
-    let appVersion = "390.0.0.28.85"
-    let appVersionCode = "765313520"
+    let appVersion = "426.0.0.30.91"
+    let appVersionCode = "838009832"
     
     /// Device locale matching the real device settings
     var deviceLocale: String {

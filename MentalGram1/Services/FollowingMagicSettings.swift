@@ -69,6 +69,12 @@ class FollowingMagicSettings: ObservableObject {
         SecretNumberManager.shared.reset()
     }
 
+    /// Scales the pending offset by 1 000 (K-mode) when the real count is >= 10 000.
+    func applyKModeScaling() {
+        pendingOffset = pendingOffset * 1_000
+        print("🎩 [MAGIC] K-mode activated — offset scaled to \(pendingOffset)")
+    }
+
     /// Clears the pending offset after the trick is revealed.
     func clear() {
         pendingOffset = 0

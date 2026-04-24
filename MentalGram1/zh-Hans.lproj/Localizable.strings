@@ -561,11 +561,13 @@
 "followers.follow_back" = "也关注";
 "followers.remove_btn" = "移除";
 "followers.search" = "搜索";
+"followers.section.following" = "所有关注";
+"followers.following_btn" = "已关注";
 
 // Force Reel
 "force_reel.title" = "强制视频";
-"force_reel.subtitle" = "在发现页放置最多3个视频";
-"force_reel.description" = "从任意账号预先选择最多3个视频。在表演界面，滑动网格设置位置，然后打开发现页——视频将从该位置开始出现，每隔3个插入一次。";
+"force_reel.subtitle" = "强制特定视频出现在发现页";
+"force_reel.description" = "从任意账号预先选择一个视频。在表演界面打开发现页——强制的视频将出现在信息流中。";
 "force_reel.add_reel_count" = "添加视频 (%d/3)";
 "force_reel.select_reel" = "选择视频";
 "force_reel.remove_all" = "全部删除";
@@ -588,6 +590,9 @@
 "postpred.help.section.before" = "表演前";
 "postpred.help.section.during" = "表演中";
 "postpred.help.section.tips" = "技巧";
+"postpred.help.howitworks.step1" = "准备您的**合集** — 提前上传照片并让应用自动归档。它们在Instagram上不可见，直到您选择揭示它们。";
+"postpred.help.howitworks.step2" = "观众自由选择一个单词、数字、图像或扑克牌。您使用其中一种输入方式悄悄捕获他们的选择。";
+"postpred.help.howitworks.step3" = "触发揭示。对应的照片在真实Instagram上重新出现，**位于原始位置，带有原始日期** — 仿佛它一直都在那里。";
 "postpred.help.howitworks.body1" = "您准备一个**合集**，每个字母或数字对应一张照片。照片提前上传并自动归档，在Instagram上不可见，直到您选择揭示它们。";
 "postpred.help.howitworks.body2" = "触发揭示时，应用会取消归档对应的照片。它以**原始网格位置**和**原始日期**重新出现，就像它一直在那里一样。";
 "postpred.help.howitworks.info" = "观众在真实的Instagram个人主页上看到真实的帖子。没有应用可见，只有Instagram。";
@@ -596,17 +601,35 @@
 "postpred.help.metric.banks" = "库";
 "postpred.help.metric.banks.desc" = "每个库=单词或数字中的一个位置。库1→第1个字母，库2→第2个字母。库的数量决定了可以揭示的最大长度。";
 "postpred.help.inputs.body1" = "观众自由思考一个单词或数字。您使用三种方法之一悄悄捕获他们的选择：";
+"postpred.help.inputs.intro" = "每种输入方式与特定类型的合集兼容。选择最适合您表演的方式。";
 "postpred.help.input.grid.label" = "网格输入";
+"postpred.help.input.grid.intro" = "在表演中，左右滑动照片网格。帖子1–9对应数字1–9；帖子10+对应数字0。最多累积3位数字，然后点击帖子图标触发揭示。";
+"postpred.help.input.grid.case.number" = "每个数字选择其库中的槽位 — 库1 → 第1位数字，库2 → 第2位数字，以此类推。";
+"postpred.help.input.grid.case.custom" = "所有累积的数字组成槽位编号（1–100）。例如：滑动7然后2 = 槽位72。滑动1, 0, 0 = 槽位100。";
+"postpred.help.input.grid.case.card" = "2位数字：[点数 + 花色]。3位数字：[十位 + 个位 + 花色]。花色：1=♠  2=♥  3=♣  4=♦。例：4→2 = 4♥ · 1→1→1 = J♠。";
 "postpred.help.input.grid.step1" = "在帖子预言设置中启用**数字网格**。";
 "postpred.help.input.grid.step2" = "在表演中，左右滑动照片网格。帖子1-9对应数字1-9。帖子10、11和12对应数字0。指示器显示累积的数字。";
 "postpred.help.input.grid.step3" = "点击帖子图标确认并触发揭示。";
-"postpred.help.input.ocr.label" = "OCR-摄像头识别";
+"postpred.help.input.ocr.label" = "OCR — 摄像头";
+"postpred.help.input.covert.label" = "隐秘输入";
+"postpred.help.input.covert.step1" = "在设置中启用**隐秘输入**并设置掩护词 — 观众在屏幕上看到的词。";
+"postpred.help.input.covert.step2" = "在Explore搜索栏中输入观众的词。观众看到掩护词；应用悄悄记录真实的词。";
+"postpred.help.input.covert.step3" = "完成后**按一次空格键**。空格从输入栏消失 — 这是正常现象。轻微振动确认词语已捕获并触发了揭示。";
+"postpred.help.input.url.label" = "URL方案 / 自动化";
+"postpred.help.input.url.intro" = "通过任何自动化工具远程触发揭示 — Apple快捷指令、NFC标签、QR码或配套应用。兼容所有合集类型。";
+"postpred.help.input.url.example.word" = "Word Reveal";
+"postpred.help.input.url.example.slot" = "Custom Set — 槽位编号（1–100）";
+"postpred.help.input.url.example.card" = "Playing Cards — 牌面符号（如 J♠, 10♥, K♦）";
+"postpred.help.settype.word.desc" = "**26个槽位（A–Z）× N个库。**每个库揭示一个字母。库1 = 第1个字母，库2 = 第2个字母。";
+"postpred.help.settype.number.desc" = "**10个槽位（0–9）× N个库。**每个库揭示一个数字。库1 = 第1个数字，库2 = 第2个数字。";
+"postpred.help.settype.custom.desc" = "**自定义图像1–100张，1个库。**滑动1–3位数字选择槽位编号（1–100）。适合比赛结果、塔罗牌或任何视觉选择。";
+"postpred.help.settype.card.desc" = "**52个槽位（A–K × ♠♥♣♦），1个库。**滑动2–3位数字选择一张牌。花色：1=♠ 2=♥ 3=♣ 4=♦。例：4→2 = 4♥ · 1→1→1 = J♠。";
 "postpred.help.input.ocr.step1" = "在帖子预言设置中启用**OCR**。";
 "postpred.help.input.ocr.step2" = "将摄像头对准手写或印刷的单词。应用自动读取并触发相应揭示。";
 "postpred.help.input.url.label" = "URL方案";
 "postpred.help.input.url.step1" = "在帖子预言设置中启用**URL Scheme**。";
 "postpred.help.input.url.step2" = "通过自定义URL远程触发揭示，适用于NFC标签、二维码或自动化快捷方式。";
-"postpred.help.before.1" = "在合集部分创建一个**合集**。选择字母类型，选择图像模板或上传您自己的照片。";
+"postpred.help.before.1" = "在合集部分创建一个**合集**。选择Word Reveal、Number Reveal、Custom Set或Playing Cards。选择图像模板或上传您自己的照片。";
 "postpred.help.before.2" = "上传图片并等待它们**自动归档**。这可能需要数小时，如有必要让应用整夜运行。";
 "postpred.help.before.3" = "上传期间，**不要使用应用**，不要更换网络，不要中断过程。屏幕会自动保持常亮。";
 "postpred.help.before.4" = "在帖子预言设置中将已上传的合集设置为**活跃**。";
@@ -633,3 +656,268 @@
 "set.upload.info.title"   = "逐步上传";
 "set.upload.info.body"    = "应用将逐张上传照片并保持屏幕常亮。若退出应用，系统将在每次下一张上传前发送通知，以便您及时返回。";
 "set.upload.info.sleep"   = "上传期间请保持屏幕常亮并留在应用内。";
+
+// Lockdown Details Sheet
+"lockdown.challenge.title"      = "Instagram 需要确认";
+"lockdown.challenge.subtitle"   = "Instagram 检测到异常活动，需要确认是您本人。";
+"lockdown.challenge.nav"        = "等待确认";
+"lockdown.challenge.step1"      = "在手机上打开 Instagram 应用";
+"lockdown.challenge.step2"      = "如果出现安全提示，请完成它（通常是短信或邮件验证码）";
+"lockdown.challenge.step3"      = "返回这里并点击下方按钮";
+"lockdown.challenge.step4"      = "如果 Instagram 中没有出现任何提示，只需等待倒计时结束 — 应用将自动恢复";
+"lockdown.challenge.btn.resume" = "已验证 — 恢复";
+"lockdown.challenge.btn.skip"   = "不验证继续（不推荐）";
+"lockdown.safety.title"         = "安全暂停";
+"lockdown.safety.subtitle"      = "应用已自动暂停以保护您的 Instagram 账户。";
+"lockdown.safety.step1"         = "请勿操作 — 应用正在等待以保护您的账户";
+"lockdown.safety.step2"         = "请勿打开 Instagram，也不要重复任何操作";
+"lockdown.safety.step3"         = "倒计时结束后，应用将自动恢复";
+"lockdown.safety.btn.skip"      = "跳过等待（不推荐）";
+"lockdown.countdown.ready"      = "可以继续了！";
+"lockdown.countdown.label"      = "恢复倒计时";
+"lockdown.btn.logout"           = "退出登录";
+"lockdown.btn.logout.note"      = "仅在其他方法无效时使用「退出登录」。您需要重新登录。";
+"lockdown.btn.close"            = "关闭";
+
+// Post Prediction input method keys (missing)
+"postpred.help.inputs.group.numeric" = "用于数字 / 自定义套组";
+"postpred.help.inputs.group.alpha" = "用于字母套组";
+"postpred.help.inputs.group.universal" = "通用 — 所有套组类型";
+"postpred.help.input.covert.label" = "隐蔽输入";
+"postpred.help.input.api.label" = "API / 自动化";
+"postpred.help.input.api.step1" = "使用外部自动化工具（快捷指令、NFC 标签、配套应用）通过 URL Scheme 向 Post Prediction 发送词语或数字。";
+"postpred.help.input.api.step2" = "当第三方触发器或物理道具在正确时机自动触发揭示时非常有用。";
+"explore.load_error" = "无法加载内容";
+
+// General UI strings (auto-generated)
+"Loading profile…" = "正在加载个人资料…";
+"Capturing followers…" = "正在获取粉丝…";
+"Digit Grid Disabled" = "数字网格已禁用";
+"Upload in progress" = "正在上传";
+"No Internet Connection" = "无互联网连接";
+"Check your connection and try again." = "检查您的连接并重试。";
+"Try Again" = "重试";
+"This keeps happening. Try logging out and back in." = "这种情况反复出现。请尝试退出并重新登录。";
+"Log Out & Retry" = "退出并重试";
+"Session Problem" = "会话问题";
+"The Instagram session has expired. This happens after a password change, prolonged inactivity, or suspicious activity detection." = "Instagram 会话已过期。这发生在密码更改、长时间不活动或可疑活动检测之后。";
+"Re-login to Instagram" = "重新登录 Instagram";
+"Saved credentials will be auto-filled." = "已保存的凭据将自动填充。";
+"No saved credentials. You will need to type them manually." = "没有保存的凭据。您需要手动输入。";
+"Emergency Logout" = "紧急退出";
+"Emergency logout clears the session and requires a full login." = "紧急退出会清除会话并需要重新完整登录。";
+"Session Info" = "会话信息";
+"Latest Follower" = "最新粉丝";
+"Visible Photos Detected" = "检测到可见照片";
+"Upload Complete" = "上传完成";
+"Re-login" = "重新登录";
+
+// Dynamic format string keys
+"ig.set_not_uploaded_title" = "套组未上传";
+"ig.set_not_uploaded_body" = "套组\"%@\"尚未上传到 Instagram。请前往 Sets 先上传它。";
+"session.reason.challenge" = "Instagram 已请求重复安全验证（%lld 次）。重新登录以恢复会话。";
+
+// Tab and context menu labels
+"Sets" = "套组";
+
+// CreateSetView strings
+"Your photos" = "您的照片";
+
+// SetDetailView strings
+"Wait a few minutes before syncing. Instagram limits API calls per hour." = "同步前请等待几分钟。Instagram 限制每小时的 API 调用次数。";
+
+// ConnectionErrorAlert strings
+"No Connection" = "无连接";
+"Error Details" = "错误详情";
+"Copy Log" = "复制日志";
+"Info" = "信息";
+
+// Session panel dismiss keys
+"session.panel.return_to_app" = "返回应用";
+"session.panel.return_to_app.hint" = "关闭此屏幕，以便您前往设置并重新登录。";
+
+// Help views (Introduction, Limits, UserGuide)
+"What is Vault?" = "什么是 Vault？";
+"Vault — Instagram Magic" = "Vault — Instagram 魔术";
+"Hybrid app · Real account · Real results" = "混合应用 · 真实账户 · 真实效果";
+"Vault se conecta directamente a tu cuenta de Instagram real sin necesitar un perfil separado, un público especial ni ninguna configuración visible." = "Vault 直接连接到您的真实 Instagram 账户 — 无需单独个人资料、特殊受众或可见设置。";
+"Todo lo que ejecutas ocurre en la misma cuenta que tus espectadores ya siguen — y lo que ven ellos es Instagram, no la app." = "您执行的一切都发生在您的观众已经关注的同一账户上 — 他们看到的是 Instagram，而不是这个应用。";
+"Cómo funciona" = "工作原理";
+"Sube, archiva y desarchiva fotos en el momento exacto que eliges" = "在您选择的确切时刻上传、存档和取消存档照片";
+"Cambia tu foto de perfil al instante desde la app" = "从应用即时更改个人资料照片";
+"Publica o actualiza tu nota e Instagram en tiempo real" = "实时发布或更新您的 Instagram 注释";
+"Edita tu biografía para que coincida con lo que el espectador está pensando" = "编辑您的个人简介以匹配观众的想法";
+"Consulta seguidores y seguidos para efectos de counter glitch" = "检查粉丝和关注数以实现计数器故障效果";
+"Recupera metadatos — fechas, posición en grid, subtítulos — para forzajes de fecha" = "检索元数据 — 日期、网格位置、说明 — 用于日期力";
+"Por qué importa en magia" = "为什么在魔术中很重要";
+"Cuando el espectador abre Instagram en su propio móvil ve el resultado real — no una captura de pantalla, no una simulación." = "当观众在自己的手机上打开 Instagram 时，他们看到的是真实结果 — 不是截图，不是模拟。";
+"La predicción estaba ahí desde el principio, archivada e invisible hasta que tú decidiste revelarla. El forzaje lo confirmó el algoritmo de Instagram. La fecha estaba grabada en una publicación de hace meses." = "预言从一开始就在那里，被存档且不可见，直到您决定揭示它。力量被 Instagram 算法确认。日期记录在几个月前的帖子中。";
+"Vault te da el control de una capa de Instagram que ningún espectador puede cuestionar — porque no es la app, es Instagram mismo." = "Vault 让您控制 Instagram 的一个层面，任何观众都无法质疑 — 因为它不是这个应用，它就是 Instagram 本身。";
+"Tres pilares" = "三大支柱";
+"Forzajes" = "强制";
+"Dirige al espectador hacia un número, fecha o post que ya conoces." = "引导观众选择您已知的数字、日期或帖子。";
+"Predicciones" = "预言";
+"Pre-sube una foto que coincide con la elección del espectador, archívala, y desarchívala en el clímax." = "预先上传一张与观众选择相符的照片，将其存档，并在高潮时取消存档。";
+"Reveals de perfil" = "个人资料揭示";
+"Cambia tu foto, nota o biografía en tiempo real para que coincida con lo que el espectador está pensando." = "实时更改您的照片、注释或个人简介，以匹配观众的想法。";
+"Límites & Seguridad" = "限制与安全";
+"Por qué existen los límites" = "为什么存在限制";
+"Instagram impone límites de uso en su API para evitar spam y comportamiento automatizado. Es una medida de seguridad normal que aplica a cualquier app conectada a la plataforma." = "Instagram 对其 API 施加使用限制以防止垃圾邮件和自动化行为。这是适用于连接到该平台的任何应用程序的正常安全措施。";
+"Vault está diseñado con tiempos de espera y espaciados automáticos que respetan esos límites. El mago no tiene que hacer nada — la app lo gestiona por él." = "Vault 设计了自动等待时间和间隔，以尊重这些限制。魔术师不需要做任何事情 — 应用程序为他处理一切。";
+"Si pulsas una función y parece que no responde de inmediato, lo más probable es que la app esté esperando el tiempo de seguridad antes de la siguiente acción. Espera unos segundos y vuelve a intentarlo." = "如果您点击某功能但似乎没有反应，应用很可能正在等待下一次操作前的安全间隔。等待几秒钟后再试。";
+"Tiempos de espera de la app" = "应用等待时间";
+"Estos valores están integrados automáticamente — no requieren ninguna acción por tu parte:" = "这些值是自动内置的 — 不需要您做任何操作：";
+"Entre fotos de un set al subir" = "上传时套组照片之间";
+"160–220 s aleatorio por foto" = "每张照片随机 160–220 秒";
+"Entre reveals consecutivos" = "连续揭示之间";
+"Mínimo entre un reveal y el siguiente" = "一次揭示与下一次之间的最小值";
+"Entre archivados (Sync & Archive)" = "存档之间 (Sync & Archive)";
+"Por cada foto archivada" = "每张存档照片";
+"Límite de acciones por hora" = "每小时操作限制";
+"La app deja de actuar si se acerca al límite" = "当接近限制时应用停止操作";
+"Qué es una detección y cuándo ocurre" = "什么是检测以及何时发生";
+"De vez en cuando Instagram puede pedir una verificación de identidad si detecta actividad inusual. Esto es completamente temporal y no supone ningún riesgo real para la cuenta." = "偶尔 Instagram 可能会在检测到异常活动时请求身份验证。这完全是临时的，对账户没有实际风险。";
+"La app reacciona automáticamente pausando la sesión durante el tiempo necesario:" = "应用自动反应，在必要时间内暂停会话：";
+"En todos los casos excepto la sesión expirada, la app se recupera sola sin intervención." = "除会话过期外，应用在所有情况下都能自行恢复，无需干预。";
+"Durante la actuación" = "演出期间";
+"Si ocurre una detección mientras el espectador está mirando, la app oculta los detalles técnicos y muestra una pantalla genérica de \"Sin conexión a Internet\"." = "如果在观众观看时发生检测，应用将隐藏技术细节并显示通用的\"无互联网连接\"屏幕。";
+"Es una excusa natural y creíble: \"Ah, la conexión de Instagram falla un momento, no pasa nada.\" Ningún espectador verá nada técnico." = "这是一个自然而可信的借口：\"啊，Instagram的连接暂时中断了，没关系。\" 没有观众会看到任何技术性的东西。";
+"Qué hacer en ese momento:" = "此时该怎么做：";
+"Señala la pantalla con naturalidad: \"Ah, Instagram falla un segundo\"" = "自然地指向屏幕：\"啊，Instagram卡了一下\"";
+"Espera 2–3 minutos — la app se recupera sola en la mayoría de casos" = "等待 2–3 分钟 — 在大多数情况下，应用会自行恢复";
+"Si el problema persiste, continúa con otra parte de la actuación y retoma después" = "如果问题持续，继续演出的另一部分，稍后再回来";
+"Regla de oro" = "黄金法则";
+"Si la app no responde o algo parece bloqueado, ve directamente a la app oficial de Instagram. Instagram puede haber mostrado un aviso de actividad inusual que requiere tu atención. Hasta que no lo resuelvas allí, Vault no podrá continuar." = "如果应用没有响应或某些内容似乎被阻止，请直接进入官方 Instagram 应用。Instagram 可能显示了需要您注意的异常活动通知。在您在那里解决之前，Vault 无法继续。";
+"Cómo recuperar la sesión" = "如何恢复会话";
+"El ciclo reveal→archive→reveal" = "揭示→存档→揭示循环";
+"Cuándo hacer re-login manualmente" = "何时手动重新登录";
+"Recomendaciones:" = "建议：";
+"Aviso importante — scroll hacia abajo" = "重要提示 — 向下滚动";
+"Verificación puntual" = "一次性验证";
+"Demasiadas peticiones (429)" = "请求过多 (429)";
+"Acción bloqueada" = "操作被阻止";
+"Spam detectado" = "检测到垃圾邮件";
+"Sesión expirada" = "会话已过期";
+"Re-login necesario" = "需要重新登录";
+"Escenario A" = "情景A";
+"Verificación puntual — el más habitual" = "一次性验证 — 最常见";
+"Escenario B" = "情景B";
+"Sesión expirada — poco frecuente" = "会话已过期 — 不常见";
+"Nunca practicar más de un ciclo completo reveal→archive con el mismo set en media hora" = "切勿在半小时内对同一套组进行多次完整的揭示→存档循环";
+"Esperar al menos 15 minutos entre un reveal y el siguiente Archive All del mismo set" = "在揭示和同一套组的下一次 Archive All 之间至少等待 15 分钟";
+"Preparar el set (Archive All) la noche anterior o al menos 1 hora antes de la actuación, no inmediatamente después de practicar" = "在演出前一天晚上或至少 1 小时前准备套组（Archive All），而不是在练习后立即进行";
+"La app avisará en el botón Sync & Archive si el set fue revelado hace menos de 30 minutos" = "如果套组在 30 分钟内被揭示，应用将在 Sync & Archive 按钮中发出警告";
+"No te preocupes — esto rara vez ocurre en una actuación real. Solo puede aparecer durante los tests cuando se repite el mismo efecto con frecuencia. La mejor estrategia es familiarizarte con la app y, si alguna vez notas un comportamiento inusual o detección de bot, compartir los logs con el desarrollador (los encontrarás en Ajustes → Logs)." = "不用担心 — 这在真实表演中很少发生。只有在测试期间同一效果被频繁重复时才可能出现。最好的策略是熟悉应用，如果您注意到异常行为或机器人检测，请与开发者分享日志（您可以在设置 → 日志中找到它们）。";
+"La causa más frecuente de detección durante los tests es practicar el mismo truco varias veces seguidas en la misma sesión." = "测试期间检测最常见的原因是在同一会话中连续多次练习相同的把戏。";
+"Cuando las mismas fotos se archivan y desarchivan 2–3 veces en 30 minutos, Instagram lo identifica como comportamiento automatizado — aunque cada operación individual respete los cooldowns." = "当同一张照片在 30 分钟内存档和取消存档 2–3 次时，Instagram 将其识别为自动化行为 — 即使每个单独的操作都遵守冷却时间。";
+"No es necesario hacer logout antes de cada actuación. Una sesión activa puede durar semanas. Haz re-login solo si:" = "每次演出前不需要退出登录。活跃会话可以持续数周。只有在以下情况下才重新登录：";
+"La app lleva más de 24 h sin responder correctamente a ninguna acción" = "应用超过 24 小时没有正确响应任何操作";
+"Se producen 3 o más detecciones seguidas en la misma sesión" = "在同一会话中连续发生 3 次或更多检测";
+"El botón \"Reconnect\" aparece persistentemente en Settings" = "\"Reconnect\" 按钮在设置中持续出现";
+"En el resto de situaciones, la app gestiona la sesión de forma automática." = "在所有其他情况下，应用自动管理会话。";
+"Tras reconectar, si no ves las fotos que esperabas en tu perfil de Instagram, haz scroll hacia abajo para forzar la actualización." = "重新连接后，如果您在 Instagram 个人资料上看不到预期的照片，请向下滚动以强制刷新。";
+"Instagram muestra a veces la versión en caché hasta que se refresca manualmente con un deslizamiento hacia abajo." = "Instagram 有时会显示缓存版本，直到通过下拉手动刷新。";
+"La app no responde o muestra un aviso de bloqueo" = "应用没有响应或显示封锁通知";
+"Abre la app oficial de Instagram" = "打开官方 Instagram 应用";
+"Si aparece un aviso de actividad inusual, pulsa \"Dismiss\" o completa el código de verificación (email o SMS)" = "如果出现异常活动通知，点击\"Dismiss\"或输入验证码（邮件或短信）";
+"Si no aparece nada, espera 2 minutos — la sesión se restablece sola en Vault" = "如果没有任何东西出现，等待 2 分钟 — 会话在 Vault 中自动重置";
+"Vuelve a Vault: todo continúa con normalidad" = "返回 Vault：一切正常继续";
+"Vault muestra la pantalla de re-login" = "Vault 显示重新登录屏幕";
+"Ve primero a Instagram real para descartar cualquier aviso pendiente y pulsa \"Dismiss\" si lo hay" = "首先去真实的 Instagram 驳回任何待处理通知，如果有的话点击\"Dismiss\"";
+"Vuelve a Vault y pulsa \"Connect Account\"" = "返回 Vault 并点击 \"Connect Account\"";
+"Entra con tu usuario y contraseña" = "使用用户名和密码登录";
+"Acepta las cookies cuando Instagram lo pida — es indispensable" = "当 Instagram 请求时接受 cookies — 这是必需的";
+"La sesión se restaura automáticamente" = "会话自动恢复";
+"API limits, cooldowns, bot detection and how to recover" = "API 限制、冷却时间、机器人检测及恢复";
+"Change your Instagram profile photo as a prediction" = "将您的 Instagram 个人资料照片作为预言更改";
+"Force a specific reel to appear in Explore" = "强制特定 Reel 出现在探索中";
+"Glitch the follower or following count for a spectator" = "让观众的粉丝或关注计数出现故障";
+"Predict a spectator's post from weeks ago" = "预言观众数周前的帖子";
+"How Vault works, what it can do, and why it matters for magic" = "Vault 如何工作，它能做什么，以及为何对魔术重要";
+"Note and biography prediction using API, OCR or URL Scheme" = "使用 API、OCR 或 URL Scheme 预言笔记和个人简介";
+
+// Help views (CounterGlitch, DateForce, InstagramProfile, PostPrediction)
+"Consejos" = "提示";
+"Convicción" = "信念";
+"Dígitos" = "数字";
+"Dígito secreto vía swipe" = "通过滑动输入秘密数字";
+"Espectador" = "观众";
+"Fase 1 — Deflación" = "阶段 1 — 减少";
+"Fase 2 — Inflación" = "阶段 2 — 增加";
+"**No enseñes la pantalla hasta tener el número inflado.** Navega el grid con el móvil hacia ti para que nadie más vea los swipes secretos." = "**在获得膨胀数字之前不要展示屏幕。** 将手机朝向自己浏览网格，这样没有人看到秘密滑动。";
+"**Perfil propio o ajeno.** Con el perfil del espectador el impacto es mayor porque puede verificarlo él mismo." = "**自己的或别人的个人资料。** 使用观众自己的个人资料时效果更大，因为他们可以自己验证。";
+"Antes de empezar" = "开始之前";
+"Durante el show" = "演出期间";
+"Dos grupos secretos" = "两个秘密群组";
+"Cálculo interno" = "内部计算";
+"El espectador lo descifra" = "观众破解它";
+"Aparece en Explore" = "出现在探索中";
+"El Mago 🎩" = "魔术师 🎩";
+"El espectador hace la resta:" = "观众做减法：";
+"EL REVEAL" = "揭示";
+"CIERRA Y ESPERA" = "关闭并等待";
+"**Antes del show**, activa **Date Force** en Settings y configura el formato de fecha (DD/MM/AAAA o MM/DD/AAAA)." = "**演出前**，在设置中启用 **Date Force** 并配置日期格式（DD/MM/YYYY 或 MM/DD/YYYY）。";
+"**Cuentas privadas.** Si un espectador tiene la cuenta privada y no te sigue de vuelta, es posible que no puedas cargar su perfil. Pídele que te siga momentáneamente o usa una cuenta pública." = "**私人账户。** 如果观众有私人账户且没有回关您，您可能无法加载其个人资料。请他们暂时关注您或使用公开账户。";
+"**Número par de espectadores.** Con 2 espectadores: 1 grupo fecha + 1 grupo hora. Con 4: 2 grupos fecha + 2 grupos hora. Con 6: 3 grupos de cada tipo." = "**偶数观众。** 2位观众：1个日期组 + 1个时间组。4位：各2组。6位：各3组。";
+"Profile Picture Prediction" = "个人资料照片预言";
+"Biography Prediction" = "个人简介预言";
+"Note Prediction" = "备注预言";
+"How it works" = "工作原理";
+"Input Method" = "输入方式";
+"upload.error.no_images" = "未加载图片。请在上传前为所有位置添加图片。";
+
+// ── Limits & Safety help (simplified) ──
+"limits.help.title" = "限制与安全";
+
+"limits.help.calm.title" = "放心 — 一切尽在掌控";
+"limits.help.calm.body" = "Instagram 偶尔会显示一个简短的提示,要求您确认是本人。对于任何连接到该平台的应用来说,这都是完全正常的,与封号毫无关系。Vault 采用与真实应用相同的反机器人防护措施,每一项都经过了充分测试。";
+"limits.help.calm.infobox" = "在开发过程中,我个人触发此类提示超过 100 次,账号从未被封禁。其他采用相同方式的应用也都正常运行 — 如果真有任何风险,Vault 不会发布。";
+
+"limits.help.warning.title" = "如果出现\"异常活动\"提示";
+"limits.help.warning.intro" = "别担心 — 这不是封号。只是 Instagram 在确认本人身份。按以下步骤操作:";
+"limits.help.warning.step1" = "打开官方 Instagram 应用,在提示上点击\"Dismiss\"。";
+"limits.help.warning.step2" = "如果要求验证,请通过电子邮件或短信验证码完成验证。";
+"limits.help.warning.step3" = "在 Vault 中从设置退出登录,等待约一分钟,然后重新登录。";
+"limits.help.warning.step4" = "可以继续使用了 — 您的账号是安全的。";
+"limits.help.warning.reassure" = "您的账号仍然正常运作。这仅仅让 Vault 暂停几分钟,仅此而已。";
+
+"limits.help.show.title" = "演出期间";
+"limits.help.show.body" = "如果观众正在看屏幕时出现提示,Vault 会隐藏所有技术细节,并显示一个通用的\"无网络连接\"画面。";
+"limits.help.show.infobox" = "完美的借口:\"唉,Instagram 卡了一下,没什么大不了的。\"观众不会看到任何技术内容。";
+
+"limits.help.best.title" = "最佳实践";
+"limits.help.best.item1" = "不要在同一会话中连续多次重复相同的效果 — 算法可能会将其标记为自动化。";
+"limits.help.best.item2" = "提前一晚或至少在演出前一小时准备好您的 Set(Sync & Archive),而不是在排练后立即进行。";
+"limits.help.best.item3" = "如果您经常演出,请使用与主账号分开的专用 Instagram 账号。";
+"limits.help.best.item4" = "Vault 会自动处理所有等待时间 — 您什么都不用想。";
+
+// ── Counter Glitch demo ──
+"Espectador" = "观众";
+"Ilusionista profesional" = "专业魔术师";
+"Espectador · 🎭" = "观众 · 🎭";
+"El número de siempre ✓" = "平常的数字 ✓";
+"El espectador ve %lld · Real: %lld + %lld" = "观众看到 %lld · 实际: %lld + %lld";
+"+%lld recibidos 🎩" = "+%lld 已接收 🎩";
+
+// ── Guide: Camouflage section ──
+"guide.section.camouflage" = "伪装";
+"guide.fakehome.title" = "虚假主屏幕";
+"guide.fakehome.subtitle" = "打开Performance时显示主屏幕截图";
+"guide.fakehome.help.what.title" = "什么是虚假主屏幕？";
+"guide.fakehome.help.what.body" = "打开Performance时，应用不会直接跳转到个人资料，而是先显示您真实iPhone主屏幕的截图。对观众来说，看起来就像您在正常打开Instagram。";
+"guide.fakehome.help.how.title" = "如何使用";
+"guide.fakehome.help.how.body" = "1. 拍摄显示Instagram图标的主屏幕真实截图。\n\n2. 在设置 › 其他 › 虚假主屏幕中上传。\n\n3. 开启开关。\n\n4. 下次打开Performance时，该截图将全屏显示 — 点击任意位置（最好是Instagram图标）来显示您的个人资料。";
+"guide.fakehome.help.why.title" = "为什么使用？";
+"guide.fakehome.help.why.body" = "创造您只是在打开真实Instagram应用的幻觉。任何看您屏幕的人在您的个人资料出现之前只会看到正常的主屏幕。";
+"guide.lockscreen.title" = "锁屏输入";
+"guide.lockscreen.subtitle" = "用于秘密数字输入的虚假iOS锁屏";
+"guide.lockscreen.help.what.title" = "什么是锁屏输入？";
+"guide.lockscreen.help.what.body" = "打开Performance时，应用会在显示您的个人资料之前显示虚假的iOS风格密码屏幕。对任何观察者来说，看起来就像您在解锁手机。";
+"guide.lockscreen.help.how.title" = "如何输入秘密数字";
+"guide.lockscreen.help.how.body" = "1. 在数字键盘上点击您的秘密数字 — 静默记录。\n\n2. 点击键盘外部锁定这些数字。\n\n3. 点击任意数字填充剩余圆点 — 将被忽略。\n\n4. 所有4个圆点填满后，锁屏关闭，Performance打开。";
+"guide.lockscreen.help.wallpaper.title" = "壁纸";
+"guide.lockscreen.help.wallpaper.body" = "上传与真实锁屏相同的壁纸使虚假锁屏看起来一模一样。没有壁纸则无法启用锁屏输入。";
+"guide.lockscreen.help.why.title" = "为什么使用？";
+"guide.lockscreen.help.why.body" = "将秘密数字的输入伪装成正常的手机解锁。与虚假主屏幕结合使用，完整序列看起来像：解锁手机 → 主屏幕 → 打开Instagram。";
+"guide.lockscreen.help.tricks.title" = "同一秘密数字 — 多种魔术";
+"guide.lockscreen.help.tricks.body" = "此处输入的数字与网格输入和所有其他魔术技巧使用的秘密数字相同：\n\n• 从数字套装中解档照片\n• 显示扑克牌\n• 显示自定义图像\n• 激活计数器故障效果\n• 在探索中强制显示卷轴";

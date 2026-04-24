@@ -4,17 +4,45 @@ import Combine
 /// Manages local data persistence for sets, banks, and photos
 class DataManager: ObservableObject {
     static let shared = DataManager()
-    
+
     @Published var sets: [PhotoSet] = []
     @Published var logs: [LogEntry] = []
-    
-    private let setsKey = "com.vault.sets"
+
+    // Sets key is account-scoped: each Instagram user ID gets its own slot.
+    // Falls back to a shared guest key when no user is logged in.
+    private var currentUserId: String = ""
+    private var setsKey: String { "com.vault.sets.\(currentUserId.isEmpty ? "guest" : currentUserId)" }
+    private let legacySetsKey = "com.vault.sets"   // Pre-account-scoping key
     private let logsKey = "com.vault.logs"
-    
+
+    private var cancellables = Set<AnyCancellable>()
+
     private init() {
         migrateImageDataToFilesystem()  // CRITICAL: Migrate old data first
+
+        // Capture initial userId from whatever session was restored from Keychain
+        currentUserId = InstagramService.shared.session.userId
+
+        // Migrate legacy (unscoped) sets to the current account's key on first run
+        migrateLegacySetsIfNeeded()
+
         loadSets()
         loadLogs()
+
+        // React to account changes (login with a different user, logout)
+        InstagramService.shared.$session
+            .map(\.userId)
+            .removeDuplicates()
+            .dropFirst()          // skip the initial value already captured above
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newUserId in
+                guard let self else { return }
+                print("👤 [ACCOUNT] User changed → '\(newUserId.isEmpty ? "guest" : newUserId)' — reloading sets")
+                self.currentUserId = newUserId
+                self.migrateLegacySetsIfNeeded()
+                self.loadSets()
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Sets CRUD
@@ -30,6 +58,7 @@ class DataManager: ObservableObject {
             case .word:   return selectedAlphabet?.characters ?? AlphabetType.latin.characters
             case .number: return (0...9).map { "\($0)" }
             case .custom: return []
+            case .card:   return SetType.cardSlotLabels
             }
         }()
 
@@ -83,22 +112,75 @@ class DataManager: ObservableObject {
                     }
                 }
             }
+        } else if type == .card {
+            // Card type: 52 fixed slots — one per card (A♠…K♦), no banks
+            if photos.isEmpty {
+                for symbol in SetType.cardSlotLabels {
+                    setPhotos.append(SetPhoto(
+                        id: UUID(),
+                        setId: setId,
+                        symbol: symbol,
+                        filename: "card_\(symbol.lowercased().replacingOccurrences(of: "♠", with: "s").replacingOccurrences(of: "♥", with: "h").replacingOccurrences(of: "♣", with: "c").replacingOccurrences(of: "♦", with: "d")).jpg",
+                        imageData: nil,
+                        mediaId: nil,
+                        isArchived: false,
+                        uploadDate: nil,
+                        lastCommentId: nil,
+                        uploadStatus: .pending,
+                        errorMessage: nil
+                    ))
+                }
+            } else {
+                for photo in photos {
+                    setPhotos.append(SetPhoto(
+                        id: UUID(),
+                        setId: setId,
+                        symbol: photo.symbol,
+                        filename: photo.filename,
+                        imageData: photo.imageData,
+                        mediaId: nil,
+                        isArchived: false,
+                        uploadDate: nil,
+                        lastCommentId: nil,
+                        uploadStatus: .pending,
+                        errorMessage: nil
+                    ))
+                }
+            }
         } else {
-            // Custom type
-            for photo in photos {
-                setPhotos.append(SetPhoto(
-                    id: UUID(),
-                    setId: setId,
-                    symbol: photo.symbol,
-                    filename: photo.filename,
-                    imageData: photo.imageData,
-                    mediaId: nil,
-                    isArchived: false,
-                    uploadDate: nil,
-                    lastCommentId: nil,
-                    uploadStatus: .pending,
-                    errorMessage: nil
-                ))
+            // Custom type: create numbered placeholder slots (1…bankCount) or use provided photos
+            if photos.isEmpty {
+                for i in 1...max(bankCount, 1) {
+                    setPhotos.append(SetPhoto(
+                        id: UUID(),
+                        setId: setId,
+                        symbol: "\(i)",
+                        filename: "custom_\(i).jpg",
+                        imageData: nil,
+                        mediaId: nil,
+                        isArchived: false,
+                        uploadDate: nil,
+                        lastCommentId: nil,
+                        uploadStatus: .pending,
+                        errorMessage: nil
+                    ))
+                }
+            } else {
+                for photo in photos {
+                    setPhotos.append(SetPhoto(
+                        id: UUID(),
+                        setId: setId,
+                        symbol: photo.symbol,
+                        filename: photo.filename,
+                        imageData: photo.imageData,
+                        mediaId: nil,
+                        isArchived: false,
+                        uploadDate: nil,
+                        lastCommentId: nil,
+                        uploadStatus: .pending,
+                        errorMessage: nil
+                    ))
+                }
             }
         }
         
@@ -399,6 +481,11 @@ class DataManager: ObservableObject {
     }
 
     func deleteSet(id: UUID) {
+        // If this set is actively uploading, cancel and reset the upload manager first
+        if UploadManager.shared.activeSetId == id {
+            print("🗑️ [DATA] Deleting active upload set \(id) — resetting UploadManager")
+            UploadManager.shared.resetAllState()
+        }
         sets.removeAll { $0.id == id }
         saveSets()
         addLog(action: "set_deleted", details: "Deleted set \(id)")
@@ -415,12 +502,30 @@ class DataManager: ObservableObject {
         // Sync metadata to iCloud KV store after every save
         CloudBackupService.shared.syncToCloud()
     }
-    
+
     private func loadSets() {
         if let data = UserDefaults.standard.data(forKey: setsKey),
            let decoded = try? JSONDecoder().decode([PhotoSet].self, from: data) {
             sets = decoded
+            print("👤 [ACCOUNT] Loaded \(decoded.count) sets for userId='\(currentUserId.isEmpty ? "guest" : currentUserId)'")
+        } else {
+            sets = []
+            print("👤 [ACCOUNT] No sets found for userId='\(currentUserId.isEmpty ? "guest" : currentUserId)'")
         }
+    }
+
+    /// One-time migration: moves sets stored under the old global key into the
+    /// current account's scoped key, then removes the old key so it only runs once.
+    private func migrateLegacySetsIfNeeded() {
+        guard let legacyData = UserDefaults.standard.data(forKey: legacySetsKey) else { return }
+        // Only migrate if the scoped key doesn't already have data
+        if UserDefaults.standard.data(forKey: setsKey) == nil {
+            UserDefaults.standard.set(legacyData, forKey: setsKey)
+            print("👤 [ACCOUNT] Migrated legacy sets → '\(setsKey)'")
+        }
+        // Remove legacy key so this never runs again
+        UserDefaults.standard.removeObject(forKey: legacySetsKey)
+        print("👤 [ACCOUNT] Legacy sets key removed")
     }
 
     /// Called after a cloud restore to reload sets from the newly written UserDefaults.

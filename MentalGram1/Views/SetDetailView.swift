@@ -130,6 +130,19 @@ struct SetDetailView: View {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
     }
 
+    /// Effective slot labels used for grid display.
+    /// For custom sets, derives labels numerically from existing photos (or defaults to 10 slots).
+    /// For word/number sets, returns the model's fixed labels.
+    private var effectiveSlotLabels: [String] {
+        if currentSet.type == .custom {
+            let numericSymbols = currentSet.photos.compactMap { Int($0.symbol) }
+            let maxSlot = numericSymbols.max() ?? 0
+            let count = max(maxSlot, 10)
+            return (1...count).map { "\($0)" }
+        }
+        return currentSet.slotLabels
+    }
+
     /// Photos that are locally marked as visible (isArchived=false) AND fully uploaded.
     /// These are candidates for a state desync with Instagram's real archive status.
     private var visibleUploadedPhotos: [SetPhoto] {
@@ -643,6 +656,42 @@ struct SetDetailView: View {
                         .background(Color.orange.opacity(0.08))
                         .cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 1))
+                    }
+
+                    // Recent-reveal warning banner — shown when the same set was
+                    // revealed less than 30 minutes ago. Rapid reveal→archive→reveal
+                    // cycles with the same photos are the main trigger for Instagram
+                    // bot detection (same mediaIds archived/unarchived repeatedly).
+                    let lastRevealedSetId = UserDefaults.standard.string(forKey: "perf_lastRevealedSetId") ?? ""
+                    let lastRevealedTs    = UserDefaults.standard.double(forKey: "perf_lastRevealedSetTimestamp")
+                    let minutesSinceReveal = lastRevealedTs > 0
+                        ? Int((Date().timeIntervalSince1970 - lastRevealedTs) / 60)
+                        : -1
+                    let recentRevealWarning = lastRevealedSetId == currentSet.id.uuidString
+                        && minutesSinceReveal >= 0
+                        && minutesSinceReveal < 30
+
+                    if recentRevealWarning {
+                        let waitLeft = 30 - minutesSinceReveal
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(Color(hex: "FF9F0A"))
+                                .padding(.top, 1)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Set revelado hace \(minutesSinceReveal) min")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(Color(hex: "FF9F0A"))
+                                Text("Archivar el mismo set demasiado pronto después de un reveal (ciclo reveal→archive→reveal) es la causa más frecuente de detección de bot en Instagram. Se recomienda esperar al menos \(waitLeft) min más.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(12)
+                        .background(Color(hex: "FF9F0A").opacity(0.07))
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "FF9F0A").opacity(0.3), lineWidth: 1))
                     }
 
                     // PRIMARY: Sync & Archive (single safe action)
@@ -2004,6 +2053,10 @@ struct SetDetailView: View {
         
         if isReorderMode {
             return AnyView(reorderableGrid(photos: photosToShow))
+        } else if currentSet.type == .custom {
+            return AnyView(slotBasedGrid(photos: photosToShow, overrideLabels: effectiveSlotLabels))
+        } else if currentSet.type == .card {
+            return AnyView(slotBasedGrid(photos: photosToShow))
         } else if (currentSet.type == .word || currentSet.type == .number) && currentSet.expectedPhotosPerBank > 0 {
             return AnyView(slotBasedGrid(photos: photosToShow))
         } else {
@@ -2013,8 +2066,8 @@ struct SetDetailView: View {
     
     // MARK: - Slot-Based Grid (Word/Number Reveal)
     
-    private func slotBasedGrid(photos: [SetPhoto]) -> some View {
-        let labels = currentSet.slotLabels
+    private func slotBasedGrid(photos: [SetPhoto], overrideLabels: [String]? = nil) -> some View {
+        let labels = overrideLabels ?? currentSet.slotLabels
         let photosBySymbol = Dictionary(grouping: photos, by: { $0.symbol })
 
         // Empty slots = slots without a photo or with a photo but no imageData
@@ -2325,7 +2378,7 @@ struct SetDetailView: View {
                     )
                 } else {
                     // Insert new
-                    let labels = currentSet.slotLabels
+                    let labels = effectiveSlotLabels
                     let position = labels.firstIndex(of: symbol) ?? labels.count
                     dataManager.insertPhotoAtPosition(
                         setId: currentSet.id,
@@ -2347,7 +2400,7 @@ struct SetDetailView: View {
 
     private func loadBulkPhotosIntoEmptySlots(items: [PhotosPickerItem]) {
         let photos = currentSet.photos
-        let labels = currentSet.slotLabels
+        let labels = effectiveSlotLabels
         let photosBySymbol = Dictionary(grouping: photos, by: { $0.symbol })
         let emptyLabels = labels.filter { label in
             guard let p = photosBySymbol[label]?.first else { return true }
@@ -2437,7 +2490,7 @@ struct SetDetailView: View {
                         }
                     } else {
                         // Insert new photo
-                        let labels = currentSet.slotLabels
+                        let labels = effectiveSlotLabels
                         let position = labels.firstIndex(of: symbol) ?? labels.count
                         dataManager.insertPhotoAtPosition(
                             setId: currentSet.id,
@@ -2626,6 +2679,14 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD] Ignored duplicate startUpload() call — already active (phase: \(uploadManager.uploadPhase))")
             return
         }
+
+        // Guard: no images loaded — show notification instead of starting an infinite loop
+        let readyPhotos = currentSet.photos.filter { $0.imageData != nil && $0.mediaId == nil }
+        guard !readyPhotos.isEmpty else {
+            print("⚠️ [UPLOAD] No images loaded — aborting upload")
+            uploadManager.showingError = String(localized: "upload.error.no_images")
+            return
+        }
         
 
         // Safe to reset: no active task exists at this point
@@ -2643,6 +2704,11 @@ struct SetDetailView: View {
             // post that existed at upload time — pinned posts stay at top, any new posts
             // uploaded afterwards also stay above it, all without manual configuration.
             do {
+                // Anti-bot: wait for cold-start warm-up and network stability
+                // before the first API call of the session.
+                try await instagram.waitForSessionWarmup()
+                try await instagram.waitForNetworkStability()
+
                 let (mediaItems, _) = try await instagram.getUserMediaItems(amount: 21)
                 let datedItems = mediaItems.compactMap { $0.takenAt != nil ? $0 : nil }
                                            .sorted { ($0.takenAt ?? .distantPast) > ($1.takenAt ?? .distantPast) }
@@ -2884,7 +2950,20 @@ struct SetDetailView: View {
 
         // If retrying, start from failed photo index
         let photosToUpload = startFrom > 0 ? Array(allPhotosToUpload.dropFirst(startFrom)) : allPhotosToUpload
-        
+
+        // Safety: if nothing has imageData ready, stop cleanly (prevents infinite auto-bank recursion)
+        let anyReady = photosToUpload.contains { $0.imageData != nil }
+        if !anyReady {
+            print("⚠️ [UPLOAD ALL] No photos with imageData — stopping upload cleanly")
+            await MainActor.run {
+                uploadManager.showingError = String(localized: "upload.error.no_images")
+                uploadManager.uploadPhase = .idle
+                uploadManager.activeTask = nil
+            }
+            dataManager.updateSetStatus(id: currentSet.id, status: .ready)
+            return
+        }
+
         let totalPhotos = allPhotosToUpload.count
         let alreadyUploaded = totalPhotos - photosToUpload.count
         await MainActor.run {

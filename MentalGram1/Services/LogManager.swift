@@ -88,15 +88,22 @@ class LogManager: ObservableObject {
     
     @Published var logs: [AppLogEntry] = []
     
-    private let maxLogs = 1000
+    private let maxLogs = 300
     private let logRetentionDays = 7
-    private let logsKey = "app_logs"
-    
+
+    /// File-system path — no UserDefaults size limit
+    private var logsFileURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return dir.appendingPathComponent("vault_logs.json")
+    }
+
     private init() {
+        // Remove the old oversized UserDefaults key to free space immediately
+        UserDefaults.standard.removeObject(forKey: "app_logs")
+
         loadLogs()
         cleanOldLogs()
-        
-        // Log app start
+
         log("App started", level: .info, category: .general)
     }
     
@@ -153,15 +160,18 @@ class LogManager: ObservableObject {
         log(message, level: .bot, category: .bot)
     }
     
-    // MARK: - Persistence
-    
+    // MARK: - Persistence (file-system, no UserDefaults size limit)
+
     private func saveLogs() {
         guard let encoded = try? JSONEncoder().encode(logs) else { return }
-        UserDefaults.standard.set(encoded, forKey: logsKey)
+        let url = logsFileURL
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? encoded.write(to: url, options: .atomic)
     }
-    
+
     private func loadLogs() {
-        guard let data = UserDefaults.standard.data(forKey: logsKey),
+        guard let data = try? Data(contentsOf: logsFileURL),
               let decoded = try? JSONDecoder().decode([AppLogEntry].self, from: data) else {
             return
         }

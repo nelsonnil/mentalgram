@@ -171,6 +171,14 @@ class UploadManager: ObservableObject {
     // MARK: - Clear Stuck State
     // Call on app launch or when starting a new upload to recover from inconsistent states
     func clearStuckState() {
+        // Priority check: if activeSetId points to a deleted/non-existent set, fully reset
+        if let setId = activeSetId,
+           DataManager.shared.sets.first(where: { $0.id == setId }) == nil {
+            print("⚠️ [UPLOAD MANAGER] Active set \(setId) no longer exists — resetting to idle")
+            resetAllState()
+            return
+        }
+
         // If we have an activeSetId but no running task, we're stuck
         if activeSetId != nil && activeTask == nil {
             switch uploadPhase {

@@ -1,4 +1,5 @@
-// ─── Instagram Fake UI ───────────────────────────────────────────────────────
+/* Localizable.strings — de */
+
 "ig.stat.posts" = "Beiträge";
 "ig.stat.followers" = "Follower";
 "ig.stat.following" = "Gefolgt";
@@ -17,16 +18,12 @@
 "ig.load_more" = "Mehr Beiträge laden";
 "ig.capturing_followers" = "Follower werden geladen…";
 "ig.searching" = "Suche...";
-
-// ─── App Navigation ──────────────────────────────────────────────────────────
 "nav.settings" = "Einstellungen";
 "nav.my_sets" = "Meine Sets";
 "nav.performance" = "Auftritt";
 "nav.logs" = "Protokolle";
 "nav.integrations" = "Integrationen";
 "nav.quick_reveal" = "Schnelle Enthüllung";
-
-// ─── Common Actions ──────────────────────────────────────────────────────────
 "action.cancel" = "Abbrechen";
 "action.done" = "Fertig";
 "action.save" = "Speichern";
@@ -60,8 +57,6 @@
 "action.from_gallery" = "Aus der Galerie";
 "action.from_archived" = "Aus Archiv";
 "action.load_more" = "Mehr Beiträge laden";
-
-// ─── Set Management ──────────────────────────────────────────────────────────
 "set.enter_name" = "Name eingeben, um fortzufahren";
 "set.each_set_desc" = "Jedes Set gruppiert Fotobanken zum Entarchivieren von Beiträgen während deiner Vorstellung.";
 "set.alphabet" = "Alphabet";
@@ -72,8 +67,6 @@
 "set.active_number" = "Aktives Zahlenset: %@";
 "set.active_word" = "Aktives Wortset: %@";
 "set.choose" = "Set auswählen...";
-
-// ─── Upload / Archive ────────────────────────────────────────────────────────
 "upload.archiving" = "Wird archiviert...";
 "upload.archiving_photos" = "Fotos werden archiviert…";
 "upload.archiving_nodismiss" = "Archivierung läuft… App nicht schließen";
@@ -96,8 +89,6 @@
 "upload.slot" = "Slot \"%@\"";
 "upload.choose_source" = "Quelle für das Foto für \"%@\" auswählen";
 "upload.instantly_reveal" = "Fotos sofort entarchivieren und enthüllen";
-
-// ─── Settings ────────────────────────────────────────────────────────────────
 "settings.language" = "Sprache";
 "settings.account" = "Konto";
 "settings.username" = "Benutzername";
@@ -148,17 +139,11 @@
 "settings.transfer_desc" = "Entleert das gesuchte Profil und füllt dann deins beim Drücken der Lautstärketaste.";
 "settings.restore_settings" = "Einstellungen wiederhergestellt";
 "settings.latest_follower" = "Neuester Follower";
-
-// ─── Integrations ────────────────────────────────────────────────────────────
 "integrations.title" = "Inject und benutzerdefinierte APIs";
 "integrations.open_service" = "Öffne die **offizielle App** des verbundenen Dienstes";
 "integrations.login" = "Mit deinem Konto anmelden";
-
-// ─── Force features ──────────────────────────────────────────────────────────
 "force.select_post" = "Beitrag zum Erzwingen auswählen";
 "force.select_reel" = "Reel zum Erzwingen auswählen";
-
-// ─── Errors & States ────────────────────────────────────────────────────────
 "error.generic" = "Fehler";
 "error.failed" = "Fehlgeschlagen";
 "error.active" = "AKTIV";
@@ -171,14 +156,10 @@
 "error.challenge_step1" = "Schließe die **Verifizierungsaufgabe** ab (Captcha, SMS-Code, E-Mail, etc.)";
 "error.challenge_wait" = "Warte **15-30 Minuten**";
 "error.session_hint" = "Öffne die **offizielle Instagram-App** und schließe ausstehende Verifizierungen ab.";
-
-// ─── Date Force / Oracle ─────────────────────────────────────────────────────
 "dateforce.how_many_followers" = "Wie viele Leute folgen diesem Zuschauer → Datumsgruppe";
 "dateforce.how_many_following" = "Wie vielen Leuten folgt dieser Zuschauer → Zeitgruppe";
 "dateforce.how_followers_date" = "Wie viele Leute folgen diesem Zuschauer → wird für die **Datums**gruppe verwendet";
 "dateforce.how_following_time" = "Wie vielen Leuten folgt dieser Zuschauer → wird für die **Zeit**gruppe verwendet";
-
-// ─── Date Force Script Labels ────────────────────────────────────────────────
 "script.setup" = "VORBEREITUNG";
 "script.collecting_numbers" = "ZAHLEN SAMMELN  —  DAS RITUAL";
 "script.invitation_auto" = "DIE EINLADUNG  —  AUTOMODUS";
@@ -196,8 +177,6 @@
 "challenge.why_reasons" = "• Kürzliche Geräte-ID-Änderung\n• Zu viele Anfragen in kurzer Zeit\n• Verdächtiges Verhalten erkannt";
 "challenge.reopen_app" = "Diese App erneut öffnen";
 "challenge.warning" = "⚠️ **Wichtig:** Versuche NICHT, dich wiederholt ab- und anzumelden. Das verschlimmert die Situation.";
-
-// ─── English-key strings ────────────────────────────────────────────────────
 "My Sets" = "Meine Sets";
 "Settings" = "Einstellungen";
 "Performance" = "Auftritt";
@@ -311,13 +290,9 @@
 "backup.h_ago" = "Vor %d h";
 "Never" = "Nie";
 "Just now" = "Gerade eben";
-
-// ─── Settings & App UI (English-keyed, German translations) ─────────────────
-
 "explore.load_error" = "Inhalt konnte nicht geladen werden";
 "action.retry" = "Erneut versuchen";
 "settings.icloud_applied" = "iCloud-Backup erfolgreich angewendet";
-
 "Add minutes to time" = "Minuten zur Zeit hinzufügen";
 "Another set is currently uploading" = "Ein anderes Set wird gerade hochgeladen";
 "Base64 from external app" = "Base64 aus externer App";
@@ -390,7 +365,6 @@
 "Waiting for connection..." = "Auf Verbindung warten...";
 "Waiting to archive..." = "Warten auf Archivierung...";
 "Waiting to upload" = "Warten auf Upload";
-
 "A photo upload is currently running. Wait for it to finish before revealing numbers — both actions share the same hourly Instagram limit and triggering both together can cause bot detection." = "Ein Foto-Upload läuft gerade. Warten Sie, bis er abgeschlossen ist, bevor Sie Zahlen enthüllen — beide Aktionen teilen dasselbe stündliche Instagram-Limit, und gleichzeitiges Auslösen kann die Bot-Erkennung aktivieren.";
 "Another app sends the image as base64. Vault handles resize and compression automatically." = "Eine andere App sendet das Bild als Base64. Vault verwaltet Größenänderung und Komprimierung automatisch.";
 "Backup runs automatically when the app is closed. Includes all your sets and images." = "Das Backup wird automatisch beim Schließen der App ausgeführt. Enthält alle Ihre Sets und Bilder.";
@@ -424,9 +398,6 @@
 "You can add or remove banks later from the set view." = "Sie können Banken später über die Set-Ansicht hinzufügen oder entfernen.";
 "You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid." = "Sie haben ein aktives Zahlen-Set, aber die Ziffernraster-Eingabe ist deaktiviert. Aktivieren Sie sie, um Fotos durch Wischen über das Raster zu dearchivieren.";
 "Import Photos" = "Fotos importieren";
-
-// ─── Helper UI strings (card titles, buttons, subtitles) ───────────────────
-
 "Biography" = "Biografie";
 "Fake Home Screen" = "Gefälschter Startbildschirm";
 "Send Note" = "Notiz senden";
@@ -459,11 +430,7 @@
 "Uploads the latest gallery photo each time Performance opens" = "Lädt jedes Mal das neueste Galeriefoto hoch, wenn Performance geöffnet wird";
 "Uploads the most recent photo from your camera roll" = "Lädt das neueste Foto aus deiner Kamerarolle hoch";
 "Lockdown active" = "Sperrung aktiv";
-
 "Write a note…" = "Schreibe eine Notiz…";
-
-// ─── Upload / Sets / Settings / Errors ─────────────────────────────────────
-
 "Total" = "Gesamt";
 "Uploaded" = "Hochgeladen";
 "Banks" = "Banken";
@@ -578,15 +545,9 @@
 "Could not load profile" = "Profil konnte nicht geladen werden";
 "Clear All Logs?" = "Alle Protokolle löschen?";
 "All" = "Alle";
-
-// ─── Logs / Integrations extras ────────────────────────────────────────────
-
 "Share Logs" = "Protokolle teilen";
 "Clear All Logs" = "Alle Protokolle löschen";
 "This will delete all %lld log entries. This action cannot be undone." = "Dies löscht alle %lld Protokolleinträge. Nicht rückgängig machbar.";
-
-// ─── SetType + DateForceHelpView + Profile (v2) ─────────────────────────────
-
 "Word Reveal" = "Wort-Enthüllung";
 "Number Reveal" = "Zahlen-Enthüllung";
 "Custom Set" = "Benutzerdefiniertes Set";
@@ -605,9 +566,6 @@
 "How many people follow that spectator → date group" = "Wie viele Personen folgen diesem Zuschauer → Datums-Gruppe";
 "How many people that spectator follows → time group" = "Wie vielen Personen dieser Zuschauer folgt → Zeit-Gruppe";
 "Auto and Dual produce identical results. Auto is faster and more discreet. Dual gives the magician more control over which profiles are used." = "Auto und Dual liefern identische Ergebnisse. Auto ist schneller und diskreter. Dual gibt dem Magier mehr Kontrolle über die verwendeten Profile.";
-
-// ─── Status + Camera + Buttons + DateForce scripts (v3) ─────────────────────
-
 "Paused" = "Pausiert";
 "Rear camera" = "Rückkamera";
 "Front camera" = "Frontkamera";
@@ -627,9 +585,6 @@
 "REGISTERING SPECTATORS  —  DUAL" = "ZUSCHAUER REGISTRIEREN — DUAL";
 "DATE GROUP  —  DUAL" = "DATUMSGRUPPE — DUAL";
 "TIME GROUP  —  DUAL" = "ZEITGRUPPE — DUAL";
-
-// ─── Upload phases + progress display (v4) ──────────────────────────────────
-
 "Starting upload..." = "Upload wird gestartet...";
 "Resuming upload..." = "Upload wird fortgesetzt...";
 "Resuming after skip..." = "Wird nach Überspringen fortgesetzt...";
@@ -657,13 +612,7 @@
 "%d/%d completed - Waiting %@ for photo #%d" = "%d/%d abgeschlossen - Warten auf %@ für Foto Nr. %d";
 "%d / %d" = "%d / %d";
 "Resume in %@" = "Fortsetzen in %@";
-
-// ─── Empty state (No Sets Yet) ──────────────────────────────────────────────
-
 "Create your first photo set to get started with magic performances" = "Erstellen Sie Ihr erstes Foto-Set, um mit Ihren Zaubervorstellungen zu beginnen";
-
-// ─── DateForceHelpView full content ──────────────────────────────────────────
-
 "Start before touching the phone. Stand still. Let the room settle." = "Beginnen Sie, bevor Sie das Telefon berühren. Stehen Sie still. Lassen Sie den Raum zur Ruhe kommen.";
 "Pause. Let that land." = "Pause. Lassen Sie das wirken.";
 "Build slowly. Look at the audience." = "Bauen Sie langsam auf. Schauen Sie das Publikum an.";
@@ -671,7 +620,6 @@
 "Enable **Date Force** in Settings." = "Aktivieren Sie **Date Force** in den Einstellungen.";
 "Select **Auto** mode." = "Wählen Sie den **Auto**-Modus.";
 "Select **Dual** mode." = "Wählen Sie den **Dual**-Modus.";
-
 "Image Template" = "Bildvorlage";
 "Upload my own" = "Eigene hochladen";
 "No templates available. You'll upload your own images." = "Keine Vorlagen verfügbar. Du lädst deine eigenen Bilder hoch.";
@@ -734,11 +682,9 @@
 "Wait while they do it. Don't rush." = "Warten Sie, während sie es tun. Nicht hetzen.";
 "When they tap a post, take back the phone naturally and show the screen to the room." = "Wenn sie auf einen Beitrag tippen, nehmen Sie das Telefon natürlich zurück und zeigen den Bildschirm.";
 "Write each number on a notepad or board as they say it. Make it theatrical — take your time." = "Notieren Sie jede Zahl auf einem Notizblock oder einer Tafel. Machen Sie es theatralisch.";
-
-// Force Reel
 "force_reel.title" = "Force Reel";
-"force_reel.subtitle" = "Bis zu 3 Reels in Entdecken platzieren";
-"force_reel.description" = "Wähle bis zu 3 Reels von beliebigen Profilen vor. In Performance wische das Raster, um eine Position festzulegen, dann öffne Entdecken — die Reels erscheinen ab diesem Slot, im Abstand von 3.";
+"force_reel.subtitle" = "Erzwinge einen bestimmten Reel in Entdecken";
+"force_reel.description" = "Wähle einen Reel von einem beliebigen Profil vor. In Performance öffne Entdecken — der erzwungene Reel erscheint im Feed.";
 "force_reel.add_reel_count" = "Reel hinzufügen (%d/3)";
 "force_reel.select_reel" = "Reel auswählen";
 "force_reel.remove_all" = "Alle entfernen";
@@ -751,7 +697,6 @@
 "force_reel.picker.header" = "@%1$@ · %2$d Reels — tippen zum Auswählen";
 "force_reel.picker.nav_title" = "Reel auswählen — Slot %d";
 "force_reel.picker.clear" = "Löschen";
-// Post Prediction Help
 "postpred.help.nav.title" = "Post Prediction";
 "postpred.help.nav.subtitle" = "Performance-Leitfaden";
 "postpred.help.hero.title" = "Die Bildvorhersage";
@@ -761,6 +706,9 @@
 "postpred.help.section.before" = "Vor der Show";
 "postpred.help.section.during" = "Wahrend der Show";
 "postpred.help.section.tips" = "Tipps";
+"postpred.help.howitworks.step1" = "Bereiten Sie Ihr **Set** vor — laden Sie Fotos im Voraus hoch und lassen Sie die App sie automatisch archivieren. Sie werden auf Instagram unsichtbar, bis Sie sie enthüllen möchten.";
+"postpred.help.howitworks.step2" = "Der Zuschauer wählt frei ein Wort, eine Zahl, ein Bild oder eine Karte. Sie erfassen seine Wahl still mit einer der Eingabemethoden.";
+"postpred.help.howitworks.step3" = "Lösen Sie die Enthüllung aus. Das passende Foto erscheint wieder auf echtem Instagram **an seiner ursprünglichen Position, mit seinem ursprünglichen Datum** — als wäre es immer da gewesen.";
 "postpred.help.howitworks.body1" = "Sie bereiten ein **Set** vor, eine Sammlung von Fotos, eines fur jeden Buchstaben oder jede Ziffer. Die Fotos werden im Voraus hochgeladen und automatisch archiviert, sodass sie auf Instagram unsichtbar sind, bis Sie sie enthullen mochten.";
 "postpred.help.howitworks.body2" = "Wenn Sie die Enthullung auslosen, dearchiviert die App das entsprechende Foto. Es erscheint an seiner **ursprunglichen Position im Raster**, mit seinem **ursprunglichen Datum**, als ware es immer da gewesen.";
 "postpred.help.howitworks.info" = "Der Zuschauer sieht einen echten Beitrag auf einem echten Instagram-Profil. Keine App ist sichtbar, nur Instagram.";
@@ -769,17 +717,36 @@
 "postpred.help.metric.banks" = "Banke";
 "postpred.help.metric.banks.desc" = "Jede Bank = eine Position im Wort oder in der Zahl. Bank 1 -> erster Buchstabe, Bank 2 -> zweiter Buchstabe usw. Die Anzahl der Banken bestimmt die maximale Lange der Enthullung.";
 "postpred.help.inputs.body1" = "Der Zuschauer denkt frei an ein Wort oder eine Zahl. Sie erfassen seine Wahl still mit einer von drei Methoden:";
+"postpred.help.inputs.intro" = "Jede Eingabemethode ist mit bestimmten Set-Typen kompatibel. Wählen Sie diejenige, die am besten zu Ihrer Vorstellung passt.";
 "postpred.help.input.grid.label" = "RASTEREINGABE";
+"postpred.help.input.grid.intro" = "Wischen Sie in der Vorstellung links oder rechts über das Fotoraster. Posts 1–9 entsprechen den Ziffern 1–9; Posts 10+ entsprechen der Ziffer 0. Sammeln Sie bis zu 3 Ziffern und tippen Sie auf das Posts-Symbol, um die Enthüllung auszulösen.";
+"postpred.help.input.grid.case.number" = "Jede Ziffer wählt den Slot in ihrer Bank — Bank 1 → 1. Ziffer, Bank 2 → 2. Ziffer usw.";
+"postpred.help.input.grid.case.custom" = "Alle Ziffern zusammen bilden die Slot-Nummer (1–100). Bsp.: Wischen Sie 7 dann 2 = Slot 72. Wischen Sie 1, 0, 0 = Slot 100.";
+"postpred.help.input.grid.case.card" = "2 Ziffern: [Wert + Farbe]. 3 Ziffern: [Zehner + Einheit + Farbe]. Farben: 1=♠  2=♥  3=♣  4=♦. Bsp.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Aktivieren Sie **Ziffernraster** in den Post-Prediction-Einstellungen.";
 "postpred.help.input.grid.step2" = "Wischen Sie in Performance links oder rechts uber das Fotoraster. Posts 1-9 entsprechen den Ziffern 1-9. Posts 10, 11 und 12 entsprechen der Ziffer 0. Ein Indikator zeigt die angesammelte Zahl.";
-"postpred.help.input.grid.step3" = "Tippen Sie auf das Posts-Symbol, um die Enthullung zu bestatigen und auszulosen.";
+"postpred.help.input.grid.step3" = "Tippen Sie auf das Posts-Symbol, um die Enthüllung zu bestätigen und auszulösen.";
+"postpred.help.input.ocr.label" = "OCR — KAMERA";
+"postpred.help.input.covert.label" = "VERDECKTE EINGABE";
+"postpred.help.input.covert.step1" = "Aktivieren Sie **Verdeckte Eingabe** in den Einstellungen und legen Sie ein Deckwort fest — das, was der Zuschauer auf dem Bildschirm sieht.";
+"postpred.help.input.covert.step2" = "Tippen Sie das Wort des Zuschauers in das Explore-Suchfeld. Der Zuschauer sieht das Deckwort; die App zeichnet das echte Wort still auf.";
+"postpred.help.input.covert.step3" = "Drücken Sie einmal **Leertaste**, wenn Sie fertig sind. Die Leertaste verschwindet aus dem Feld — das ist beabsichtigt. Eine kurze Vibration bestätigt, dass das Wort erfasst und die Enthüllung ausgelöst wurde.";
+"postpred.help.input.url.label" = "URL SCHEME / AUTOMATISIERUNG";
+"postpred.help.input.url.intro" = "Lösen Sie die Enthüllung aus der Ferne aus — über Apple-Kurzbefehle, NFC-Tags, QR-Codes oder Companion-Apps. Kompatibel mit allen Set-Typen.";
+"postpred.help.input.url.example.word" = "Word Reveal";
+"postpred.help.input.url.example.slot" = "Custom Set — Slot-Nummer (1–100)";
+"postpred.help.input.url.example.card" = "Playing Cards — Kartensymbol (z.B. J♠, 10♥, K♦)";
+"postpred.help.settype.word.desc" = "**26 Slots (A–Z) × N Banken.** Jede Bank enthüllt einen Buchstaben. Bank 1 = 1. Buchstabe, Bank 2 = 2. Buchstabe.";
+"postpred.help.settype.number.desc" = "**10 Slots (0–9) × N Banken.** Jede Bank enthüllt eine Ziffer. Bank 1 = 1. Ziffer, Bank 2 = 2. Ziffer.";
+"postpred.help.settype.custom.desc" = "**1–100 eigene Bilder, 1 Bank.** Wischen Sie 1–3 Ziffern, um die Slot-Nummer (1–100) zu wählen. Ideal für Spielergebnisse, Tarot-Karten oder visuelle Auswahl.";
+"postpred.help.settype.card.desc" = "**52 Slots (A–K × ♠♥♣♦), 1 Bank.** Wischen Sie 2 oder 3 Ziffern, um eine Karte zu wählen. Farben: 1=♠ 2=♥ 3=♣ 4=♦. Bsp.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.ocr.label" = "OCR - KAMERAERKENNUNG";
 "postpred.help.input.ocr.step1" = "Aktivieren Sie **OCR** in den Post-Prediction-Einstellungen.";
 "postpred.help.input.ocr.step2" = "Richten Sie die Kamera auf ein handgeschriebenes oder gedrucktes Wort. Die App liest es automatisch und lost die entsprechende Enthullung aus.";
 "postpred.help.input.url.label" = "URL-SCHEMA";
 "postpred.help.input.url.step1" = "Aktivieren Sie **URL Scheme** in den Post-Prediction-Einstellungen.";
 "postpred.help.input.url.step2" = "Losen Sie die Enthullung per benutzerdefinierter URL aus, nutzlich mit NFC-Tags, QR-Codes oder Automatisierungsverknupfungen.";
-"postpred.help.before.1" = "Erstellen Sie ein **Set** im Sets-Bereich. Wahlen Sie den Buchstabentyp (Numerisch oder Wort) und ein Bildtemplate oder laden Sie eigene Fotos hoch.";
+"postpred.help.before.1" = "Erstellen Sie ein **Set** im Sets-Bereich. Wählen Sie Word Reveal, Number Reveal, Custom Set oder Playing Cards. Wählen Sie ein Bildtemplate oder laden Sie eigene Fotos hoch.";
 "postpred.help.before.2" = "Laden Sie die Bilder hoch und warten Sie, bis sie **automatisch archiviert** wurden. Dies kann mehrere Stunden dauern, lassen Sie die App bei Bedarf uber Nacht laufen.";
 "postpred.help.before.3" = "Wahrend des Uploads **verwenden Sie die App nicht**, wechseln Sie nicht das Netzwerk und unterbrechen Sie den Vorgang nicht. Der Bildschirm bleibt automatisch aktiv. Eine Benachrichtigung fordert Sie auf, zwischen den Uploads zuruckzukehren.";
 "postpred.help.before.4" = "Legen Sie das hochgeladene Set als **aktiv** in den Post-Prediction-Einstellungen fest.";
@@ -801,8 +768,633 @@
 "postpred.help.tip.banks" = "**Anzahl der Banken.** Jede Bank = eine Buchstaben- oder Ziffernposition. Planen Sie Ihre Sets entsprechend dem langsten Wort oder der langsten Zahl, die Sie enthullen mochten.";
 "postpred.help.tip.fakeapp" = "**Fake-Profil = sofortige Vorschau, echtes Instagram = nach der Vibration.** Die Vorhersage erscheint sofort im App-Fake-Profil – aber sie ist noch nicht auf echtem Instagram verfügbar. Warte auf das haptische Feedback, bevor du fortfährst.";
 "postpred.help.tip.openprofile" = "**Öffne zuerst dein echtes Instagram-Profil.** Nachdem die Vibration den Upload bestätigt, öffne dein eigenes Instagram-Profil, bevor du den Zuschauer einlädst zu schauen. Dadurch wird der Inhalt im Feed geladen. Wenn der Zuschauer zuerst aktualisiert, muss er möglicherweise nach unten scrollen.";
+"set.upload.info.title" = "Schrittweiser Upload";
+"set.upload.info.body" = "Die App lädt Fotos nacheinander hoch und hält den Bildschirm aktiv. Wenn du die App verlässt, wirst du vor jedem nächsten Upload benachrichtigt, damit du rechtzeitig zurückkehren kannst.";
+"set.upload.info.sleep" = "Halte den Bildschirm aktiv und bleibe während des Uploads in der App.";
+"lockdown.challenge.title" = "Instagram braucht eine Bestätigung";
+"lockdown.challenge.subtitle" = "Instagram hat ungewöhnliche Aktivität erkannt und möchte bestätigen, dass du es bist.";
+"lockdown.challenge.nav" = "Bestätigung ausstehend";
+"lockdown.challenge.step1" = "Öffne die Instagram-App auf deinem Handy";
+"lockdown.challenge.step2" = "Falls eine Sicherheitsaufforderung erscheint, schließe sie ab (meistens ein Code per SMS oder E-Mail)";
+"lockdown.challenge.step3" = "Komm hierher zurück und tippe auf die Schaltfläche unten";
+"lockdown.challenge.step4" = "Falls keine Aufforderung in Instagram erschien, warte einfach den Countdown ab — die App wird sich von selbst fortsetzen";
+"lockdown.challenge.btn.resume" = "Ich habe es bestätigt — Fortsetzen";
+"lockdown.challenge.btn.skip" = "Ohne Bestätigung fortfahren (nicht empfohlen)";
+"lockdown.safety.title" = "Sicherheitspause";
+"lockdown.safety.subtitle" = "Die App hat automatisch pausiert, um dein Instagram-Konto zu schützen.";
+"lockdown.safety.step1" = "Tu nichts — die App wartet, um dein Konto zu schützen";
+"lockdown.safety.step2" = "Öffne Instagram nicht und wiederhole keine Aktion";
+"lockdown.safety.step3" = "Wenn der Countdown null erreicht, wird die App automatisch fortgesetzt";
+"lockdown.safety.btn.skip" = "Warten überspringen (nicht empfohlen)";
+"lockdown.countdown.ready" = "Bereit zum Fortfahren!";
+"lockdown.countdown.label" = "Wird fortgesetzt in";
+"lockdown.btn.logout" = "Abmelden";
+"lockdown.btn.logout.note" = "Verwende 'Abmelden' nur, wenn nichts anderes funktioniert. Du musst dich erneut anmelden.";
+"lockdown.btn.close" = "Schließen";
+"postpred.help.inputs.group.numeric" = "FÜR NUMERISCHE / EIGENE SETS";
+"postpred.help.inputs.group.alpha" = "FÜR ALPHABETISCHE SETS";
+"postpred.help.inputs.group.universal" = "UNIVERSELL — ALLE SET-TYPEN";
+"postpred.help.input.covert.label" = "VERDECKTE EINGABE";
+"postpred.help.input.api.label" = "API / AUTOMATISIERUNG";
+"postpred.help.input.api.step1" = "Verwende ein externes Automatisierungstool (Kurzbefehle, NFC-Tag, Begleit-App), um das Wort oder die Zahl über das URL-Schema an Post Prediction zu senden.";
+"postpred.help.input.api.step2" = "Nützlich, wenn ein Drittanbieter-Auslöser oder ein physisches Hilfsmittel die Enthüllung automatisch zum richtigen Zeitpunkt auslöst.";
+"Check your connection and try again." = "Überprüfe deine Verbindung und versuche es erneut.";
+"Try Again" = "Erneut versuchen";
+"This keeps happening. Try logging out and back in." = "Das passiert immer wieder. Versuche, dich ab- und wieder anzumelden.";
+"Session Problem" = "Sitzungsproblem";
+"The Instagram session has expired. This happens after a password change, prolonged inactivity, or suspicious activity detection." = "Die Instagram-Sitzung ist abgelaufen. Dies passiert nach einer Passwortänderung, längerer Inaktivität oder der Erkennung verdächtiger Aktivitäten.";
+"Re-login to Instagram" = "Erneut bei Instagram anmelden";
+"Saved credentials will be auto-filled." = "Gespeicherte Anmeldedaten werden automatisch ausgefüllt.";
+"No saved credentials. You will need to type them manually." = "Keine gespeicherten Anmeldedaten. Du musst sie manuell eingeben.";
+"Emergency Logout" = "Notabmeldung";
+"Emergency logout clears the session and requires a full login." = "Die Notabmeldung löscht die Sitzung und erfordert eine vollständige Anmeldung.";
+"Session Info" = "Sitzungsinfo";
+"Upload Complete" = "Upload abgeschlossen";
+"Re-login" = "Erneut anmelden";
+"ig.set_not_uploaded_title" = "Set nicht hochgeladen";
+"ig.set_not_uploaded_body" = "Das Set \"%@\" wurde noch nicht auf Instagram hochgeladen. Gehe zu Sets und lade es zuerst hoch.";
+"session.reason.challenge" = "Instagram hat wiederholt eine Sicherheitsverifizierung angefordert (%lld Mal). Melde dich erneut an, um die Sitzung wiederherzustellen.";
+"Your photos" = "Deine Fotos";
+"Wait a few minutes before syncing. Instagram limits API calls per hour." = "Warte ein paar Minuten vor der Synchronisierung. Instagram begrenzt API-Aufrufe pro Stunde.";
+"Info" = "Info";
+"session.panel.return_to_app" = "Zurück zur App";
+"session.panel.return_to_app.hint" = "Schließt diesen Bildschirm, damit du zu den Einstellungen gehst und dich neu anmeldest.";
+"What is Vault?" = "Was ist Vault?";
+"Vault — Instagram Magic" = "Vault — Instagram-Magie";
+"Hybrid app · Real account · Real results" = "Hybrid-App · Echtes Konto · Echte Ergebnisse";
+"Vault se conecta directamente a tu cuenta de Instagram real sin necesitar un perfil separado, un público especial ni ninguna configuración visible." = "Vault verbindet sich direkt mit deinem echten Instagram-Konto — kein separates Profil, kein besonderes Publikum, kein sichtbares Setup.";
+"Todo lo que ejecutas ocurre en la misma cuenta que tus espectadores ya siguen — y lo que ven ellos es Instagram, no la app." = "Alles, was du ausführst, passiert auf demselben Konto, dem deine Zuschauer bereits folgen — und was sie sehen, ist Instagram, nicht die App.";
+"Cómo funciona" = "So funktioniert es";
+"Sube, archiva y desarchiva fotos en el momento exacto que eliges" = "Fotos genau zu dem Zeitpunkt hochladen, archivieren und dearchivieren, den du wählst";
+"Cambia tu foto de perfil al instante desde la app" = "Ändere dein Profilfoto sofort über die App";
+"Publica o actualiza tu nota e Instagram en tiempo real" = "Veröffentliche oder aktualisiere deine Instagram-Notiz in Echtzeit";
+"Edita tu biografía para que coincida con lo que el espectador está pensando" = "Bearbeite deine Biografie, damit sie mit dem übereinstimmt, woran der Zuschauer denkt";
+"Consulta seguidores y seguidos para efectos de counter glitch" = "Prüfe Follower und Following für Counter-Glitch-Effekte";
+"Recupera metadatos — fechas, posición en grid, subtítulos — para forzajes de fecha" = "Rufe Metadaten ab — Daten, Grid-Position, Beschriftungen — für Datumkräfte";
+"Por qué importa en magia" = "Warum es in der Zauberei wichtig ist";
+"Cuando el espectador abre Instagram en su propio móvil ve el resultado real — no una captura de pantalla, no una simulación." = "Wenn der Zuschauer Instagram auf seinem eigenen Telefon öffnet, sieht er das echte Ergebnis — kein Screenshot, keine Simulation.";
+"La predicción estaba ahí desde el principio, archivada e invisible hasta que tú decidiste revelarla. El forzaje lo confirmó el algoritmo de Instagram. La fecha estaba grabada en una publicación de hace meses." = "Die Vorhersage war von Anfang an da, archiviert und unsichtbar, bis du dich entschieden hast, sie zu enthüllen. Der Force wurde durch Instagrams Algorithmus bestätigt. Das Datum war in einem Beitrag von vor Monaten aufgezeichnet.";
+"Vault te da el control de una capa de Instagram que ningún espectador puede cuestionar — porque no es la app, es Instagram mismo." = "Vault gibt dir die Kontrolle über eine Instagram-Ebene, die kein Zuschauer in Frage stellen kann — denn es ist nicht die App, es ist Instagram selbst.";
+"Tres pilares" = "Drei Säulen";
+"Forzajes" = "Forces";
+"Dirige al espectador hacia un número, fecha o post que ya conoces." = "Führe den Zuschauer zu einer Zahl, einem Datum oder einem Beitrag, den du bereits kennst.";
+"Predicciones" = "Vorhersagen";
+"Pre-sube una foto que coincide con la elección del espectador, archívala, y desarchívala en el clímax." = "Lade vorab ein Foto hoch, das der Wahl des Zuschauers entspricht, archiviere es und dearchiviere es beim Höhepunkt.";
+"Reveals de perfil" = "Profil-Enthüllungen";
+"Cambia tu foto, nota o biografía en tiempo real para que coincida con lo que el espectador está pensando." = "Ändere in Echtzeit dein Foto, deine Notiz oder Biografie, damit sie mit dem übereinstimmt, woran der Zuschauer denkt.";
+"Límites & Seguridad" = "Grenzen & Sicherheit";
+"Por qué existen los límites" = "Warum Grenzen bestehen";
+"Instagram impone límites de uso en su API para evitar spam y comportamiento automatizado. Es una medida de seguridad normal que aplica a cualquier app conectada a la plataforma." = "Instagram setzt Nutzungslimits für seine API, um Spam und automatisiertes Verhalten zu verhindern. Dies ist eine normale Sicherheitsmaßnahme, die für jede mit der Plattform verbundene App gilt.";
+"Vault está diseñado con tiempos de espera y espaciados automáticos que respetan esos límites. El mago no tiene que hacer nada — la app lo gestiona por él." = "Vault ist mit automatischen Wartezeiten und Abständen ausgestattet, die diese Grenzen respektieren. Der Magier muss nichts tun — die App erledigt es für ihn.";
+"Si pulsas una función y parece que no responde de inmediato, lo más probable es que la app esté esperando el tiempo de seguridad antes de la siguiente acción. Espera unos segundos y vuelve a intentarlo." = "Wenn du eine Funktion tippst und sie scheinbar nicht reagiert, wartet die App höchstwahrscheinlich auf das Sicherheitsintervall vor der nächsten Aktion. Warte einige Sekunden und versuche es erneut.";
+"Tiempos de espera de la app" = "App-Wartezeiten";
+"Estos valores están integrados automáticamente — no requieren ninguna acción por tu parte:" = "Diese Werte sind automatisch integriert — sie erfordern keine Aktion deinerseits:";
+"Entre fotos de un set al subir" = "Zwischen Fotos in einem Set beim Hochladen";
+"160–220 s aleatorio por foto" = "160–220 s zufällig pro Foto";
+"Entre reveals consecutivos" = "Zwischen aufeinanderfolgenden Enthüllungen";
+"Mínimo entre un reveal y el siguiente" = "Minimum zwischen einer und der nächsten Enthüllung";
+"Entre archivados (Sync & Archive)" = "Zwischen Archivierungen (Sync & Archive)";
+"Por cada foto archivada" = "Pro archiviertem Foto";
+"Límite de acciones por hora" = "Aktionslimit pro Stunde";
+"La app deja de actuar si se acerca al límite" = "Die App hört auf zu handeln, wenn sie sich dem Limit nähert";
+"Qué es una detección y cuándo ocurre" = "Was ist eine Erkennung und wann tritt sie auf";
+"De vez en cuando Instagram puede pedir una verificación de identidad si detecta actividad inusual. Esto es completamente temporal y no supone ningún riesgo real para la cuenta." = "Gelegentlich kann Instagram eine Identitätsverifizierung anfordern, wenn es ungewöhnliche Aktivitäten erkennt. Dies ist vollständig temporär und stellt kein wirkliches Risiko für das Konto dar.";
+"La app reacciona automáticamente pausando la sesión durante el tiempo necesario:" = "Die App reagiert automatisch, indem sie die Sitzung für die notwendige Zeit pausiert:";
+"En todos los casos excepto la sesión expirada, la app se recupera sola sin intervención." = "In allen Fällen außer einer abgelaufenen Sitzung erholt sich die App von selbst ohne Eingriff.";
+"Durante la actuación" = "Während der Vorstellung";
+"Si ocurre una detección mientras el espectador está mirando, la app oculta los detalles técnicos y muestra una pantalla genérica de \"Sin conexión a Internet\"." = "Wenn während der Zuschauer zuschaut eine Erkennung auftritt, versteckt die App die technischen Details und zeigt einen generischen \"Keine Internetverbindung\"-Bildschirm.";
+"Es una excusa natural y creíble: \"Ah, la conexión de Instagram falla un momento, no pasa nada.\" Ningún espectador verá nada técnico." = "Es ist eine natürliche und glaubwürdige Entschuldigung: \"Ah, Instagrams Verbindung fällt kurz aus, kein Problem.\" Kein Zuschauer wird etwas Technisches sehen.";
+"Qué hacer en ese momento:" = "Was in diesem Moment zu tun ist:";
+"Señala la pantalla con naturalidad: \"Ah, Instagram falla un segundo\"" = "Zeige natürlich auf den Bildschirm: \"Ah, Instagram hängt kurz\"";
+"Espera 2–3 minutos — la app se recupera sola en la mayoría de casos" = "Warte 2–3 Minuten — die App erholt sich in den meisten Fällen von selbst";
+"Si el problema persiste, continúa con otra parte de la actuación y retoma después" = "Wenn das Problem anhält, fahre mit einem anderen Teil der Vorstellung fort und kehre später zurück";
+"Regla de oro" = "Goldene Regel";
+"Si la app no responde o algo parece bloqueado, ve directamente a la app oficial de Instagram. Instagram puede haber mostrado un aviso de actividad inusual que requiere tu atención. Hasta que no lo resuelvas allí, Vault no podrá continuar." = "Wenn die App nicht reagiert oder etwas gesperrt scheint, gehe direkt zur offiziellen Instagram-App. Instagram hat möglicherweise einen Hinweis auf ungewöhnliche Aktivitäten angezeigt, der deine Aufmerksamkeit erfordert. Bis du es dort gelöst hast, kann Vault nicht weitermachen.";
+"Cómo recuperar la sesión" = "Wie man die Sitzung wiederherstellt";
+"El ciclo reveal→archive→reveal" = "Der Enthüllungs→Archivierungs→Enthüllungs-Zyklus";
+"Cuándo hacer re-login manualmente" = "Wann man sich manuell erneut anmeldet";
+"Recomendaciones:" = "Empfehlungen:";
+"Aviso importante — scroll hacia abajo" = "Wichtiger Hinweis — nach unten scrollen";
+"Verificación puntual" = "Einmalige Überprüfung";
+"Demasiadas peticiones (429)" = "Zu viele Anfragen (429)";
+"Acción bloqueada" = "Aktion blockiert";
+"Spam detectado" = "Spam erkannt";
+"Sesión expirada" = "Sitzung abgelaufen";
+"Re-login necesario" = "Erneute Anmeldung erforderlich";
+"Escenario A" = "Szenario A";
+"Verificación puntual — el más habitual" = "Einmalige Überprüfung — die häufigste";
+"Escenario B" = "Szenario B";
+"Sesión expirada — poco frecuente" = "Sitzung abgelaufen — selten";
+"Nunca practicar más de un ciclo completo reveal→archive con el mismo set en media hora" = "Niemals mehr als einen vollständigen Enthüllungs→Archivierungs-Zyklus mit demselben Set in einer halben Stunde üben";
+"Esperar al menos 15 minutos entre un reveal y el siguiente Archive All del mismo set" = "Mindestens 15 Minuten zwischen einer Enthüllung und dem nächsten Archive All desselben Sets warten";
+"Preparar el set (Archive All) la noche anterior o al menos 1 hora antes de la actuación, no inmediatamente después de practicar" = "Das Set (Archive All) am Abend zuvor oder mindestens 1 Stunde vor der Vorstellung vorbereiten, nicht unmittelbar nach dem Üben";
+"La app avisará en el botón Sync & Archive si el set fue revelado hace menos de 30 minutos" = "Die App warnt im Sync & Archive-Button, wenn das Set vor weniger als 30 Minuten enthüllt wurde";
+"No te preocupes — esto rara vez ocurre en una actuación real. Solo puede aparecer durante los tests cuando se repite el mismo efecto con frecuencia. La mejor estrategia es familiarizarte con la app y, si alguna vez notas un comportamiento inusual o detección de bot, compartir los logs con el desarrollador (los encontrarás en Ajustes → Logs)." = "Keine Sorge — das tritt bei einer echten Vorstellung selten auf. Es kann nur bei Tests auftreten, wenn derselbe Effekt häufig wiederholt wird. Die beste Strategie ist, dich mit der App vertraut zu machen und, wenn du ungewöhnliches Verhalten oder Bot-Erkennung bemerkst, die Logs mit dem Entwickler zu teilen (du findest sie unter Einstellungen → Logs).";
+"La causa más frecuente de detección durante los tests es practicar el mismo truco varias veces seguidas en la misma sesión." = "Die häufigste Ursache für Erkennungen bei Tests ist, denselben Trick mehrmals hintereinander in derselben Sitzung zu üben.";
+"Cuando las mismas fotos se archivan y desarchivan 2–3 veces en 30 minutos, Instagram lo identifica como comportamiento automatizado — aunque cada operación individual respete los cooldowns." = "Wenn dieselben Fotos 2–3 Mal in 30 Minuten archiviert und dearchiviert werden, identifiziert Instagram dies als automatisiertes Verhalten — auch wenn jeder einzelne Vorgang die Cooldowns respektiert.";
+"No es necesario hacer logout antes de cada actuación. Una sesión activa puede durar semanas. Haz re-login solo si:" = "Es ist nicht notwendig, sich vor jeder Vorstellung abzumelden. Eine aktive Sitzung kann wochenlang dauern. Melde dich nur erneut an, wenn:";
+"La app lleva más de 24 h sin responder correctamente a ninguna acción" = "Die App hat mehr als 24 h lang nicht korrekt auf eine Aktion reagiert";
+"Se producen 3 o más detecciones seguidas en la misma sesión" = "3 oder mehr aufeinanderfolgende Erkennungen in derselben Sitzung auftreten";
+"El botón \"Reconnect\" aparece persistentemente en Settings" = "Die Schaltfläche \"Reconnect\" erscheint dauerhaft in den Einstellungen";
+"En el resto de situaciones, la app gestiona la sesión de forma automática." = "In allen anderen Situationen verwaltet die App die Sitzung automatisch.";
+"Tras reconectar, si no ves las fotos que esperabas en tu perfil de Instagram, haz scroll hacia abajo para forzar la actualización." = "Wenn du nach der Wiederverbindung die erwarteten Fotos auf deinem Instagram-Profil nicht siehst, scrolle nach unten, um eine Aktualisierung zu erzwingen.";
+"Instagram muestra a veces la versión en caché hasta que se refresca manualmente con un deslizamiento hacia abajo." = "Instagram zeigt manchmal die gecachte Version, bis sie durch Herunterziehen manuell aktualisiert wird.";
+"La app no responde o muestra un aviso de bloqueo" = "Die App reagiert nicht oder zeigt eine Sperrbenachrichtigung";
+"Abre la app oficial de Instagram" = "Öffne die offizielle Instagram-App";
+"Si aparece un aviso de actividad inusual, pulsa \"Dismiss\" o completa el código de verificación (email o SMS)" = "Wenn eine Benachrichtigung über ungewöhnliche Aktivitäten erscheint, tippe auf \"Dismiss\" oder vervollständige den Verifizierungscode (E-Mail oder SMS)";
+"Si no aparece nada, espera 2 minutos — la sesión se restablece sola en Vault" = "Wenn nichts erscheint, warte 2 Minuten — die Sitzung stellt sich in Vault selbst wieder her";
+"Vuelve a Vault: todo continúa con normalidad" = "Kehre zu Vault zurück: Alles läuft normal weiter";
+"Vault muestra la pantalla de re-login" = "Vault zeigt den Erneut-Anmelden-Bildschirm";
+"Ve primero a Instagram real para descartar cualquier aviso pendiente y pulsa \"Dismiss\" si lo hay" = "Gehe zuerst zum echten Instagram, um ausstehende Hinweise zu verwerfen, und tippe auf \"Dismiss\" wenn vorhanden";
+"Vuelve a Vault y pulsa \"Connect Account\"" = "Kehre zu Vault zurück und tippe auf \"Connect Account\"";
+"Entra con tu usuario y contraseña" = "Melde dich mit deinem Benutzernamen und Passwort an";
+"Acepta las cookies cuando Instagram lo pida — es indispensable" = "Akzeptiere Cookies, wenn Instagram darum bittet — es ist unverzichtbar";
+"La sesión se restaura automáticamente" = "Die Sitzung wird automatisch wiederhergestellt";
+"API limits, cooldowns, bot detection and how to recover" = "API-Limits, Cooldowns, Bot-Erkennung und Wiederherstellung";
+"Change your Instagram profile photo as a prediction" = "Ändere dein Instagram-Profilfoto als Vorhersage";
+"Force a specific reel to appear in Explore" = "Zwinge ein bestimmtes Reel, in Explore zu erscheinen";
+"Glitch the follower or following count for a spectator" = "Den Follower- oder Following-Zähler eines Zuschauers glitchen";
+"Predict a spectator's post from weeks ago" = "Einen Beitrag eines Zuschauers von vor Wochen vorhersagen";
+"How Vault works, what it can do, and why it matters for magic" = "Wie Vault funktioniert, was es kann und warum es für die Magie wichtig ist";
+"Note and biography prediction using API, OCR or URL Scheme" = "Notiz- und Biografievorhersage per API, OCR oder URL-Schema";
+"Consejos" = "Tipps";
+"Convicción" = "Überzeugung";
+"Dígitos" = "Ziffern";
+"Dígito secreto vía swipe" = "Geheime Ziffer per Swipe";
+"Espectador" = "Zuschauer";
+"Fase 1 — Deflación" = "Phase 1 — Deflation";
+"Fase 2 — Inflación" = "Phase 2 — Inflation";
+"**No enseñes la pantalla hasta tener el número inflado.** Navega el grid con el móvil hacia ti para que nadie más vea los swipes secretos." = "**Zeige den Bildschirm nicht, bis du die aufgeblähte Zahl hast.** Navigiere das Grid mit dem Handy zu dir, damit niemand sonst die geheimen Swipes sieht.";
+"**Perfil propio o ajeno.** Con el perfil del espectador el impacto es mayor porque puede verificarlo él mismo." = "**Eigenes Profil oder das eines anderen.** Mit dem eigenen Profil des Zuschauers ist die Wirkung größer, weil er es selbst überprüfen kann.";
+"Antes de empezar" = "Bevor du anfängst";
+"Durante el show" = "Während der Show";
+"Dos grupos secretos" = "Zwei geheime Gruppen";
+"Cálculo interno" = "Interne Berechnung";
+"El espectador lo descifra" = "Der Zuschauer entschlüsselt es";
+"Aparece en Explore" = "Erscheint in Entdecken";
+"El Mago 🎩" = "Der Zauberer 🎩";
+"El espectador hace la resta:" = "Der Zuschauer rechnet die Subtraktion:";
+"EL REVEAL" = "DIE ENTHÜLLUNG";
+"CIERRA Y ESPERA" = "SCHLIESSEN UND WARTEN";
+"**Antes del show**, activa **Date Force** en Settings y configura el formato de fecha (DD/MM/AAAA o MM/DD/AAAA)." = "**Vor der Show**, aktiviere **Date Force** in den Einstellungen und konfiguriere das Datumsformat (TT/MM/JJJJ oder MM/TT/JJJJ).";
+"**Cuentas privadas.** Si un espectador tiene la cuenta privada y no te sigue de vuelta, es posible que no puedas cargar su perfil. Pídele que te siga momentáneamente o usa una cuenta pública." = "**Private Konten.** Wenn ein Zuschauer ein privates Konto hat und dir nicht folgt, kannst du möglicherweise sein Profil nicht laden. Bitte ihn, dir kurzzeitig zu folgen, oder verwende ein öffentliches Konto.";
+"**Número par de espectadores.** Con 2 espectadores: 1 grupo fecha + 1 grupo hora. Con 4: 2 grupos fecha + 2 grupos hora. Con 6: 3 grupos de cada tipo." = "**Gerade Anzahl von Zuschauern.** Mit 2 Zuschauern: 1 Datumsgruppe + 1 Zeitgruppe. Mit 4: 2 Datumsgruppen + 2 Zeitgruppen. Mit 6: 3 Gruppen von jedem Typ.";
+"Profile Picture Prediction" = "Profilfoto-Vorhersage";
+"Biography Prediction" = "Biografie-Vorhersage";
+"Note Prediction" = "Notiz-Vorhersage";
+"How it works" = "So funktioniert es";
+"Input Method" = "Eingabemethode";
+"Setup" = "Einrichtung";
+"Saved to Settings" = "In Einstellungen gespeichert";
+"Force the Scroll" = "Den Scroll erzwingen";
+"Before the show you choose a post in Settings. During the performance the spectator scrolls freely — but the app always stops on your pre-chosen image, making them believe the choice was entirely theirs." = "Vor der Show wählst du einen Post in den Einstellungen. Während der Vorführung scrollt der Zuschauer frei — aber die App stoppt immer bei deinem vorher gewählten Bild und lässt ihn glauben, die Wahl war vollständig seine eigene.";
+"Before the show, go to Settings and pick the post you want to force from any Instagram profile. That's all the preparation needed." = "Gehe vor der Show in die Einstellungen und wähle den Post, den du von einem beliebigen Instagram-Profil erzwingen möchtest. Das ist die einzige Vorbereitung.";
+"Prepared in Settings" = "In Einstellungen vorbereitet";
+"The selection is made before the performance — the spectator never sees this step. You simply choose the target post from any public profile." = "Die Auswahl wird vor der Vorführung getroffen — der Zuschauer sieht diesen Schritt nie. Du wählst einfach den Ziel-Post von einem beliebigen öffentlichen Profil.";
+"Spectator scrolls freely" = "Zuschauer scrollt frei";
+"During the show the spectator scrolls through the posts at their own pace. They genuinely believe the choice is completely random." = "Während der Show scrollt der Zuschauer in seinem eigenen Tempo durch die Posts. Er glaubt wirklich, die Wahl sei völlig zufällig.";
+"The app does the work" = "Die App erledigt die Arbeit";
+"The moment the scroll starts to slow down, the app intercepts it and lands exactly on your pre-chosen image — invisible to the spectator." = "In dem Moment, in dem das Scrollen langsamer wird, fängt die App es ab und landet genau auf deinem vorher gewählten Bild — unsichtbar für den Zuschauer.";
+"Multiple profiles" = "Mehrere Profile";
+"Configure one forced post per Instagram profile. Each profile you visit during the show activates the right image automatically." = "Richte einen erzwungenen Post pro Instagram-Profil ein. Jedes Profil, das du während der Show besuchst, aktiviert automatisch das richtige Bild.";
+"After the scroll lands once, the interception releases completely. The spectator can keep scrolling freely — the trick fires only once and feels entirely natural." = "Sobald der Scroll gelandet ist, wird die Abfangung vollständig aufgehoben. Der Zuschauer kann weiter frei scrollen — der Trick löst nur einmal aus und fühlt sich völlig natürlich an.";
+"**Before the show**, open Settings and enable **Force Post**." = "**Vor der Show**, öffne die Einstellungen und aktiviere **Force Post**.";
+"Tap **Select Post** — or **Add Another Profile** if you've already configured one." = "Tippe auf **Post auswählen** — oder **Weiteres Profil hinzufügen**, wenn du bereits eines konfiguriert hast.";
+"Search for the Instagram username of the profile you plan to use during the show." = "Suche den Instagram-Benutzernamen des Profils, das du während der Show verwenden möchtest.";
+"Browse their posts and tap the one you want the spectator to land on. A local thumbnail is saved to the device." = "Durchsuche ihre Posts und tippe auf den, auf dem der Zuschauer landen soll. Eine lokale Miniaturansicht wird auf dem Gerät gespeichert.";
+"Repeat for each additional profile. Once set up, you don't touch Settings again during the performance." = "Wiederhole für jedes weitere Profil. Einmal eingerichtet, berührst du die Einstellungen während der Vorführung nicht mehr.";
+"GO TO PERFORMANCE" = "ZU PERFORMANCE WECHSELN";
+"SPECTATOR SCROLLS" = "ZUSCHAUER SCROLLT";
+"THE FORCE" = "DER FORCE";
+"THE REVEAL" = "DAS REVEAL";
+"Open Performance and search for the target profile in Explore. You can hand the phone directly to the spectator at this point." = "Öffne Performance und suche das Zielprofil in Explore. Du kannst das Telefon an diesem Punkt direkt an den Zuschauer übergeben.";
+"Tap any post to open the fullscreen viewer. Ask the spectator to scroll through the posts however they want — up, down, fast, slow. Tell them to stop whenever they feel like it." = "Tippe auf einen beliebigen Post, um den Vollbild-Viewer zu öffnen. Bitte den Zuschauer, durch die Posts zu scrollen, wie er möchte — hoch, runter, schnell, langsam. Sag ihm, er soll aufhören, wann immer er möchte.";
+"As the scroll decelerates, the app silently intercepts it and stops exactly on the post you chose in Settings. The spectator sees it as their own random choice." = "Wenn das Scrollen abbremst, fängt die App es lautlos ab und stoppt genau bei dem Post, den du in den Einstellungen gewählt hast. Der Zuschauer sieht es als seine eigene zufällige Wahl.";
+"Show your prediction — a sealed envelope, a card, or simply name the post. The spectator is convinced they chose it freely." = "Zeige deine Vorhersage — einen versiegelten Umschlag, eine Karte oder nenne einfach den Post. Der Zuschauer ist überzeugt, ihn frei gewählt zu haben.";
+"**Prepare in advance.** Set up your forced post in Settings well before the show. During the performance you only open Performance — nothing else." = "**Im Voraus vorbereiten.** Richte deinen erzwungenen Post in den Einstellungen lange vor der Show ein. Während der Vorführung öffnest du nur Performance — sonst nichts.";
+"**Multiple profiles.** You can load a different forced post for each profile. Useful when you let the spectator choose which Instagram account to visit." = "**Mehrere Profile.** Du kannst einen anderen erzwungenen Post für jedes Profil laden. Nützlich, wenn du den Zuschauer wählen lässt, welches Instagram-Konto zu besuchen.";
+"**Single intercept.** The app fires once and then releases. After landing on the forced post the spectator can scroll freely — it feels completely natural." = "**Einmalige Abfangung.** Die App löst einmal aus und gibt dann frei. Nach der Landung auf dem erzwungenen Post kann der Zuschauer frei scrollen — es fühlt sich völlig natürlich an.";
+"**Works offline.** The selected thumbnail is saved locally. The force works even without internet during the show." = "**Funktioniert offline.** Das ausgewählte Miniaturbild wird lokal gespeichert. Der Force funktioniert auch ohne Internet während der Show.";
+"**Public profiles only.** The target account must be public — or one you already follow — for its posts to appear in the picker." = "**Nur öffentliche Profile.** Das Zielkonto muss öffentlich sein — oder eines, dem du bereits folgst — damit seine Posts in der Auswahl erscheinen.";
+"**Create a dedicated account.** A great strategy is to create a real Instagram profile exclusively for your magic — fill it with poker cards, city photos, drink brands, flags, or any themed content. You can then force a specific card, city, or brand with total conviction. The spectator sees a real public Instagram account with real posts." = "**Erstelle ein dediziertes Konto.** Eine großartige Strategie ist es, ein echtes Instagram-Profil ausschließlich für deine Magie zu erstellen — fülle es mit Pokerkarten, Stadtfotos, Getränkemarken, Flaggen oder beliebigen thematischen Inhalten. Du kannst dann eine bestimmte Karte, Stadt oder Marke mit totaler Überzeugung erzwingen. Der Zuschauer sieht ein echtes öffentliches Instagram-Konto mit echten Posts.";
+"**Antes del show** — elige el post objetivo en Settings" = "**Vor der Show** — wähle den Ziel-Post in den Einstellungen";
+"El espectador hace scroll libremente — la app para exactamente en tu post" = "Der Zuschauer scrollt frei — die App stoppt genau bei deinem Post";
+"Force the Reel" = "Den Reel erzwingen";
+"In Settings you pick a reel and assign it a position number. The spectator names any number — the magician browses between Posts, Reels and Tagged sections, secretly registering each digit. The forced reel appears at exactly that position in Explore." = "In den Einstellungen wählst du einen Reel und weist ihm eine Positionsnummer zu. Der Zuschauer nennt eine beliebige Zahl — der Magier durchsucht zwischen Posts, Reels und Markierten Sektionen und registriert dabei heimlich jede Ziffer. Der erzwungene Reel erscheint genau an dieser Position in Explore.";
+"You choose a reel in Settings before the show. During the performance the spectator names any number — the magician browses between Posts, Reels and Tagged sections, secretly registering each digit as they swipe." = "Du wählst einen Reel in den Einstellungen vor der Show. Während der Vorführung nennt der Zuschauer eine beliebige Zahl — der Magier durchsucht zwischen Posts, Reels und Markierten Sektionen und registriert beim Wischen heimlich jede Ziffer.";
+"One reel, one number" = "Ein Reel, eine Zahl";
+"The reel and its forced position are set in Settings beforehand. The spectator names a number freely — it always matches." = "Der Reel und seine erzwungene Position werden vorher in den Einstellungen festgelegt. Der Zuschauer nennt frei eine Zahl — sie passt immer.";
+"Sections are a secret keypad" = "Sektionen sind eine geheime Tastatur";
+"Swiping between Posts, Reels and Tagged looks like normal browsing. Each swipe secretly registers the digit of the item touched." = "Das Wischen zwischen Posts, Reels und Markierten sieht wie normales Browsen aus. Jedes Wischen registriert heimlich die Ziffer des berührten Elements.";
+"Magician dials it in" = "Der Magier wählt es ein";
+"The magician swipes between sections — one swipe per digit. The 'Following' counter confirms each one silently." = "Der Magier wischt zwischen Sektionen — ein Wischen pro Ziffer. Der 'Folgt'-Zähler bestätigt jedes leise.";
+"Reel appears in Explore" = "Reel erscheint in Explore";
+"Navigate to Explore. The app counts to that position in the grid — the forced reel is already waiting there." = "Navigiere zu Explore. Die App zählt bis zu dieser Position im Grid — der erzwungene Reel wartet bereits dort.";
+"The 'Following' counter shows the accumulated digit in real time — only the magician knows what it means." = "Der 'Folgt'-Zähler zeigt die akkumulierte Ziffer in Echtzeit — nur der Magier weiß, was das bedeutet.";
+"**Before the show**, open Settings and enable **Force Reel**." = "**Vor der Show**, öffne die Einstellungen und aktiviere **Force Reel**.";
+"Tap **Select Reel**, search for any account and pick the reel you want to force." = "Tippe auf **Reel auswählen**, suche ein beliebiges Konto und wähle den Reel aus, den du erzwingen möchtest.";
+"Note the position number assigned — this is the number the spectator must 'freely' name." = "Notiere die zugewiesene Positionsnummer — das ist die Zahl, die der Zuschauer 'frei' nennen muss.";
+"Once configured, close Settings. You don't touch it again during the performance." = "Einmal konfiguriert, schließe die Einstellungen. Du berührst sie während der Vorführung nicht mehr.";
+"OPEN A PROFILE" = "EIN PROFIL ÖFFNEN";
+"SPECTATOR NAMES A NUMBER" = "ZUSCHAUER NENNT EINE ZAHL";
+"MAGICIAN DIALS IN SECRET" = "MAGIER WÄHLT IM GEHEIMEN";
+"OPEN EXPLORE" = "EXPLORE ÖFFNEN";
+"In Performance, navigate to any Instagram profile and open their post grid." = "Navigiere in Performance zu einem beliebigen Instagram-Profil und öffne sein Post-Grid.";
+"Ask the spectator to call out any number freely. While their attention is on the screen, you swipe between sections — Posts, Reels, Tagged — to register each digit." = "Bitte den Zuschauer, frei eine beliebige Zahl zu rufen. Während seine Aufmerksamkeit auf dem Bildschirm liegt, wischt du zwischen Sektionen — Posts, Reels, Markierte — um jede Ziffer zu registrieren.";
+"Each swipe between sections looks like normal browsing. What the spectator doesn't know is that each swipe secretly registers the digit of the item touched." = "Jedes Wischen zwischen Sektionen sieht wie normales Browsen aus. Was der Zuschauer nicht weiß, ist, dass jedes Wischen heimlich die Ziffer des berührten Elements registriert.";
+"Navigate to Explore. The grid counts to the spectator's number and highlights exactly the reel you placed there in Settings." = "Navigiere zu Explore. Das Grid zählt bis zur Zahl des Zuschauers und hebt genau den Reel hervor, den du dort in den Einstellungen platziert hast.";
+"**Prepare beforehand.** Select the reel and memorise its position — Settings are not touched during performance." = "**Vorher vorbereiten.** Wähle den Reel aus und merke dir seine Position — die Einstellungen werden während der Vorführung nicht berührt.";
+"**Swipe naturally.** Browsing between Posts, Reels and Tagged looks completely normal — no one suspects a digit is being registered." = "**Natürlich wischen.** Das Browsen zwischen Posts, Reels und Markierten wirkt völlig normal — niemand ahnt, dass eine Ziffer registriert wird.";
+"**More digits = more impressive.** A 3-digit number like 134 feels completely impossible to predict." = "**Mehr Ziffern = beeindruckender.** Eine dreistellige Zahl wie 134 wirkt völlig unmöglich zu erraten.";
+"**Confirm before Explore.** Always tap the post icon to lock in the number before navigating." = "**Vor Explore bestätigen.** Tippe immer auf das Post-Symbol, um die Zahl einzusperren, bevor du navigierst.";
+"Feature Guide" = "Funktionsleitfaden";
+"What it does" = "Was es macht";
+"Input methods" = "Eingabemethoden";
+"Fake app vs. real Instagram" = "Fake-App vs. echtes Instagram";
+"What is OCR?" = "Was ist OCR?";
+"OCR — Camera Recognition" = "OCR — Kameraerkennung";
+"The app uploads a chosen photo as your Instagram profile picture at the exact moment of the reveal." = "Die App lädt ein ausgewähltes Foto als dein Instagram-Profilbild genau im Moment des Reveals hoch.";
+"The app posts a note on your Instagram account that matches what the spectator said or wrote." = "Die App veröffentlicht eine Notiz auf deinem Instagram-Konto, die dem entspricht, was der Zuschauer gesagt oder geschrieben hat.";
+"The app updates the bio section of your real Instagram profile with a text that matches the spectator's prediction." = "Die App aktualisiert den Bio-Bereich deines echten Instagram-Profils mit einem Text, der der Vorhersage des Zuschauers entspricht.";
+"Enable \"Auto on Performance open\" to automatically upload the most recent photo in your camera roll every time you enter Performance." = "Aktiviere \"Auto beim Öffnen von Performance\", um automatisch das neueste Foto in deiner Kamerarolle hochzuladen, jedes Mal wenn du Performance öffnest.";
+"The app's fake profile shows the prediction **instantly** — but this is only a local preview. It is not yet live on real Instagram." = "Das gefälschte Profil der App zeigt die Vorhersage **sofort** — aber das ist nur eine lokale Vorschau. Sie ist noch nicht live auf dem echten Instagram.";
+"The app **vibrates** when the upload or unarchive is confirmed on real Instagram. Wait for that signal before proceeding." = "Die App **vibriert**, wenn der Upload oder das De-Archivieren auf dem echten Instagram bestätigt wird. Warte auf dieses Signal, bevor du weitermachst.";
+"**After the vibration**, open the real Instagram profile yourself first — this loads the content in the feed. If the spectator looks before you do, they may need to scroll down to see it." = "**Nach der Vibration** öffne zuerst selbst das echte Instagram-Profil — das lädt den Inhalt im Feed. Wenn der Zuschauer zuerst schaut, muss er möglicherweise nach unten scrollen, um es zu sehen.";
+"OCR (Optical Character Recognition) is a technology that reads text from an image or live camera. The app uses the camera to recognise a word a spectator wrote or chose, without any manual input from the magician." = "OCR (Optische Zeichenerkennung) ist eine Technologie, die Text aus einem Bild oder einer Live-Kamera liest. Die App verwendet die Kamera, um ein Wort zu erkennen, das ein Zuschauer geschrieben oder gewählt hat, ohne manuelle Eingabe des Magiers.";
+"Point camera → text is detected → prediction triggers automatically" = "Kamera richten → Text wird erkannt → Vorhersage löst automatisch aus";
+"Prepare the prediction photo in your camera roll before the performance." = "Bereite das Vorhersagefoto in deiner Kamerarolle vor der Vorführung vor.";
+"Open the Performance tab — the photo uploads automatically and appears in the fake profile instantly." = "Öffne den Performance-Tab — das Foto wird automatisch hochgeladen und erscheint sofort im gefälschten Profil.";
+"Notes are limited to 60 characters — keep predictions concise (a single word or short phrase works best)." = "Notizen sind auf 60 Zeichen begrenzt — halte Vorhersagen prägnant (ein einzelnes Wort oder ein kurzer Satz funktioniert am besten).";
+"Notes disappear automatically after 24 hours, leaving no permanent trace." = "Notizen verschwinden automatisch nach 24 Stunden, ohne permanente Spuren zu hinterlassen.";
+"Supports up to 150 characters, so you can include the full prediction and a signature line." = "Unterstützt bis zu 150 Zeichen, sodass du die vollständige Vorhersage und eine Unterschriftszeile einfügen kannst.";
+"Use a 1:1 square photo for best results on the circular Instagram profile picture crop." = "Verwende ein quadratisches 1:1-Foto für beste Ergebnisse beim kreisförmigen Instagram-Profilbild-Zuschnitt.";
+"A cooldown prevents double-sending. If the button is disabled, wait a few seconds and try again." = "Eine Abklingzeit verhindert das Doppelsenden. Wenn die Schaltfläche deaktiviert ist, warte einige Sekunden und versuche es erneut.";
+"Preparación" = "Vorbereitung";
+"El espectador dice un número del 1 al 100. El mago lo registra en secreto y abre el perfil de Instagram de un participante: el contador aparece inflado. Al pulsar el botón de volumen, un glitch y cuenta regresiva revelan el número \"robado\"." = "Der Zuschauer nennt eine Zahl von 1 bis 100. Der Magier registriert sie heimlich und öffnet das Instagram-Profil eines Teilnehmers: Der Zähler erscheint aufgebläht. Durch Drücken der Lautstärketaste enthüllen ein Glitch und ein Countdown die \"gestohlene\" Zahl.";
+"Activa **Counter Glitch Effect** en Settings. Elige si el contador objetivo es **Followers** o **Following**." = "Aktiviere **Counter Glitch Effect** in den Einstellungen. Wähle, ob der Ziel-Zähler **Follower** oder **Folgt** ist.";
+"Configura el **Delay** antes de la cuenta regresiva (0–10 s) para poder hablar antes de que empiecen los números a bajar." = "Konfiguriere die **Verzögerung** vor dem Countdown (0–10 s), um vor dem Fallen der Zahlen sprechen zu können.";
+"En Performance, abre el perfil del participante. **Antes** de abrirlo, entra al grid de posts y registra los dígitos con swipes izquierda." = "Öffne in Performance das Profil des Teilnehmers. **Bevor** du es öffnest, gehe zum Post-Grid und registriere die Ziffern mit Links-Wischgesten.";
+"La app **suma** el número al contador real. El espectador ve el total inflado y cree que siempre fue así. El glitch lo \"devuelve\" al original — que él reconocerá como el número verdadero." = "Die App **addiert** die Zahl zum echten Zähler. Der Zuschauer sieht den aufgeblähten Wert und denkt, es war immer so. Der Glitch \"gibt\" ihn zur ursprünglichen Zahl zurück — die er als die wahre erkennen wird.";
+"El mago registra **3** y **7** con swipes secretos. El contador **Following** muestra el acumulado" = "Der Magier registriert **3** und **7** mit geheimen Wischgesten. Der **Folgt**-Zähler zeigt den akkumulierten Wert";
+"Inflado invisible" = "Unsichtbare Inflation";
+"Glitch + cuenta regresiva" = "Glitch + Countdown";
+"Inflado" = "Aufgebläht";
+"Glitch" = "Glitch";
+"La ilusión" = "Die Illusion";
+"La convicción" = "Die Überzeugung";
+"Modo Transfer" = "Transfer-Modus";
+"Memoriza el mapa de dígitos: fila 1 → 1,2,3 · fila 2 → 4,5,6 · fila 3 → 7,8,9 · fila 4 → 0 (cualquier celda)." = "Merke dir die Ziffernkarte: Reihe 1 → 1,2,3 · Reihe 2 → 4,5,6 · Reihe 3 → 7,8,9 · Reihe 4 → 0 (beliebige Zelle).";
+"Opcional: activa **Transfer Effect** si quieres que el número \"robado\" aparezca sumándose a tu propio perfil." = "Optional: Aktiviere **Transfer Effect**, wenn du möchtest, dass die \"gestohlene\" Zahl sich zum eigenen Profil hinzufügt.";
+"**No enseñes la pantalla hasta tener el número inflado.** Navega el grid con el móvil hacia ti, después gíralo." = "**Zeige den Bildschirm nicht, bis die aufgeblähte Zahl bereit ist.** Navigiere das Grid mit dem Telefon zu dir gewandt, dann drehe es um.";
+"**Perfil propio o ajeno.** Con el perfil del espectador el impacto es mayor porque puede verificar inmediatamente. Con el tuyo tienes más control." = "**Eigenes Profil oder das eines anderen.** Mit dem Profil des Zuschauers ist die Wirkung größer, da er sofort überprüfen kann. Mit deinem hast du mehr Kontrolle.";
+"**Registra los dígitos antes de abrir el perfil.** Una vez el número inflado está visible, cualquier swipe accidental lo resetearía." = "**Registriere die Ziffern vor dem Öffnen des Profils.** Sobald die aufgeblähte Zahl sichtbar ist, würde jedes versehentliche Wischen sie zurücksetzen.";
+"**Transfer mode** funciona mejor en shows pequeños donde el público puede ver ambos perfiles y el \"viaje\" del número." = "**Transfer-Modus** funktioniert am besten bei kleinen Shows, bei denen das Publikum beide Profile und die \"Reise\" der Zahl sehen kann.";
+"**Usa el delay.** 3–5 segundos de pausa entre el botón y la cuenta regresiva te dan tiempo para hablar y construir expectativa." = "**Nutze die Verzögerung.** 3–5 Sekunden Pause zwischen dem Knopf und dem Countdown geben dir Zeit zu sprechen und Spannung aufzubauen.";
+"Selección" = "Auswahl";
+"Suma camuflada" = "Getarnte Summe";
+"Presentación y guión" = "Präsentation und Skript";
+"Seleccionas espectadores del público que te han seguido. Sus seguidores y seguidos se usan para \"codificar\" la fecha y la hora de hoy. El resultado aparece en el perfil de cualquier reel de Explore — el espectador lo descifra restando sus propios números." = "Du wählst Zuschauer aus dem Publikum, die dir gefolgt sind. Ihre Follower- und Folgt-Anzahl werden verwendet, um das heutige Datum und die Uhrzeit zu \"codieren\". Das Ergebnis erscheint im Profil eines beliebigen Reels in Explore — der Zuschauer entziffert es, indem er seine eigenen Zahlen subtrahiert.";
+"El mago pide a los espectadores que le sigan en Instagram durante la actuación. Una vez lo hayan hecho, abre su lista de seguidores y selecciona quiénes participan." = "Der Magier bittet die Zuschauer, ihm während der Vorführung auf Instagram zu folgen. Nachdem sie das getan haben, öffnet er seine Followerliste und wählt aus, wer teilnimmt.";
+"En Performance, abre la lista de seguidores (**\"Followers\"**) y espera a que los espectadores te sigan durante el show." = "Öffne in Performance die Followerliste (**\"Followers\"**) und warte, bis die Zuschauer dir während der Show folgen.";
+"Toca discretamente la foto de cada espectador — el aro aparece solo en tu pantalla como marca interna. Nadie más lo ve." = "Tippe diskret auf das Foto jedes Zuschauers — der Ring erscheint nur auf deinem Bildschirm als interner Marker. Niemand sonst sieht es.";
+"Toca la **foto de perfil** de cada espectador en la lista — aparece el aro Stories de colores. Los primeros seleccionados → grupo 📅 fecha. Los últimos → grupo 🕐 hora." = "Tippe auf das **Profilbild** jedes Zuschauers in der Liste — der farbige Stories-Ring erscheint. Zuerst ausgewählt → 📅 Datum-Gruppe. Zuletzt ausgewählt → 🕐 Uhrzeit-Gruppe.";
+"Grupo 1 (📅 fecha): suma sus **seguidores** · Grupo 2 (🕐 hora): suma sus **seguidos**" = "Gruppe 1 (📅 Datum): Summe ihrer **Follower** · Gruppe 2 (🕐 Zeit): Summe ihrer **Folgt**";
+"En Explore, el reel muestra **fecha + suma** como seguidores y **hora + suma** como seguidos" = "In Explore zeigt der Reel **Datum + Summe** als Follower und **Zeit + Summe** als Folgt";
+"El reel muestra los seguidores y seguidos modificados. Pide al espectador que reste el número de su grupo — obtendrá la fecha y la hora de hoy." = "Der Reel zeigt die modifizierten Follower und Folgt-Zahlen. Bitte den Zuschauer, die Zahl seiner Gruppe zu subtrahieren — er erhält das heutige Datum und die Uhrzeit.";
+"El espectador resta su grupo al número del reel… y aparece la **fecha y hora exacta** ✓" = "Der Zuschauer subtrahiert seine Gruppe von der Reel-Zahl… und **das genaue Datum und die Uhrzeit** erscheinen ✓";
+"Funciona con **2, 4, 6, 8** o más espectadores (siempre número par)" = "Funktioniert mit **2, 4, 6, 8** oder mehr Zuschauern (immer eine gerade Zahl)";
+"Pulsa la **flecha atrás** para cerrar. La app carga sus perfiles automáticamente en segundo plano." = "Tippe auf den **Zurück-Pfeil**, um zu schließen. Die App lädt ihre Profile automatisch im Hintergrund.";
+"Pulsa la flecha atrás. La app carga los perfiles en background. En 2-3 segundos todo está calculado." = "Tippe auf den Zurück-Pfeil. Die App lädt Profile im Hintergrund. In 2-3 Sekunden ist alles berechnet.";
+"Ve a Explore, abre cualquier reel y muestra los números al público. ¡Ya están listos!" = "Gehe zu Explore, öffne einen beliebigen Reel und zeige die Zahlen dem Publikum. Sie sind bereit!";
+"**Antes del show**, activa **Date Force** en Settings y configura el formato de fecha (DD/MM o MM/DD) y el offset de minutos si lo necesitas." = "**Vor der Show**, aktiviere **Date Force** in den Einstellungen und konfiguriere das Datumsformat (DD/MM oder MM/DD) und den Minuten-Offset falls nötig.";
+"El mago abre **Seguidores** y toca el avatar de cada espectador — el **aro** confirma la selección" = "Der Magier öffnet **Follower** und tippt auf den Avatar jedes Zuschauers — der **Ring** bestätigt die Auswahl";
+"SELECCIÓN SECRETA" = "GEHEIME AUSWAHL";
+"PEDIR QUE TE SIGAN" = "BITTEN ZU FOLGEN";
+"Pide a los espectadores elegidos que te sigan en Instagram ahora mismo. Abre la lista de seguidores en Performance." = "Bitte die gewählten Zuschauer, dir jetzt auf Instagram zu folgen. Öffne die Followerliste in Performance.";
+"**Número par de espectadores.** Con 2 espectadores: 1 grupo fecha + 1 grupo hora. Con 4: 2+2. Con 6: 3+3." = "**Gerade Anzahl Zuschauer.** Mit 2: 1 Datumsgruppe + 1 Zeitgruppe. Mit 4: 2+2. Mit 6: 3+3.";
+"**Si te equivocas**, toca la foto de nuevo — el aro desaparece y el espectador queda deseleccionado." = "**Falls du einen Fehler machst**, tippe erneut auf das Foto — der Ring verschwindet und der Zuschauer wird abgewählt.";
+"**Toca la foto, no la fila.** El aro se activa pulsando el avatar. Pulsar el nombre abre el perfil." = "**Tippe auf das Foto, nicht auf die Zeile.** Der Ring aktiviert sich durch Tippen auf den Avatar. Tippen auf den Namen öffnet das Profil.";
+"**Usa el offset de minutos** en Settings si necesitas ajustar la hora para que el truco funcione con la hora exacta del show." = "**Nutze den Minuten-Offset** in den Einstellungen, wenn du die Zeit anpassen musst, damit der Trick mit der genauen Show-Zeit funktioniert.";
+"**Cuentas privadas.** Si un espectador tiene la cuenta privada y no te sigue de vuelta, es posible que sus conteos no estén disponibles." = "**Private Konten.** Wenn ein Zuschauer ein privates Konto hat und dir nicht folgt, sind seine Zähler möglicherweise nicht verfügbar.";
+"¡Fecha y hora de hoy!" = "Das heutige Datum und Uhrzeit!";
+"Quitar" = "Entfernen";
+"Seguir" = "Folgen";
+"App captures new followers automatically during Performance. Open 'Followed by' to manage spectators." = "Die App erfasst automatisch neue Follower wahrend der Performance. Offne 'Gefolgt von', um Zuschauer zu verwalten.";
+"Pre-select a post from any profile. When visiting that profile in Performance, the scroll always stops on the forced image. Add multiple profiles to force different posts per profile." = "Wahle einen Post von einem beliebigen Profil vor. Beim Besuch dieses Profils in Performance stoppt der Scroll immer auf dem erzwungenen Bild. Fuge mehrere Profile hinzu, um verschiedene Posts pro Profil zu erzwingen.";
+"Important before logging in" = "Wichtig vor dem Anmelden";
+"Read this before continuing" = "Lesen Sie dies vor dem Fortfahren";
+"Steps once the page opens" = "Schritte nach dem Offnen der Seite";
+"I understand — open Instagram" = "Verstanden — Instagram offnen";
+"GETTING STARTED" = "ERSTE SCHRITTE";
+"Limits & Safety" = "Limits & Sicherheit";
+"Introduction, features and the three pillars of Vault" = "Einführung, Funktionen und die drei Säulen von Vault";
+"Post an Instagram note that matches what the spectator thought" = "Veröffentliche eine Instagram-Notiz, die dem entspricht, was der Zuschauer gedacht hat";
+"Update your bio in real time to reveal a prediction" = "Aktualisiere deine Bio in Echtzeit, um eine Vorhersage zu enthüllen";
+"Accept all cookies" = "Alle Cookies akzeptieren";
+"Why are cookies needed?" = "Warum werden Cookies benötigt?";
+"If you see a verification step" = "Wenn ein Verifizierungsschritt erscheint";
+"Instagram will show a cookie banner when the page loads. You must tap **\"Allow all cookies\"** (or equivalent). Without cookies the session cannot be saved and the login will fail." = "Instagram zeigt beim Laden ein Cookie-Banner. Du musst **\"Alle Cookies akzeptieren\"** (oder Ähnliches) antippen. Ohne Cookies kann die Sitzung nicht gespeichert werden und die Anmeldung schlägt fehl.";
+"This app connects to Instagram using the same session cookies your browser uses. Accepting cookies lets Instagram create the **sessionid** token that the app reads to authenticate your account securely." = "Diese App verbindet sich mit Instagram über dieselben Sitzungs-Cookies wie dein Browser. Durch Akzeptieren der Cookies kann Instagram das **sessionid**-Token erstellen, das die App zum sicheren Authentifizieren liest.";
+"Instagram may ask you to verify your identity (email or phone code). Complete it normally — the app will resume the session automatically once verification is done." = "Instagram fordert dich möglicherweise auf, deine Identität zu verifizieren (E-Mail oder Telefoncode). Schließe es normal ab — die App setzt die Sitzung automatisch fort, sobald die Verifizierung abgeschlossen ist.";
+"Tap **\"Allow all cookies\"** on the cookie banner" = "Tippe auf **\"Alle Cookies akzeptieren\"** im Cookie-Banner";
+"Enter your Instagram username and password" = "Gib deinen Instagram-Benutzernamen und dein Passwort ein";
+"Complete any verification Instagram requests" = "Schließe alle von Instagram angeforderten Verifizierungen ab";
+"The app closes the browser automatically once you are in" = "Die App schließt den Browser automatisch, sobald du eingeloggt bist";
+"INJECT (11z.co)" = "INJECT (11z.co)";
+"Inject" = "Inject";
+"integrations.inject_id" = "Inject-ID";
+"integrations.json_field" = "JSON-Feldname";
+"integrations.test_connection" = "Verbindung testen";
+"integrations.testing" = "Teste…";
+"integrations.connection_ok" = "✅ Verbindung OK";
+"integrations.no_response" = "❌ Keine Antwort";
+"integrations.response_received" = "Antwort erhalten:";
+"integrations.check_inject_id" = "Kein Wert empfangen. Überprüfe, ob die Inject-ID korrekt ist.";
+"integrations.check_url_field" = "Kein Wert empfangen. Überprüfe, ob URL und Feldname korrekt sind.";
+"logs.search_placeholder" = "Protokolle durchsuchen...";
+"followers.error.load_failed" = "Profil konnte nicht geladen werden.";
+"followers.error.rate_limited" = "Instagram begrenzt gerade Anfragen.\nWarte ein paar Sekunden und versuche es erneut.";
+"followers.error.no_data" = "Instagram hat keine Daten für dieses Profil zurückgegeben.";
+"cgdemo.pill.your_profile" = "Dein Profil";
+"cgdemo.pill.spectator" = "Zuschauer";
+"cgdemo.pill.conviction" = "Überzeugung";
+"cgdemo.badge.your_phone" = "Dein Handy · Performance";
+"cgdemo.badge.your_phone_sub" = "Registriere die Ziffern in deinem eigenen Profil";
+"cgdemo.badge.spectator_profile" = "Profil des Zuschauers";
+"cgdemo.badge.spectator_profile_sub" = "Öffne sein Profil — der Zähler erscheint aufgeblasen";
+"cgdemo.badge.spectator_glitch" = "Profil des Zuschauers · Glitch";
+"cgdemo.badge.spectator_glitch_sub" = "Lautstärke drücken — Countdown zur echten Zahl";
+"cgdemo.badge.conviction" = "Der Zuschauer überprüft sein Handy";
+"cgdemo.badge.conviction_sub" = "Sieht die echte Zahl — bestätigt ohne es zu wissen";
+"cgdemo.caption.digits" = "Auf **deinem Profil** (Performance aktiv) wische das Grid, um heimlich deine Ziffern zu registrieren";
+"cgdemo.caption.inflated" = "Öffne das Profil des Zuschauers — der Zähler erscheint aufgeblasen. Er ahnt nichts.";
+"cgdemo.caption.glitch" = "Noch auf dem Profil des Zuschauers: Lautstärketaste → Glitch → Zähler fällt auf echte Zahl";
+"cgdemo.caption.conviction" = "Der Zuschauer überprüft sein Handy — sieht die echte Zahl. Die geheimen Ziffern sind verschwunden!";
+"cgdemo.label.magician_transfer" = "Magier (Transfer)";
+"El espectador ve %lld · Real: %lld + %lld" = "Der Zuschauer sieht %lld · Real: %lld + %lld";
+"+%lld recibidos 🎩" = "+%lld erhalten 🎩";
+"action.restart" = "Neustart";
+"action.next" = "Weiter";
+"Guión" = "Skript";
+"LA PROPUESTA" = "DER VORSCHLAG";
+"LA JUSTIFICACIÓN" = "DIE BEGRÜNDUNG";
+"EL MOMENTO" = "DER MOMENT";
+"LA REVELACIÓN" = "DIE ENTHÜLLUNG";
+"EL GANCHO" = "DER EINSTIEG";
+"LA INVITACIÓN" = "DIE EINLADUNG";
+"EL RITUAL DE LOS NÚMEROS" = "DAS ZAHLENRITUAL";
+"EL DESCONOCIDO" = "DAS UNBEKANNTE";
+"dfh.pill.selection" = "Auswahl";
+"dfh.pill.sum" = "Summe";
+"dfh.pill.explore" = "Erkunden";
+"dfh.pill.reveal" = "Enthüllen";
+"dfh.label.date" = "Datum";
+"dfh.label.time" = "Uhrzeit";
+"dfh.group_prefix" = "Gruppe";
+"fph.pill.settings" = "Einstellungen";
+"fph.pill.perform" = "Vorführen";
+"frh.pill.grid" = "Raster";
+"frh.pill.dial" = "Zifferblatt";
+"frh.pill.explore" = "Erkunden";
+"Browsing Posts → Reels → Tagged looks natural while each swipe secretly registers a digit" = "Das Durchsuchen von Posts → Reels → Markiert wirkt natürlich, während jedes Wischen heimlich eine Ziffer registriert";
+"Tap **Posts** to lock in the number and trigger the unarchive" = "Tippe auf **Posts**, um die Zahl zu fixieren und das Entarchivieren auszulösen";
+"26 photos (A–Z) upload as **Bank 1** — one image archived per letter" = "26 Fotos (A–Z) werden als **Bank 1** hochgeladen — ein Bild pro Buchstabe archiviert";
+"Bank 1 ✓ ready. A second full set uploads as **Bank 2**" = "Bank 1 ✓ bereit. Ein zweiter vollständiger Satz wird als **Bank 2** hochgeladen";
+"Bank 2 ✓ ready. A third set uploads as **Bank 3**" = "Bank 2 ✓ bereit. Ein dritter Satz wird als **Bank 3** hochgeladen";
+"Each bank = one full A–Z set. A word uses one letter from each bank in order" = "Jede Bank = ein vollständiger A–Z-Satz. Ein Wort verwendet einen Buchstaben aus jeder Bank der Reihe nach";
+"Spectator's word: **CAT**" = "Wort des Zuschauers: **KATZE**";
+"App records:" = "App zeichnet auf:";
+"The magician **searches a profile in Explore** — typing secretly registers the spectator's predicted word letter by letter" = "Der Magier **sucht ein Profil in Erkunden** — die Eingabe registriert heimlich das vorhergesagte Wort Buchstabe für Buchstabe";
+"Photo **#37** appears as a new post — unarchived on real Instagram at its original date" = "Foto **#37** erscheint als neuer Beitrag — auf echtem Instagram mit dem Originaldatum entarchiviert";
+"Each post maps to a secret digit — the magician memorises the layout" = "Jeder Beitrag entspricht einer geheimen Ziffer — der Magier memoriert das Layout";
+"Swiping between sections registers each digit — watch **Following** count update" = "Wischen zwischen Abschnitten registriert jede Ziffer — beobachte die Aktualisierung der **Folgend**-Anzahl";
+"Change your Instagram profile photo automatically to match the spectator's prediction — no manual upload needed during the show." = "Ändere dein Instagram-Profilbild automatisch, um die Vorhersage des Zuschauers zu entsprechen — kein manuelles Hochladen während der Show.";
+"Post a note on your Instagram profile that matches what the spectator predicted — the note appears instantly during the performance." = "Veröffentliche eine Notiz auf deinem Instagram-Profil, die das übereinstimmt, was der Zuschauer vorhergesagt hat — die Notiz erscheint sofort während der Vorstellung.";
+"Update your Instagram biography to reveal a prediction — the text appears permanently on your profile, visible to anyone who checks." = "Aktualisiere deine Instagram-Biografie, um eine Vorhersage zu enthüllen — der Text erscheint dauerhaft auf deinem Profil, sichtbar für jeden.";
+"¡Elige un número del 1 al 31 🎩" = "Wähle eine Zahl von 1 bis 31 🎩";
+"La app infla silenciosamente el contador real sumándole el número del espectador. Cuando el glitch termina la cuenta regresiva, el contador vuelve al número real — que el espectador reconoce como \"el de siempre\". La ilusión: los números \"desaparecieron\"." = "Die App bläht den echten Zähler stillschweigend auf, indem sie die Zahl des Zuschauers addiert. Wenn der Glitch den Countdown beendet, kehrt der Zähler zur echten Zahl zurück — die der Zuschauer als \"die übliche\" erkennt. Die Illusion: die Zahlen \"sind verschwunden\".";
+"Un guión con drama para justificar el efecto y crear convicción." = "Ein dramatisches Skript, um den Effekt zu rechtfertigen und Überzeugung zu erzeugen.";
+"Con **Transfer Effect** activado, el truco tiene una segunda fase: el número \"robado\" del espectador aparece sumándose al perfil del mago." = "Mit aktiviertem **Transfer Effect** hat der Trick eine zweite Phase: Die \"gestohlene\" Zahl des Zuschauers erscheint und addiert sich zum Profil des Magiers.";
+"En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel." = "Im Post-/Reel-Grid des Profils registriert jedes Links-Wischen auf einer Zelle die Ziffer an dieser Position (1–9, dann 0). Genau wie Force Reel.";
+"El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537." = "Das offene Profil zeigt real + Zuschauerzahl. Wenn die echte Zahl 500 ist und der Zuschauer 37 gesagt hat, sieht er 537.";
+"Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos." = "Beim Drücken der Lautstärketaste: Glitch-Effekt (Signalverzerrung) und dann fällt der Zähler in ~6 Sekunden von 537 auf 500.";
+"Cuando el espectador comprueba su móvil ve 500 — el número de siempre. Confirma sin saberlo que le quitaron exactamente 37." = "Wenn der Zuschauer sein Handy überprüft, sieht er 500 — die übliche Zahl. Er bestätigt unwissentlich, dass genau 37 entnommen wurden.";
+"El perfil puede ser del espectador, de un voluntario elegido al azar, o el del propio mago." = "Das Profil kann das des Zuschauers, eines zufällig gewählten Freiwilligen oder das des Magiers selbst sein.";
+"El perfil del espectador/voluntario cuenta regresivamente del número inflado al real." = "Das Profil des Zuschauers/Freiwilligen zählt von der aufgeblasenen Zahl zur echten zurück.";
+"Abre tu propio perfil. Pulsa el botón de volumen de nuevo: el mismo número aparece sumándose a tu contador — como si los seguidores hubieran \"viajado\" de un perfil al otro." = "Öffne dein eigenes Profil. Drücke die Lautstärketaste erneut: Die gleiche Zahl erscheint und addiert sich zu deinem Zähler — als ob die Follower von einem Profil zum anderen \"gereist\" wären.";
+"Asegúrate de navegar a tu propio perfil antes de pulsar el volumen la segunda vez. La app guarda el offset de la Fase 1 y lo usa en la Fase 2." = "Stelle sicher, zu deinem eigenen Profil zu navigieren, bevor du die Lautstärke ein zweites Mal drückst. Die App speichert den Offset aus Phase 1 und verwendet ihn in Phase 2.";
+"Señala a un participante. Sin tocar el móvil todavía." = "Zeige auf einen Teilnehmer. Ohne das Handy zu berühren.";
+"Abre el perfil de Instagram del participante mostrando la pantalla." = "Öffne das Instagram-Profil des Teilnehmers und zeige den Bildschirm.";
+"Pulsa el botón de volumen con naturalidad. El glitch comienza." = "Drücke die Lautstärketaste natürlich. Der Glitch beginnt.";
+"El contador termina de bajar. Silencio. Luego:" = "Der Zähler ist fertig gesunken. Stille. Dann:";
+"«Quiero hacer un pequeño experimento. Algo que nunca ha podido demostrarse de forma pública.»" = "«Ich möchte ein kleines Experiment machen. Etwas, das noch nie öffentlich demonstriert werden konnte.»";
+"«¿Puedes decirme un número del 1 al 100? El que quieras. Sin pensar demasiado.»" = "«Kannst du mir eine Zahl von 1 bis 100 nennen? Welche du willst. Ohne zu viel nachzudenken.»";
+"«[El número dicho]. Perfecto. Ese número ahora te pertenece.»" = "«[Genannte Zahl]. Perfekt. Diese Zahl gehört jetzt dir.»";
+"«Instagram lleva un registro de todo. Cada seguidor, cada conexión... tiene un peso.»" = "«Instagram führt über alles Protokoll. Jeder Follower, jede Verbindung... hat ein Gewicht.»";
+"«Mira cuánta gente te sigue. [lee el número inflado]. [Número]. Personas reales que eligieron estar pendientes de ti.»" = "«Schau, wie viele Menschen dir folgen. [lies die aufgeblasene Zahl]. [Zahl]. Echte Menschen, die sich entschieden haben, auf dich zu achten.»";
+"«Ahora voy a hacer algo que no debería ser posible.»" = "«Jetzt werde ich etwas tun, das nicht möglich sein sollte.»";
+"«[Número dicho por el espectador]. Ese es tu número. Voy a tomarlo prestado... por un momento.»" = "«[Vom Zuschauer genannte Zahl]. Das ist deine Zahl. Ich werde sie ausleihen... für einen Moment.»";
+"«[Número dicho]. Desaparecidos. Echa un vistazo a tu móvil. ¿Cuántos seguidores tienes?»" = "«[Genannte Zahl]. Verschwunden. Schau auf dein Handy. Wie viele Follower hast du?»";
+"«Exactamente los mismos de siempre. Excepto que hace unos segundos había [número] más.»" = "«Genau die gleichen wie immer. Außer dass es vor ein paar Sekunden [Zahl] mehr gab.»";
+"«No te preocupes — solo los tomé prestados. [Si Transfer mode]: los tienes en el mío.»" = "«Keine Sorge — ich habe sie nur ausgeliehen. [Wenn Transfer mode]: du findest sie in meinem.»";
+"Mientras hablas y el espectador piensa el número, empieza discretamente a navegar el grid de su perfil para registrar los dígitos." = "Während du sprichst und der Zuschauer an die Zahl denkt, beginne diskret, durch sein Profilgrid zu navigieren, um die Ziffern zu registrieren.";
+"Di esto justo cuando el glitch arranca. El delay que hayas configurado te da margen para hablar antes del conteo." = "Sag dies genau, wenn der Glitch einsetzt. Die von dir konfigurierte Verzögerung gibt dir Spielraum zum Sprechen vor dem Countdown.";
+"Un guión dramático para que el efecto resulte creíble y memorable." = "Ein dramatisches Skript, damit der Effekt glaubwürdig und einprägsam ist.";
+"El mago pide a unos espectadores que le sigan en Instagram durante el show. Abre la lista de seguidores y toca la foto de perfil de cada espectador: aparece un aro Stories como marca secreta. Al salir, la app calcula el resultado automáticamente." = "Der Magier bittet einige Zuschauer, ihm während der Show auf Instagram zu folgen. Er öffnet die Follower-Liste und tippt auf das Profilfoto jedes Zuschauers: Ein Stories-Ring erscheint als geheimes Zeichen. Beim Verlassen berechnet die App das Ergebnis automatisch.";
+"Los primeros N espectadores seleccionados son el grupo FECHA (usan sus seguidores). Los últimos N son el grupo HORA (usan sus seguidos)." = "Die ersten N ausgewählten Zuschauer sind die DATUM-Gruppe (verwenden ihre Follower). Die letzten N sind die ZEIT-Gruppe (verwenden ihr Following).";
+"La app suma internamente los conteos de cada grupo y los añade a la fecha/hora actual, generando los números \"mágicos\"." = "Die App summiert intern die Zählungen jeder Gruppe und fügt sie zum aktuellen Datum/Uhrzeit hinzu, wodurch die \"magischen\" Zahlen entstehen.";
+"Abre cualquier reel en Explore. El perfil de ese usuario muestra los seguidores/seguidos ya modificados con el resultado del truco." = "Öffne ein beliebiges Reel in Erkunden. Das Profil dieses Nutzers zeigt die Follower/Following bereits mit dem Trickresultat modifiziert.";
+"Al restar los números de su grupo, el espectador obtiene la fecha y la hora exactas — sin saber que el mago los incluyó de antemano." = "Durch Subtrahieren der Zahlen ihrer Gruppe erhält der Zuschauer das genaue Datum und die Uhrzeit — ohne zu wissen, dass der Magier sie im Voraus eingefügt hat.";
+"El aro en la foto es completamente invisible para los espectadores — parece una notificación normal de Instagram." = "Der Ring auf dem Foto ist für Zuschauer vollständig unsichtbar — er sieht wie eine normale Instagram-Benachrichtigung aus.";
+"\"Voy a necesitar tu ayuda. ¿Puedes seguirme en Instagram ahora mismo? Todos vosotros.\"" = "\"Ich werde eure Hilfe brauchen. Könnt ihr mir jetzt alle auf Instagram folgen?\"";
+"\"Vamos a Explore. Abre cualquier reel que quieras — tú eliges.\"" = "\"Gehen wir zu Erkunden. Öffne ein beliebiges Reel das du willst — du wählst.\"";
+"\"Resta tus seguidores de ese número. ¿Qué obtienes? Exactamente: la fecha de hoy.\"" = "\"Ziehe deine Follower von dieser Zahl ab. Was erhältst du? Genau: das heutige Datum.\"";
+"Un guión completo para construir suspense y justificar el uso de seguidores y seguidos. Adapta las palabras a tu estilo." = "Ein vollständiges Skript, um Spannung aufzubauen und die Verwendung von Followern und Following zu rechtfertigen. Passe die Worte deinem Stil an.";
+"Empieza sin tocar el teléfono. De pie, en silencio. Deja que la sala se calme." = "Fange an, ohne das Telefon zu berühren. Stehend, in Stille. Lass den Raum zur Ruhe kommen.";
+"Saca el móvil. Sostenlo visible pero sin abrirlo todavía." = "Hole dein Handy heraus. Halte es sichtbar, ohne es noch zu öffnen.";
+"Divide la sala visualmente. Señala izquierda, luego derecha." = "Teile den Raum visuell. Zeige links, dann rechts.";
+"El grupo izquierdo mira su perfil. Instagram ya está abierto en cada móvil." = "Die linke Gruppe schaut auf ihr Profil. Instagram ist bereits auf jedem Handy geöffnet.";
+"Entrega el móvil a alguien que no haya participado todavía." = "Gib das Handy jemandem, der noch nicht mitgemacht hat.";
+"Ralentiza todo. Mira entre la pantalla y el público." = "Verlangsame alles. Schau zwischen Bildschirm und Publikum.";
+"«Quiero hablar de algo que todos hacemos cada día sin pensarlo. Seguir a personas.»" = "«Ich möchte über etwas sprechen, das wir alle jeden Tag tun, ohne darüber nachzudenken. Menschen folgen.»";
+"«No en la calle. En Instagram. Esa pequeña decisión — pulsar ese botón — significa algo. Significa que elegiste a esa persona. Dijiste: esta persona me importa.»" = "«Nicht auf der Straße. Auf Instagram. Diese kleine Entscheidung — diesen Knopf zu drücken — bedeutet etwas. Es bedeutet, dass du diese Person gewählt hast. Du hast gesagt: Diese Person ist mir wichtig.»";
+"«Y la gente que te sigue a ti hizo lo mismo contigo. Miró tu vida y decidió que merecía la pena. Eso no es nada. Es una forma silenciosa de confianza.»" = "«Und die Menschen, die dir folgen, haben dasselbe mit dir getan. Sie sahen dein Leben und entschieden, dass es sich lohnt. Das ist nicht nichts. Es ist eine stille Form des Vertrauens.»";
+"«Lo que creo — y lo que quiero mostraros esta noche — es que esas elecciones tienen peso real. Y cuando las sumas todas en una sala llena de gente... nos dicen algo extraordinario.»" = "«Was ich glaube — und was ich euch heute Abend zeigen möchte — ist, dass diese Entscheidungen echtes Gewicht haben. Und wenn man sie alle in einem vollbesetzten Raum zusammenzählt... erzählen sie uns etwas Außerordentliches.»";
+"«Voy a necesitar vuestra ayuda. Todos sacad el móvil y abrid Instagram.»" = "«Ich werde eure Hilfe brauchen. Alle nehmt euer Handy heraus und öffnet Instagram.»";
+"«Buscadme. [di tu usuario claramente] Y seguidme. Ahora mismo, en esta sala. Vais a ser parte de esto.»" = "«Sucht mich. [sage deinen Nutzernamen deutlich] Und folgt mir. Jetzt gerade, in diesem Raum. Ihr werdet Teil davon sein.»";
+"«Bien. No cerréis Instagram — lo vais a necesitar. Quedaos en vuestro propio perfil.»" = "«Gut. Schließt Instagram nicht — ihr werdet es brauchen. Bleibt auf eurem eigenen Profil.»";
+"«Quiero separaros en dos grupos. Los de mi izquierda — y los de mi derecha.»" = "«Ich möchte euch in zwei Gruppen aufteilen. Die auf meiner linken Seite — und die auf meiner rechten.»";
+"«Los de la izquierda representan una cara de la ecuación: las personas que os eligieron a vosotros. Vuestros seguidores. Ese número mide vuestra presencia en el mundo.»" = "«Die auf der linken Seite repräsentieren eine Seite der Gleichung: die Menschen, die euch gewählt haben. Eure Follower. Diese Zahl misst eure Präsenz in der Welt.»";
+"«Los de la derecha representáis la otra cara. Las personas que vosotros elegisteis. A quiénes seguís. El número que mide vuestra curiosidad. Lo que os importa.»" = "«Die auf der rechten Seite repräsentiert die andere Seite. Die Menschen, die ihr gewählt habt. Wem ihr folgt. Die Zahl, die eure Neugier misst. Was euch wichtig ist.»";
+"«Dos direcciones de la misma conexión. Quién viene a ti. Y a quién vas tú. Y creo — de verdad lo creo — que juntos, en esta sala, en este momento exacto... esos dos números saben algo que nosotros no.»" = "«Zwei Richtungen derselben Verbindung. Wer zu dir kommt. Und zu wem du gehst. Und ich glaube — ich glaube es wirklich — dass diese zwei Zahlen zusammen, in diesem Raum, in genau diesem Moment... etwas wissen, was wir nicht wissen.»";
+"«Los de la izquierda — mirad vuestro perfil. No a quién seguís. El otro número. ¿Cuánta gente os sigue a vosotros? Decidlo en voz alta.»" = "«Die auf der linken Seite — schaut auf euer Profil. Nicht wem ihr folgt. Die andere Zahl. Wie viele Menschen folgen euch? Sagt es laut.»";
+"[Nombre]: 1.240. [Nombre]: 873. ¿Y tú? 512. Perfecto." = "[Name]: 1.240. [Name]: 873. Und du? 512. Perfekt.";
+"«1.240 más 873 más 512. Juntos... 2.625. Esa es la suma de todos los que os eligieron. Recordad ese número.»" = "«1.240 plus 873 plus 512. Zusammen... 2.625. Das ist die Summe aller, die euch gewählt haben. Merkt euch diese Zahl.»";
+"«Y el otro lado. Los de la derecha — pregunta diferente. ¿A cuánta gente seguís vosotros? Las personas que elegisteis.»" = "«Und die andere Seite. Die auf der rechten Seite — andere Frage. Wie vielen Menschen folgt ihr? Die Menschen, die ihr gewählt habt.»";
+"«347 más 512 más 190. Juntos... 1.049. El alcance colectivo de vuestra curiosidad. Guardad ese número también.»" = "«347 plus 512 plus 190. Zusammen... 1.049. Die kollektive Reichweite eurer Neugier. Behaltet auch diese Zahl.»";
+"«Ahora bien. Si yo elijo el perfil — sospecharíais. Si lo elige alguien que conocéis — no sería justo. Lo que necesitamos es alguien completamente fuera de esta sala. Alguien que el algoritmo encontró para nosotros.»" = "«Nun gut. Wenn ich das Profil wähle — würdet ihr misstrauisch sein. Wenn jemand, den ihr kennt, es wählt — wäre es nicht fair. Was wir brauchen, ist jemand völlig außerhalb dieses Raums. Jemand, den der Algorithmus für uns gefunden hat.»";
+"«Tú no has participado todavía. Quiero que abras el Explore de Instagram — la lupa. Verás publicaciones de personas que nunca has conocido, elegidas por el algoritmo. Desplázate todo el tiempo que quieras. Cuando uno te llame la atención — para. Sin pensar. Solo para.»" = "«Du hast noch nicht mitgemacht. Ich möchte, dass du Instagrams Erkunden öffnest — die Lupe. Du wirst Beiträge von Leuten sehen, die du noch nie getroffen hast, vom Algorithmus ausgewählt. Scrolle so lange du willst. Wenn dich einer anspricht — halte an. Ohne nachzudenken. Einfach halte an.»";
+"«¿Recordáis el primer número? La suma de todos los que siguen a vuestro grupo — 2.625. Ahora mirad este desconocido. Tiene... [lee el número de seguidores forzado]. 5.227 seguidores.»" = "«Erinnert ihr euch an die erste Zahl? Die Summe aller, die eurer Gruppe folgen — 2.625. Nun schaut euch diesen Fremden an. Er hat... [lies die erzwungene Followerzahl]. 5.227 Follower.»";
+"«5.227... menos 2.625... eso nos da... 2.602. Cuatro dígitos. 26 — 02. El 26 de febrero. Alguien mire su móvil. ¿Qué fecha es hoy?»" = "«5.227... minus 2.625... das ergibt... 2.602. Vier Ziffern. 26 — 02. Der 26. Februar. Jemand schaut auf sein Handy. Was ist heute für ein Datum?»";
+"«Y el segundo número — 1.049. Las personas a las que sigue vuestro grupo. Este desconocido sigue a... [lee el número de seguidos forzado]. 2.349 personas. 2.349 menos 1.049... 1.300. Las trece horas. Alguien dígame la hora exacta ahora mismo.»" = "«Und die zweite Zahl — 1.049. Die Menschen, denen eure Gruppe folgt. Dieser Fremde folgt... [lies die erzwungene Following-Zahl]. 2.349 Menschen. 2.349 minus 1.049... 1.300. Dreizehn Uhr. Jemand sagt mir die genaue Uhrzeit jetzt.»";
+"«La fecha y la hora de hoy. Codificadas en los números de un desconocido en internet — por las personas de esta sala, con sus propias elecciones, hechas a lo largo de años. Eso no es magia. Eso es conexión.»" = "«Das heutige Datum und die Uhrzeit. In den Zahlen eines Fremden im Internet kodiert — von den Menschen in diesem Raum, mit ihren eigenen Entscheidungen, die über Jahre getroffen wurden. Das ist keine Magie. Das ist Verbindung.»";
+"Una vez la mayoría te haya seguido, pulsa discretamente en el área de seguidores — la app empieza a capturar en background. Los próximos 10–20 segundos de carga los usas para la presentación." = "Sobald die meisten dir gefolgt sind, tippe diskret auf den Follower-Bereich — die App beginnt im Hintergrund zu erfassen. Die nächsten 10–20 Sekunden des Ladens nutzt du für die Präsentation.";
+"Apunta los números en un bloc o pizarra mientras los dicen. Hazlo teatral y deliberado — cada número tiene peso." = "Schreibe die Zahlen auf einen Notizblock oder eine Tafel, während sie sie sagen. Mache es theatralisch und bewusst — jede Zahl hat Gewicht.";
+"Deja que se desplace libremente. No digas nada. El silencio trabaja por ti. Cuando toque una publicación, recupera el móvil de forma natural." = "Lass sie frei scrollen. Sag nichts. Die Stille arbeitet für dich. Wenn sie auf einen Beitrag tippen, hole das Handy natürlich zurück.";
+"Pausa. No sonrías. Deja que reaccionen primero." = "Pause. Nicht lächeln. Lass sie zuerst reagieren.";
+"⭐ Sets" = "⭐ Sets";
+"Change your Instagram profile photo automatically to match the spectator's prediction." = "Ändere dein Instagram-Profilfoto automatisch, um mit der Vorhersage des Zuschauers übereinzustimmen.";
+"Can be triggered automatically when entering Performance, or manually." = "Kann automatisch beim Betreten der Performance ausgelöst werden oder manuell.";
+"Ideal for pre-show automation: build a Shortcut that runs the URL and the photo changes before you even walk on stage." = "Ideal für die Vor-Show-Automatisierung: Erstelle eine Verknüpfung, die die URL ausführt und das Foto ändert sich bevor du auf die Bühne gehst.";
+"Take the prediction photo before the show, then open Performance — it uploads instantly without any extra steps." = "Mache das Vorhersagefoto vor der Show, dann öffne Performance — es lädt sofort hoch, ohne zusätzliche Schritte.";
+"Enable \"Auto on Performance open\" or have a URL Scheme shortcut ready." = "Aktiviere \"Auto bei Performance öffnen\" oder habe eine URL Scheme-Verknüpfung bereit.";
+"Wait for the vibration confirming the upload on real Instagram, then open your own Instagram profile before showing the spectator." = "Warte auf die Vibration, die den Upload auf dem echten Instagram bestätigt, dann öffne dein eigenes Instagram-Profil, bevor du es dem Zuschauer zeigst.";
+"A 30-second cooldown prevents accidental re-uploads during the same performance." = "Eine 30-Sekunden-Abklingzeit verhindert versehentliche Neu-Uploads während derselben Aufführung.";
+"Combine with a URL Scheme from Apple Shortcuts for a completely hands-free reveal." = "Kombiniere mit einem URL Scheme von Apple Kurzbefehlen für eine völlig freihändige Enthüllung.";
+"Post a note on your Instagram profile that matches what the spectator predicted — visible above your profile picture for 24 hours." = "Veröffentliche eine Notiz auf deinem Instagram-Profil, die mit dem übereinstimmt, was der Zuschauer vorhergesagt hat — sichtbar über deinem Profilfoto für 24 Stunden.";
+"The note appears above your profile picture in the Instagram Stories bar — only your followers can see it." = "Die Notiz erscheint über deinem Profilfoto in der Instagram Stories-Leiste — nur deine Follower können sie sehen.";
+"The app calls the Instagram API directly to post the note. Set up an API source in \"Auto Input\" to pull the text from an external service (e.g. a personal webhook or Make/Zapier automation)." = "Die App ruft die Instagram-API direkt auf, um die Notiz zu veröffentlichen. Richte eine API-Quelle in \"Auto Input\" ein, um den Text von einem externen Dienst abzurufen (z.B. ein persönlicher Webhook oder Make/Zapier-Automatisierung).";
+"Point the camera at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note, no typing required." = "Richte die Kamera auf ein Wort, das der Zuschauer geschrieben hat, oder eine Karte, die er hält — die App liest den Text automatisch und sendet ihn als deine Notiz, kein Tippen erforderlich.";
+"Ask the spectator to think of or write a short word (max 60 characters)." = "Bitte den Zuschauer, sich ein kurzes Wort auszudenken oder zu schreiben (max. 60 Zeichen).";
+"Use OCR to read it covertly, or enter it manually before the performance." = "Verwende OCR, um es verdeckt zu lesen, oder gib es manuell vor der Aufführung ein.";
+"Open Performance — the note posts automatically (with API or URL Scheme) or tap \"Send Note\". It appears in the fake profile instantly." = "Öffne Performance — die Notiz wird automatisch gepostet (mit API oder URL Scheme) oder tippe auf \"Notiz senden\". Sie erscheint sofort im gefälschten Profil.";
+"Wait for the vibration confirming the note is live on real Instagram, then open your own profile before the spectator looks." = "Warte auf die Vibration, die bestätigt, dass die Notiz auf dem echten Instagram live ist, dann öffne dein eigenes Profil, bevor der Zuschauer schaut.";
+"Use the URL Scheme method with Apple Shortcuts so the note posts the moment you open the app — zero visible interaction." = "Verwende die URL Scheme-Methode mit Apple Kurzbefehlen, damit die Notiz veröffentlicht wird, sobald du die App öffnest — null sichtbare Interaktion.";
+"Update your Instagram biography to reveal a prediction — the text appears permanently on your profile page until you change it." = "Aktualisiere deine Instagram-Biografie, um eine Vorhersage zu enthüllen — der Text erscheint dauerhaft auf deiner Profilseite bis du ihn änderst.";
+"Visible to anyone who visits your profile — no followers required, ideal for in-person reveals." = "Sichtbar für jeden, der dein Profil besucht — keine Follower erforderlich, ideal für persönliche Enthüllungen.";
+"The app calls the Instagram Graph API to update your bio. Configure an API source in \"Auto Input\" to receive the prediction text from an external system before the show." = "Die App ruft die Instagram Graph API auf, um deine Bio zu aktualisieren. Konfiguriere eine API-Quelle in \"Auto Input\", um den Vorhersagetext von einem externen System vor der Show zu empfangen.";
+"You can also use URL schemes from other apps (Tasker, NFC tags, Focus Mode automations) to update the bio at the right moment." = "Du kannst auch URL Schemes aus anderen Apps (Tasker, NFC-Tags, Fokusmodus-Automatisierungen) verwenden, um die Bio im richtigen Moment zu aktualisieren.";
+"Covertly scan text the spectator has written — the word or phrase is captured without any manual typing and is used to update your biography instantly." = "Scanne verdeckt den Text, den der Zuschauer geschrieben hat — das Wort oder die Phrase wird ohne manuelles Tippen erfasst und sofort zur Aktualisierung deiner Biografie verwendet.";
+"Have the spectator write or choose a word / phrase beforehand (up to 150 characters)." = "Lass den Zuschauer im Voraus ein Wort / einen Satz schreiben oder wählen (bis zu 150 Zeichen).";
+"Capture it via OCR, load it via API, or type it manually before the performance." = "Erfasse es per OCR, lade es über API oder gib es manuell vor der Aufführung ein.";
+"Open Performance (or trigger the URL Scheme) — the biography updates in the fake profile instantly." = "Öffne Performance (oder löse das URL Scheme aus) — die Biografie aktualisiert sich sofort im gefälschten Profil.";
+"Wait for the vibration confirming the bio is live on real Instagram, then visit your own Instagram profile before showing the spectator." = "Warte auf die Vibration, die bestätigt, dass die Bio auf dem echten Instagram live ist, dann besuche dein eigenes Instagram-Profil, bevor du es dem Zuschauer zeigst.";
+"Pre-write a \"normal\" bio and update it back after the show to avoid leaving the prediction bio permanently." = "Schreibe vorab eine \"normale\" Bio und aktualisiere sie nach der Show zurück, um zu vermeiden, dass die Vorhersage-Bio dauerhaft bleibt.";
+"The biography works for any text — not just single words. You can reveal a sentence, a date, or a full phrase." = "Die Biografie funktioniert für jeden Text — nicht nur einzelne Wörter. Du kannst einen Satz, ein Datum oder eine vollständige Phrase enthüllen.";
+"Combine with the Profile Picture method: update both the photo and the bio to make an even stronger double reveal." = "Kombiniere mit der Profilfoto-Methode: Aktualisiere sowohl das Foto als auch die Bio für eine noch stärkere doppelte Enthüllung.";
+"\"Take my phone. Open this person's Instagram profile — you can search anyone you like.\"" = "\"Nimm mein Handy. Öffne das Instagram-Profil dieser Person — du kannst jeden suchen, den du willst.\"";
+"\"Scroll through their posts totally freely. Up, down, as fast or as slow as you like. Stop wherever you want — completely at random.\"" = "\"Scrolle durch ihre Beiträge völlig frei. Hoch, runter, so schnell oder langsam wie du willst. Halte an, wo du willst — völlig zufällig.\"";
+"\"Look where you stopped. I predicted that exact image before we even started — because what feels like a free choice… isn't.\"" = "\"Schau, wo du angehalten hast. Ich habe dieses genaue Bild vorhergesagt, bevor wir überhaupt angefangen haben — denn was sich wie eine freie Wahl anfühlt… ist keine.\"";
+"target profile" = "Zielprofil";
+"FORCED" = "ERZWUNGEN";
+"SELECT FORCED POST" = "ERZWUNGENEN POST WÄHLEN";
+"\"Open any profile — a friend, a celebrity, anyone. Look at their posts.\"" = "\"Öffne ein beliebiges Profil — einen Freund, eine Berühmtheit, jeden. Schau dir ihre Beiträge an.\"";
+"\"Think of any number — say it out loud. Completely your choice.\"" = "\"Denk an eine beliebige Zahl — sag sie laut. Völlig deine Wahl.\"";
+"\"Count to position #13 in Explore. That reel — right where your number landed — is what I prepared for you.\"" = "\"Zähle bis Position #13 in Erkunden. Dieses Reel — genau dort, wo deine Zahl landete — das ist, was ich für dich vorbereitet habe.\"";
+"Search" = "Suchen";
+"Magician · NYC 🎩" = "Magier · NYC 🎩";
+"UNARCHIVED" = "DEARCHIVIERT";
+"Explorar" = "Erkunden";
+"Unarchiving **MAGIC**…" = "Dearchivierung von **MAGIC**…";
+"**C** from Bank 1 · **A** from Bank 2 · **T** from Bank 3 → photos revealed on Instagram" = "**C** aus Bank 1 · **A** aus Bank 2 · **T** aus Bank 3 → Fotos auf Instagram enthüllt";
+"+ 17 more letters archived invisibly" = "+ 17 weitere Buchstaben unsichtbar archiviert";
+"Photo **#37** appears as a new post — unarchived on real Instagram at its original position" = "Foto **#37** erscheint als neuer Beitrag — auf dem echten Instagram an seiner ursprünglichen Position dearchiviert";
+"The magician **searches a profile in Explore** — typing secretly registers the spectator's word while looking natural" = "Der Zauberer **sucht ein Profil in Erkunden** — heimliches Tippen registriert das Wort des Zuschauers auf natürlich wirkende Weise";
+"El número de siempre ✓" = "Die übliche Zahl ✓";
+"Espectador · 🎭" = "Zuschauer · 🎭";
+"Ilusionista profesional" = "Professioneller Illusionist";
+"1.247 seguidores" = "1.247 Follower";
+"318 seguidos" = "318 Folgend";
+"Buscar" = "Suchen";
+"FECHA" = "DATUM";
+"Reels" = "Reels";
+"Magic Show • Instrumental" = "Magic Show • Instrumental";
+"The spectator sees your profile photo change live — the image matches what they predicted." = "Der Zuschauer sieht, wie sich dein Profilfoto live ändert — das Bild stimmt mit dem überein, was er vorhergesagt hat.";
+"Trigger the biography update using vault://bio?text=<your text>. Create an Apple Shortcut that sends this URL to update the bio instantly." = "Löse die Biografie-Aktualisierung mit vault://bio?text=<dein Text> aus. Erstelle einen Apple Kurzbefehl, der diese URL sendet, um die Bio sofort zu aktualisieren.";
+"Trigger the note from any automation app using vault://note?text=<your text>. Combine with Apple Shortcuts for hands-free delivery." = "Löse die Notiz von jeder Automatisierungs-App mit vault://note?text=<dein Text> aus. Kombiniere mit Apple Kurzbefehlen für eine freihändige Übermittlung.";
+"Use vault://profilepic from any shortcut or automation tool (e.g. Apple Shortcuts) to trigger an upload of the last photo in your camera roll." = "Verwende vault://profilepic von jedem Kurzbefehl oder Automatisierungstool (z.B. Apple Kurzbefehle), um einen Upload des letzten Fotos in deiner Kamerarolle auszulösen.";
 
-// Set upload — progressive upload info banner
-"set.upload.info.title"   = "Schrittweiser Upload";
-"set.upload.info.body"    = "Die App lädt Fotos nacheinander hoch und hält den Bildschirm aktiv. Wenn du die App verlässt, wirst du vor jedem nächsten Upload benachrichtigt, damit du rechtzeitig zurückkehren kannst.";
-"set.upload.info.sleep"   = "Halte den Bildschirm aktiv und bleibe während des Uploads in der App.";
+// ── Performance Help View ──
+"How the Instagram emulator works — navigation, profiles and Explore" = "Wie der Instagram-Emulator funktioniert — Navigation, Profile und Erkunden";
+"perf.help.overview.title" = "Was ist Performance?";
+"perf.help.plus.title" = "Der +-Button — Einstellungen aufrufen";
+"perf.help.profile.title" = "Die Profilansicht";
+"perf.help.bottombar.title" = "Untere Navigationsleiste";
+"perf.help.explore.title" = "Erkunden";
+"perf.help.realdata.title" = "Echte Instagram-Daten";
+"perf.help.overview.body1" = "Performance ist ein integrierter Instagram-Emulator. Er sieht aus und funktioniert wie die echte Instagram-App, läuft aber innerhalb von Vault und ist über die offizielle API direkt mit deinem Instagram-Konto verbunden.";
+"perf.help.overview.infobox" = "Alles, was der Zuschauer sieht, sind echte Instagram-Inhalte aus deinem tatsächlichen Konto — Beiträge, Follower, Reels — live von der API abgerufen. Es ist keine Simulation; es ist dein echtes Profil.";
+"perf.help.overview.body2" = "Der Zuschauer kann dein Handy halten, ein beliebiges Profil öffnen, frei scrollen und jederzeit echte Instagram-Daten sehen. Vault arbeitet unsichtbar im Hintergrund.";
+"perf.help.plus.body" = "Um über Performance auf die Einstellungen zuzugreifen, tippe auf den +-Button oben links in der Kopfleiste — derselben Leiste, die in der Mitte deinen Benutzernamen zeigt. Dies ist der einzige Weg zurück zu den Einstellungen im Performance-Modus.";
+"perf.help.plus.infobox" = "Konfiguriere alle deine Tricks (Force Post, Force Reel, Date Force, Counter Glitch usw.) in den Einstellungen vor der Show. Sobald du in Performance bist, nutze den +-Button, um zurückzukehren und bei Bedarf anzupassen.";
+"perf.help.plus.mock.label" = "Kopfleiste";
+"perf.help.plus.mock.sublabel" = "Tippe + (oben links) um Einstellungen zu öffnen";
+"perf.help.profile.followers.title" = "Follower-Zähler — antippbar";
+"perf.help.profile.followers.desc" = "Tippe auf den Follower-Zähler, um die vollständige Follower-Liste zu öffnen. Im Date-Force-Modus tippst du auf den Avatar-Kreis, um Zuschauer auszuwählen — eine blaue Zahl (1, 2, 3…) zeigt die Auswahlreihenfolge an. Erste Hälfte = Datumsgruppe, zweite Hälfte = Uhrzeitgruppe. Tippe neben den Kreis, um das Profil dieser Person zu öffnen.";
+"perf.help.profile.tabs.title" = "Beiträge / Reels / Markiert-Tabs";
+"perf.help.profile.tabs.desc" = "Wechsle zwischen den drei Tabs, um die Beiträge, Reels und markierten Fotos des Profils zu durchsuchen. Tippe auf ein beliebiges Miniaturbild, um es im Vollbild zu sehen.";
+"perf.help.profile.refresh.title" = "Zum Aktualisieren ziehen";
+"perf.help.profile.refresh.desc" = "Ziehe das Profil nach unten, um es von Instagram neu zu laden und aktuelle Änderungen anzuzeigen (neue Follower, aktualisierte Bio, neu hochgeladene Fotos).";
+"perf.help.bottombar.body" = "Die untere Navigationsleiste ahmt Instagrams Oberfläche nach. Die meisten Buttons sind dekorativ — nur die Lupe (Suchen) ist funktional und öffnet Erkunden.";
+"perf.help.bottombar.infobox" = "Der Suche/Lupe-Button ist der Hauptweg, um zu Erkunden zu navigieren. Tippe, um zufällige Reels zu durchsuchen und jedes Instagram-Profil nach Benutzername zu suchen.";
+"perf.help.mock.home" = "Start";
+"perf.help.mock.search" = "Suchen";
+"perf.help.mock.send" = "Senden";
+"perf.help.mock.profile" = "Profil";
+"perf.help.mock.active" = "✓ Aktiv";
+"perf.help.mock.posts" = "Beiträge";
+"perf.help.mock.reels" = "Reels";
+"perf.help.mock.tagged" = "Markiert";
+"perf.help.explore.body" = "Die Erkunden-Ansicht öffnet sich, wenn du die Lupe in der unteren Leiste antippst. Sie zeigt einen echten Instagram-Erkunden-Feed mit zufälligen Reels und eine Suchleiste oben, um jedes Profil zu finden.";
+"perf.help.explore.reels.title" = "Zufälliger Reels-Feed";
+"perf.help.explore.reels.desc" = "Erkunden zeigt echte Reels von Instagram. Der Zuschauer kann frei scrollen. Im Force-Reel-Modus erscheint das Ziel-Reel an der Position, die du heimlich gewählt hast.";
+"perf.help.explore.search.title" = "Jedes echte Profil suchen";
+"perf.help.explore.search.desc" = "Gib einen beliebigen Benutzernamen in die Suchleiste ein, um sein echtes Instagram-Profil zu laden — Fotos, Follower, Folgende — direkt von der API. Der Zuschauer kann frei wählen, wen er sich ansieht.";
+"perf.help.explore.infobox" = "Im Force-Reel-Modus registriert das Suchen und Wischen zwischen Tabs (Beiträge/Reels/Markiert) auf einem Profil heimlich jede Ziffer der Nummer des Zuschauers. Wenn du Erkunden öffnest, erscheint das Reel genau an dieser Position.";
+"perf.help.realdata.body" = "Da Performance mit der echten Instagram-API verbunden ist, sind alle angezeigten Daten authentisch und aktuell. Es gibt keine vorgeladenen Inhalte.";
+"perf.help.realdata.item1" = "Fotos und Videos werden live von deinem echten Instagram-Konto geladen";
+"perf.help.realdata.item2" = "Follower- und Folgezahlen sind real — und können heimlich für Effekte manipuliert werden";
+"perf.help.realdata.item3" = "Jedes Profil, das du suchst, lädt seine echten Beiträge, Reels und Biografie von der API";
+"perf.help.realdata.item4" = "Biografie-Updates und Foto-Uploads aus den Einstellungen erscheinen auf dem echten Instagram-Profil";
+
+// ── Private profile state ──
+"ig.private.title" = "Dieses Konto ist privat";
+"ig.private.subtitle" = "Folge diesem Konto, um Fotos und Videos zu sehen.";
+
+// ── Limits & Safety help (simplified) ──
+"limits.help.title" = "Limits & Sicherheit";
+
+"limits.help.calm.title" = "Entspann dich — alles ist unter Kontrolle";
+"limits.help.calm.body" = "Instagram zeigt gelegentlich eine kurze Warnung an, die dich bittet zu bestätigen, dass du es bist. Das ist völlig normal für jede App, die mit der Plattform verbunden ist, und hat nichts mit einer Sperrung zu tun. Vault ist mit denselben Anti-Bot-Schutzmaßnahmen ausgestattet, die echte Apps verwenden, und jede einzelne wurde gründlich getestet.";
+"limits.help.calm.infobox" = "Ich habe diese Art von Warnung während der Entwicklung persönlich mehr als 100 Mal ausgelöst, und mein Konto wurde nie gesperrt. Andere Apps mit dem gleichen Ansatz funktionieren problemlos — wenn es ein echtes Risiko gäbe, wäre Vault nicht veröffentlicht.";
+
+"limits.help.warning.title" = "Wenn eine Warnung \"Ungewöhnliche Aktivität\" erscheint";
+"limits.help.warning.intro" = "Keine Sorge — das ist keine Sperrung. Instagram bestätigt nur, dass du es wirklich bist. Befolge diese Schritte:";
+"limits.help.warning.step1" = "Öffne die offizielle Instagram-App und tippe in der Warnung auf \"Dismiss\".";
+"limits.help.warning.step2" = "Wenn eine Verifizierung verlangt wird, schließe sie mit dem E-Mail- oder SMS-Code ab.";
+"limits.help.warning.step3" = "Melde dich in Vault über Einstellungen ab, warte etwa eine Minute und melde dich erneut an.";
+"limits.help.warning.step4" = "Du kannst weitermachen — dein Konto ist sicher.";
+"limits.help.warning.reassure" = "Dein Konto funktioniert weiterhin einwandfrei. Das pausiert Vault nur für wenige Minuten, mehr nicht.";
+
+"limits.help.show.title" = "Während einer Vorführung";
+"limits.help.show.body" = "Wenn eine Warnung erscheint, während der Zuschauer auf den Bildschirm schaut, verbirgt Vault alle technischen Details und zeigt einen generischen Bildschirm \"Keine Internetverbindung\".";
+"limits.help.show.infobox" = "Perfekte Ausrede: \"Ach, Instagram spinnt kurz, nichts Wichtiges.\" Kein Zuschauer wird etwas Technisches sehen.";
+
+"limits.help.best.title" = "Best Practices";
+"limits.help.best.item1" = "Wiederhole nicht denselben Effekt mehrmals hintereinander in derselben Sitzung — der Algorithmus könnte es als automatisiert kennzeichnen.";
+"limits.help.best.item2" = "Bereite deine Sets (Sync & Archive) am Abend vorher oder mindestens eine Stunde vor der Show vor, nicht direkt nach dem Proben.";
+"limits.help.best.item3" = "Wenn du oft auftrittst, nutze ein eigenes Instagram-Konto, getrennt von deinem Hauptkonto.";
+"limits.help.best.item4" = "Vault verwaltet alle Wartezeiten automatisch — du musst an nichts davon denken.";
+
+// ── Guide: Camouflage section ──
+"guide.section.camouflage" = "TARNUNG";
+"guide.fakehome.title" = "Gefälschter Startbildschirm";
+"guide.fakehome.subtitle" = "Zeigt einen Screenshot des Startbildschirms beim Öffnen von Performance";
+"guide.fakehome.help.what.title" = "Was ist der gefälschte Startbildschirm?";
+"guide.fakehome.help.what.body" = "Beim Öffnen von Performance zeigt die App zunächst einen Screenshot deines echten iPhone-Startbildschirms. Für Zuschauer sieht es so aus, als würdest du einfach Instagram öffnen.";
+"guide.fakehome.help.how.title" = "So verwendest du es";
+"guide.fakehome.help.how.body" = "1. Mache einen echten Screenshot deines Startbildschirms mit sichtbarem Instagram-Symbol.\n\n2. Lade ihn unter Einstellungen › Sonstiges › Gefälschter Startbildschirm hoch.\n\n3. Aktiviere den Schalter.\n\n4. Beim nächsten Öffnen von Performance erscheint der Screenshot im Vollbild — tippe irgendwo (idealerweise auf das Instagram-Symbol), um dein Profil anzuzeigen.";
+"guide.fakehome.help.why.title" = "Warum verwenden?";
+"guide.fakehome.help.why.body" = "Es erweckt den Eindruck, dass du einfach die echte Instagram-App öffnest. Jeder, der auf deinen Bildschirm schaut, sieht nur den normalen Startbildschirm, bevor dein Profil erscheint.";
+"guide.lockscreen.title" = "Sperrbildschirm-Eingabe";
+"guide.lockscreen.subtitle" = "Gefälschter iOS-Sperrbildschirm für die geheime Zifferneingabe";
+"guide.lockscreen.help.what.title" = "Was ist die Sperrbildschirm-Eingabe?";
+"guide.lockscreen.help.what.body" = "Beim Öffnen von Performance zeigt die App einen gefälschten iOS-Passcode-Bildschirm. Für Zuschauer sieht es aus, als würdest du dein Telefon entsperren.";
+"guide.lockscreen.help.how.title" = "So gibst du deine geheime Zahl ein";
+"guide.lockscreen.help.how.body" = "1. Tippe die Ziffern deiner Geheimzahl auf dem Ziffernfeld — sie werden lautlos registriert.\n\n2. Tippe außerhalb des Ziffernfelds, um diese Ziffern zu sperren.\n\n3. Fülle die verbleibenden Punkte mit beliebigen Ziffern — sie werden ignoriert.\n\n4. Sobald alle 4 Punkte gefüllt sind, schließt sich der Sperrbildschirm und Performance öffnet sich.";
+"guide.lockscreen.help.wallpaper.title" = "Hintergrundbild";
+"guide.lockscreen.help.wallpaper.body" = "Lade dasselbe Hintergrundbild hoch, das du auf deinem echten Sperrbildschirm verwendest. Ohne Hintergrundbild kann die Sperrbildschirm-Eingabe nicht aktiviert werden.";
+"guide.lockscreen.help.why.title" = "Warum verwenden?";
+"guide.lockscreen.help.why.body" = "Es tarnt die Eingabe einer Geheimzahl als normale Telefonentsperrung. Kombiniert mit dem gefälschten Startbildschirm sieht die vollständige Abfolge so aus: Telefon entsperren → Startbildschirm → Instagram öffnen.";
+"guide.lockscreen.help.tricks.title" = "Dieselbe Geheimzahl — viele Tricks";
+"guide.lockscreen.help.tricks.body" = "Die hier eingegebene Zahl ist dieselbe Geheimzahl, die von der Rastereingabe und allen anderen Zaubertricks verwendet wird:\n\n• Foto aus einem numerischen Set dearchivieren\n• Spielkarte enthüllen\n• Benutzerdefiniertes Bild zeigen\n• Zähler-Glitch aktivieren\n• Reel in Entdecken erzwingen";

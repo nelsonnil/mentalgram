@@ -360,40 +360,52 @@ enum AlphabetType: String, Codable, CaseIterable {
 // MARK: - Set Models
 
 enum SetType: String, Codable, CaseIterable {
-    case word = "word"
+    case word   = "word"
     case number = "number"
     case custom = "custom"
-    
+    case card   = "card"
+
+    // 52 labels ordered by suit: A♠ 2♠ … K♠ | A♥ … K♥ | A♣ … K♣ | A♦ … K♦
+    static let cardSlotLabels: [String] = {
+        let values = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"]
+        let suits  = ["♠","♥","♣","♦"]
+        return suits.flatMap { suit in values.map { "\($0)\(suit)" } }
+    }()
+
     var icon: String {
         switch self {
-        case .word: return "textformat.abc"
+        case .word:   return "textformat.abc"
         case .number: return "number"
         case .custom: return "square.grid.2x2"
+        case .card:   return "suit.spade.fill"
         }
     }
     
     var title: String {
         switch self {
-        case .word: return String(localized: "Word Reveal")
+        case .word:   return String(localized: "Word Reveal")
         case .number: return String(localized: "Number Reveal")
         case .custom: return String(localized: "Custom Set")
+        case .card:   return String(localized: "Playing Cards")
         }
     }
     
     var description: String {
         switch self {
-        case .word: return String(localized: "Multiple banks of letters (A-Z)")
+        case .word:   return String(localized: "Multiple banks of letters (A-Z)")
         case .number: return String(localized: "Multiple banks of digits (0-9)")
         case .custom: return String(localized: "Single bank of custom images")
+        case .card:   return String(localized: "52-card deck (A–K × ♠♥♣♦)")
         }
     }
     
-    /// Expected number of photos per bank
+    /// Expected number of photos per bank (or total for card/custom)
     func expectedPhotoCount(alphabet: AlphabetType?) -> Int {
         switch self {
-        case .number: return 10  // 0-9
-        case .word: return alphabet?.count ?? 26
-        case .custom: return 0  // No fixed count
+        case .number: return 10
+        case .word:   return alphabet?.count ?? 26
+        case .custom: return 0
+        case .card:   return 52
         }
     }
     
@@ -401,8 +413,9 @@ enum SetType: String, Codable, CaseIterable {
     func slotLabels(alphabet: AlphabetType?) -> [String] {
         switch self {
         case .number: return (0...9).map { "\($0)" }
-        case .word: return alphabet?.characters ?? AlphabetType.latin.characters
+        case .word:   return alphabet?.characters ?? AlphabetType.latin.characters
         case .custom: return []
+        case .card:   return SetType.cardSlotLabels
         }
     }
 }
@@ -665,7 +678,7 @@ class SecretInputSettings: ObservableObject {
     
     private init() {
         let savedEnabled = UserDefaults.standard.object(forKey: "secretInputEnabled") as? Bool
-        self.isEnabled = savedEnabled ?? true
+        self.isEnabled = savedEnabled ?? false
 
         if let savedMode = UserDefaults.standard.string(forKey: "secretInputMode"),
            let mode = MaskInputMode(rawValue: savedMode) {

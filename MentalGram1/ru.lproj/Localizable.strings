@@ -501,11 +501,13 @@
 "followers.follow_back" = "Подписаться";
 "followers.remove_btn" = "Удалить";
 "followers.search" = "Поиск";
+"followers.section.following" = "Все подписки";
+"followers.following_btn" = "Вы подписаны";
 
 // Force Reel
 "force_reel.title" = "Force Reel";
-"force_reel.subtitle" = "Разместите до 3 reels в Explore";
-"force_reel.description" = "Заранее выберите до 3 reels с любого профиля. В разделе Performance перетащите сетку для установки позиции, затем откройте Explore — reels появятся начиная с этого слота, через 3.";
+"force_reel.subtitle" = "Принудительно показать конкретный Reel в Explore";
+"force_reel.description" = "Заранее выберите Reel с любого профиля. В Performance откройте Explore — принудительный Reel появится в ленте.";
 "force_reel.add_reel_count" = "Добавить Reel (%d/3)";
 "force_reel.select_reel" = "Выбрать Reel";
 "force_reel.remove_all" = "Удалить все";
@@ -528,6 +530,9 @@
 "postpred.help.section.before" = "До шоу";
 "postpred.help.section.during" = "Во время шоу";
 "postpred.help.section.tips" = "Советы";
+"postpred.help.howitworks.step1" = "Подготовьте свой **Сет** — загрузите фотографии заранее и позвольте приложению автоматически их архивировать. Они становятся невидимыми в Instagram до момента раскрытия.";
+"postpred.help.howitworks.step2" = "Зритель свободно выбирает слово, число, изображение или карту. Вы фиксируете его выбор незаметно одним из методов ввода.";
+"postpred.help.howitworks.step3" = "Запустите раскрытие. Соответствующая фотография появляется в настоящем Instagram **на исходной позиции, с исходной датой** — как будто она всегда там была.";
 "postpred.help.howitworks.body1" = "Вы подготавливаете **Сет** из фотографий, по одной на каждую букву или цифру. Фотографии загружаются заранее и автоматически архивируются, оставаясь невидимыми в Instagram до момента раскрытия.";
 "postpred.help.howitworks.body2" = "Когда вы запускаете раскрытие, приложение разархивирует соответствующую фотографию. Она появляется на **исходной позиции в сетке** с **исходной датой**, как будто всегда там была.";
 "postpred.help.howitworks.info" = "Зритель видит реальную публикацию на реальном профиле Instagram. Никакого приложения не видно, только Instagram.";
@@ -536,17 +541,35 @@
 "postpred.help.metric.banks" = "Банки";
 "postpred.help.metric.banks.desc" = "Каждый банк = одна позиция в слове или числе. Банк 1 -> первая буква, Банк 2 -> вторая буква. Количество банков определяет максимальную длину раскрытия.";
 "postpred.help.inputs.body1" = "Зритель свободно думает о слове или числе. Вы фиксируете его выбор незаметно одним из трёх способов:";
+"postpred.help.inputs.intro" = "Каждый метод ввода совместим с определёнными типами сетов. Выберите тот, который лучше всего подходит для вашего выступления.";
 "postpred.help.input.grid.label" = "ВВОД ЧЕРЕЗ СЕТКУ";
+"postpred.help.input.grid.intro" = "В Выступлении смахните влево или вправо по сетке фото. Публикации 1–9 соответствуют цифрам 1–9; публикации 10+ соответствуют цифре 0. Наберите до 3 цифр, затем нажмите на значок Публикаций для раскрытия.";
+"postpred.help.input.grid.case.number" = "Каждая цифра выбирает слот в своём банке — банк 1 → 1-я цифра, банк 2 → 2-я цифра и т.д.";
+"postpred.help.input.grid.case.custom" = "Все набранные цифры образуют номер слота (1–100). Напр.: смахните 7 потом 2 = слот 72. Смахните 1, 0, 0 = слот 100.";
+"postpred.help.input.grid.case.card" = "2 цифры: [значение + масть]. 3 цифры: [десятки + единицы + масть]. Масти: 1=♠  2=♥  3=♣  4=♦. Напр.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Включите **Сетку цифр** в настройках пост-предсказания.";
 "postpred.help.input.grid.step2" = "В разделе Выступление смахните влево или вправо по сетке фото. Публикации 1-9 соответствуют цифрам 1-9. Публикации 10, 11 и 12 соответствуют цифре 0.";
 "postpred.help.input.grid.step3" = "Нажмите на значок публикаций для подтверждения и запуска раскрытия.";
-"postpred.help.input.ocr.label" = "OCR - РАСПОЗНАВАНИЕ КАМЕРОЙ";
+"postpred.help.input.ocr.label" = "OCR — КАМЕРА";
+"postpred.help.input.covert.label" = "СКРЫТЫЙ ВВОД";
+"postpred.help.input.covert.step1" = "Включите **Скрытый ввод** в настройках и задайте слово-прикрытие — то, что зритель увидит на экране.";
+"postpred.help.input.covert.step2" = "Введите слово зрителя в поле поиска Explore. Зритель видит слово-прикрытие; приложение незаметно записывает настоящее слово.";
+"postpred.help.input.covert.step3" = "Когда закончите, нажмите **Пробел один раз**. Пробел исчезает из поля — это нормально. Лёгкая вибрация подтверждает, что слово зафиксировано и раскрытие запущено.";
+"postpred.help.input.url.label" = "URL СХЕМА / АВТОМАТИЗАЦИЯ";
+"postpred.help.input.url.intro" = "Запустите раскрытие удалённо из любого инструмента автоматизации — Быстрые команды Apple, NFC-метки, QR-коды или вспомогательные приложения. Совместимо со всеми типами сетов.";
+"postpred.help.input.url.example.word" = "Word Reveal";
+"postpred.help.input.url.example.slot" = "Custom Set — номер слота (1–100)";
+"postpred.help.input.url.example.card" = "Playing Cards — символ карты (напр. J♠, 10♥, K♦)";
+"postpred.help.settype.word.desc" = "**26 слотов (A–Z) × N банков.** Каждый банк раскрывает одну букву. Банк 1 = 1-я буква, Банк 2 = 2-я буква.";
+"postpred.help.settype.number.desc" = "**10 слотов (0–9) × N банков.** Каждый банк раскрывает одну цифру. Банк 1 = 1-я цифра, Банк 2 = 2-я цифра.";
+"postpred.help.settype.custom.desc" = "**1–100 пользовательских изображений, 1 банк.** Смахните 1–3 цифры для выбора номера слота (1–100). Идеально для счётов матчей, таро или визуального выбора.";
+"postpred.help.settype.card.desc" = "**52 слота (A–K × ♠♥♣♦), 1 банк.** Смахните 2–3 цифры для выбора карты. Масти: 1=♠ 2=♥ 3=♣ 4=♦. Напр.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.ocr.step1" = "Включите **OCR** в настройках пост-предсказания.";
 "postpred.help.input.ocr.step2" = "Направьте камеру на рукописное или печатное слово. Приложение автоматически его прочитает и запустит соответствующее раскрытие.";
 "postpred.help.input.url.label" = "URL-СХЕМА";
 "postpred.help.input.url.step1" = "Включите **URL Scheme** в настройках пост-предсказания.";
 "postpred.help.input.url.step2" = "Запустите раскрытие удалённо через пользовательский URL. Полезно с NFC-метками, QR-кодами или автоматизацией.";
-"postpred.help.before.1" = "Создайте **Сет** в разделе Сеты. Выберите тип букв и шаблон изображения или загрузите свои фото.";
+"postpred.help.before.1" = "Создайте **Сет** в разделе Сеты. Выберите Word Reveal, Number Reveal, Custom Set или Playing Cards. Выберите шаблон изображения или загрузите свои фото.";
 "postpred.help.before.2" = "Загрузите изображения и дождитесь их **автоматического архивирования**. Это может занять несколько часов.";
 "postpred.help.before.3" = "Во время загрузки **не используйте приложение**, не меняйте сеть и не прерывайте процесс. Экран не засыпает автоматически.";
 "postpred.help.before.4" = "Установите загруженный Сет как **активный** в настройках пост-предсказания.";
@@ -573,3 +596,281 @@
 "set.upload.info.title"   = "Поэтапная загрузка";
 "set.upload.info.body"    = "Приложение будет загружать фото по одному, удерживая экран активным. Если вы выйдете из приложения, уведомление предупредит вас перед каждой следующей загрузкой, чтобы вы успели вернуться.";
 "set.upload.info.sleep"   = "Держите экран включённым и оставайтесь в приложении во время загрузки.";
+
+// Lockdown Details Sheet
+"lockdown.challenge.title"      = "Instagram требует подтверждения";
+"lockdown.challenge.subtitle"   = "Instagram обнаружил необычную активность и хочет убедиться, что это вы.";
+"lockdown.challenge.nav"        = "Ожидание подтверждения";
+"lockdown.challenge.step1"      = "Откройте приложение Instagram на телефоне";
+"lockdown.challenge.step2"      = "Если появится запрос безопасности, выполните его (обычно код по SMS или email)";
+"lockdown.challenge.step3"      = "Вернитесь сюда и нажмите кнопку ниже";
+"lockdown.challenge.step4"      = "Если в Instagram ничего не появилось, просто подождите окончания обратного отсчёта — приложение возобновится само";
+"lockdown.challenge.btn.resume" = "Я подтвердил — Возобновить";
+"lockdown.challenge.btn.skip"   = "Продолжить без проверки (не рекомендуется)";
+"lockdown.safety.title"         = "Пауза безопасности";
+"lockdown.safety.subtitle"      = "Приложение автоматически приостановилось для защиты вашего аккаунта Instagram.";
+"lockdown.safety.step1"         = "Ничего не делайте — приложение ждёт, чтобы защитить ваш аккаунт";
+"lockdown.safety.step2"         = "Не открывайте Instagram и не повторяйте никаких действий";
+"lockdown.safety.step3"         = "Когда обратный отсчёт достигнет нуля, приложение возобновится автоматически";
+"lockdown.safety.btn.skip"      = "Пропустить ожидание (не рекомендуется)";
+"lockdown.countdown.ready"      = "Готово к продолжению!";
+"lockdown.countdown.label"      = "Возобновляется через";
+"lockdown.btn.logout"           = "Выйти из аккаунта";
+"lockdown.btn.logout.note"      = "Используйте «Выйти» только если ничто другое не помогает. Потребуется повторный вход.";
+"lockdown.btn.close"            = "Закрыть";
+
+// Post Prediction input method keys (missing)
+"postpred.help.inputs.group.numeric" = "ДЛЯ ЧИСЛОВЫХ / ПОЛЬЗОВАТЕЛЬСКИХ СЕТОВ";
+"postpred.help.inputs.group.alpha" = "ДЛЯ АЛФАВИТНЫХ СЕТОВ";
+"postpred.help.inputs.group.universal" = "УНИВЕРСАЛЬНО — ВСЕ ТИПЫ СЕТОВ";
+"postpred.help.input.covert.label" = "СКРЫТЫЙ ВВОД";
+"postpred.help.input.api.label" = "API / АВТОМАТИЗАЦИЯ";
+"postpred.help.input.api.step1" = "Используйте внешний инструмент автоматизации (Быстрые команды, NFC-метка, приложение-компаньон), чтобы отправить слово или число в Post Prediction через URL Scheme.";
+"postpred.help.input.api.step2" = "Полезно, когда сторонний триггер или физический реквизит автоматически запускает раскрытие в нужный момент.";
+"explore.load_error" = "Не удалось загрузить контент";
+
+// General UI strings (auto-generated)
+"Loading profile…" = "Загрузка профиля…";
+"Capturing followers…" = "Получение подписчиков…";
+"Digit Grid Disabled" = "Цифровая сетка отключена";
+"You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid." = "У вас активный числовой сет, но ввод через цифровую сетку отключён. Включите его, чтобы разархивировать фото свайпом по сетке.";
+"Upload in progress" = "Загрузка выполняется";
+"A photo upload is currently running. Wait for it to finish before revealing numbers — both actions share the same hourly Instagram limit and triggering both together can cause bot detection." = "Сейчас выполняется загрузка фотографий. Дождитесь её завершения перед раскрытием чисел — оба действия используют один почасовой лимит Instagram, и их одновременный запуск может привести к обнаружению бота.";
+"No Internet Connection" = "Нет подключения к Интернету";
+"Check your connection and try again." = "Проверьте соединение и повторите попытку.";
+"Try Again" = "Повторить попытку";
+"This keeps happening. Try logging out and back in." = "Это продолжается. Попробуйте выйти из системы и войти снова.";
+"Log Out & Retry" = "Выйти и повторить";
+"Session Problem" = "Проблема сессии";
+"The Instagram session has expired. This happens after a password change, prolonged inactivity, or suspicious activity detection." = "Сессия Instagram истекла. Это происходит после смены пароля, длительного бездействия или обнаружения подозрительной активности.";
+"Re-login to Instagram" = "Повторный вход в Instagram";
+"Saved credentials will be auto-filled." = "Сохранённые учётные данные будут заполнены автоматически.";
+"No saved credentials. You will need to type them manually." = "Нет сохранённых учётных данных. Вам нужно будет ввести их вручную.";
+"Emergency Logout" = "Экстренный выход";
+"Emergency logout clears the session and requires a full login." = "Экстренный выход очищает сессию и требует полного входа в систему.";
+"Session Info" = "Информация о сессии";
+"Latest Follower" = "Последний подписчик";
+"Visible Photos Detected" = "Обнаружены видимые фотографии";
+"Upload Complete" = "Загрузка завершена";
+"Re-login" = "Повторный вход";
+
+// Dynamic format string keys
+"ig.set_not_uploaded_title" = "Сет не загружен";
+"ig.set_not_uploaded_body" = "Сет \"%@\" ещё не загружен в Instagram. Перейдите в Sets и сначала загрузите его.";
+"session.reason.challenge" = "Instagram запросил повторную верификацию безопасности (%lld раз). Войдите снова, чтобы восстановить сессию.";
+
+// Tab and context menu labels
+"Sets" = "Сеты";
+
+// CreateSetView strings
+"Your photos" = "Ваши фото";
+
+// SetDetailView strings
+"Log out and log in again to continue uploading." = "Выйдите и войдите снова, чтобы продолжить загрузку.";
+"Remove this photo from all banks? This cannot be undone." = "Удалить это фото из всех банков? Это действие необратимо.";
+"Checking real state on Instagram" = "Проверка реального состояния в Instagram";
+"Short pause before sending archive requests" = "Короткая пауза перед отправкой запросов на архивирование";
+"Wait a few minutes before syncing. Instagram limits API calls per hour." = "Подождите несколько минут перед синхронизацией. Instagram ограничивает API-вызовы в час.";
+"Another set is currently uploading" = "Другой сет сейчас загружается";
+"Upload will resume automatically after this wait" = "Загрузка автоматически возобновится после этого ожидания.";
+"Go to Settings and re-login to continue" = "Перейдите в Настройки и войдите снова, чтобы продолжить";
+"Now tap the photo to swap with" = "Теперь нажмите на фото для обмена";
+"Tap a photo, then tap another to swap them" = "Нажмите на одно фото, затем на другое, чтобы поменять их местами";
+"Identical photos next to each other will trigger bot detection. Reorder to fix." = "Одинаковые фото рядом друг с другом вызовут обнаружение бота. Измените порядок, чтобы исправить.";
+
+// ConnectionErrorAlert strings
+"No Connection" = "Нет соединения";
+"No Internet connection. Please try again later." = "Нет подключения к Интернету. Пожалуйста, попробуйте позже.";
+"Error Details" = "Детали ошибки";
+"Copy Log" = "Скопировать лог";
+"Info" = "Инфо";
+
+// Session panel dismiss keys
+"session.panel.return_to_app" = "Вернуться в приложение";
+"session.panel.return_to_app.hint" = "Закрывает этот экран, чтобы вы могли перейти в Настройки и повторно войти.";
+
+// Help views (Introduction, Limits, UserGuide)
+"What is Vault?" = "Что такое Vault?";
+"Vault — Instagram Magic" = "Vault — Магия Instagram";
+"Hybrid app · Real account · Real results" = "Гибридное приложение · Реальный аккаунт · Реальные результаты";
+"Vault se conecta directamente a tu cuenta de Instagram real sin necesitar un perfil separado, un público especial ni ninguna configuración visible." = "Vault подключается напрямую к вашему реальному аккаунту Instagram — без отдельного профиля, без специальной аудитории, без видимой настройки.";
+"Todo lo que ejecutas ocurre en la misma cuenta que tus espectadores ya siguen — y lo que ven ellos es Instagram, no la app." = "Всё, что вы исполняете, происходит на том же аккаунте, на который уже подписаны ваши зрители — и они видят Instagram, а не приложение.";
+"Cómo funciona" = "Как это работает";
+"Sube, archiva y desarchiva fotos en el momento exacto que eliges" = "Загружайте, архивируйте и разархивируйте фотографии в нужный момент";
+"Cambia tu foto de perfil al instante desde la app" = "Мгновенно меняйте фото профиля прямо из приложения";
+"Publica o actualiza tu nota e Instagram en tiempo real" = "Публикуйте или обновляйте свою заметку в Instagram в реальном времени";
+"Edita tu biografía para que coincida con lo que el espectador está pensando" = "Редактируйте биографию так, чтобы она соответствовала мыслям зрителя";
+"Consulta seguidores y seguidos para efectos de counter glitch" = "Проверяйте подписчиков и подписки для эффектов counter glitch";
+"Recupera metadatos — fechas, posición en grid, subtítulos — para forzajes de fecha" = "Получайте метаданные — даты, позиция в сетке, подписи — для датных форсов";
+"Por qué importa en magia" = "Почему это важно в фокусах";
+"Cuando el espectador abre Instagram en su propio móvil ve el resultado real — no una captura de pantalla, no una simulación." = "Когда зритель открывает Instagram на своём телефоне, он видит реальный результат — не скриншот, не симуляцию.";
+"La predicción estaba ahí desde el principio, archivada e invisible hasta que tú decidiste revelarla. El forzaje lo confirmó el algoritmo de Instagram. La fecha estaba grabada en una publicación de hace meses." = "Предсказание было там с самого начала, заархивированное и невидимое, пока вы не решили его раскрыть. Форс подтвердил алгоритм Instagram. Дата была записана в публикации несколько месяцев назад.";
+"Vault te da el control de una capa de Instagram que ningún espectador puede cuestionar — porque no es la app, es Instagram mismo." = "Vault даёт вам контроль над уровнем Instagram, который ни один зритель не может поставить под сомнение — потому что это не приложение, это сам Instagram.";
+"Tres pilares" = "Три опоры";
+"Forzajes" = "Форсы";
+"Dirige al espectador hacia un número, fecha o post que ya conoces." = "Направьте зрителя к числу, дате или публикации, которую вы уже знаете.";
+"Predicciones" = "Предсказания";
+"Pre-sube una foto que coincide con la elección del espectador, archívala, y desarchívala en el clímax." = "Заранее загрузите фото, соответствующее выбору зрителя, заархивируйте его и разархивируйте в кульминации.";
+"Reveals de perfil" = "Раскрытия профиля";
+"Cambia tu foto, nota o biografía en tiempo real para que coincida con lo que el espectador está pensando." = "Изменяйте в реальном времени фото, заметку или биографию, чтобы они совпадали с мыслями зрителя.";
+"Límites & Seguridad" = "Ограничения и безопасность";
+"Por qué existen los límites" = "Почему существуют ограничения";
+"Instagram impone límites de uso en su API para evitar spam y comportamiento automatizado. Es una medida de seguridad normal que aplica a cualquier app conectada a la plataforma." = "Instagram устанавливает ограничения на использование API для предотвращения спама и автоматизированного поведения. Это обычная мера безопасности, применяемая к любому приложению, подключённому к платформе.";
+"Vault está diseñado con tiempos de espera y espaciados automáticos que respetan esos límites. El mago no tiene que hacer nada — la app lo gestiona por él." = "Vault разработан с автоматическими временными паузами и интервалами, которые соблюдают эти ограничения. Маг ничего не должен делать — приложение всё делает само.";
+"Si pulsas una función y parece que no responde de inmediato, lo más probable es que la app esté esperando el tiempo de seguridad antes de la siguiente acción. Espera unos segundos y vuelve a intentarlo." = "Если вы нажали на функцию и она не реагирует, скорее всего, приложение ожидает интервал безопасности перед следующим действием. Подождите несколько секунд и повторите попытку.";
+"Tiempos de espera de la app" = "Время ожидания приложения";
+"Estos valores están integrados automáticamente — no requieren ninguna acción por tu parte:" = "Эти значения встроены автоматически — они не требуют никаких действий с вашей стороны:";
+"Entre fotos de un set al subir" = "Между фотографиями сета при загрузке";
+"160–220 s aleatorio por foto" = "160–220 с случайно на фото";
+"Entre reveals consecutivos" = "Между последовательными раскрытиями";
+"Mínimo entre un reveal y el siguiente" = "Минимум между одним раскрытием и следующим";
+"Entre archivados (Sync & Archive)" = "Между архивированиями (Sync & Archive)";
+"Por cada foto archivada" = "За каждое архивированное фото";
+"Límite de acciones por hora" = "Лимит действий в час";
+"La app deja de actuar si se acerca al límite" = "Приложение перестаёт действовать при приближении к лимиту";
+"Qué es una detección y cuándo ocurre" = "Что такое обнаружение и когда оно происходит";
+"De vez en cuando Instagram puede pedir una verificación de identidad si detecta actividad inusual. Esto es completamente temporal y no supone ningún riesgo real para la cuenta." = "Иногда Instagram может запросить подтверждение личности при обнаружении необычной активности. Это полностью временно и не представляет реального риска для аккаунта.";
+"La app reacciona automáticamente pausando la sesión durante el tiempo necesario:" = "Приложение автоматически реагирует, приостанавливая сессию на необходимое время:";
+"En todos los casos excepto la sesión expirada, la app se recupera sola sin intervención." = "Во всех случаях, кроме истёкшей сессии, приложение восстанавливается самостоятельно без вмешательства.";
+"Durante la actuación" = "Во время выступления";
+"Si ocurre una detección mientras el espectador está mirando, la app oculta los detalles técnicos y muestra una pantalla genérica de \"Sin conexión a Internet\"." = "Если обнаружение происходит, пока зритель смотрит, приложение скрывает технические детали и показывает общий экран «Нет подключения к Интернету».";
+"Es una excusa natural y creíble: \"Ah, la conexión de Instagram falla un momento, no pasa nada.\" Ningún espectador verá nada técnico." = "Это естественное и правдоподобное объяснение: «Ах, связь Instagram пропала на секунду, ничего страшного». Ни один зритель ничего технического не увидит.";
+"Qué hacer en ese momento:" = "Что делать в этот момент:";
+"Señala la pantalla con naturalidad: \"Ah, Instagram falla un segundo\"" = "Покажи на экран естественно: «Ах, Instagram завис на секунду»";
+"Espera 2–3 minutos — la app se recupera sola en la mayoría de casos" = "Подождите 2–3 минуты — приложение в большинстве случаев восстанавливается само";
+"Si el problema persiste, continúa con otra parte de la actuación y retoma después" = "Если проблема сохраняется, продолжите с другой частью выступления и вернитесь позже";
+"Regla de oro" = "Золотое правило";
+"Si la app no responde o algo parece bloqueado, ve directamente a la app oficial de Instagram. Instagram puede haber mostrado un aviso de actividad inusual que requiere tu atención. Hasta que no lo resuelvas allí, Vault no podrá continuar." = "Если приложение не реагирует или что-то заблокировано, перейдите непосредственно в официальное приложение Instagram. Instagram мог показать уведомление о необычной активности, требующее вашего внимания. Пока вы не решите это там, Vault не сможет продолжить.";
+"Cómo recuperar la sesión" = "Как восстановить сессию";
+"El ciclo reveal→archive→reveal" = "Цикл раскрытие→архив→раскрытие";
+"Cuándo hacer re-login manualmente" = "Когда повторно входить вручную";
+"Recomendaciones:" = "Рекомендации:";
+"Aviso importante — scroll hacia abajo" = "Важное уведомление — прокрутите вниз";
+"Verificación puntual" = "Разовая верификация";
+"Demasiadas peticiones (429)" = "Слишком много запросов (429)";
+"Acción bloqueada" = "Действие заблокировано";
+"Spam detectado" = "Обнаружен спам";
+"Sesión expirada" = "Сессия истекла";
+"Re-login necesario" = "Повторный вход необходим";
+"Escenario A" = "Сценарий А";
+"Verificación puntual — el más habitual" = "Разовая верификация — наиболее частая";
+"Escenario B" = "Сценарий Б";
+"Sesión expirada — poco frecuente" = "Сессия истекла — нечасто";
+"Nunca practicar más de un ciclo completo reveal→archive con el mismo set en media hora" = "Никогда не практикуйте более одного полного цикла раскрытие→архив с одним сетом за полчаса";
+"Esperar al menos 15 minutos entre un reveal y el siguiente Archive All del mismo set" = "Ждите не менее 15 минут между раскрытием и следующим «Archive All» того же сета";
+"Preparar el set (Archive All) la noche anterior o al menos 1 hora antes de la actuación, no inmediatamente después de practicar" = "Подготовьте сет (Archive All) накануне вечером или минимум за 1 час до выступления, не сразу после тренировки";
+"La app avisará en el botón Sync & Archive si el set fue revelado hace menos de 30 minutos" = "Приложение предупредит в кнопке Sync & Archive, если сет был раскрыт менее 30 минут назад";
+"No te preocupes — esto rara vez ocurre en una actuación real. Solo puede aparecer durante los tests cuando se repite el mismo efecto con frecuencia. La mejor estrategia es familiarizarte con la app y, si alguna vez notas un comportamiento inusual o detección de bot, compartir los logs con el desarrollador (los encontrarás en Ajustes → Logs)." = "Не беспокойтесь — это редко происходит на реальном выступлении. Это может появиться только во время тестов, когда один и тот же эффект повторяется часто. Лучшая стратегия — ознакомиться с приложением и, если вы замечаете необычное поведение или обнаружение бота, поделиться логами с разработчиком (вы найдёте их в Настройки → Логи).";
+"La causa más frecuente de detección durante los tests es practicar el mismo truco varias veces seguidas en la misma sesión." = "Наиболее частой причиной обнаружения во время тестов является многократная отработка одного и того же трюка подряд в одной сессии.";
+"Cuando las mismas fotos se archivan y desarchivan 2–3 veces en 30 minutos, Instagram lo identifica como comportamiento automatizado — aunque cada operación individual respete los cooldowns." = "Когда одни и те же фотографии архивируются и разархивируются 2–3 раза за 30 минут, Instagram идентифицирует это как автоматизированное поведение — даже если каждая отдельная операция соблюдает задержки.";
+"No es necesario hacer logout antes de cada actuación. Una sesión activa puede durar semanas. Haz re-login solo si:" = "Не нужно выходить из системы перед каждым выступлением. Активная сессия может длиться неделями. Повторно входите только если:";
+"La app lleva más de 24 h sin responder correctamente a ninguna acción" = "Приложение уже более 24 часов не реагирует корректно ни на одно действие";
+"Se producen 3 o más detecciones seguidas en la misma sesión" = "В одной сессии происходит 3 или более последовательных обнаружения";
+"El botón \"Reconnect\" aparece persistentemente en Settings" = "Кнопка «Reconnect» появляется постоянно в Настройках";
+"En el resto de situaciones, la app gestiona la sesión de forma automática." = "Во всех остальных ситуациях приложение управляет сессией автоматически.";
+"Tras reconectar, si no ves las fotos que esperabas en tu perfil de Instagram, haz scroll hacia abajo para forzar la actualización." = "После повторного подключения, если вы не видите ожидаемые фото в профиле Instagram, прокрутите вниз для принудительного обновления.";
+"Instagram muestra a veces la versión en caché hasta que se refresca manualmente con un deslizamiento hacia abajo." = "Instagram иногда отображает кэшированную версию, пока страница не будет вручную обновлена свайпом вниз.";
+"La app no responde o muestra un aviso de bloqueo" = "Приложение не реагирует или показывает уведомление о блокировке";
+"Abre la app oficial de Instagram" = "Откройте официальное приложение Instagram";
+"Si aparece un aviso de actividad inusual, pulsa \"Dismiss\" o completa el código de verificación (email o SMS)" = "Если появится уведомление о необычной активности, нажмите «Dismiss» или введите код подтверждения (email или SMS)";
+"Si no aparece nada, espera 2 minutos — la sesión se restablece sola en Vault" = "Если ничего не появляется, подождите 2 минуты — сессия восстанавливается в Vault самостоятельно";
+"Vuelve a Vault: todo continúa con normalidad" = "Вернитесь в Vault: всё продолжается в обычном режиме";
+"Vault muestra la pantalla de re-login" = "Vault показывает экран повторного входа";
+"Ve primero a Instagram real para descartar cualquier aviso pendiente y pulsa \"Dismiss\" si lo hay" = "Сначала перейдите в реальный Instagram, чтобы отклонить все ожидающие уведомления, и нажмите «Dismiss» если есть";
+"Vuelve a Vault y pulsa \"Connect Account\"" = "Вернитесь в Vault и нажмите «Connect Account»";
+"Entra con tu usuario y contraseña" = "Войдите с именем пользователя и паролем";
+"Acepta las cookies cuando Instagram lo pida — es indispensable" = "Принимайте cookies, когда Instagram просит — это обязательно";
+"La sesión se restaura automáticamente" = "Сессия автоматически восстанавливается";
+"API limits, cooldowns, bot detection and how to recover" = "Лимиты API, задержки, обнаружение бота и восстановление";
+"Change your Instagram profile photo as a prediction" = "Измените фото профиля Instagram как предсказание";
+"Force a specific reel to appear in Explore" = "Принудите определённый рилс появиться в разделе «Интересное»";
+"Glitch the follower or following count for a spectator" = "Сделать глитч счётчика подписчиков или подписок зрителя";
+"Predict a spectator's post from weeks ago" = "Предскажите пост зрителя недельной давности";
+"How Vault works, what it can do, and why it matters for magic" = "Как работает Vault, что он умеет и почему это важно для фокусов";
+"Note and biography prediction using API, OCR or URL Scheme" = "Предсказание заметки и биографии через API, OCR или URL-схему";
+
+// Help views (CounterGlitch, DateForce, InstagramProfile, PostPrediction)
+"Consejos" = "Советы";
+"Convicción" = "Убеждённость";
+"Dígitos" = "Цифры";
+"Dígito secreto vía swipe" = "Секретная цифра через свайп";
+"Espectador" = "Зритель";
+"Fase 1 — Deflación" = "Фаза 1 — Дефляция";
+"Fase 2 — Inflación" = "Фаза 2 — Инфляция";
+"**No enseñes la pantalla hasta tener el número inflado.** Navega el grid con el móvil hacia ti para que nadie más vea los swipes secretos." = "**Не показывайте экран, пока не получите увеличенное число.** Навигируйте по сетке с телефоном к себе, чтобы никто не видел тайных свайпов.";
+"**Perfil propio o ajeno.** Con el perfil del espectador el impacto es mayor porque puede verificarlo él mismo." = "**Собственный профиль или чужой.** С собственным профилем зрителя эффект сильнее, потому что он может проверить сам.";
+"Antes de empezar" = "Прежде чем начать";
+"Durante el show" = "Во время шоу";
+"Dos grupos secretos" = "Две секретные группы";
+"Cálculo interno" = "Внутренний расчёт";
+"El espectador lo descifra" = "Зритель расшифровывает";
+"Aparece en Explore" = "Появляется в Интересном";
+"El Mago 🎩" = "Маг 🎩";
+"El espectador hace la resta:" = "Зритель делает вычитание:";
+"EL REVEAL" = "РАСКРЫТИЕ";
+"CIERRA Y ESPERA" = "ЗАКРОЙ И ЖДИ";
+"**Antes del show**, activa **Date Force** en Settings y configura el formato de fecha (DD/MM/AAAA o MM/DD/AAAA)." = "**Перед шоу**, включите **Date Force** в настройках и настройте формат даты (ДД/ММ/ГГГГ или ММ/ДД/ГГГГ).";
+"**Cuentas privadas.** Si un espectador tiene la cuenta privada y no te sigue de vuelta, es posible que no puedas cargar su perfil. Pídele que te siga momentáneamente o usa una cuenta pública." = "**Приватные аккаунты.** Если у зрителя закрытый аккаунт и он не подписан на вас, загрузить его профиль может не получиться. Попросите его подписаться на вас ненадолго или используйте публичный аккаунт.";
+"**Número par de espectadores.** Con 2 espectadores: 1 grupo fecha + 1 grupo hora. Con 4: 2 grupos fecha + 2 grupos hora. Con 6: 3 grupos de cada tipo." = "**Чётное число зрителей.** С 2 зрителями: 1 группа даты + 1 группа времени. С 4: 2 группы даты + 2 группы времени. С 6: 3 группы каждого типа.";
+"Profile Picture Prediction" = "Предсказание фото профиля";
+"Biography Prediction" = "Предсказание биографии";
+"Note Prediction" = "Предсказание заметки";
+"How it works" = "Как это работает";
+"Input Method" = "Способ ввода";
+"upload.error.no_images" = "Изображения не загружены. Добавьте изображения во все слоты перед загрузкой.";
+
+// ── Limits & Safety help (simplified) ──
+"limits.help.title" = "Лимиты и безопасность";
+
+"limits.help.calm.title" = "Спокойствие — всё под контролем";
+"limits.help.calm.body" = "Instagram иногда показывает короткое уведомление с просьбой подтвердить, что это действительно вы. Это совершенно нормально для любого приложения, подключённого к платформе, и никак не связано с блокировкой. Vault разработан с теми же защитными мерами против ботов, которые используют реальные приложения, и каждая из них тщательно протестирована.";
+"limits.help.calm.infobox" = "Я лично вызывал такое уведомление более 100 раз во время разработки, и мой аккаунт ни разу не был заблокирован. Другие приложения с таким же подходом работают без проблем — если бы существовал реальный риск, Vault не был бы опубликован.";
+
+"limits.help.warning.title" = "Если появилось уведомление \"Необычная активность\"";
+"limits.help.warning.intro" = "Не беспокойтесь — это не блокировка. Instagram просто подтверждает, что это действительно вы. Выполните эти шаги:";
+"limits.help.warning.step1" = "Откройте официальное приложение Instagram и нажмите \"Dismiss\" в уведомлении.";
+"limits.help.warning.step2" = "Если запросит проверку, завершите её кодом из email или SMS.";
+"limits.help.warning.step3" = "В Vault выйдите из аккаунта в Настройках, подождите около минуты и войдите снова.";
+"limits.help.warning.step4" = "Можно продолжать — ваш аккаунт в безопасности.";
+"limits.help.warning.reassure" = "Ваш аккаунт продолжает работать как обычно. Это только приостанавливает Vault на несколько минут, и ничего больше.";
+
+"limits.help.show.title" = "Во время выступления";
+"limits.help.show.body" = "Если уведомление появляется, пока зритель смотрит на экран, Vault скрывает все технические детали и показывает стандартный экран \"Нет подключения к интернету\".";
+"limits.help.show.infobox" = "Идеальное оправдание: \"Ой, Instagram на секунду завис, ничего страшного.\" Ни один зритель не увидит ничего технического.";
+
+"limits.help.best.title" = "Рекомендации";
+"limits.help.best.item1" = "Не повторяйте один и тот же эффект несколько раз подряд в одной сессии — алгоритм может отметить это как автоматизацию.";
+"limits.help.best.item2" = "Готовьте свои сеты (Sync & Archive) накануне вечером или хотя бы за час до выступления, а не сразу после репетиции.";
+"limits.help.best.item3" = "Если вы часто выступаете, используйте отдельный Instagram-аккаунт, не связанный с основным.";
+"limits.help.best.item4" = "Vault автоматически управляет всеми периодами ожидания — вам не нужно ни о чём думать.";
+
+// ── Counter Glitch demo ──
+"Espectador" = "Зритель";
+"Ilusionista profesional" = "Профессиональный иллюзионист";
+"Espectador · 🎭" = "Зритель · 🎭";
+"El número de siempre ✓" = "Обычное число ✓";
+"El espectador ve %lld · Real: %lld + %lld" = "Зритель видит %lld · Настоящее: %lld + %lld";
+"+%lld recibidos 🎩" = "+%lld получено 🎩";
+
+// ── Guide: Camouflage section ──
+"guide.section.camouflage" = "КАМУФЛЯЖ";
+"guide.fakehome.title" = "Поддельный экран Home";
+"guide.fakehome.subtitle" = "Показывает скриншот домашнего экрана при открытии Performance";
+"guide.fakehome.help.what.title" = "Что такое поддельный экран Home?";
+"guide.fakehome.help.what.body" = "При открытии Performance приложение сначала показывает скриншот вашего настоящего домашнего экрана iPhone. Наблюдателю кажется, что вы просто открываете Instagram.";
+"guide.fakehome.help.how.title" = "Как использовать";
+"guide.fakehome.help.how.body" = "1. Сделайте настоящий скриншот домашнего экрана с видимым значком Instagram.\n\n2. Загрузите в Настройки › Другое › Поддельный экран Home.\n\n3. Включите переключатель.\n\n4. В следующий раз при открытии Performance этот скриншот появится на весь экран — нажмите в любом месте (в идеале на значок Instagram), чтобы открыть профиль.";
+"guide.fakehome.help.why.title" = "Зачем использовать?";
+"guide.fakehome.help.why.body" = "Создаёт иллюзию, что вы просто открываете настоящее приложение Instagram. Любой, кто смотрит на ваш экран, видит только обычный домашний экран до появления вашего профиля.";
+"guide.lockscreen.title" = "Ввод через экран блокировки";
+"guide.lockscreen.subtitle" = "Поддельный экран блокировки iOS для ввода секретных цифр";
+"guide.lockscreen.help.what.title" = "Что такое ввод через экран блокировки?";
+"guide.lockscreen.help.what.body" = "При открытии Performance приложение показывает поддельный экран пароля в стиле iOS. Для любого наблюдателя это выглядит как обычная разблокировка телефона.";
+"guide.lockscreen.help.how.title" = "Как ввести секретный номер";
+"guide.lockscreen.help.how.body" = "1. Нажмите цифры секретного номера на цифровой клавиатуре — они регистрируются беззвучно.\n\n2. Нажмите за пределами клавиатуры, чтобы зафиксировать эти цифры.\n\n3. Заполните оставшиеся точки любыми цифрами — они игнорируются.\n\n4. Когда все 4 точки заполнены, экран блокировки закрывается и открывается Performance.";
+"guide.lockscreen.help.wallpaper.title" = "Обои";
+"guide.lockscreen.help.wallpaper.body" = "Загрузите те же обои, что используете на настоящем экране блокировки, чтобы поддельный выглядел идентично. Без обоев ввод через экран блокировки нельзя включить.";
+"guide.lockscreen.help.why.title" = "Зачем использовать?";
+"guide.lockscreen.help.why.body" = "Маскирует ввод секретного номера под обычную разблокировку телефона. В сочетании с поддельным домашним экраном полная последовательность выглядит как: разблокировка → домашний экран → открытие Instagram.";
+"guide.lockscreen.help.tricks.title" = "Тот же секретный номер — много трюков";
+"guide.lockscreen.help.tricks.body" = "Вводимый здесь номер — это тот же секретный номер, используемый Grid Input и всеми другими фокусами:\n\n• Разархивировать фото из числового сета\n• Открыть игральную карту\n• Показать пользовательское изображение\n• Активировать эффект сбоя счётчика\n• Принудительно показать рилс в Поиске";

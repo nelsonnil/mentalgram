@@ -5,7 +5,7 @@ import SwiftUI
 private struct IPHSection<Content: View>: View {
     let icon: String
     let iconColor: Color
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -31,7 +31,7 @@ private struct IPHSection<Content: View>: View {
 private struct IPHBullet: View {
     let icon: String
     let iconColor: Color
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -49,7 +49,7 @@ private struct IPHBullet: View {
 }
 
 private struct IPHMethodPill: View {
-    let label: String
+    let label: LocalizedStringKey
     let color: Color
 
     var body: some View {
@@ -154,7 +154,7 @@ private var iphDivider: some View {
         .padding(.vertical, 4)
 }
 
-private func iphTopBar(title: String, subtitle: String, onClose: @escaping () -> Void) -> some View {
+private func iphTopBar(title: LocalizedStringKey, subtitle: LocalizedStringKey, onClose: @escaping () -> Void) -> some View {
     HStack {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
@@ -201,7 +201,7 @@ struct ProfilePictureHelpView: View {
                             inputMethods
                         }
                         iphDivider
-                        IPHSection(icon: "mic.fill", iconColor: VaultTheme.Colors.warning, title: "During the show") {
+                        IPHSection(icon: "mic.fill", iconColor: VaultTheme.Colors.warning, title: "During the Show") {
                             duringShow
                         }
                         iphDivider
@@ -337,7 +337,7 @@ struct NoteHelpView: View {
                             inputMethods
                         }
                         iphDivider
-                        IPHSection(icon: "mic.fill", iconColor: VaultTheme.Colors.warning, title: "During the show") {
+                        IPHSection(icon: "mic.fill", iconColor: VaultTheme.Colors.warning, title: "During the Show") {
                             duringShow
                         }
                         iphDivider
@@ -481,7 +481,7 @@ struct BiographyHelpView: View {
                             inputMethods
                         }
                         iphDivider
-                        IPHSection(icon: "mic.fill", iconColor: VaultTheme.Colors.warning, title: "During the show") {
+                        IPHSection(icon: "mic.fill", iconColor: VaultTheme.Colors.warning, title: "During the Show") {
                             duringShow
                         }
                         iphDivider

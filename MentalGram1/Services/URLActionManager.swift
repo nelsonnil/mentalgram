@@ -4,9 +4,11 @@ import Combine
 /// Handles incoming URL scheme actions and stores them for PerformanceView to consume.
 ///
 /// Supported URLs:
-///   vault://note?text=<encoded text>   → send as Instagram Note
-///   vault://bio?text=<encoded text>    → update Instagram Biography
-///   vault://reveal?word=<encoded word> → open Performance and unarchive photos for the given word
+///   vault://note?text=<encoded text>    → send as Instagram Note
+///   vault://bio?text=<encoded text>     → update Instagram Biography
+///   vault://reveal?word=<encoded word>  → Word Reveal: unarchive letter photos for the given word
+///   vault://reveal?slot=<number>        → Custom Set Reveal: unarchive the photo at slot 1–100
+///   vault://reveal?card=<symbol>        → Playing Card Reveal: unarchive a card (e.g. J♠, 10♥, K♦)
 ///
 /// Flow:
 ///   1. App receives URL → URLActionManager.shared.handleURL(_:)
@@ -60,23 +62,39 @@ class URLActionManager: ObservableObject {
             return true
         }
 
-        // ── Word reveal variant ───────────────────────────────────────────────
+        // ── Reveal variants: word / custom slot / playing card ───────────────
         if host == "reveal" {
-            let paramName = "word"
-            guard let wordItem = components?.queryItems?.first(where: { $0.name == paramName }),
-                  let raw = wordItem.value,
-                  !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else {
-                print("⚠️ [URL] Missing or empty 'word' parameter in vault://reveal URL: \(url)")
-                return false
+            let items = components?.queryItems ?? []
+
+            // vault://reveal?word=COCHE  (Word Reveal)
+            if let raw = items.first(where: { $0.name == "word" })?.value,
+               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                print("📲 [URL] vault://reveal?word received: \"\(word.prefix(40))\"")
+                DispatchQueue.main.async { self.pendingMode = "reveal";      self.pendingText = word }
+                return true
             }
-            let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            print("📲 [URL] vault://reveal received, word=\"\(word.prefix(40))\"")
-            DispatchQueue.main.async {
-                self.pendingMode = "reveal"
-                self.pendingText = word
+
+            // vault://reveal?slot=15  (Custom Set Reveal, slot 1–100)
+            if let raw = items.first(where: { $0.name == "slot" })?.value,
+               let slot = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+               (1...100).contains(slot) {
+                print("📲 [URL] vault://reveal?slot received: \(slot)")
+                DispatchQueue.main.async { self.pendingMode = "reveal_slot"; self.pendingText = "\(slot)" }
+                return true
             }
-            return true
+
+            // vault://reveal?card=J%E2%99%A0  (Playing Card Reveal, e.g. J♠ 10♥ K♦)
+            if let raw = items.first(where: { $0.name == "card" })?.value,
+               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let symbol = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                print("📲 [URL] vault://reveal?card received: \"\(symbol)\"")
+                DispatchQueue.main.async { self.pendingMode = "reveal_card"; self.pendingText = symbol }
+                return true
+            }
+
+            print("⚠️ [URL] vault://reveal: missing or invalid 'word', 'slot', or 'card' parameter in \(url)")
+            return false
         }
 
         // ── Note / Bio text variants ──────────────────────────────────────────
@@ -106,8 +124,9 @@ class URLActionManager: ObservableObject {
     // MARK: - Consumption
 
     /// Called by PerformanceView to retrieve and clear the pending action.
+    /// Note: pendingText may be empty for modes that carry no payload (e.g. profilepic_last).
     func consume() -> (mode: String, text: String)? {
-        guard !pendingMode.isEmpty, !pendingText.isEmpty else { return nil }
+        guard !pendingMode.isEmpty else { return nil }
         let result = (mode: pendingMode, text: pendingText)
         pendingMode = ""
         pendingText = ""
@@ -126,15 +145,27 @@ class URLActionManager: ObservableObject {
         return components.url?.absoluteString ?? "vault://\(mode)?text=\(text)"
     }
 
-    // MARK: - Reveal URL builder
+    // MARK: - Reveal URL builders
 
-    /// Builds a vault://reveal?word= URL for the given word, with proper URL encoding.
+    /// vault://reveal?word=COCHE  — Word Reveal: unarchive letter photos for `word`.
     static func revealURL(word: String) -> String {
-        var components = URLComponents()
-        components.scheme = "vault"
-        components.host   = "reveal"
-        components.queryItems = [URLQueryItem(name: "word", value: word)]
-        return components.url?.absoluteString ?? "vault://reveal?word=\(word)"
+        var c = URLComponents(); c.scheme = "vault"; c.host = "reveal"
+        c.queryItems = [URLQueryItem(name: "word", value: word)]
+        return c.url?.absoluteString ?? "vault://reveal?word=\(word)"
+    }
+
+    /// vault://reveal?slot=15  — Custom Set Reveal: unarchive the photo at slot 1–100.
+    static func revealCustomSlotURL(slot: Int) -> String {
+        var c = URLComponents(); c.scheme = "vault"; c.host = "reveal"
+        c.queryItems = [URLQueryItem(name: "slot", value: "\(slot)")]
+        return c.url?.absoluteString ?? "vault://reveal?slot=\(slot)"
+    }
+
+    /// vault://reveal?card=J%E2%99%A0  — Playing Card Reveal: unarchive a card photo (e.g. J♠, 10♥, K♦).
+    static func revealCardURL(symbol: String) -> String {
+        var c = URLComponents(); c.scheme = "vault"; c.host = "reveal"
+        c.queryItems = [URLQueryItem(name: "card", value: symbol)]
+        return c.url?.absoluteString ?? "vault://reveal?card=\(symbol)"
     }
 
     // MARK: - Profile pic URL builders

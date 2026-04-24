@@ -13,6 +13,18 @@ struct LetterTemplate: Identifiable, Equatable {
     }
 }
 
+// MARK: - Number Template
+
+struct NumberTemplate: Identifiable, Equatable {
+    let id: String           // folder name, e.g. "Default"
+    let name: String         // display name
+    let folderPath: String   // relative inside bundle: "number/{id}"
+
+    static func == (lhs: NumberTemplate, rhs: NumberTemplate) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 // MARK: - Template Manager
 
 final class TemplateManager {
@@ -82,6 +94,65 @@ final class TemplateManager {
                 forResource: letter,
                 withExtension: ext,
                 subdirectory: "letras/\(folderName)/\(template.id)") {
+                return try? Data(contentsOf: url)
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Number Templates
+
+    /// Returns all available number templates, sorted by name.
+    func numberTemplates() -> [NumberTemplate] {
+        guard let baseURL = Bundle.main.url(forResource: "number", withExtension: nil) else {
+            return []
+        }
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: baseURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: .skipsHiddenFiles) else {
+            return []
+        }
+        let subfolders = contents
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .map { url in
+                let templateId = url.lastPathComponent
+                return NumberTemplate(
+                    id: templateId,
+                    name: templateId,
+                    folderPath: "number/\(templateId)"
+                )
+            }
+            .sorted { $0.name < $1.name }
+
+        return subfolders
+    }
+
+    /// Returns UIImages for the first `count` digits of the number template, for previewing.
+    func previewImages(for template: NumberTemplate, count: Int = 4) -> [UIImage] {
+        let digits = Array(["0","1","2","3","4","5","6","7","8","9"].prefix(count))
+        return digits.compactMap { digit in
+            numberImageData(for: digit, template: template).flatMap { UIImage(data: $0) }
+        }
+    }
+
+    /// Loads all digit images for the template and returns them ready to pass to DataManager.createSet.
+    func photos(for template: NumberTemplate) -> [(symbol: String, filename: String, imageData: Data)] {
+        ["0","1","2","3","4","5","6","7","8","9"].compactMap { digit in
+            guard let data = numberImageData(for: digit, template: template) else { return nil }
+            let filename = "\(digit)_template.jpg"
+            return (symbol: digit, filename: filename, imageData: data)
+        }
+    }
+
+    /// Image data for a single digit from a number template.
+    func numberImageData(for digit: String, template: NumberTemplate) -> Data? {
+        let extensions = ["jpg", "jpeg", "png", "PNG", "JPG"]
+        for ext in extensions {
+            if let url = Bundle.main.url(
+                forResource: digit,
+                withExtension: ext,
+                subdirectory: template.folderPath) {
                 return try? Data(contentsOf: url)
             }
         }
