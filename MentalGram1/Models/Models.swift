@@ -468,6 +468,7 @@ struct PhotoSet: Identifiable, Codable {
     var createdAt: Date
     var completedAt: Date?
     var selectedAlphabet: AlphabetType?  // For Word Reveal: which alphabet to use
+    var targetBankCount: Int?  // How many banks the user requested at creation time
     
     var totalPhotos: Int {
         photos.count

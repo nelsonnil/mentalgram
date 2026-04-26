@@ -1398,3 +1398,5 @@
 "guide.lockscreen.help.why.body" = "Cela déguise la saisie d'un numéro secret en déverrouillage normal du téléphone. Combiné avec le faux écran d'accueil, la séquence complète ressemble à: déverrouiller → écran d'accueil → ouvrir Instagram.";
 "guide.lockscreen.help.tricks.title" = "Le même numéro secret — plusieurs tours";
 "guide.lockscreen.help.tricks.body" = "Le numéro saisi ici est le même que celui utilisé par la saisie en grille et tous les autres tours de magie:\n\n• Désarchiver une photo d'un set numérique\n• Révéler une carte à jouer\n• Afficher une image personnalisée\n• Activer l'effet de compteur\n• Forcer un reel dans Explorer";
+"guide.lockscreen.help.cards.title" = "Codes des cartes";
+"guide.lockscreen.help.cards.body" = "Pour révéler une carte, saisissez son code comme numéro secret :\n\nCouleurs :  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartes A–9  →  [valeur][couleur]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartes 10, V, D, R  →  [dizaine][unité][couleur]\n  10♠ = 101    V♥ = 112\n  D♣  = 123    R♦  = 134\n\nExemple : pour révéler D♥ saisissez 122.";

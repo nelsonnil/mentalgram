@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var showingCreateSet = false
     @State private var showingExplore = false
     @State private var showingChallengeAlert = false
+    @AppStorage("launchDirectlyToPerformance") private var launchDirectlyToPerformance = false
 
     // Pre-performance visible photos check
     @State private var showVisiblePhotosAlert = false
@@ -105,6 +106,9 @@ struct HomeView: View {
             updateTabBarAppearance(forTab: 0)
         }
         .onAppear {
+            if launchDirectlyToPerformance && instagram.isLoggedIn {
+                selectedTab = 0
+            }
             updateTabBarAppearance(forTab: selectedTab)
             // Clean up any stuck upload state (e.g. deleted active set from infinite-loop bug)
             UploadManager.shared.clearStuckState()
@@ -724,7 +728,8 @@ struct SettingsView: View {
     @State private var showingLogin = false
     @State private var developerMode = false
 
-    // Other Settings — Fake Home Screen
+    // Other Settings — Fake Home Screen & launch behavior
+    @AppStorage("launchDirectlyToPerformance") private var launchDirectlyToPerformance = false
     @ObservedObject private var illusionService = HomeScreenIllusionService.shared
     @State private var showingHomeScreenPicker = false
 
@@ -959,6 +964,14 @@ struct SettingsView: View {
     @ViewBuilder private var otherSection: some View {
         settingsSectionLabel("OTHER", icon: "gearshape.2.fill", color: Self.colorData)
         accentedSection(color: Self.colorData) {
+            modernToggleRow(
+                icon: "bolt.fill",
+                iconColor: Self.colorData,
+                title: "Launch directly to Performance",
+                detail: "Skip the Sets tab — app opens on Performance every time",
+                isOn: $launchDirectlyToPerformance
+            )
+            modernDivider()
             FakeHomeScreenCard(showingPicker: $showingHomeScreenPicker)
             LockscreenInputSettingsCard()
         }
@@ -1725,6 +1738,8 @@ struct SettingsView: View {
                 await MainActor.run {
                     isSendingNote = false
                     if success {
+                        // Keep last_note_sent_date in sync so auto-mode dedup (2h window) works correctly
+                        UserDefaults.standard.set(Date(), forKey: "last_note_sent_date")
                         noteMessage = "✅ Note sent!\n\nYour note \"\(textToSend)\" is now visible above your profile picture in DMs for 24 hours."
                         showingNoteAlert = true
                         noteText = "" // Clear field
@@ -3280,6 +3295,9 @@ struct DateForceSettingsCard: View {
 
 private struct BackupCard: View {
     @ObservedObject var backup: CloudBackupService
+    @State private var showRestoreConfirm = false
+    @State private var showRestoredAlert = false
+    @State private var isRestoring = false
 
     private var lastBackupText: String {
         guard let date = backup.lastBackupDate else {
@@ -3367,10 +3385,64 @@ private struct BackupCard: View {
                 }
                 .disabled(!backup.iCloudAvailable || backup.isSyncing)
 
+                Button(action: { showRestoreConfirm = true }) {
+                    HStack {
+                        if isRestoring {
+                            ProgressView()
+                                .tint(.blue)
+                                .scaleEffect(0.85)
+                        } else {
+                            Image(systemName: "icloud.and.arrow.down")
+                        }
+                        Text(isRestoring ? "Restoring…" : "Restore from backup")
+                            .font(VaultTheme.Typography.body().weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(Color.blue.opacity(0.12))
+                    .foregroundColor(backup.hasCloudBackup ? .blue : .gray)
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                    )
+                }
+                .disabled(!backup.hasCloudBackup || isRestoring || backup.isSyncing)
+
                 Text("Backup runs automatically when the app is closed. Includes all your sets and images.")
                     .font(VaultTheme.Typography.caption())
                     .foregroundColor(VaultTheme.Colors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .alert("Restore from iCloud?", isPresented: $showRestoreConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Restore", role: .destructive) {
+                performRestore()
+            }
+        } message: {
+            Text("This will overwrite your current settings and sets with the iCloud backup. This action cannot be undone.")
+        }
+        .alert("Restore complete", isPresented: $showRestoredAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Your settings and sets have been restored from iCloud.")
+        }
+    }
+
+    private func performRestore() {
+        isRestoring = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let success = backup.restoreFromCloud()
+            DispatchQueue.main.async {
+                if success {
+                    DataManager.shared.reloadAfterRestore()
+                    iCloudDriveSync.shared.downloadAllPhotosFromCloud { count in
+                        print("☁️ [BACKUP] Manual restore: \(count) photo files downloaded")
+                    }
+                }
+                isRestoring = false
+                showRestoredAlert = success
             }
         }
     }

@@ -283,14 +283,22 @@ struct SetDetailView: View {
         }
     }
 
+    @State private var showForceDeleteBankConfirm = false
+
     @ViewBuilder private var deleteLastBankButton: some View {
-        let canDelete: Bool = {
-            guard currentSet.banks.count > 1 else { return false }
+        let hasManyBanks = currentSet.banks.count > 1
+        let isExtraBank: Bool = {
+            guard let target = currentSet.targetBankCount else { return false }
+            return currentSet.banks.count > target
+        }()
+        let canDeleteSafely: Bool = {
+            guard hasManyBanks else { return false }
             guard let last = currentSet.banks.max(by: { $0.position < $1.position }) else { return false }
             let bankPhotos = currentSet.photos.filter { $0.bankId == last.id }
             return !bankPhotos.contains(where: { $0.uploadStatus != .pending || $0.imageData != nil })
         }()
-        if canDelete {
+
+        if canDeleteSafely {
             Button { dataManager.removeLastBank(setId: currentSet.id) } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "trash").font(.system(size: 13))
@@ -301,6 +309,25 @@ struct SetDetailView: View {
                 .background(Color.red.opacity(0.08)).cornerRadius(8)
             }
             .buttonStyle(.plain)
+        } else if isExtraBank && hasManyBanks {
+            Button { showForceDeleteBankConfirm = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash").font(.system(size: 13))
+                    Text("Remove extra bank").font(.caption)
+                }
+                .foregroundColor(.red)
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Color.red.opacity(0.08)).cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .alert("Remove Extra Bank?", isPresented: $showForceDeleteBankConfirm) {
+                Button("Remove", role: .destructive) {
+                    dataManager.removeLastBank(setId: currentSet.id, force: true)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This bank was created beyond your target of \(currentSet.targetBankCount ?? 0). Its photos will be removed from the app but will remain archived on Instagram.")
+            }
         }
     }
 
@@ -3362,13 +3389,20 @@ struct SetDetailView: View {
         } // end for (photos loop)
         
         // ── AUTO-NEXT BANK ────────────────────────────────────────────────
-        // For word/number sets: automatically add the next bank and keep uploading.
-        // This lets the user leave the app running overnight without manual intervention.
+        // For word/number sets: automatically add the next bank and keep uploading,
+        // but ONLY if the target bank count hasn't been reached yet.
         let setForBankCheck = dataManager.sets.first(where: { $0.id == currentSet.id })
         let isWordOrNumber = setForBankCheck?.type == .word || setForBankCheck?.type == .number
-        if isWordOrNumber {
-            print("➕ [BANK] Bank complete — auto-adding next bank and continuing upload…")
-            LogManager.shared.info("Bank complete — auto-adding next bank", category: .upload)
+        let currentBankCount = setForBankCheck?.banks.count ?? 0
+        let targetBanks = setForBankCheck?.targetBankCount ?? currentBankCount
+        let canAddMoreBanks = currentBankCount < targetBanks
+        if isWordOrNumber && !canAddMoreBanks {
+            print("✅ [BANK] All \(currentBankCount)/\(targetBanks) banks complete — stopping auto-bank")
+            LogManager.shared.success("All \(currentBankCount) banks completed for set '\(setForBankCheck?.name ?? "")'", category: .upload)
+        }
+        if isWordOrNumber && canAddMoreBanks {
+            print("➕ [BANK] Bank \(currentBankCount)/\(targetBanks) complete — auto-adding next bank and continuing upload…")
+            LogManager.shared.info("Bank \(currentBankCount)/\(targetBanks) complete — auto-adding next bank", category: .upload)
             let newBank = await MainActor.run { dataManager.addBank(setId: currentSet.id) }
             if newBank != nil {
                 // Brief pause (1 cooldown cycle) before starting next bank

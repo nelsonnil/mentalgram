@@ -192,7 +192,8 @@ class DataManager: ObservableObject {
             banks: banks,
             photos: setPhotos,
             createdAt: Date(),
-            selectedAlphabet: selectedAlphabet
+            selectedAlphabet: selectedAlphabet,
+            targetBankCount: (type == .word || type == .number) ? bankCount : nil
         )
         
         sets.append(newSet)
@@ -415,10 +416,12 @@ class DataManager: ObservableObject {
         return newBank
     }
 
-    /// Removes the last bank from a word/number set, but only if ALL its photos are still pending (not uploaded).
-    /// Returns true if removed, false if blocked.
+    /// Removes the last bank from a word/number set.
+    /// By default only removes if ALL photos are still pending (not uploaded).
+    /// Pass `force: true` to remove even if photos have been uploaded/archived
+    /// (those photos stay archived on Instagram but are no longer tracked).
     @discardableResult
-    func removeLastBank(setId: UUID) -> Bool {
+    func removeLastBank(setId: UUID, force: Bool = false) -> Bool {
         guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return false }
         let set = sets[setIndex]
         guard set.type == .word || set.type == .number else { return false }
@@ -429,16 +432,20 @@ class DataManager: ObservableObject {
 
         guard let lastBank = set.banks.max(by: { $0.position < $1.position }) else { return false }
         let bankPhotos = set.photos.filter { $0.bankId == lastBank.id }
-        let hasUploaded = bankPhotos.contains { $0.uploadStatus != .pending }
-        if hasUploaded {
-            print("⚠️ [BANK] Cannot remove bank \(lastBank.position) — has uploaded photos")
-            return false
+
+        if !force {
+            let hasUploaded = bankPhotos.contains { $0.uploadStatus != .pending }
+            if hasUploaded {
+                print("⚠️ [BANK] Cannot remove bank \(lastBank.position) — has uploaded photos (use force to override)")
+                return false
+            }
         }
 
+        let removedCount = bankPhotos.count
         sets[setIndex].banks.removeAll { $0.id == lastBank.id }
         sets[setIndex].photos.removeAll { $0.bankId == lastBank.id }
         saveSets()
-        print("🗑️ [BANK] Removed bank \(lastBank.position) from set '\(set.name)'")
+        print("🗑️ [BANK] Removed bank \(lastBank.position) from set '\(set.name)' (\(removedCount) photos, force=\(force))")
         return true
     }
     

@@ -38,6 +38,11 @@ struct LockscreenInputGuideView: View {
                                      title: String(localized: "guide.lockscreen.help.tricks.title")) {
                             guideBody(String(localized: "guide.lockscreen.help.tricks.body"))
                         }
+                        sectionDivider
+                        guideSection(icon: "suit.spade.fill", iconColor: accent,
+                                     title: String(localized: "guide.lockscreen.help.cards.title")) {
+                            guideBody(String(localized: "guide.lockscreen.help.cards.body"))
+                        }
                     }
                     .padding(.horizontal, VaultTheme.Spacing.lg)
 

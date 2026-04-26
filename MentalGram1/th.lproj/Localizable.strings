@@ -865,3 +865,5 @@
 "guide.lockscreen.help.why.body" = "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram.";
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
 "guide.lockscreen.help.tricks.body" = "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore";
+"guide.lockscreen.help.cards.title" = "รหัสไพ่";
+"guide.lockscreen.help.cards.body" = "เพื่อเปิดเผยไพ่ ให้ป้อนรหัสเป็นตัวเลขลับ:\n\nดอก:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nไพ่ A–9  →  [ค่า][ดอก]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nไพ่ 10, J, Q, K  →  [หลักสิบ][หลักหน่วย][ดอก]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nตัวอย่าง: เปิดเผย Q♥ ให้ป้อน 122";

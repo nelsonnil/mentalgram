@@ -1397,3 +1397,5 @@
 "guide.lockscreen.help.why.body" = "Disfarça a entrada de um número secreto como um desbloqueio normal do telefone. Combinado com a tela inicial falsa, a sequência completa parece: desbloquear → tela inicial → abrir Instagram.";
 "guide.lockscreen.help.tricks.title" = "O mesmo número secreto — muitos truques";
 "guide.lockscreen.help.tricks.body" = "O número inserido aqui é o mesmo usado pela entrada em grade e todos os outros truques:\n\n• Desarquivar uma foto de um set numérico\n• Revelar uma carta\n• Mostrar uma imagem personalizada\n• Ativar o efeito contador\n• Forçar um reel no Explorar";
+"guide.lockscreen.help.cards.title" = "Códigos das cartas";
+"guide.lockscreen.help.cards.body" = "Para revelar uma carta, insira seu código como número secreto:\n\nNaipes:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartas A–9  →  [valor][naipe]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartas 10, J, Q, K  →  [dezena][unidade][naipe]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nExemplo: para revelar Q♥ insira 122.";

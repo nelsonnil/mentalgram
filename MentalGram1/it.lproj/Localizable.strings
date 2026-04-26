@@ -1398,3 +1398,5 @@
 "guide.lockscreen.help.why.body" = "Maschera l'inserimento di un numero segreto come normale sblocco del telefono. Combinato con la schermata home falsa, la sequenza completa sembra: sblocca → home → apri Instagram.";
 "guide.lockscreen.help.tricks.title" = "Lo stesso numero segreto — tanti trucchi";
 "guide.lockscreen.help.tricks.body" = "Il numero inserito qui è lo stesso usato dall'inserimento a griglia e da tutti gli altri trucchi:\n\n• Disarchiviare una foto da un set numerico\n• Rivelare una carta da gioco\n• Mostrare un'immagine personalizzata\n• Attivare l'effetto contatore\n• Forzare un reel in Esplora";
+"guide.lockscreen.help.cards.title" = "Codici delle carte";
+"guide.lockscreen.help.cards.body" = "Per rivelare una carta, inserisci il suo codice come numero segreto:\n\nSemi:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCarte A–9  →  [valore][seme]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCarte 10, J, Q, K  →  [decina][unità][seme]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nEsempio: per rivelare Q♥ inserisci 122.";

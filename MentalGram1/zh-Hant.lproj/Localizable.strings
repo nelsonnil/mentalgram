@@ -875,3 +875,5 @@
 "guide.lockscreen.help.why.body" = "將秘密數字的輸入偽裝成正常的手機解鎖。與虛假主畫面結合使用，完整序列看起來像：解鎖手機 → 主畫面 → 開啟Instagram。";
 "guide.lockscreen.help.tricks.title" = "同一秘密數字 — 多種魔術";
 "guide.lockscreen.help.tricks.body" = "此處輸入的數字與網格輸入和所有其他魔術技巧使用的秘密數字相同：\n\n• 從數字套裝中解除封存照片\n• 顯示撲克牌\n• 顯示自訂圖像\n• 啟動計數器故障效果\n• 在探索中強制顯示卷軸";
+"guide.lockscreen.help.cards.title" = "撲克牌代碼";
+"guide.lockscreen.help.cards.body" = "輸入撲克牌代碼作為秘密數字以揭示對應的牌：\n\n花色：  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nA–9 的牌  →  [牌值][花色]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\n10、J、Q、K  →  [十位][個位][花色]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\n範例：揭示 Q♥ 請輸入 122。";

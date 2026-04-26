@@ -921,3 +921,5 @@
 "guide.lockscreen.help.why.body" = "将秘密数字的输入伪装成正常的手机解锁。与虚假主屏幕结合使用，完整序列看起来像：解锁手机 → 主屏幕 → 打开Instagram。";
 "guide.lockscreen.help.tricks.title" = "同一秘密数字 — 多种魔术";
 "guide.lockscreen.help.tricks.body" = "此处输入的数字与网格输入和所有其他魔术技巧使用的秘密数字相同：\n\n• 从数字套装中解档照片\n• 显示扑克牌\n• 显示自定义图像\n• 激活计数器故障效果\n• 在探索中强制显示卷轴";
+"guide.lockscreen.help.cards.title" = "扑克牌代码";
+"guide.lockscreen.help.cards.body" = "输入扑克牌代码作为秘密数字以揭示对应的牌：\n\n花色：  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nA–9 的牌  →  [牌值][花色]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\n10、J、Q、K  →  [十位][个位][花色]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\n示例：揭示 Q♥ 请输入 122。";

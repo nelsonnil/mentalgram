@@ -1215,3 +1215,5 @@
 "guide.lockscreen.help.why.body" = "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram.";
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
 "guide.lockscreen.help.tricks.body" = "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore";
+"guide.lockscreen.help.cards.title" = "Speelkaartcodes";
+"guide.lockscreen.help.cards.body" = "Voer de code van een speelkaart in als geheim getal om deze te onthullen:\n\nKleur:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKaarten A–9  →  [waarde][kleur]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKaarten 10, B, V, H  →  [tientallen][eenheden][kleur]\n  10♠ = 101    B♥ = 112\n  V♣  = 123    H♦  = 134\n\nVoorbeeld: typ 122 om V♥ te onthullen.";

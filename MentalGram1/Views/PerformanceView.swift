@@ -82,8 +82,9 @@ struct PerformanceView: View {
     @ObservedObject private var uploadManager = UploadManager.shared
 
     // MARK: - Refresh throttle (prevent rapid consecutive API calls)
-    @State private var lastRefreshDate: Date? = nil
-    private let minRefreshInterval: TimeInterval = 10
+    /// Persisted across app restarts so throttle survives close/reopen cycles.
+    @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
+    private let minRefreshInterval: TimeInterval = 60  // 60s minimum between full profile fetches
 
     // MARK: - Auto-refresh on Performance entry
     /// Persisted timestamp of the last full profile refresh. Used to decide whether
@@ -223,8 +224,6 @@ struct PerformanceView: View {
             },
             mediaItemsByURL: mediaItemsByURL,
             isLoading: isLoading,
-            lastRefreshDate: lastRefreshDate,
-            minRefreshInterval: minRefreshInterval,
             onUploadConflict: { showUploadConflictAlert = true },
             onFollowerTap: { follower in
                 withAnimation(.easeInOut(duration: 0.25)) { selectedSpectator = follower }
@@ -908,12 +907,20 @@ struct PerformanceView: View {
             return
         }
 
-        // Skip if same value was already sent — avoids Instagram duplicate spam rejection
+        // Skip if same value was already sent within 2 hours — avoids Instagram duplicate spam rejection
         let ud = UserDefaults.standard
-        let lastKey = target == "note" ? "last_note_text" : "last_biography_text"
-        if let lastSent = ud.string(forKey: lastKey), lastSent == text.trimmingCharacters(in: .whitespacesAndNewlines) {
-            print("⏭️ [API AUTO] Same value as last sent — skipping (\"\(text.prefix(30))\")")
-            return
+        let lastKey   = target == "note" ? "last_note_text"      : "last_biography_text"
+        let dateKey   = target == "note" ? "last_note_sent_date"  : "last_biography_sent_date"
+        let trimmed   = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
+            let sentDate   = ud.object(forKey: dateKey) as? Date ?? .distantPast
+            let hoursSince = Date().timeIntervalSince(sentDate) / 3600
+            if hoursSince < 2 {
+                print("⏭️ [API AUTO] Dedup: same text sent \(String(format: "%.0f", hoursSince * 60))m ago — skipping (\"\(text.prefix(30))\")")
+                return
+            }
+            print("⏭️ [API AUTO] Dedup expired (\(String(format: "%.1f", hoursSince))h) — allowing re-send")
+            ud.removeObject(forKey: lastKey)
         }
 
         print("⚡ [API AUTO] Got value: \"\(text.prefix(40))\" — applying to \(target)")
@@ -937,7 +944,8 @@ struct PerformanceView: View {
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     print("✅ [API AUTO] Note sent: \"\(final)\"")
-                    ud.set(text.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)  // store raw for dedup
+                    ud.set(trimmed, forKey: lastKey)          // raw text for dedup
+                    ud.set(Date(), forKey: dateKey)           // timestamp so dedup expires in 2h
                     fireDoubleConfirmationVibration()
                 }
             } else {
@@ -962,7 +970,8 @@ struct PerformanceView: View {
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     print("✅ [API AUTO] Biography updated: \"\(final)\"")
-                    ud.set(text.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastKey)  // store raw for dedup
+                    ud.set(trimmed, forKey: lastKey)          // raw text for dedup
+                    ud.set(Date(), forKey: dateKey)           // timestamp so dedup expires in 2h
                     fireDoubleConfirmationVibration()
                 }
             }
@@ -994,13 +1003,20 @@ struct PerformanceView: View {
         }
 
         let ud = UserDefaults.standard
-        let lastKey = target == "note" ? "last_note_text" : "last_biography_text"
+        let lastKey = target == "note" ? "last_note_text"     : "last_biography_text"
+        let dateKey = target == "note" ? "last_note_sent_date" : "last_biography_sent_date"
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Dedup on the raw detected word (template-agnostic)
+        // Dedup on the raw detected word — expires after 2 hours
         if let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
-            print("⏭️ [OCR] Same value as last sent — skipping")
-            return
+            let sentDate   = ud.object(forKey: dateKey) as? Date ?? .distantPast
+            let hoursSince = Date().timeIntervalSince(sentDate) / 3600
+            if hoursSince < 2 {
+                print("⏭️ [OCR] Dedup: same word sent \(String(format: "%.0f", hoursSince * 60))m ago — skipping (\"\(trimmed.prefix(30))\")")
+                return
+            }
+            print("⏭️ [OCR] Dedup expired (\(String(format: "%.1f", hoursSince))h) — allowing re-send")
+            ud.removeObject(forKey: lastKey)
         }
 
         // Apply text template ({word} → detected word)
@@ -1023,7 +1039,8 @@ struct PerformanceView: View {
                 }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
-                    ud.set(trimmed, forKey: lastKey)  // store raw word for dedup
+                    ud.set(trimmed, forKey: lastKey)  // raw word for dedup
+                    ud.set(Date(), forKey: dateKey)   // timestamp so dedup expires in 2h
                     print("✅ [OCR] Note sent: \"\(final)\"")
                     fireDoubleConfirmationVibration()
                 }
@@ -1048,7 +1065,8 @@ struct PerformanceView: View {
                 }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
-                    ud.set(trimmed, forKey: lastKey)  // store raw word for dedup
+                    ud.set(trimmed, forKey: lastKey)  // raw word for dedup
+                    ud.set(Date(), forKey: dateKey)   // timestamp so dedup expires in 2h
                     print("✅ [OCR] Biography updated: \"\(final)\"")
                     fireDoubleConfirmationVibration()
                 }
@@ -1194,9 +1212,11 @@ struct PerformanceView: View {
             return
         }
 
-        // Throttle: block refreshes faster than minRefreshInterval
-        if let last = lastRefreshDate, Date().timeIntervalSince(last) < minRefreshInterval {
-            let waited = Int(Date().timeIntervalSince(last))
+        // Throttle: block refreshes faster than minRefreshInterval (persisted across restarts)
+        let now = Date().timeIntervalSince1970
+        let timeSinceLastRefresh = now - lastRefreshTimestamp
+        if lastRefreshTimestamp > 0 && timeSinceLastRefresh < minRefreshInterval {
+            let waited = Int(timeSinceLastRefresh)
             print("🚫 [PERF] loadProfile throttled — \(waited)s since last refresh (min \(Int(minRefreshInterval))s)")
             LogManager.shared.warning("loadProfile throttled: \(waited)s since last refresh", category: .general)
             return
@@ -1210,7 +1230,9 @@ struct PerformanceView: View {
             LogManager.shared.warning("loadProfile skipped: profile pic upload active", category: .general)
             return
         }
-        lastRefreshDate = Date()
+        // Stamp both timestamps so neither the throttle nor the auto-refresh fires again soon
+        lastRefreshTimestamp = now
+        lastAutoRefreshTimestamp = now
 
         print("🔄 [PERF] loadProfile starting — full profile refresh")
         LogManager.shared.info("Profile refresh started", category: .general)
@@ -2202,8 +2224,6 @@ struct InstagramProfileView: View {
 
     // Passed from PerformanceView so the pull-to-refresh guard can check them.
     var isLoading: Bool = false
-    var lastRefreshDate: Date? = nil
-    var minRefreshInterval: TimeInterval = 30
     // Called when reveal is blocked because an upload is active.
     var onUploadConflict: (() -> Void)? = nil
     // Called when user taps a follower — PerformanceView handles the overlay.
@@ -3358,7 +3378,7 @@ struct ReelsGridView: View {
         LazyVGrid(columns: columns, spacing: 1) {
             ForEach(reelURLs, id: \.self) { url in
                 Color.clear
-                    .aspectRatio(4/5, contentMode: .fit)
+                    .aspectRatio(1, contentMode: .fit)
                     .overlay(
                         ZStack(alignment: .bottomLeading) {
                             if let image = cachedImages[url] {
@@ -3379,7 +3399,7 @@ struct ReelsGridView: View {
             if placeholderCount > 0 {
                 ForEach(0..<placeholderCount, id: \.self) { _ in
                     Color.clear
-                        .aspectRatio(4/5, contentMode: .fit)
+                        .aspectRatio(1, contentMode: .fit)
                         .overlay(
                             ZStack(alignment: .bottomLeading) {
                                 Rectangle().fill(Color.gray.opacity(0.15))
@@ -3813,7 +3833,7 @@ struct PhotosGridView: View {
         LazyVGrid(columns: columns, spacing: 1) {
             ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
                 Color.clear
-                    .aspectRatio(4/5, contentMode: .fit)
+                    .aspectRatio(1, contentMode: .fit)
                     .overlay(
                         Group {
                 if let image = cachedImages[url] {
@@ -3833,7 +3853,7 @@ struct PhotosGridView: View {
             if placeholderCount > 0 {
                 ForEach(0..<placeholderCount, id: \.self) { _ in
                     Color.clear
-                        .aspectRatio(4/5, contentMode: .fit)
+                        .aspectRatio(1, contentMode: .fit)
                         .overlay(Rectangle().fill(Color.gray.opacity(0.15)))
                         .clipped()
                 }

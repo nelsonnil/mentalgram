@@ -1398,3 +1398,5 @@
 "guide.lockscreen.help.why.body" = "Es tarnt die Eingabe einer Geheimzahl als normale Telefonentsperrung. Kombiniert mit dem gefälschten Startbildschirm sieht die vollständige Abfolge so aus: Telefon entsperren → Startbildschirm → Instagram öffnen.";
 "guide.lockscreen.help.tricks.title" = "Dieselbe Geheimzahl — viele Tricks";
 "guide.lockscreen.help.tricks.body" = "Die hier eingegebene Zahl ist dieselbe Geheimzahl, die von der Rastereingabe und allen anderen Zaubertricks verwendet wird:\n\n• Foto aus einem numerischen Set dearchivieren\n• Spielkarte enthüllen\n• Benutzerdefiniertes Bild zeigen\n• Zähler-Glitch aktivieren\n• Reel in Entdecken erzwingen";
+"guide.lockscreen.help.cards.title" = "Spielkarten-Codes";
+"guide.lockscreen.help.cards.body" = "Um eine Spielkarte aufzudecken, gib ihren Code als Geheimzahl ein:\n\nFarben:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKarten A–9  →  [Wert][Farbe]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKarten 10, B, D, K  →  [Zehner][Einer][Farbe]\n  10♠ = 101    B♥ = 112\n  D♣  = 123    K♦  = 134\n\nBeispiel: Um D♥ aufzudecken, gib 122 ein.";

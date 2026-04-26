@@ -1217,3 +1217,5 @@
 "guide.lockscreen.help.why.body" = "비밀 번호 입력을 일반 전화 잠금 해제로 위장합니다. 가짜 홈 화면과 결합하면 전체 시퀀스가 다음처럼 보입니다: 전화 잠금 해제 → 홈 화면 → Instagram 열기.";
 "guide.lockscreen.help.tricks.title" = "같은 비밀 번호 — 다양한 트릭";
 "guide.lockscreen.help.tricks.body" = "여기서 입력하는 번호는 그리드 입력과 다른 모든 마술 트릭에 사용되는 동일한 비밀 번호입니다:\n\n• 숫자 세트에서 사진 보관 해제\n• 카드 공개\n• 사용자 정의 이미지 표시\n• 카운터 글리치 활성화\n• 탐색에서 릴 강제 표시";
+"guide.lockscreen.help.cards.title" = "플레이잉 카드 코드";
+"guide.lockscreen.help.cards.body" = "카드를 공개하려면 비밀 번호로 해당 코드를 입력하세요:\n\n슈트:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nA–9 카드  →  [숫자][슈트]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\n10, J, Q, K 카드  →  [십의 자리][일의 자리][슈트]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\n예시: Q♥를 공개하려면 122를 입력하세요.";

@@ -99,6 +99,10 @@ class InstagramService: ObservableObject {
     private let maxActionsPerHour: Int = 55 // Safe margin below 60
     @Published var actionsThisHour: Int = 0
     @Published var isRateLimited: Bool = false
+    private var lastRequestTimestamp: Date? = nil
+    /// Rolling buffer of recent API calls for bot-detection diagnostics
+    private var recentRequests: [(date: Date, method: String, path: String)] = []
+    private let recentRequestsMax = 10
     
     // Network monitoring
     private let networkMonitor = NWPathMonitor()
@@ -322,6 +326,23 @@ class InstagramService: ObservableObject {
         
         print("🔒 [LOCKDOWN] Activated for \(Int(duration/60)) minutes")
         print("🔒 [LOCKDOWN] Reason: \(reason)")
+
+        // Dump recent API calls to logs for bot-detection diagnosis
+        let df = DateFormatter()
+        df.dateFormat = "HH:mm:ss.SSS"
+        let history = recentRequests.enumerated().map { i, req in
+            let gapStr: String
+            if i > 0 {
+                let prevDate = recentRequests[i - 1].date
+                gapStr = String(format: "+%.1fs", req.date.timeIntervalSince(prevDate))
+            } else {
+                gapStr = "start"
+            }
+            return "  \(df.string(from: req.date)) \(req.method) \(req.path) [\(gapStr)]"
+        }.joined(separator: "\n")
+        let diagMsg = "LOCKDOWN — last \(recentRequests.count) API calls:\n\(history)"
+        LogManager.shared.bot(diagMsg)
+        print("🔒 [LOCKDOWN] \(diagMsg)")
     }
     
     /// Marks the session as challenged for `duration` seconds.
@@ -1157,25 +1178,53 @@ class InstagramService: ObservableObject {
         }
         
         if let body = body {
-            let bodyString = body.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+            // Properly percent-encode each value so special characters (newlines → %0A,
+            // spaces → %20, ampersands → %26, etc.) survive the API round-trip intact.
+            // Raw string concatenation silently strips or breaks multi-line biography text.
+            var components = URLComponents()
+            components.queryItems = body.map { URLQueryItem(name: $0.key, value: $0.value) }
+            let bodyString = components.percentEncodedQuery ?? ""
             request.httpBody = bodyString.data(using: .utf8)
         }
         
         // Track this action for rate limiting
         trackAction()
+
+        // Log the request with timing info
+        let now = Date()
+        let gap: String
+        if let last = lastRequestTimestamp {
+            let elapsed = now.timeIntervalSince(last)
+            gap = String(format: "%.1fs", elapsed)
+        } else {
+            gap = "first"
+        }
+        lastRequestTimestamp = now
+        let rateInfo = checkRateLimit()
+        let shortPath = path.components(separatedBy: "?").first ?? path
+        LogManager.shared.log(
+            "\(method) \(shortPath) [gap:\(gap)] [actions:\(rateInfo.actionsUsed)/\(maxActionsPerHour)] [errors:\(consecutiveErrors)]",
+            level: .debug, category: .api
+        )
+        recentRequests.append((date: now, method: method, path: shortPath))
+        if recentRequests.count > recentRequestsMax { recentRequests.removeFirst() }
         
         // Use different sessions: GET can wait, POST cannot (critical for bot detection)
         let session = (method == "GET") ? getSession : postSession
         
+        let requestStart = CFAbsoluteTimeGetCurrent()
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError {
-            // Network error - safe to retry
+            let duration = String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - requestStart) * 1000)
             print("🌐 [NETWORK] URLError: \(error.localizedDescription)")
+            LogManager.shared.error("\(method) \(shortPath) NETWORK ERROR [\(duration)]: \(error.localizedDescription)", category: .api)
             throw InstagramError.networkError(error.localizedDescription)
         }
         
+        let duration = String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - requestStart) * 1000)
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw InstagramError.invalidResponse
         }
@@ -1193,16 +1242,18 @@ class InstagramService: ObservableObject {
             challengeRequiredStreak = 0
         } else {
             consecutiveErrors += 1
+            LogManager.shared.warning("\(method) \(shortPath) HTTP \(httpResponse.statusCode) [\(duration)] [consecutiveErrors:\(consecutiveErrors)]", category: .api)
         }
         
         // Check for bot detection signals in HTTP status
         if httpResponse.statusCode == 429 {
-            // Rate limited
+            LogManager.shared.bot("\(method) \(shortPath) → HTTP 429 Rate Limited [\(duration)] [actions:\(rateInfo.actionsUsed)/\(maxActionsPerHour)]")
             await triggerLockdown(reason: "Rate limited by Instagram. Too many requests.", duration: 300)
             throw InstagramError.botDetected("Rate limited (HTTP 429). Wait 5 minutes.")
         }
         
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            LogManager.shared.bot("\(method) \(shortPath) → HTTP \(httpResponse.statusCode) Session expired [\(duration)]")
             await MainActor.run { self.isSessionExpired = true }
             throw InstagramError.sessionExpired
         }
@@ -1267,6 +1318,10 @@ class InstagramService: ObservableObject {
             consecutiveErrors = 0
             consecutiveBotSignalErrors = 0
         }
+
+        // Log successful response (debug level to avoid flooding)
+        let dataSize = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+        print("✅ [API] \(method) \(shortPath) → 200 [\(duration)] [\(dataSize)]")
         
         return data
     }
