@@ -21,22 +21,24 @@ struct UserGuideView: View {
         case dateForce
         case fakeHomeScreen
         case lockscreenInput
+        case amnesiaCarousel
 
         var id: Int {
             switch self {
-            case .introduction:   return 0
-            case .limits:         return 1
-            case .performance:    return 2
-            case .profilePicture: return 3
-            case .note:           return 4
-            case .biography:      return 5
-            case .forcePost:      return 6
-            case .forceReel:      return 7
-            case .postPrediction: return 8
-            case .counterGlitch:  return 9
-            case .dateForce:      return 10
-            case .fakeHomeScreen: return 11
+            case .introduction:    return 0
+            case .limits:          return 1
+            case .performance:     return 2
+            case .profilePicture:  return 3
+            case .note:            return 4
+            case .biography:       return 5
+            case .forcePost:       return 6
+            case .forceReel:       return 7
+            case .postPrediction:  return 8
+            case .counterGlitch:   return 9
+            case .dateForce:       return 10
+            case .fakeHomeScreen:  return 11
             case .lockscreenInput: return 12
+            case .amnesiaCarousel: return 13
             }
         }
     }
@@ -159,8 +161,17 @@ struct UserGuideView: View {
                             iconColor: colorTricks,
                             title: "Date Force",
                             subtitle: "Force followers/following to reveal today's date",
-                            isFirst: false, isLast: true
+                            isFirst: false, isLast: false
                         ) { activeSheet = .dateForce }
+
+                        guideDivider
+                        guideRow(
+                            icon: "rectangle.on.rectangle.slash.fill",
+                            iconColor: colorTricks,
+                            title: "guide.amnesia.row.title",
+                            subtitle: "guide.amnesia.row.subtitle",
+                            isFirst: false, isLast: true
+                        ) { activeSheet = .amnesiaCarousel }
                     }
 
                     // CAMOUFLAGE
@@ -229,6 +240,8 @@ struct UserGuideView: View {
             FakeHomeScreenGuideView(onClose: { activeSheet = nil })
         case .lockscreenInput:
             LockscreenInputGuideView(onClose: { activeSheet = nil })
+        case .amnesiaCarousel:
+            AmnesiaCarouselGuideView(onClose: { activeSheet = nil })
         }
     }
 

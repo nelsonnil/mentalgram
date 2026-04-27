@@ -29,6 +29,7 @@ struct PerformanceView: View {
     @ObservedObject private var forceRevealSettings = ForceNumberRevealSettings.shared
     @ObservedObject private var followingMagic = FollowingMagicSettings.shared
     @ObservedObject private var volumeMonitor  = VolumeButtonMonitor.shared
+    @ObservedObject private var amnesiaSettings = AmnesiaCarouselSettings.shared
     @StateObject private var ocrCoordinator = OCRCoordinator()
     /// Set by OCR result handler; observed by InstagramProfileView to trigger post-prediction reveal.
     @State private var pendingOCRWord: String? = nil
@@ -1078,6 +1079,40 @@ struct PerformanceView: View {
     }
 
     /// Two full-power vibrations with a 2-second gap — mirrors the post-unarchive confirmation.
+    // MARK: - Amnesia Carousel
+
+    /// Called when the magician closes the PostScrollView after viewing the short carousel.
+    /// Runs the archive-A / unarchive-B swap in the background with anti-bot delays.
+    private func triggerAmnesiaSwap() {
+        guard amnesiaSettings.isEnabled,
+              amnesiaSettings.isReady,
+              !amnesiaSettings.isRevealed,
+              amnesiaSettings.uploadState != .swapping,
+              !instagram.isLocked
+        else {
+            print("🎭 [AMNESIA] Swap skipped — not ready or already revealed")
+            return
+        }
+        print("🎭 [AMNESIA] Triggering reveal swap…")
+        amnesiaSettings.uploadState = .swapping
+
+        Task {
+            do {
+                try await instagram.swapAmnesiaCarousels(settings: amnesiaSettings)
+                await MainActor.run {
+                    amnesiaSettings.uploadState = .ready
+                    fireDoubleConfirmationVibration()
+                }
+            } catch {
+                await MainActor.run {
+                    amnesiaSettings.uploadState = .ready
+                    print("⚠️ [AMNESIA] Swap error: \(error.localizedDescription)")
+                    LogManager.shared.warning("Amnesia swap failed: \(error.localizedDescription)", category: .api)
+                }
+            }
+        }
+    }
+
     private func fireDoubleConfirmationVibration() {
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
         Task {
@@ -1264,6 +1299,9 @@ struct PerformanceView: View {
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
                 ProfileCacheService.shared.pendingProfilePic = nil
                         downloadAndCacheImages(profile: fetchedProfile)
+                    } else {
+                        print("⚠️ [PERF] getProfileInfo returned nil — profile data unavailable")
+                        LogManager.shared.error("loadProfile: getProfileInfo returned nil for userId \(instagram.session.userId)", category: .general)
                     }
                     isLoading = false
             } catch let error as InstagramError {
@@ -2197,6 +2235,9 @@ struct InstagramProfileView: View {
     @ObservedObject private var dateForce = DateForceSettings.shared
     var onAutoFollowedByTap: (() -> Void)? = nil
 
+    // Amnesia Carousel
+    @ObservedObject private var amnesiaSettings = AmnesiaCarouselSettings.shared
+
     // Optimistic note state — @AppStorage triggers instant re-render on write
     @AppStorage("last_note_text")           private var lastNoteText: String = ""
     @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
@@ -2765,7 +2806,24 @@ struct InstagramProfileView: View {
             DragGesture(minimumDistance: 20, coordinateSpace: .local)
                 .onEnded { value in handleGridSwipe(value) }
         )
-        .fullScreenCover(isPresented: $showingPostViewer) {
+        .fullScreenCover(isPresented: $showingPostViewer, onDismiss: {
+            // Amnesia Carousel trigger: when the magician closes the post viewer,
+            // check if the post that was just viewed is the short carousel (A).
+            // If Amnesia is enabled and not yet revealed, fire the swap.
+            let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+            if amnesiaSettings.isEnabled,
+               amnesiaSettings.isReady,
+               !amnesiaSettings.isRevealed,
+               let shortId = amnesiaSettings.shortCarouselMediaId,
+               selectedPostIndex < urlsToShow.count
+            {
+                let viewedURL  = urlsToShow[selectedPostIndex]
+                let viewedItem = mediaItemsByURL[viewedURL]
+                if viewedItem?.mediaId == shortId || viewedURL.contains(shortId) {
+                    triggerAmnesiaSwap()
+                }
+            }
+        }) {
             let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
             PostScrollView(
                 mediaURLs: urlsToShow,
@@ -3357,6 +3415,27 @@ struct InstagramProfileView: View {
         await MainActor.run { clearOCRPeek() }
     }
 
+    // MARK: - Amnesia Carousel swap
+
+    private func triggerAmnesiaSwap() {
+        guard amnesiaSettings.isEnabled,
+              amnesiaSettings.isReady,
+              !amnesiaSettings.isRevealed,
+              amnesiaSettings.uploadState != .swapping,
+              !instagram.isLocked else { return }
+
+        amnesiaSettings.uploadState = .swapping
+        Task {
+            do {
+                try await instagram.swapAmnesiaCarousels(settings: amnesiaSettings)
+                await MainActor.run { amnesiaSettings.uploadState = .ready }
+            } catch {
+                await MainActor.run { amnesiaSettings.uploadState = .ready }
+                LogManager.shared.log("Amnesia swap error: \(error.localizedDescription)", level: .error, category: .general)
+            }
+        }
+    }
+
 }
 
 // MARK: - Reels Grid View (4:5 aspect with play icon overlay)
@@ -3899,7 +3978,7 @@ struct PostScrollView: View {
                                 PostCardView(
                                     url: url,
                                     item: resolvedItems[url],
-                                    cachedImage: cachedImages[url],
+                                    cachedImages: cachedImages,
                                     username: username,
                                     profileImage: profileImage
                                 )
@@ -3978,9 +4057,10 @@ struct PostScrollView: View {
 private struct PostCardView: View {
     let url: String
     let item: InstagramMediaItem?
-    let cachedImage: UIImage?
+    let cachedImages: [String: UIImage]
     let username: String
     let profileImage: UIImage?
+    @State private var carouselIndex = 0
 
     private static let numberFormatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -4016,18 +4096,18 @@ private struct PostCardView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
-            // Media
-            if let image = cachedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.15))
-                    .aspectRatio(1, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .overlay(ProgressView().tint(.gray))
+            mediaView
+
+            if carouselURLs.count > 1 {
+                HStack(spacing: 4) {
+                    ForEach(carouselURLs.indices, id: \.self) { index in
+                        Circle()
+                            .fill(index == carouselIndex ? Color.blue : Color.gray.opacity(0.35))
+                            .frame(width: 6, height: 6)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
             }
 
             // Action bar with counts (like real Instagram)
@@ -4061,6 +4141,71 @@ private struct PostCardView: View {
             } else {
                 Spacer().frame(height: 12)
             }
+        }
+    }
+
+    private var carouselURLs: [String] {
+        guard let item = item, item.mediaType == .carousel, item.carouselImageURLs.count > 1 else {
+            return []
+        }
+        return item.carouselImageURLs
+    }
+
+    @ViewBuilder
+    private var mediaView: some View {
+        let urls = carouselURLs
+        if urls.count > 1 {
+            Color.clear
+                .aspectRatio(0.8, contentMode: .fit)
+                .overlay(
+                    TabView(selection: $carouselIndex) {
+                        ForEach(Array(urls.enumerated()), id: \.offset) { index, imageURL in
+                            postImage(for: imageURL)
+                                .tag(index)
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                )
+                .clipped()
+        } else if let image = cachedImages[url] {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
+        } else {
+            Rectangle()
+                .fill(Color.gray.opacity(0.15))
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay(ProgressView().tint(.gray))
+        }
+    }
+
+    @ViewBuilder
+    private func postImage(for imageURL: String) -> some View {
+        if let image = cachedImages[imageURL] ?? (imageURL == url ? cachedImages[url] : nil) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let remoteURL = URL(string: imageURL) {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                default:
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.15))
+                        .overlay(ProgressView().tint(.gray))
+                }
+            }
+        } else {
+            Rectangle()
+                .fill(Color.gray.opacity(0.15))
+                .overlay(ProgressView().tint(.gray))
         }
     }
 

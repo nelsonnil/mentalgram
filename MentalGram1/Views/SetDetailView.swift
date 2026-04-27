@@ -102,6 +102,7 @@ struct SetDetailView: View {
     @State private var filledSlotActionIsUploaded = false
 
     // VERIFY & SYNC state
+    @State private var syncArchivePulse = false
     @State private var isSyncing = false
     @State private var syncProgress = 0
     @State private var syncTotal = 0
@@ -249,16 +250,38 @@ struct SetDetailView: View {
                         uploadManager.reverifyError = nil
                         startReverify()
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 13)).foregroundColor(.secondary)
-                            Text("Re-verify all (\(allUploadedPhotos.count) photos)")
-                                .font(.caption).foregroundColor(.secondary)
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Re-verify All (\(allUploadedPhotos.count) photos)")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.primary)
+                                Text("Check if any photo is currently unarchived on Instagram")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(Color.gray.opacity(0.08)).cornerRadius(8)
+                        .padding(12)
+                        .background(Color.blue.opacity(0.08))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.blue.opacity(0.25), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
+
+                    Text("Use Re-verify All before Performance to detect public photos and avoid accidental reveal.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -730,6 +753,7 @@ struct SetDetailView: View {
                             Image(systemName: saRateLimited ? "clock.badge.exclamationmark" : "archivebox.circle.fill")
                                 .font(.system(size: 22))
                                 .foregroundColor(saRateLimited ? .orange : .purple)
+                                .opacity(!saRateLimited && !isSyncing && !isArchivingAll ? 1.0 : 0.6)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Sync & Archive (\(visibleUploadedPhotos.count) visible)")
                                     .font(.subheadline.bold())
@@ -747,10 +771,16 @@ struct SetDetailView: View {
                                 .foregroundColor(.secondary)
                         }
                         .padding(12)
-                        .background((saRateLimited ? Color.orange : Color.purple).opacity(0.08))
+                        .background(
+                            (saRateLimited ? Color.orange : Color.purple)
+                                .opacity(syncArchivePulse && !saRateLimited ? 0.16 : 0.08)
+                        )
                         .cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(
-                            (saRateLimited ? Color.orange : Color.purple).opacity(0.25), lineWidth: 1))
+                            (saRateLimited ? Color.orange : Color.purple)
+                                .opacity(syncArchivePulse && !saRateLimited ? 0.5 : 0.25), lineWidth: syncArchivePulse && !saRateLimited ? 1.5 : 1))
+                        .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: syncArchivePulse)
+                        .onAppear { syncArchivePulse = true }
                     }
                     .buttonStyle(.plain)
                     .disabled(isSyncing || isArchivingAll || uploadManager.isSyncArchiveActive || saRateLimited)
@@ -760,21 +790,39 @@ struct SetDetailView: View {
                         guard !isSyncing else { return }
                         Task { await verifySyncAll() }
                     }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.triangle.2.circlepath.circle")
-                                .font(.system(size: 14))
-                                .foregroundColor(.secondary)
-                            Text("Verify only")
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Re-verify All")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.primary)
+                                Text("Check if any photo is currently unarchived on Instagram")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.gray.opacity(0.08))
-                        .cornerRadius(8)
+                        .padding(12)
+                        .background(Color.blue.opacity(0.08))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.blue.opacity(0.25), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
                     .disabled(isSyncing || isArchivingAll)
+
+                    Text("Use Re-verify All before Performance to detect public photos and avoid accidental reveal.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -1556,7 +1604,7 @@ struct SetDetailView: View {
                         }
                         .foregroundColor(.green)
                         
-                        quickActionsSection
+                        completedActionsSection
                     } else {
                         HStack(spacing: 8) {
                             Image(systemName: "square.stack.3d.up")
@@ -1857,6 +1905,54 @@ struct SetDetailView: View {
                 )
         )
         .padding(.top, 4)
+    }
+
+    // MARK: - Completed Actions Section
+
+    private var completedActionsSection: some View {
+        VStack(spacing: 12) {
+            let hasUnuploadedPhotos = currentSet.photos.contains { $0.mediaId == nil }
+
+            if hasUnuploadedPhotos {
+                Button {
+                    guard !uploadManager.isActive else { return }
+                    dataManager.updateSetStatus(id: currentSet.id, status: .ready)
+                    Task { await uploadAllPhotos() }
+                } label: {
+                    Label("Start Uploading", systemImage: "arrow.up.circle.fill")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(VaultTheme.Colors.primary)
+                        .cornerRadius(VaultTheme.CornerRadius.sm)
+                }
+                .disabled(uploadManager.isActive)
+            }
+
+            if currentSet.type == .word || currentSet.type == .number {
+                Button {
+                    _ = dataManager.addBank(setId: currentSet.id)
+                    dataManager.updateSetStatus(id: currentSet.id, status: .ready)
+                } label: {
+                    Label("Add Another Bank", systemImage: "plus.rectangle.on.rectangle")
+                        .font(.subheadline.bold())
+                        .foregroundColor(VaultTheme.Colors.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(VaultTheme.Colors.primary.opacity(0.12))
+                        .cornerRadius(VaultTheme.CornerRadius.sm)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.sm)
+                                .stroke(VaultTheme.Colors.primary.opacity(0.3), lineWidth: 1)
+                        )
+                }
+            }
+
+            Text(String(format: String(localized: "%lld archived • %lld visible"), archivedCount, visibleCount))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
     }
 
     // MARK: - Quick Actions Section

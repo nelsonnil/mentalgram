@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Main Home View
 
@@ -107,7 +108,13 @@ struct HomeView: View {
         }
         .onAppear {
             if launchDirectlyToPerformance && instagram.isLoggedIn {
-                selectedTab = 0
+                let visible = visiblePhotosInActiveSets()
+                if !visible.isEmpty {
+                    visiblePhotosToArchive = visible
+                    showVisiblePhotosAlert = true
+                } else {
+                    selectedTab = 0
+                }
             }
             updateTabBarAppearance(forTab: selectedTab)
             // Clean up any stuck upload state (e.g. deleted active set from infinite-loop bug)
@@ -150,7 +157,9 @@ struct HomeView: View {
     private func visiblePhotosInActiveSets() -> [SetPhoto] {
         var result: [SetPhoto] = []
         let activeIds = [activeSetSettings.activeWordSetId,
-                         activeSetSettings.activeNumberSetId].compactMap { $0 }
+                         activeSetSettings.activeNumberSetId,
+                         activeSetSettings.activeCustomSetId,
+                         activeSetSettings.activeCardSetId].compactMap { $0 }
         print("🔍 [PRE-PERF] Checking \(activeIds.count) active set(s) for visible photos")
         for setId in activeIds {
             guard let photoSet = dataManager.sets.first(where: { $0.id == setId }) else {
@@ -170,7 +179,9 @@ struct HomeView: View {
 
     private func activeSetNames() -> String {
         let activeIds = [activeSetSettings.activeWordSetId,
-                         activeSetSettings.activeNumberSetId].compactMap { $0 }
+                         activeSetSettings.activeNumberSetId,
+                         activeSetSettings.activeCustomSetId,
+                         activeSetSettings.activeCardSetId].compactMap { $0 }
         let names = activeIds.compactMap { id in
             dataManager.sets.first(where: { $0.id == id })?.name
         }
@@ -282,6 +293,7 @@ struct HomeView: View {
 struct SetsListView: View {
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject var instagram = InstagramService.shared
+    @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
     @State private var showingCreateSet = false
     @State private var newlyCreatedSet: PhotoSet? = nil
     @State private var navigateToNewSet = false
@@ -343,6 +355,11 @@ struct SetsListView: View {
                     .padding(.horizontal, VaultTheme.Spacing.lg)
                     .padding(.top, VaultTheme.Spacing.md)
                     .padding(.bottom, VaultTheme.Spacing.sm)
+
+                    if hasPendingPrePerformanceActions {
+                        pendingArchiveBanner
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
+                    }
 
                     if dataManager.sets.isEmpty {
                         EmptyStateView(
@@ -431,7 +448,52 @@ struct SetsListView: View {
         }
         .preferredColorScheme(.dark)
     }
-    
+
+    private var visibleSetPhotosCount: Int {
+        dataManager.sets.reduce(0) { partial, set in
+            partial + set.photos.filter { $0.mediaId != nil && !$0.isArchived }.count
+        }
+    }
+
+    private var setsWithVisiblePhotosCount: Int {
+        dataManager.sets.filter { set in
+            set.photos.contains { $0.mediaId != nil && !$0.isArchived }
+        }.count
+    }
+
+    private var hasAmnesiaPendingReset: Bool {
+        amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
+    }
+
+    private var hasPendingPrePerformanceActions: Bool {
+        visibleSetPhotosCount > 0 || hasAmnesiaPendingReset
+    }
+
+    @ViewBuilder
+    private var pendingArchiveBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text("Pre-Performance Check Required")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+            }
+            Text("Detected \(visibleSetPhotosCount) visible photo(s) across \(setsWithVisiblePhotosCount) set(s). Archive them before performance. \(hasAmnesiaPendingReset ? "Amnesia Carousel is revealed — reset it." : "")")
+                .font(.system(size: 12))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.12))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+    }
+
     private func deleteSets(at offsets: IndexSet) {
         for index in offsets {
             let set = dataManager.sets[index]
@@ -677,6 +739,8 @@ struct ActivityLogView: View {
 struct SettingsView: View {
     @ObservedObject var instagram      = InstagramService.shared
     @ObservedObject var backup         = CloudBackupService.shared
+    @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @ObservedObject private var profileCache = ProfileCacheService.shared
     @State private var settingsProfilePic: UIImage? = nil
@@ -794,12 +858,69 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var loggedInSections: some View {
+        if hasPendingPrePerformanceActions {
+            prePerformanceWarningSection
+        }
         accountSection
         instagramProfileSection
         tricksSection
         integrationsSection
         otherSection
         dataSection
+    }
+
+    private var visibleSetPhotosCount: Int {
+        dataManager.sets.reduce(0) { partial, set in
+            partial + set.photos.filter { $0.mediaId != nil && !$0.isArchived }.count
+        }
+    }
+
+    private var setsWithVisiblePhotosCount: Int {
+        dataManager.sets.filter { set in
+            set.photos.contains { $0.mediaId != nil && !$0.isArchived }
+        }.count
+    }
+
+    private var hasAmnesiaPendingReset: Bool {
+        amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
+    }
+
+    private var hasPendingPrePerformanceActions: Bool {
+        visibleSetPhotosCount > 0 || hasAmnesiaPendingReset
+    }
+
+    @ViewBuilder
+    private var prePerformanceWarningSection: some View {
+        settingsSectionLabel("PRE-PERFORMANCE CHECK", icon: "exclamationmark.triangle.fill", color: .orange)
+        modernCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("Archive pending items before performance")
+                        .font(VaultTheme.Typography.bodyBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                }
+                Text("Detected \(visibleSetPhotosCount) visible photo(s) in \(setsWithVisiblePhotosCount) set(s). Re-verify and archive in Sets before opening Performance.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if hasAmnesiaPendingReset {
+                    Text("Amnesia Carousel is revealed. Open Amnesia Carousel and press Reset before the next show.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(12)
+            .background(Color.orange.opacity(0.12))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+            )
+        }
+        Spacer().frame(height: 28)
     }
 
     // MARK: - Section: Not Logged In
@@ -934,6 +1055,7 @@ struct SettingsView: View {
             ForceNumberRevealSettingsCard()
             FollowingMagicSettingsCard()
             DateForceSettingsCard()
+            AmnesiaCarouselSettingsCard()
         }
         Spacer().frame(height: 28)
     }
@@ -1992,16 +2114,13 @@ struct FollowerDataSheet: View {
                         
                         // Stats (si tenemos fullInfo)
                         if let info = fullInfo {
+                            let posts = InstagramService.robustInt(info["media_count"])
+                            let followers = InstagramService.robustInt(info["follower_count"])
+                            let following = InstagramService.robustInt(info["following_count"])
                             HStack(spacing: 20) {
-                                if let posts = info["media_count"] as? Int {
-                                    StatBadge(label: "Posts", value: "\(posts)")
-                                }
-                                if let followers = info["follower_count"] as? Int {
-                                    StatBadge(label: "Followers", value: formatCount(followers))
-                                }
-                                if let following = info["following_count"] as? Int {
-                                    StatBadge(label: "Following", value: formatCount(following))
-                                }
+                                StatBadge(label: "Posts", value: "\(posts)")
+                                StatBadge(label: "Followers", value: formatCount(followers))
+                                StatBadge(label: "Following", value: formatCount(following))
                             }
                             .padding(.horizontal)
                         }
@@ -3838,6 +3957,602 @@ private struct LockscreenInputHelpSheet: View {
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+// MARK: - Amnesia Carousel Settings Card
+
+struct AmnesiaCarouselSettingsCard: View {
+    @ObservedObject private var settings = AmnesiaCarouselSettings.shared
+    @ObservedObject private var instagram = InstagramService.shared
+    @State private var isExpanded         = false
+    @State private var showingHelp        = false
+    @State private var showingImagePicker = false
+    @State private var pickingSlot        = 0
+    @State private var uploadError: String?
+    @State private var showingError       = false
+    @State private var showingResetAlert  = false
+
+    private let accent = SettingsView.colorTricks
+
+    var body: some View {
+        CollapsibleCard(
+            icon: "rectangle.on.rectangle.slash",
+            iconColor: accent,
+            title: LocalizedStringKey("guide.amnesia.row.title"),
+            subtitle: LocalizedStringKey("guide.amnesia.row.subtitle"),
+            isExpanded: $isExpanded,
+            trailing: {
+                Button { showingHelp = true } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        ) {
+            // Toggle
+            HStack {
+                Text(String(localized: "amnesia.toggle"))
+                    .font(VaultTheme.Typography.body())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+                Toggle("", isOn: $settings.isEnabled)
+                    .labelsHidden()
+                    .tint(accent)
+            }
+
+            if settings.isEnabled {
+                modernDivider()
+                imageSlots
+                modernDivider()
+                statusRow
+                modernDivider()
+                actionButtons
+            }
+        }
+        .sheet(isPresented: $showingHelp) {
+            AmnesiaCarouselHelpSheet()
+        }
+        .sheet(isPresented: $showingImagePicker) {
+            HomeScreenImagePicker { image in
+                settings.setImage(image, for: pickingSlot)
+            }
+        }
+        .alert(String(localized: "amnesia.state.error"), isPresented: $showingError) {
+            Button("OK") {}
+        } message: {
+            Text(uploadError ?? "")
+        }
+        .alert(String(localized: "amnesia.reset_title"), isPresented: $showingResetAlert) {
+            Button(String(localized: "amnesia.reset_confirm"), role: .destructive) { triggerReset() }
+            Button(String(localized: "amnesia.reset_cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "amnesia.reset_msg"))
+        }
+    }
+
+    // MARK: - Image slots
+
+    private var imageSlots: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(String(localized: "amnesia.images_title"))
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+                Button {
+                    loadESPTemplate()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(String(localized: "amnesia.esp_template"))
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundColor(accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(accent.opacity(0.15))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .disabled(settings.isReady)
+            }
+
+            // Slots 1-4 in a 2×2 grid
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(0..<4, id: \.self) { i in
+                    amnesiaSlot(index: i, isHidden: false)
+                }
+            }
+
+            // Slot 5 (the hidden image) — visually distinct
+            VStack(alignment: .leading, spacing: 4) {
+                amnesiaSlot(index: 4, isHidden: true)
+                    .frame(maxWidth: .infinity)
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.slash.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                    Text(String(localized: "amnesia.slot5_hint"))
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(.orange.opacity(0.85))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func amnesiaSlot(index: Int, isHidden: Bool) -> some View {
+        Button {
+            pickingSlot = index
+            showingImagePicker = true
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        isHidden ? Color.orange : Color(hex: "#3A3A3C"),
+                        style: StrokeStyle(lineWidth: isHidden ? 2 : 1.5,
+                                           dash: isHidden ? [6, 3] : [])
+                    )
+                    .background(Color(hex: "#1C1C1E").cornerRadius(8))
+
+                if let img = settings.images[index] {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 80)
+                        .clipped()
+                        .cornerRadius(7)
+                } else {
+                    VStack(spacing: 4) {
+                        Image(systemName: isHidden ? "eye.slash" : "photo.badge.plus")
+                            .font(.system(size: 22))
+                            .foregroundColor(isHidden ? .orange.opacity(0.7) : VaultTheme.Colors.textSecondary)
+                        Text(isHidden ? String(localized: "amnesia.slot_hidden") : String(format: String(localized: "amnesia.slot_n"), index + 1))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(isHidden ? .orange.opacity(0.7) : VaultTheme.Colors.textSecondary)
+                    }
+                }
+            }
+            .frame(height: 80)
+        }
+        .disabled(settings.uploadState.isUploading || settings.isReady)
+    }
+
+    // MARK: - Status
+
+    private var statusRow: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            Text(settings.uploadState.label)
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+            if settings.isReady {
+                Spacer()
+                Text(settings.isRevealed ? "REVELADO" : "INICIAL")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(settings.isRevealed ? .orange : .green)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background((settings.isRevealed ? Color.orange : Color.green).opacity(0.15))
+                    .cornerRadius(4)
+            }
+        }
+    }
+
+    private var statusColor: Color {
+        switch settings.uploadState {
+        case .idle:        return .gray
+        case .uploading:   return .yellow
+        case .ready:       return .green
+        case .swapping:    return .orange
+        case .error:       return .red
+        }
+    }
+
+    // MARK: - Buttons
+
+    private var actionButtons: some View {
+        VStack(spacing: 8) {
+                if !settings.isReady {
+                modernActionButton(
+                    title: settings.uploadState.isUploading ? settings.uploadState.label : String(localized: "amnesia.btn_upload"),
+                    icon: "arrow.up.circle.fill",
+                    loading: settings.uploadState.isUploading,
+                    enabled: settings.allImagesFilled && !settings.uploadState.isUploading && !instagram.isLocked
+                ) { startUpload() }
+            } else {
+                if settings.isRevealed {
+                    modernActionButton(
+                        title: settings.uploadState == .swapping ? String(localized: "amnesia.state.swapping") : String(localized: "amnesia.btn_reset"),
+                        icon: "arrow.counterclockwise.circle.fill",
+                        loading: settings.uploadState == .swapping,
+                        enabled: settings.uploadState != .swapping
+                    ) { showingResetAlert = true }
+                }
+
+                // Clear all button (secondary)
+                Button {
+                    settings.clearAll()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 13))
+                        Text(String(localized: "amnesia.btn_clear"))
+                            .font(VaultTheme.Typography.caption())
+                    }
+                    .foregroundColor(.red.opacity(0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .disabled(settings.uploadState == .swapping)
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func startUpload() {
+        let filled = settings.images.compactMap { $0 }
+        guard filled.count == 5 else { return }
+        settings.uploadState = .uploading(step: 0, total: 12)
+
+        Task {
+            do {
+                try await InstagramService.shared.uploadAmnesiaCarousels(
+                    images: filled.map { $0 }
+                ) { step, total in
+                    Task { @MainActor in
+                        settings.uploadState = .uploading(step: step, total: total)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    settings.uploadState = .error(error.localizedDescription)
+                    uploadError = error.localizedDescription
+                    showingError = true
+                }
+            }
+        }
+    }
+
+    private func triggerReset() {
+        settings.uploadState = .swapping
+        Task {
+            do {
+                try await InstagramService.shared.swapAmnesiaCarousels(settings: settings)
+                await MainActor.run { settings.uploadState = .ready }
+            } catch {
+                await MainActor.run {
+                    settings.uploadState = .ready
+                    uploadError = error.localizedDescription
+                    showingError = true
+                }
+            }
+        }
+    }
+
+    private func loadESPTemplate() {
+        let names = ["esp_card_1", "esp_card_2", "esp_card_3", "esp_card_4", "esp_card_5"]
+        for (i, name) in names.enumerated() {
+            if let img = UIImage(named: name) {
+                settings.setImage(img, for: i)
+            }
+        }
+    }
+
+    private func modernDivider() -> some View {
+        Divider().background(Color(hex: "#3A3A3C"))
+    }
+
+    @ViewBuilder
+    private func modernActionButton(title: String, icon: String, loading: Bool, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: VaultTheme.Spacing.sm) {
+                if loading {
+                    ProgressView().scaleEffect(0.8).tint(.white)
+                } else {
+                    Image(systemName: icon)
+                }
+                Text(title).font(VaultTheme.Typography.bodyBold())
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, VaultTheme.Spacing.md)
+            .background(enabled ? VaultTheme.Colors.primary : VaultTheme.Colors.textDisabled)
+            .cornerRadius(VaultTheme.CornerRadius.md)
+        }
+        .disabled(!enabled || loading)
+    }
+}
+
+// MARK: - Amnesia Carousel Help Sheet
+
+private struct AmnesiaCarouselHelpSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Animated preview
+                    AmnesiaAnimationView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+
+                    Divider()
+
+                    helpSection(
+                        icon: "questionmark.circle.fill",
+                        title: String(localized: "guide.amnesia.what.title"),
+                        body: String(localized: "guide.amnesia.what.body")
+                    )
+
+                    helpSection(
+                        icon: "rectangle.on.rectangle.slash.fill",
+                        title: String(localized: "guide.amnesia.trigger.title"),
+                        body: String(localized: "guide.amnesia.trigger.body")
+                    )
+
+                    helpSection(
+                        icon: "star.fill",
+                        title: String(localized: "guide.amnesia.hidden.title"),
+                        body: String(localized: "guide.amnesia.hidden.body")
+                    )
+
+                    helpSection(
+                        icon: "mic.fill",
+                        title: String(localized: "guide.amnesia.script.title"),
+                        body: scriptText
+                    )
+
+                    Spacer(minLength: 40)
+                }
+                .padding(20)
+            }
+            .background(Color(hex: "#1C1C1E").ignoresSafeArea())
+            .navigationTitle(String(localized: "guide.amnesia.row.title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(String(localized: "action.close")) { dismiss() }
+                        .foregroundColor(SettingsView.colorTricks)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func helpSection(icon: String, title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(SettingsView.colorTricks)
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            Text(body)
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var scriptText: String {
+        [
+            "\(String(localized: "guide.amnesia.script.opening.phase"))\n\(String(localized: "guide.amnesia.script.opening.text"))",
+            "\(String(localized: "guide.amnesia.script.close.phase"))\n\(String(localized: "guide.amnesia.script.close.text"))",
+            "\(String(localized: "guide.amnesia.script.optionA.phase"))\n\(String(localized: "guide.amnesia.script.optionA.text"))",
+            "\(String(localized: "guide.amnesia.script.optionB.phase"))\n\(String(localized: "guide.amnesia.script.optionB.text"))",
+            "\(String(localized: "guide.amnesia.script.climax.phase"))\n\(String(localized: "guide.amnesia.script.climax.text"))"
+        ].joined(separator: "\n\n──────────────────────────────\n\n")
+    }
+}
+
+// MARK: - Amnesia Animation View
+
+struct AmnesiaAnimationView: View {
+    @State private var phase = 0
+    private let timer = Timer.publish(every: 4.0, on: .main, in: .common).autoconnect()
+
+    // Zener card symbols drawn in SwiftUI
+    private var symbols: [(String, AnyView)] {
+        [
+            (String(localized: "amnesia.anim.card_circle"),   AnyView(ZenerCircle())),
+            (String(localized: "amnesia.anim.card_cross"),    AnyView(ZenerCross())),
+            (String(localized: "amnesia.anim.card_square"),   AnyView(ZenerSquare())),
+            (String(localized: "amnesia.anim.card_waves"),    AnyView(ZenerWaves())),
+            (String(localized: "amnesia.anim.card_star"),     AnyView(ZenerStar()))
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // Phase label
+            Text(phaseTitle)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white.opacity(0.5))
+                .textCase(.uppercase)
+                .tracking(1)
+                .animation(.easeInOut(duration: 0.4), value: phase)
+
+            // Cards row
+            HStack(spacing: 10) {
+                ForEach(0..<visibleCount, id: \.self) { i in
+                    ZenerCardView(content: symbols[i].1,
+                                  label: symbols[i].0,
+                                  isRevealed: i == 4,
+                                  showGlow: phase >= 2 && i == 4)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.5).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                }
+            }
+            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: visibleCount)
+
+            // Subtitle
+            Text(phaseSubtitle)
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.65))
+                .multilineTextAlignment(.center)
+                .animation(.easeInOut(duration: 0.4), value: phase)
+                .frame(minHeight: 36)
+
+            // Dots indicator
+            HStack(spacing: 6) {
+                ForEach(0..<4, id: \.self) { i in
+                    Circle()
+                        .fill(i == phase ? SettingsView.colorTricks : Color.white.opacity(0.2))
+                        .frame(width: 6, height: 6)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(hex: "#2C2C2E").cornerRadius(12))
+        .onReceive(timer) { _ in
+            withAnimation { phase = (phase + 1) % 4 }
+        }
+    }
+
+    private var visibleCount: Int {
+        switch phase {
+        case 0, 1: return 4
+        case 2, 3: return 5
+        default:   return 4
+        }
+    }
+
+    private var phaseTitle: String {
+        switch phase {
+        case 0: return String(localized: "amnesia.anim.phase0_title")
+        case 1: return String(localized: "amnesia.anim.phase1_title")
+        case 2: return String(localized: "amnesia.anim.phase2_title")
+        case 3: return String(localized: "amnesia.anim.phase3_title")
+        default: return ""
+        }
+    }
+
+    private var phaseSubtitle: String {
+        switch phase {
+        case 0: return String(localized: "amnesia.anim.phase0_sub")
+        case 1: return String(localized: "amnesia.anim.phase1_sub")
+        case 2: return String(localized: "amnesia.anim.phase2_sub")
+        case 3: return String(localized: "amnesia.anim.phase3_sub")
+        default: return ""
+        }
+    }
+}
+
+// MARK: - Zener Card View
+
+private struct ZenerCardView: View {
+    let content: AnyView
+    let label: String
+    let isRevealed: Bool
+    let showGlow: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(hex: "#1C1C1E"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(
+                                showGlow ? Color.orange : (isRevealed ? Color.orange.opacity(0.5) : Color(hex: "#3A3A3C")),
+                                lineWidth: showGlow ? 2 : 1
+                            )
+                    )
+                    .shadow(color: showGlow ? .orange.opacity(0.6) : .clear, radius: 8)
+                content
+                    .frame(width: 28, height: 28)
+            }
+            .frame(width: 44, height: 44)
+
+            Text(isRevealed ? "★" : "")
+                .font(.system(size: 8))
+                .foregroundColor(.orange)
+                .frame(height: 10)
+        }
+    }
+}
+
+// MARK: - Zener Symbols (SwiftUI shapes)
+
+private struct ZenerCircle: View {
+    var body: some View {
+        Circle()
+            .stroke(Color.white.opacity(0.85), lineWidth: 2.5)
+            .padding(4)
+    }
+}
+
+private struct ZenerCross: View {
+    var body: some View {
+        ZStack {
+            Rectangle().fill(Color.white.opacity(0.85)).frame(width: 2.5, height: 22)
+            Rectangle().fill(Color.white.opacity(0.85)).frame(width: 22, height: 2.5)
+        }
+    }
+}
+
+private struct ZenerSquare: View {
+    var body: some View {
+        Rectangle()
+            .stroke(Color.white.opacity(0.85), lineWidth: 2.5)
+            .padding(4)
+    }
+}
+
+private struct ZenerWaves: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let w = size.width, h = size.height
+            var path = Path()
+            let waves = 3
+            let ampY = h * 0.18
+            let segW = w / CGFloat(waves)
+            path.move(to: CGPoint(x: 0, y: h / 2))
+            for i in 0..<waves {
+                let x0 = CGFloat(i) * segW
+                path.addCurve(
+                    to:        CGPoint(x: x0 + segW,     y: h / 2),
+                    control1:  CGPoint(x: x0 + segW * 0.3, y: h / 2 - ampY),
+                    control2:  CGPoint(x: x0 + segW * 0.7, y: h / 2 + ampY)
+                )
+            }
+            ctx.stroke(path, with: .color(.white.opacity(0.85)),
+                       style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+        }
+        .padding(4)
+    }
+}
+
+private struct ZenerStar: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let cx = size.width / 2, cy = size.height / 2
+            let R: CGFloat = min(cx, cy) - 2
+            let r: CGFloat = R * 0.4
+            let points = 5
+            var path = Path()
+            for i in 0..<(points * 2) {
+                let angle = CGFloat(i) * .pi / CGFloat(points) - .pi / 2
+                let radius: CGFloat = i.isMultiple(of: 2) ? R : r
+                let pt = CGPoint(x: cx + radius * cos(angle), y: cy + radius * sin(angle))
+                i == 0 ? path.move(to: pt) : path.addLine(to: pt)
+            }
+            path.closeSubpath()
+            ctx.fill(path, with: .color(.orange.opacity(0.9)))
+            ctx.stroke(path, with: .color(.orange), style: StrokeStyle(lineWidth: 1.5))
         }
     }
 }

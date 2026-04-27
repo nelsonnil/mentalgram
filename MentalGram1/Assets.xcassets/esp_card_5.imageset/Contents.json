@@ -1,0 +1,13 @@
+{
+  "images" : [
+    {
+      "filename" : "esp_card_5.jpg",
+      "idiom" : "universal",
+      "scale" : "1x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

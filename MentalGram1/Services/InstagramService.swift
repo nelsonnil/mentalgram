@@ -1131,7 +1131,8 @@ class InstagramService: ObservableObject {
     private func apiRequest(
         method: String,
         path: String,
-        body: [String: String]? = nil
+        body: [String: String]? = nil,
+        rawBody: String? = nil
     ) async throws -> Data {
         // Auto-expire lockdown if the countdown has already passed
         if isLocked, let until = lockUntil, Date() > until {
@@ -1177,14 +1178,16 @@ class InstagramService: ObservableObject {
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        if let body = body {
+        if let rawBody = rawBody {
+            // Pre-encoded body — caller has already handled encoding (e.g. mixed JSON fields).
+            request.httpBody = rawBody.data(using: .utf8)
+        } else if let body = body {
             // Properly percent-encode each value so special characters (newlines → %0A,
             // spaces → %20, ampersands → %26, etc.) survive the API round-trip intact.
             // Raw string concatenation silently strips or breaks multi-line biography text.
             var components = URLComponents()
             components.queryItems = body.map { URLQueryItem(name: $0.key, value: $0.value) }
-            let bodyString = components.percentEncodedQuery ?? ""
-            request.httpBody = bodyString.data(using: .utf8)
+            request.httpBody = (components.percentEncodedQuery ?? "").data(using: .utf8)
         }
         
         // Track this action for rate limiting
@@ -1262,6 +1265,15 @@ class InstagramService: ObservableObject {
             // Try to parse error message from response
             if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let message = errorJson["message"] as? String ?? ""
+                // Log full error details for debugging (status ≥ 400)
+                if httpResponse.statusCode >= 500 {
+                    let errorType    = errorJson["error_type"]        as? String ?? "?"
+                    let fbErrorCode  = errorJson["fb_api_error_code"] as? Int    ?? -1
+                    let spamBlock    = errorJson["spam"]               as? Bool   ?? false
+                    let feedback     = errorJson["feedback_message"]   as? String ?? ""
+                    print("❌ [API] 5xx detail — type:\(errorType) fb_code:\(fbErrorCode) spam:\(spamBlock) msg:\(message) feedback:\(feedback)")
+                    print("❌ [API] Full 5xx JSON: \((String(data: data, encoding: .utf8) ?? "?").prefix(500))")
+                }
                 
                 // Check for challenge_required.
                 // For GET (read-only) endpoints Instagram sometimes returns challenge_required
@@ -1928,9 +1940,9 @@ class InstagramService: ObservableObject {
             print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
             
             // Datos importantes
-            let followerCount = user["follower_count"] as? Int ?? 0
-            let followingCount = user["following_count"] as? Int ?? 0
-            let mediaCount = user["media_count"] as? Int ?? 0
+            let followerCount = Self.robustInt(user["follower_count"])
+            let followingCount = Self.robustInt(user["following_count"])
+            let mediaCount = Self.robustInt(user["media_count"])
             let biography = user["biography"] as? String ?? ""
             
             print("✅ User info extraído:")
@@ -1956,9 +1968,17 @@ class InstagramService: ObservableObject {
         
         let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
         
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let user = json["user"] as? [String: Any] else {
-            print("❌ [PROFILE] Failed to parse user data")
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [PROFILE] Failed to parse JSON response")
+            let rawStr = String(data: data.prefix(500), encoding: .utf8) ?? "(binary)"
+            LogManager.shared.error("getProfileInfo: JSON parse failed — raw: \(rawStr)", category: .api)
+            return nil
+        }
+
+        guard let user = json["user"] as? [String: Any] else {
+            let topKeys = json.keys.sorted().joined(separator: ", ")
+            print("❌ [PROFILE] No 'user' key — top-level keys: \(topKeys)")
+            LogManager.shared.error("getProfileInfo: missing 'user' key — keys: \(topKeys)", category: .api)
             return nil
         }
         
@@ -2074,18 +2094,37 @@ class InstagramService: ObservableObject {
             print("⚠️ [PROFILE] Skipping data fetch (private profile, not following)")
         }
 
+        // Robust profile pic: try HD version first, then standard field
+        let profilePicURL: String = {
+            if let hdInfo = user["hd_profile_pic_url_info"] as? [String: Any],
+               let hdUrl = hdInfo["url"] as? String, !hdUrl.isEmpty {
+                return hdUrl
+            }
+            if let hdVersions = user["hd_profile_pic_versions"] as? [[String: Any]],
+               let best = hdVersions.last, let url = best["url"] as? String, !url.isEmpty {
+                return url
+            }
+            return user["profile_pic_url"] as? String ?? ""
+        }()
+
+        let followerCount  = Self.robustInt(user["follower_count"])
+        let followingCount = Self.robustInt(user["following_count"])
+        let mediaCount     = Self.robustInt(user["media_count"])
+        print("📊 [PROFILE] Parsed counts — followers: \(followerCount), following: \(followingCount), media: \(mediaCount)")
+        print("📊 [PROFILE] Profile pic URL resolved: \(profilePicURL.isEmpty ? "EMPTY" : String(profilePicURL.prefix(80)))")
+
         var profile = InstagramProfile(
             userId: extractedUserId,
             username: user["username"] as? String ?? "",
             fullName: user["full_name"] as? String ?? "",
             biography: user["biography"] as? String ?? "",
             externalUrl: user["external_url"] as? String,
-            profilePicURL: user["profile_pic_url"] as? String ?? "",
+            profilePicURL: profilePicURL,
             isVerified: user["is_verified"] as? Bool ?? false,
             isPrivate: user["is_private"] as? Bool ?? false,
-            followerCount: user["follower_count"] as? Int ?? 0,
-            followingCount: user["following_count"] as? Int ?? 0,
-            mediaCount: user["media_count"] as? Int ?? 0,
+            followerCount: followerCount,
+            followingCount: followingCount,
+            mediaCount: mediaCount,
             followedBy: followedBy,
             isFollowing: isFollowing,
             isFollowRequested: isFollowRequested,
@@ -2319,6 +2358,7 @@ class InstagramService: ObservableObject {
         }
         
         let ownerUsername = (media["user"] as? [String: Any])?["username"] as? String
+        let carouselURLs = extractCarouselImageURLs(from: media, fallbackCoverURL: imageURL)
         return InstagramMediaItem(
             id: mediaId,
             mediaId: mediaId,
@@ -2329,8 +2369,32 @@ class InstagramService: ObservableObject {
             likeCount: media["like_count"] as? Int,
             commentCount: media["comment_count"] as? Int,
             mediaType: mediaType == 2 ? .video : (mediaType == 8 ? .carousel : .photo),
+            carouselImageURLs: carouselURLs,
             ownerUsername: ownerUsername
         )
+    }
+
+    private func extractCarouselImageURLs(from media: [String: Any], fallbackCoverURL: String) -> [String] {
+        guard let children = media["carousel_media"] as? [[String: Any]], !children.isEmpty else {
+            return []
+        }
+
+        var urls: [String] = []
+        for child in children {
+            if let imageVersions = child["image_versions2"] as? [String: Any],
+               let candidates = imageVersions["candidates"] as? [[String: Any]],
+               let first = candidates.first,
+               let url = first["url"] as? String,
+               !url.isEmpty {
+                urls.append(url)
+            }
+        }
+
+        if urls.isEmpty, !fallbackCoverURL.isEmpty {
+            urls.append(fallbackCoverURL)
+        }
+
+        return Array(urls.prefix(10))
     }
     
     // MARK: - Get User Media Items (Extended with metadata)
@@ -2439,6 +2503,7 @@ class InstagramService: ObservableObject {
             
             // Determine media type
             let mediaType: InstagramMediaItem.MediaType
+            let carouselURLs = extractCarouselImageURLs(from: item, fallbackCoverURL: imageUrl)
             if let carouselMedia = item["carousel_media"] as? [[String: Any]], !carouselMedia.isEmpty {
                 mediaType = .carousel
             } else if videoUrl != nil {
@@ -2456,7 +2521,8 @@ class InstagramService: ObservableObject {
                 takenAt: takenAt,
                 likeCount: likeCount,
                 commentCount: commentCount,
-                mediaType: mediaType
+                mediaType: mediaType,
+                carouselImageURLs: carouselURLs
             )
             mediaItems.append(mediaItem)
         }
@@ -2695,6 +2761,7 @@ class InstagramService: ObservableObject {
             
             // Determine media type
             let mediaType: InstagramMediaItem.MediaType
+            let carouselURLs = extractCarouselImageURLs(from: item, fallbackCoverURL: imageUrl)
             if let carouselMedia = item["carousel_media"] as? [[String: Any]], !carouselMedia.isEmpty {
                 mediaType = .carousel
             } else if videoUrl != nil {
@@ -2713,6 +2780,7 @@ class InstagramService: ObservableObject {
                 likeCount: likeCount,
                 commentCount: commentCount,
                 mediaType: mediaType,
+                carouselImageURLs: carouselURLs,
                 ownerUsername: ownerUsername
             )
             mediaItems.append(mediaItem)
@@ -3115,6 +3183,434 @@ class InstagramService: ObservableObject {
         return profile
     }
     
+    // MARK: - Amnesia Carousel (sidecar upload)
+
+    /// Step 1 of carousel upload: upload a single image for use in a sidecar/carousel post.
+    /// Unlike uploadPhoto(), this does NOT call /media/configure/ — it only pushes the bytes
+    /// and returns the raw upload_id, which will later be collected into configure_sidecar().
+    ///
+    /// - Parameters:
+    ///   - imageData: JPEG data of the image.
+    ///   - stepLabel: Human-readable label used in logs (e.g. "A-1/4").
+    /// - Returns: The upload_id string needed by configure_sidecar.
+    func uploadPhotoForSidecar(imageData: Data, stepLabel: String = "", clientSidecarId: String) async throws -> String {
+        guard !isLocked else { throw InstagramError.apiError("Lockdown activo. Espera antes de subir.") }
+
+        let label = stepLabel.isEmpty ? "sidecar" : stepLabel
+        print("📤 [AMNESIA] Uploading \(label) (\(imageData.count / 1024) KB)…")
+
+        let timestampMs  = Int(Date().timeIntervalSince1970 * 1000) + Int.random(in: -300...300)
+        let uploadId     = String(timestampMs)
+        let uploadName   = "\(uploadId)_0_\(Int.random(in: 1_000_000_000...9_999_999_999))"
+        let waterfallId  = UUID().uuidString
+
+        // Album uploads only mark each photo as sidecar. The final carousel id is
+        // generated later in configure_sidecar; it is not sent in rupload params.
+        var ruploadParams: [String: Any] = [
+            "retry_context":      "{\"num_step_auto_retry\":0,\"num_reupload\":0,\"num_step_manual_retry\":0}",
+            "media_type":         "1",
+            "xsharing_user_ids":  "[]",
+            "upload_id":          uploadId,
+            "is_sidecar":         "1",
+            "image_compression":  "{\"lib_name\":\"moz\",\"lib_version\":\"3.1.m\",\"quality\":\"80\"}"
+        ]
+        _ = clientSidecarId
+        guard let paramsData   = try? JSONSerialization.data(withJSONObject: ruploadParams),
+              let paramsString = String(data: paramsData, encoding: .utf8),
+              let uploadURL    = URL(string: "https://i.instagram.com/rupload_igphoto/\(uploadName)")
+        else { throw InstagramError.uploadFailed }
+
+        var req = URLRequest(url: uploadURL)
+        req.httpMethod = "POST"
+        let base = buildHeaders()
+        for (k, v) in base where k != "Content-Type" { req.setValue(v, forHTTPHeaderField: k) }
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.setValue(String(imageData.count),     forHTTPHeaderField: "Content-Length")
+        req.setValue(paramsString,                forHTTPHeaderField: "X-Instagram-Rupload-Params")
+        req.setValue(waterfallId,                 forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
+        req.setValue("image/jpeg",                forHTTPHeaderField: "X-Entity-Type")
+        req.setValue(uploadName,                  forHTTPHeaderField: "X-Entity-Name")
+        req.setValue(String(imageData.count),     forHTTPHeaderField: "X-Entity-Length")
+        req.setValue("0",                         forHTTPHeaderField: "Offset")
+        req.httpBody = imageData
+
+        let (data, response) = try await postSession.data(for: req)
+        if let http = response as? HTTPURLResponse {
+            print("   [AMNESIA] Upload HTTP \(http.statusCode) for \(label)")
+            // Capture fresh www-claim from upload response so configure_sidecar uses latest token
+            if let claim = (http.allHeaderFields as? [String: String])?
+                .first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
+                await MainActor.run { self.wwwClaim = claim }
+                print("   [AMNESIA] Updated wwwClaim from upload response (\(label))")
+            }
+            if let raw = String(data: data, encoding: .utf8) {
+                print("   [AMNESIA] Upload response for \(label): \(raw.prefix(300))")
+            }
+            guard http.statusCode == 200 else {
+                throw InstagramError.apiError("Upload HTTP \(http.statusCode) for \(label)")
+            }
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let returnedId = json["upload_id"] as? String ?? (json["upload_id"] as? Int).map(String.init)
+        else {
+            let raw = String(data: data, encoding: .utf8) ?? "?"
+            print("   [AMNESIA] Unexpected upload response for \(label): \(raw.prefix(200))")
+            // Instagram sometimes returns the upload_id we sent — fall back to it
+            return uploadId
+        }
+        print("✅ [AMNESIA] Upload OK \(label) → upload_id=\(returnedId)")
+        return returnedId
+    }
+
+    /// Step 2 of carousel upload: call configure_sidecar to create the final carousel post
+    /// from the previously uploaded images.
+    ///
+    /// - Parameters:
+    ///   - uploadIds: Array of upload_ids returned by uploadPhotoForSidecar(), in display order.
+    ///   - caption:   Post caption (default empty).
+    /// - Returns: The media_id of the newly created carousel post.
+    func configureSidecar(uploadIds: [String], caption: String = "", clientSidecarId: String) async throws -> String {
+        guard !uploadIds.isEmpty else { throw InstagramError.apiError("No upload IDs provided") }
+        print("📋 [AMNESIA] configure_sidecar with \(uploadIds.count) images (sidecarId=\(clientSidecarId))…")
+
+        let tzOffset = String(TimeZone.current.secondsFromGMT())
+        let devicePayload: [String: Any] = [
+            "device_id": deviceId,
+            "uuid": clientUUID,
+            "phone_id": clientUUID,
+            "manufacturer": "Apple",
+            "model": DeviceInfo.shared.modelName
+        ]
+        let editsString = "{\"crop_original_size\":[864.0,1080.0],\"crop_center\":[0.0,0.0],\"crop_zoom\":1.0}"
+        let extraString = "{\"source_width\":864,\"source_height\":1080}"
+
+        // Match instagrapi's album children: include edits/extra/dimensions metadata.
+        let children: [[String: Any]] = uploadIds.map { id in
+            [
+                "upload_id":          id,
+                "source_type":        "4",
+                "timezone_offset":    tzOffset,
+                "device":             devicePayload,
+                "edits":              editsString,
+                "extra":              extraString,
+                "scene_capture_type": "",
+                "scene_type":         NSNull()
+            ] as [String: Any]
+        }
+        guard let childrenData   = try? JSONSerialization.data(withJSONObject: children),
+              let childrenString = String(data: childrenData, encoding: .utf8)
+        else { throw InstagramError.apiError("Failed to serialise children_metadata") }
+
+        // instagrapi generates a fresh carousel upload_id at configure time.
+        let carouselUploadId = String(Int(Date().timeIntervalSince1970 * 1000))
+
+        let bodyDict: [String: Any] = [
+            "_csrftoken": session.csrfToken,
+            "_uid": session.userId,
+            "_uuid": clientUUID,
+            "timezone_offset": tzOffset,
+            "caption": caption,
+            "client_sidecar_id": carouselUploadId,
+            "upload_id": carouselUploadId,
+            "source_type": "4",
+            "creation_logger_session_id": pigeonSessionId,
+            "suggested_venue_position": -1,
+            "is_suggested_venue": false,
+            "device": devicePayload,
+            "children_metadata": children
+        ]
+        guard let bodyJSONData = try? JSONSerialization.data(withJSONObject: bodyDict),
+              let bodyJSONString = String(data: bodyJSONData, encoding: .utf8) else {
+            throw InstagramError.apiError("Failed to serialise signed configure_sidecar body")
+        }
+        let signature = generateSignature(data: bodyJSONString)
+        let rawBodyString = "signed_body=\(signature).\(bodyJSONString)&ig_sig_key_version=\(sigKeyVersion)"
+        print("📋 [AMNESIA] Using carousel upload_id=\(carouselUploadId) (fresh configure id)")
+
+        print("📋 [AMNESIA] configure_sidecar children_metadata: \(childrenString.prefix(200))")
+        print("📋 [AMNESIA] configure_sidecar signed JSON: \(bodyJSONString.prefix(800))")
+        print("📋 [AMNESIA] configure_sidecar signed body prefix: \(rawBodyString.prefix(300))")
+
+        // Warm-up GET to refresh the www-claim token immediately before posting.
+        // configure_sidecar is strict about having a fresh, valid X-IG-WWW-Claim.
+        print("📋 [AMNESIA] Warming up session before configure_sidecar…")
+        if let warmUrl = URL(string: "https://i.instagram.com/api/v1/accounts/current_user/?edit=true") {
+            var warmReq = URLRequest(url: warmUrl)
+            warmReq.httpMethod = "GET"
+            warmReq.timeoutInterval = 10
+            let warmHeaders = buildHeaders()
+            for (k, v) in warmHeaders { warmReq.setValue(v, forHTTPHeaderField: k) }
+            if let (_, warmResp) = try? await getSession.data(for: warmReq),
+               let warmHttp = warmResp as? HTTPURLResponse,
+               let hdrs = warmHttp.allHeaderFields as? [String: String],
+               let claim = hdrs.first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
+                await MainActor.run { self.wwwClaim = claim }
+                print("📋 [AMNESIA] Fresh wwwClaim captured from warm-up GET")
+            }
+        }
+
+        var data: Data
+        var lastError: Error?
+
+        // Retry up to 2 times on HTTP 500 (Instagram transient server errors)
+        for attempt in 1...3 {
+            do {
+                let configURL = URL(string: "https://i.instagram.com/api/v1/media/configure_sidecar/")!
+                var configReq = URLRequest(url: configURL)
+                configReq.httpMethod = "POST"
+                configReq.timeoutInterval = 30
+                let hdrs = buildHeaders()
+                for (k, v) in hdrs { configReq.setValue(v, forHTTPHeaderField: k) }
+                configReq.httpBody = rawBodyString.data(using: .utf8)
+                configReq.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+                print("📋 [AMNESIA] POSTing signed configure_sidecar to i.instagram.com (attempt \(attempt))…")
+                let (rawData, rawResp) = try await postSession.data(for: configReq)
+                let httpResp = rawResp as? HTTPURLResponse
+                let statusCode = httpResp?.statusCode ?? 0
+                print("📋 [AMNESIA] configure_sidecar HTTP \(statusCode)")
+                // Log ALL response headers for diagnosis
+                if let hdrsResp = httpResp?.allHeaderFields as? [String: String] {
+                    let interesting = hdrsResp.filter { k, _ in
+                        let kl = k.lowercased()
+                        return kl.hasPrefix("x-ig") || kl.hasPrefix("x-fb") || kl == "www-authenticate"
+                            || kl == "content-type" || kl.hasPrefix("x-bloks") || kl == "location"
+                    }
+                    for (k, v) in interesting.sorted(by: { $0.key < $1.key }) {
+                        print("   [AMNESIA] resp-header: \(k): \(v)")
+                    }
+                    // Always capture fresh www-claim (even from 500 responses)
+                    if let claim = hdrsResp.first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
+                        await MainActor.run { self.wwwClaim = claim }
+                        print("   [AMNESIA] Updated wwwClaim from configure_sidecar response")
+                    }
+                }
+                if let raw = String(data: rawData, encoding: .utf8) {
+                    print("   [AMNESIA] configure_sidecar response: \(raw.prefix(600))")
+                }
+                if statusCode == 500 {
+                    throw InstagramError.apiError("HTTP 500: Unknown Server Error.")
+                }
+                data = rawData
+
+                if let raw = String(data: data, encoding: .utf8) {
+                    print("   [AMNESIA] configure_sidecar response (attempt \(attempt)): \(raw.prefix(300))")
+                }
+
+                guard let json  = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let media = json["media"] as? [String: Any]
+                else {
+                    let raw = String(data: data, encoding: .utf8) ?? "?"
+                    throw InstagramError.apiError("configure_sidecar: unexpected response — \(raw.prefix(200))")
+                }
+
+                let mediaId: String?
+                if let s = media["pk"] as? String       { mediaId = s }
+                else if let i = media["pk"] as? Int64   { mediaId = String(i) }
+                else if let i = media["pk"] as? Int     { mediaId = String(i) }
+                else                                     { mediaId = nil }
+
+                guard let id = mediaId else {
+                    throw InstagramError.apiError("configure_sidecar: no media pk in response")
+                }
+                print("✅ [AMNESIA] Carousel created — mediaId=\(id) (\(uploadIds.count) images)")
+                return id
+            } catch {
+                lastError = error
+                let desc = error.localizedDescription
+                print("⚠️ [AMNESIA] configure_sidecar attempt \(attempt) failed: \(desc)")
+                LogManager.shared.warning("configure_sidecar attempt \(attempt) failed: \(desc)", category: .api)
+                if attempt < 3 {
+                    let wait = UInt64.random(in: 5_000_000_000...10_000_000_000)
+                    print("   [AMNESIA] Retrying in \(wait / 1_000_000_000)s…")
+                    try? await Task.sleep(nanoseconds: wait)
+                }
+            }
+        }
+        throw lastError ?? InstagramError.apiError("configure_sidecar failed after 3 attempts")
+    }
+
+    /// Full Amnesia Carousel upload flow:
+    /// Uploads two carousel posts (4-image and 5-image) and archives the 5-image one.
+    ///
+    /// Progress is reported via the `onProgress` closure:
+    ///   - step 1-4:  uploading images for the short carousel (A)
+    ///   - step 5:    configuring short carousel
+    ///   - step 6-10: uploading images for the full carousel (B)
+    ///   - step 11:   configuring full carousel
+    ///   - step 12:   archiving full carousel
+    ///
+    /// On success sets `AmnesiaCarouselSettings.shared.shortCarouselMediaId` and `fullCarouselMediaId`.
+    func uploadAmnesiaCarousels(
+        images: [UIImage],           // must be exactly 5
+        onProgress: @escaping (Int, Int) -> Void
+    ) async throws {
+        guard images.count == 5 else {
+            throw InstagramError.apiError("Se necesitan exactamente 5 imágenes")
+        }
+        guard !isLocked else {
+            throw InstagramError.apiError("Lockdown activo. Espera antes de subir.")
+        }
+
+        let total = 12  // 4 uploads + 1 configure + 5 uploads + 1 configure + 1 archive
+        var step  = 0
+        func advance() { step += 1; onProgress(step, total) }
+
+        // Prepare all carousel images with the same exact aspect ratio.
+        // Instagram carousels are strict: mixing 4:5 and 1:1 items can make
+        // configure_sidecar fail with a generic HTTP 500.
+        func jpeg(_ img: UIImage, index: Int) throws -> Data {
+            let normalized = InstagramService.normalizeImageOrientation(img)
+            print("📐 [AMNESIA] Image #\(index + 1) input: \(Int(normalized.size.width))x\(Int(normalized.size.height)) @\(normalized.scale)x")
+
+            let targetSize = CGSize(width: 864, height: 1080) // exact 4:5 portrait
+            let targetRatio = targetSize.width / targetSize.height
+            let sourceRatio = normalized.size.width / normalized.size.height
+            let cropSize: CGSize
+
+            if sourceRatio > targetRatio {
+                let cropWidth = normalized.size.height * targetRatio
+                cropSize = CGSize(width: cropWidth, height: normalized.size.height)
+            } else {
+                let cropHeight = normalized.size.width / targetRatio
+                cropSize = CGSize(width: normalized.size.width, height: cropHeight)
+            }
+
+            let cropOrigin = CGPoint(
+                x: (normalized.size.width - cropSize.width) / 2,
+                y: (normalized.size.height - cropSize.height) / 2
+            )
+            let drawScale = targetSize.width / cropSize.width
+            let drawRect = CGRect(
+                x: -cropOrigin.x * drawScale,
+                y: -cropOrigin.y * drawScale,
+                width: normalized.size.width * drawScale,
+                height: normalized.size.height * drawScale
+            )
+
+            UIGraphicsBeginImageContextWithOptions(targetSize, true, 1.0)
+            normalized.draw(in: drawRect)
+            guard let preparedImage = UIGraphicsGetImageFromCurrentImageContext() else {
+                UIGraphicsEndImageContext()
+                throw InstagramError.apiError("No se pudo preparar la imagen")
+            }
+            UIGraphicsEndImageContext()
+
+            guard let finalData = preparedImage.jpegData(compressionQuality: 0.88) else {
+                throw InstagramError.apiError("No se pudo comprimir la imagen")
+            }
+
+            print("📦 [AMNESIA] Image #\(index + 1) final: 864x1080 (4:5), \(finalData.count / 1024)KB")
+            return finalData
+        }
+
+        // ── Carousel A (images 0-3, 4 images) — will be visible ─────────────────
+        // Upload first image without a pre-set client_sidecar_id.
+        // Its returned upload_id becomes the client_sidecar_id for all remaining uploads
+        // and for configure_sidecar — this is the pattern used by instagrapi.
+        print("🎭 [AMNESIA] Phase 1: uploading short carousel (4 images)…")
+        var uploadIdsA: [String] = []
+        for i in 0..<4 {
+            let imgData = try jpeg(images[i], index: i)
+            // For the first image, use its own upload_id as the sidecar ID.
+            // For subsequent images, use the first image's upload_id.
+            let sidecarId = uploadIdsA.first ?? ""
+            let id = try await uploadPhotoForSidecar(imageData: imgData, stepLabel: "A-\(i+1)/4", clientSidecarId: sidecarId)
+            uploadIdsA.append(id)
+            advance()
+            if i < 3 {
+                let gap = UInt64.random(in: 2_000_000_000...4_000_000_000)
+                try await Task.sleep(nanoseconds: gap)
+            }
+        }
+        let sidecarIdA = uploadIdsA[0]
+        print("🎭 [AMNESIA] Carousel A sidecarId (= first upload_id): \(sidecarIdA)")
+
+        // Anti-bot: 4-7s before configure
+        print("   [AMNESIA] Waiting before configure_sidecar A…")
+        try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
+        let mediaIdA = try await configureSidecar(uploadIds: uploadIdsA, caption: "", clientSidecarId: sidecarIdA)
+        advance()
+        trackAction()
+
+        // Anti-bot: 5-8s before starting carousel B
+        try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...8_000_000_000))
+
+        // ── Carousel B (all 5 images) — will be archived immediately ────────────
+        print("🎭 [AMNESIA] Phase 2: uploading full carousel (5 images)…")
+        var uploadIdsB: [String] = []
+        for i in 0..<5 {
+            let imgData = try jpeg(images[i], index: i)
+            let sidecarId = uploadIdsB.first ?? ""
+            let id = try await uploadPhotoForSidecar(imageData: imgData, stepLabel: "B-\(i+1)/5", clientSidecarId: sidecarId)
+            uploadIdsB.append(id)
+            advance()
+            if i < 4 {
+                let gap = UInt64.random(in: 2_000_000_000...4_000_000_000)
+                try await Task.sleep(nanoseconds: gap)
+            }
+        }
+        let sidecarIdB = uploadIdsB[0]
+        print("🎭 [AMNESIA] Carousel B sidecarId (= first upload_id): \(sidecarIdB)")
+
+        // Anti-bot: 4-7s before configure
+        print("   [AMNESIA] Waiting before configure_sidecar B…")
+        try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
+        let mediaIdB = try await configureSidecar(uploadIds: uploadIdsB, caption: "", clientSidecarId: sidecarIdB)
+        advance()
+        trackAction()
+
+        // Anti-bot: 5-9s before archiving carousel B
+        try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...9_000_000_000))
+        print("🎭 [AMNESIA] Archiving full carousel B (mediaId=\(mediaIdB))…")
+        _ = try await archivePhoto(mediaId: mediaIdB, skipPreCheck: true)
+        advance()
+
+        // Persist both IDs
+        await MainActor.run {
+            AmnesiaCarouselSettings.shared.shortCarouselMediaId = mediaIdA
+            AmnesiaCarouselSettings.shared.fullCarouselMediaId  = mediaIdB
+            AmnesiaCarouselSettings.shared.isRevealed           = false
+            AmnesiaCarouselSettings.shared.uploadState          = .ready
+        }
+        print("✅ [AMNESIA] Both carousels ready — A=\(mediaIdA) B=\(mediaIdB)")
+        LogManager.shared.success("Amnesia Carousel preparado — A:\(mediaIdA) B:\(mediaIdB)", category: .upload)
+    }
+
+    /// Swaps the two Amnesia Carousel posts:
+    ///   - If not yet revealed: archives short (A), unarchives full (B)  → spectator sees 5 images
+    ///   - If already revealed: reverses the swap (reset for next performance)
+    func swapAmnesiaCarousels(settings: AmnesiaCarouselSettings) async throws {
+        guard let shortId = settings.shortCarouselMediaId,
+              let fullId  = settings.fullCarouselMediaId
+        else { throw InstagramError.apiError("Carruseles de Amnesia no preparados") }
+
+        guard !isLocked else { throw InstagramError.apiError("Lockdown activo") }
+
+        if !settings.isRevealed {
+            // Reveal: archive short (4-img), unarchive full (5-img)
+            print("🎭 [AMNESIA] Swap → REVEAL (archive A, unarchive B)…")
+            LogManager.shared.info("Amnesia Carousel → Reveal iniciado", category: .api)
+            _ = try await archivePhoto(mediaId: shortId, skipPreCheck: true)
+            // Anti-bot: brief gap between the two operations
+            try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            _ = try await unarchivePhoto(mediaId: fullId, skipPreCheck: true)
+            await MainActor.run { settings.isRevealed = true }
+            print("✅ [AMNESIA] Reveal complete — spectator now sees 5 images")
+            LogManager.shared.success("Amnesia Carousel revelado (5 imágenes visibles)", category: .api)
+        } else {
+            // Reset: archive full (5-img), unarchive short (4-img)
+            print("🎭 [AMNESIA] Swap → RESET (archive B, unarchive A)…")
+            LogManager.shared.info("Amnesia Carousel → Reset iniciado", category: .api)
+            _ = try await archivePhoto(mediaId: fullId, skipPreCheck: true)
+            try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            _ = try await unarchivePhoto(mediaId: shortId, skipPreCheck: true)
+            await MainActor.run { settings.isRevealed = false }
+            print("✅ [AMNESIA] Reset complete — ready for next performance")
+            LogManager.shared.success("Amnesia Carousel reseteado (4 imágenes visibles)", category: .api)
+        }
+    }
+
     // MARK: - Instagram Notes
     
     /// Create an Instagram Note (bubble above profile pic in DMs)
@@ -3627,6 +4123,18 @@ class InstagramService: ObservableObject {
         return (false, 0)
     }
     
+    // MARK: - Robust JSON Parsing
+
+    /// Safely extracts an Int from any numeric JSON value (Int, Int64, Double, NSNumber, String).
+    static func robustInt(_ value: Any?) -> Int {
+        if let i = value as? Int    { return i }
+        if let i = value as? Int64  { return Int(i) }
+        if let d = value as? Double { return Int(d) }
+        if let n = value as? NSNumber { return n.intValue }
+        if let s = value as? String, let i = Int(s) { return i }
+        return 0
+    }
+
     // MARK: - Image Orientation Fix
     
     /// Normalize image orientation to prevent rotation issues
@@ -4126,6 +4634,82 @@ class InstagramService: ObservableObject {
         print("❌ [TEST] Could not find archived photos from any endpoint")
         LogManager.shared.error("No archived photos found - tried \(possiblePaths.count) endpoints", category: .api)
         throw InstagramError.apiError("Could not access archived photos. This may be due to:\n• No archived photos exist\n• Endpoint access restricted\n• Session may need refresh")
+    }
+
+    // MARK: - Paginated Archived Photos Fetch
+
+    /// Fetches ALL archived photos from `feed/only_me_feed/` by paginating through every
+    /// page until `more_available` is false or `next_max_id` is absent.
+    /// Anti-bot: adds a 1–2 s human delay between pages. Max 10 pages (200 photos) as safety cap.
+    func getAllArchivedPhotos() async throws -> [(mediaId: String, imageURL: String, timestamp: Date?)] {
+        var allPhotos: [(mediaId: String, imageURL: String, timestamp: Date?)] = []
+        var nextMaxId: String? = nil
+        let maxPages = 10
+
+        for page in 0..<maxPages {
+            // Human delay between pages (skip on first page — caller may already have a delay)
+            if page > 0 {
+                let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
+                try await Task.sleep(nanoseconds: delay)
+            }
+
+            var path = "/feed/only_me_feed/"
+            if let cursor = nextMaxId {
+                path += "?max_id=\(cursor)"
+            }
+
+            print("📦 [ARCHIVE] Fetching page \(page + 1) from \(path)")
+            let data = try await apiRequest(method: "GET", path: path)
+
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw InstagramError.apiError("Could not parse archive feed response")
+            }
+
+            // Parse items — same logic as testGetArchivedPhotos
+            let items = json["items"] as? [[String: Any]] ?? []
+            for item in items {
+                let mediaItem = item["media"] as? [String: Any] ?? item
+                let pkInt   = mediaItem["pk"] as? Int64
+                let pkStr   = (mediaItem["pk"] as? String).flatMap { Int64($0) }
+                guard let pk = pkInt ?? pkStr else { continue }
+                let mediaId = String(pk)
+
+                var imageURL = ""
+                if let iv = mediaItem["image_versions2"] as? [String: Any],
+                   let candidates = iv["candidates"] as? [[String: Any]],
+                   let url = candidates.first?["url"] as? String {
+                    imageURL = url
+                }
+
+                let takenAt: Date?
+                if let t = mediaItem["taken_at"] as? TimeInterval {
+                    takenAt = Date(timeIntervalSince1970: t)
+                } else if let t = mediaItem["taken_at"] as? Int64 {
+                    takenAt = Date(timeIntervalSince1970: TimeInterval(t))
+                } else {
+                    takenAt = nil
+                }
+
+                allPhotos.append((mediaId: mediaId, imageURL: imageURL, timestamp: takenAt))
+            }
+
+            print("📦 [ARCHIVE] Page \(page + 1): \(items.count) items (total so far: \(allPhotos.count))")
+
+            // Check pagination
+            let moreAvailable = json["more_available"] as? Bool ?? false
+            if let cursor = json["next_max_id"] as? String {
+                nextMaxId = cursor
+            } else if let cursor = json["next_max_id"] as? NSNumber {
+                nextMaxId = cursor.stringValue
+            } else {
+                nextMaxId = nil
+            }
+
+            if !moreAvailable || nextMaxId == nil { break }
+        }
+
+        LogManager.shared.info("Archive fetch complete: \(allPhotos.count) photos", category: .api)
+        return allPhotos
     }
 }
 

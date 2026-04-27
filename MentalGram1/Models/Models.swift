@@ -152,6 +152,8 @@ struct InstagramMediaItem: Identifiable, Codable {
     let likeCount: Int?
     let commentCount: Int?
     let mediaType: MediaType
+    /// Image URLs for carousel children, including the cover image when available.
+    var carouselImageURLs: [String] = []
     /// Username of the post/reel owner, populated from the API when available.
     var ownerUsername: String? = nil
     

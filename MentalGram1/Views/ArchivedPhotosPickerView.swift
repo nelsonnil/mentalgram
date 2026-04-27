@@ -9,38 +9,72 @@ struct ArchivedPhoto: Identifiable {
     var thumbnailImage: UIImage? = nil
 }
 
+// MARK: - Archived Photos Cache
+/// In-memory cache shared across all ArchivedPhotosPickerView instances.
+/// Prevents redundant API calls when the user opens the picker for multiple slots.
+/// TTL = 15 minutes — after that the next open triggers a fresh full fetch.
+final class ArchivedPhotosCache {
+    static let shared = ArchivedPhotosCache()
+    private init() {}
+
+    private(set) var photos: [ArchivedPhoto] = []
+    private var fetchedAt: Date? = nil
+    private let ttl: TimeInterval = 15 * 60  // 15 minutes
+
+    var isValid: Bool {
+        guard let t = fetchedAt else { return false }
+        return Date().timeIntervalSince(t) < ttl
+    }
+
+    func store(_ photos: [ArchivedPhoto]) {
+        self.photos = photos
+        self.fetchedAt = Date()
+    }
+
+    func invalidate() {
+        photos = []
+        fetchedAt = nil
+    }
+}
+
 // MARK: - Archived Photos Picker View
 struct ArchivedPhotosPickerView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var instagram = InstagramService.shared
-    
+
     let targetSlotSymbol: String
     let onPhotoSelected: (ArchivedPhoto) -> Void
-    
+
     @State private var archivedPhotos: [ArchivedPhoto] = []
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
     @State private var selectedPhoto: ArchivedPhoto? = nil
-    @State private var downloadedImages: [String: UIImage] = [:] // mediaId -> UIImage
-    
+    @State private var downloadedImages: [String: UIImage] = [:]
+    @State private var isForcingRefresh = false
+
     private let columns = [
         GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8)
     ]
-    
+
     var body: some View {
         NavigationView {
             ZStack {
                 VaultTheme.Colors.background
                     .ignoresSafeArea()
-                
+
                 if isLoading {
                     VStack(spacing: 16) {
                         ProgressView()
                             .tint(.white)
-                        Text("Loading archived photos...")
+                        Text(isForcingRefresh ? "Refreshing archive..." : "Loading archived photos...")
                             .foregroundColor(.secondary)
+                        if !isForcingRefresh {
+                            Text("Fetching all pages — this may take a moment")
+                                .font(.caption)
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
                     }
                 } else if let error = errorMessage {
                     VStack(spacing: 16) {
@@ -54,8 +88,8 @@ struct ArchivedPhotosPickerView: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
-                        
-                        Button(action: loadArchivedPhotos) {
+
+                        Button(action: { loadPhotos(forceRefresh: true) }) {
                             Label("Retry", systemImage: "arrow.clockwise")
                                 .font(.headline)
                                 .foregroundColor(.white)
@@ -86,9 +120,7 @@ struct ArchivedPhotosPickerView: View {
                                     photo: photo,
                                     thumbnailImage: downloadedImages[photo.mediaId],
                                     isSelected: selectedPhoto?.mediaId == photo.mediaId,
-                                    onTap: {
-                                        selectedPhoto = photo
-                                    }
+                                    onTap: { selectedPhoto = photo }
                                 )
                             }
                         }
@@ -100,12 +132,17 @@ struct ArchivedPhotosPickerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
+                    Button("Cancel") { dismiss() }
+                        .foregroundColor(.white)
                 }
-                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if !isLoading && errorMessage == nil {
+                        Button(action: { loadPhotos(forceRefresh: true) }) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Select") {
                         if let selected = selectedPhoto {
@@ -123,55 +160,79 @@ struct ArchivedPhotosPickerView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .onAppear {
-            loadArchivedPhotos()
+            loadPhotos(forceRefresh: false)
         }
     }
-    
-    private func loadArchivedPhotos() {
+
+    // MARK: - Load Logic
+
+    private func loadPhotos(forceRefresh: Bool) {
+        // Serve from cache if valid and not forcing refresh — zero API calls
+        if !forceRefresh, ArchivedPhotosCache.shared.isValid {
+            let cached = ArchivedPhotosCache.shared.photos
+            archivedPhotos = cached
+            isLoading = false
+            // Thumbnails already downloaded in a previous open are stored in the cache objects
+            for photo in cached {
+                if let img = photo.thumbnailImage {
+                    downloadedImages[photo.mediaId] = img
+                }
+            }
+            print("📦 [ARCHIVE PICKER] Serving \(cached.count) photos from cache (no API call)")
+            return
+        }
+
         isLoading = true
+        isForcingRefresh = forceRefresh
         errorMessage = nil
-        
+
+        if forceRefresh {
+            ArchivedPhotosCache.shared.invalidate()
+        }
+
         Task {
             do {
-                let photos = try await instagram.testGetArchivedPhotos()
-                
-                await MainActor.run {
-                    archivedPhotos = photos.map { photo in
-                        ArchivedPhoto(
-                            mediaId: photo.mediaId,
-                            imageURL: photo.imageURL,
-                            timestamp: photo.timestamp
-                        )
-                    }
-                    isLoading = false
+                // Full paginated fetch — may take a few seconds for large archives
+                let raw = try await instagram.getAllArchivedPhotos()
+                var photos = raw.map {
+                    ArchivedPhoto(mediaId: $0.mediaId, imageURL: $0.imageURL, timestamp: $0.timestamp)
                 }
-                
-                // Download thumbnails in background
-                await downloadThumbnails()
-                
+
+                await MainActor.run {
+                    archivedPhotos = photos
+                    isLoading = false
+                    isForcingRefresh = false
+                }
+
+                // Download thumbnails and store them back into cache objects
+                await downloadThumbnails(into: &photos)
+                ArchivedPhotosCache.shared.store(photos)
+
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isLoading = false
+                    isForcingRefresh = false
                 }
             }
         }
     }
-    
-    private func downloadThumbnails() async {
-        for photo in archivedPhotos {
+
+    private func downloadThumbnails(into photos: inout [ArchivedPhoto]) async {
+        for i in photos.indices {
+            let photo = photos[i]
             guard !photo.imageURL.isEmpty else { continue }
-            
-            do {
-                if let url = URL(string: photo.imageURL),
-                   let (data, _) = try? await URLSession.shared.data(from: url),
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        downloadedImages[photo.mediaId] = image
+            if let url = URL(string: photo.imageURL),
+               let (data, _) = try? await URLSession.shared.data(from: url),
+               let image = UIImage(data: data) {
+                await MainActor.run {
+                    downloadedImages[photo.mediaId] = image
+                    // Keep the displayed grid updated as thumbnails arrive
+                    if let idx = archivedPhotos.firstIndex(where: { $0.mediaId == photo.mediaId }) {
+                        archivedPhotos[idx].thumbnailImage = image
                     }
                 }
-            } catch {
-                print("Failed to download thumbnail for \(photo.mediaId): \(error)")
+                photos[i].thumbnailImage = image  // persist in cache object
             }
         }
     }

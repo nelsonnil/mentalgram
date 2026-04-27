@@ -371,9 +371,6 @@ struct UserProfileView: View {
                         }
                         .frame(height: 44)
 
-                        Color(uiColor: .separator)
-                            .frame(height: 1 / UIScreen.main.scale)
-
                         // Tab content
                         Group {
                             switch selectedTab {
