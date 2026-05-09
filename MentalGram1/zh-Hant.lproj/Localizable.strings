@@ -25,6 +25,10 @@
 "backup.just_now" = "剛剛";
 "backup.min_ago" = "%d 分鐘前";
 "backup.h_ago" = "%d 小時前";
+"backup.info.auto" = "每次應用程式進入背景時會自動執行備份。您也可以透過「立即備份」手動觸發。";
+"backup.info.what" = "備份內容：所有設定、Date Force、Force Reel、啟用中的套組及其元資料。";
+"backup.info.photos" = "套組照片會同步至 iCloud 雲端硬碟。可在檔案 App → iCloud 雲端硬碟 → Vault → Photos 中查看。";
+"backup.info.excluded" = "不備份：Instagram 工作階段、裝置 ID 和冷卻計時器（裝置專屬）。";
 
 // ─── Settings & App UI ──────────────────────────────────────────────────────
 
@@ -586,6 +590,7 @@
 "postpred.help.during.timing.dialogue" = "開啟Instagram。去我的個人頁面。向下滑動，它一直在那裡。";
 "postpred.help.tip.timing" = "**揭示速度。** 一個字母或數字：約2-3秒。五個字母（如MAGIC）：約12-15秒。每個額外字母增加約2-3秒。";
 "postpred.help.tip.vibration" = "**振動=就緒。** 觸覺回饋是照片在真實Instagram上生效的訊號。振動後引導觀眾。";
+"postpred.help.tip.ring" = "**橙色光環 = 已確認。** 成功揭示後，您的頭像周圍會出現橙色漸層光環——與 Instagram 限時動態光環完全相同。這確認照片已在真實 Instagram 上生效。進入新的 Performance 會話時，光環會自動重置。";
 "postpred.help.tip.position" = "**原始位置。** 照片在格線的原始位置以原始日期重新出現，可能需要滑動才能找到。";
 "postpred.help.tip.upload" = "**上傳期間。** 不要使用應用程式，不要更換Wi-Fi網路，不要鎖定螢幕。";
 "postpred.help.tip.banks" = "**庫的數量。** 每個庫=一個字母或數字的位置。根據要揭示的最長單詞或數字規劃您的合集。";
@@ -624,9 +629,12 @@
 "postpred.help.inputs.group.alpha" = "用於字母套組";
 "postpred.help.inputs.group.universal" = "通用 — 所有套組類型";
 "postpred.help.input.covert.label" = "隱蔽輸入";
-"postpred.help.input.api.label" = "API / 自動化";
-"postpred.help.input.api.step1" = "使用外部自動化工具（捷徑、NFC 標籤、配套應用程式）透過 URL Scheme 向 Post Prediction 傳送詞語或數字。";
-"postpred.help.input.api.step2" = "當第三方觸發器或實體道具在正確時機自動觸發揭示時非常有用。";
+"postpred.help.input.api.label" = "API 自動揭示";
+"postpred.help.input.api.intro" = "連接 Inject (11z.co) 或自訂 API。先開啟 Performance — 應用程式每 2 秒在背景查詢一次。觀眾提交選擇的瞬間，揭示會自動觸發並伴隨三次震動。";
+"postpred.help.input.api.step1" = "在設定 → Post Prediction 中，將 Auto Input 設為 **API** 並選擇來源（Inject 或自訂 API）。";
+"postpred.help.input.api.step2" = "在開始表演前，在裝置上開啟 Performance 畫面。";
+"postpred.help.input.api.step3" = "請觀眾在 Inject 連結或您的自訂表單中做出選擇。";
+"postpred.help.input.api.step4" = "2 秒內應用程式偵測到新值，揭示對應照片，並三次震動確認。";
 "explore.load_error" = "無法載入內容";
 
 // General UI strings (auto-generated)
@@ -936,5 +944,14 @@
 "guide.amnesia.script.optionA.text" = "「我也關閉。」[魔術師在應用中關閉輪播→交換激活]\n\n「現在我們兩個都斷開連接了。只剩下圖片……在這裡。」[指向頭部]\n\n[閉眼] 伸出手：「每次移動……一張圖片變得不那麼清晰……好像它從來就沒有完全在那裡。」[三次緩慢手勢]\n\n「好了。可以睜開眼睛了。」";
 "guide.amnesia.script.optionB.phase" = "選項B——隱蔽滑動";
 "guide.amnesia.script.optionB.text" = "[魔術師在說話時隨意在應用中滑動並關閉輪播]\n\n「記憶不是照片。它是重建。每次你記起某事，你的大腦都會稍微重寫它。在那個不穩定的瞬間……可以進行干預。」\n\n「你確切記得幾張圖片？」[觀眾：四張]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "直接開啟 Performance";
+"settings.launch_direct.detail" = "跳過 Sets 標籤 — 應用程式每次都直接開啟 Performance";
+"settings.lockscreen.description" = "進入 Performance 時顯示偽鎖定畫面。點選秘密數字，點選數字鍵盤外部鎖定，然後填滿剩餘的圓點。";
+"settings.lockscreen.choose_wallpaper" = "選擇桌布";
+"settings.lockscreen.warning_no_wallpaper" = "請選擇桌布以啟用";
+"action.change" = "更改";
+"action.remove" = "移除";
+
 "guide.amnesia.script.climax.phase" = "高潮";
 "guide.amnesia.script.climax.text" = "「再次打開Instagram。找到同一篇帖子。」\n\n[觀眾看到5張圖片]\n\n「你看到幾張？」——五張。\n\n「看一下日期。和之前一樣嗎？」——是的。\n\n「Instagram不會說謊。它無法修改日期。就是這樣上傳的。」\n\n[停頓]\n\n「發生的不是你忘記了一張圖片。你的大腦被引導著沒有看到它。現在你知道這是可能的了。」";

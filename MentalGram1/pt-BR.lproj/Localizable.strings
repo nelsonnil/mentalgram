@@ -288,6 +288,10 @@
 "backup.just_now" = "Agora mesmo";
 "backup.min_ago" = "Há %d min";
 "backup.h_ago" = "Há %d h";
+"backup.info.auto" = "O backup é feito automaticamente toda vez que o app vai para segundo plano. Você também pode iniciá-lo manualmente com \"Fazer backup agora\".";
+"backup.info.what" = "O que é salvo: todas as configurações, Date Force, Force Reel, sets ativos e metadados dos sets.";
+"backup.info.photos" = "As fotos dos sets são sincronizadas com o iCloud Drive. Veja-as no app Arquivos → iCloud Drive → Vault → Photos.";
+"backup.info.excluded" = "Não salvo: sessão do Instagram, ID do dispositivo e timers de cooldown (específicos do dispositivo).";
 "Never" = "Nunca";
 "Just now" = "Agora mesmo";
 "explore.load_error" = "Não foi possível carregar o conteúdo";
@@ -762,6 +766,7 @@
 "postpred.help.during.timing.dialogue" = "Abra o Instagram. Va ao meu perfil. Role para baixo, sempre esteve la.";
 "postpred.help.tip.timing" = "**Velocidade de revelacao.** Uma letra ou digito: ~2-3 segundos. Cinco letras (ex. MAGIC): ~12-15 segundos. Cada letra adicional adiciona ~2-3 segundos.";
 "postpred.help.tip.vibration" = "**Vibracao = pronto.** O feedback haptico e o sinal de que a foto esta ao vivo no Instagram real. Apos a vibracao, direcione o espectador.";
+"postpred.help.tip.ring" = "**Anel laranja = confirmado.** Após uma revelação bem-sucedida, um anel com gradiente laranja aparece ao redor da sua foto de perfil — exatamente como o anel do Instagram Stories. Confirma que a foto está ao vivo no Instagram real. O anel é redefinido automaticamente ao abrir uma nova sessão de Performance.";
 "postpred.help.tip.position" = "**Posicao original.** A foto reaparece exatamente onde estava na grade, com sua data original. Pode ser necessario rolar para encontra-la.";
 "postpred.help.tip.upload" = "**Durante o envio.** Nao use o app, nao troque de rede Wi-Fi e nao bloqueie a tela. Uma notificacao solicita que voce retorne entre cada envio.";
 "postpred.help.tip.banks" = "**Numero de Bancos.** Cada banco = uma posicao de letra ou digito. Planeje seus sets com base na palavra ou numero mais longo que deseja revelar.";
@@ -794,9 +799,12 @@
 "postpred.help.inputs.group.alpha" = "PARA SETS ALFABÉTICOS";
 "postpred.help.inputs.group.universal" = "UNIVERSAL — TODOS OS TIPOS DE SET";
 "postpred.help.input.covert.label" = "DIGITAÇÃO ENCOBERTA";
-"postpred.help.input.api.label" = "API / AUTOMAÇÃO";
-"postpred.help.input.api.step1" = "Use uma ferramenta de automação externa (Atalhos, tag NFC, app companion) para enviar a palavra ou número ao Post Prediction via URL Scheme.";
-"postpred.help.input.api.step2" = "Útil quando um gatilho de terceiros ou acessório físico aciona automaticamente a revelação no momento certo.";
+"postpred.help.input.api.label" = "REVELAÇÃO AUTOMÁTICA POR API";
+"postpred.help.input.api.intro" = "Conecte Inject (11z.co) ou uma API personalizada. Abra Performance primeiro — o app consulta a cada 2 s em segundo plano. No momento em que o espectador envia sua seleção, a revelação dispara automaticamente com vibração tripla.";
+"postpred.help.input.api.step1" = "Em Configurações → Post Prediction, defina Auto Input como **API** e escolha sua fonte (Inject ou API personalizada).";
+"postpred.help.input.api.step2" = "Abra a tela Performance no seu dispositivo antes de iniciar a apresentação.";
+"postpred.help.input.api.step3" = "Peça ao espectador que faça sua seleção no link Inject ou no seu formulário personalizado.";
+"postpred.help.input.api.step4" = "Em menos de 2 segundos o app detecta o novo valor, revela as fotos correspondentes e vibra três vezes para confirmar.";
 "Check your connection and try again." = "Verifique sua conexão e tente novamente.";
 "Try Again" = "Tentar novamente";
 "This keeps happening. Try logging out and back in." = "Isso continua acontecendo. Tente sair e fazer login novamente.";
@@ -1458,5 +1466,14 @@
 "guide.amnesia.script.optionA.text" = "«Fecho também.» [Mágico fecha carrossel no app → swap ativado]\n\n«Agora estamos os dois desconectados. Só restam as imagens... aqui.» [Aponta para a cabeça]\n\n[Olhos fechados] Mão estendida: «A cada movimento... uma imagem vai ficando menos nítida... como se nunca tivesse estado completamente lá.» [Três passes lentos]\n\n«Pronto. Pode abrir os olhos.»";
 "guide.amnesia.script.optionB.phase" = "OPÇÃO B — ROLAGEM DISCRETA";
 "guide.amnesia.script.optionB.text" = "[Mágico rola casualmente no app e fecha o carrossel enquanto fala]\n\n«A memória não é uma fotografia. É uma reconstrução. Cada vez que você lembra de algo, sua mente o reescreve levemente. Nesse instante... é possível intervir.»\n\n«Quantas imagens você lembra exatamente?» [Espectador: quatro]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Abrir diretamente no Performance";
+"settings.launch_direct.detail" = "Pular aba de Sets — o app abre em Performance sempre";
+"settings.lockscreen.description" = "Mostra uma tela de bloqueio falsa ao abrir o Performance. Toque nos dígitos do seu número secreto, toque fora do teclado para bloqueá-lo e preencha os pontos restantes.";
+"settings.lockscreen.choose_wallpaper" = "Escolher papel de parede";
+"settings.lockscreen.warning_no_wallpaper" = "Selecione um papel de parede para ativar";
+"action.change" = "Alterar";
+"action.remove" = "Remover";
+
 "guide.amnesia.script.climax.phase" = "CLÍMAX";
 "guide.amnesia.script.climax.text" = "«Abra o Instagram novamente. Procure o mesmo post.»\n\n[Espectador vê 5 imagens]\n\n«Quantas você vê?» — Cinco.\n\n«Olhe a data. É a mesma de antes?» — Sim.\n\n«O Instagram não mente. Não pode modificar datas. Foi publicado assim.»\n\n[Pausa]\n\n«O que aconteceu não é que você esqueceu uma imagem. Sua mente foi guiada a não vê-la. E agora você sabe que isso é possível.»";

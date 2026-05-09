@@ -97,12 +97,28 @@ class InstagramService: ObservableObject {
     // MARK: - Rate Limiting (anti-bot: max 60 actions/hour)
     private var actionTimestamps: [Date] = []
     private let maxActionsPerHour: Int = 55 // Safe margin below 60
+    /// Stop paginated archive scans when actionsThisHour reaches this threshold
+    private let archiveScanRateLimitThreshold: Int = 45
     @Published var actionsThisHour: Int = 0
     @Published var isRateLimited: Bool = false
     private var lastRequestTimestamp: Date? = nil
     /// Rolling buffer of recent API calls for bot-detection diagnostics
     private var recentRequests: [(date: Date, method: String, path: String)] = []
     private let recentRequestsMax = 10
+
+    // MARK: - Archive Scan Cache
+    /// In-memory cache for the last archive scan result. Avoids re-scanning hundreds of
+    /// photos every session. Invalidated automatically after unarchive/archive operations.
+    private var archivedPhotoCache: [(mediaId: String, imageURL: String, timestamp: Date?)]? = nil
+    private var archivedPhotoCacheDate: Date? = nil
+    private let archivedPhotoCacheTTL: TimeInterval = 600 // 10 minutes
+
+    /// Invalidate the archive scan cache (call after any archive/unarchive action).
+    func invalidateArchiveCache() {
+        archivedPhotoCache = nil
+        archivedPhotoCacheDate = nil
+        print("♻️ [ARCHIVE CACHE] Invalidated")
+    }
     
     // Network monitoring
     private let networkMonitor = NWPathMonitor()
@@ -432,6 +448,9 @@ class InstagramService: ObservableObject {
         // Reset lockdown
         unlock()
 
+        // Clear archive cache — next login belongs to a potentially different account
+        invalidateArchiveCache()
+
         // Clear profile cache (disk + memory)
         ProfileCacheService.shared.clearAll()
         ProfileCacheService.shared.pendingProfilePic = nil
@@ -477,7 +496,10 @@ class InstagramService: ObservableObject {
             let data = try await apiRequest(method: "GET", path: "/accounts/current_user/?edit=true")
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                json["user"] != nil {
-                await MainActor.run { isSessionExpired = false }
+                await MainActor.run {
+                    isSessionExpired = false
+                    resetUploadPhaseAfterRelogin()
+                }
                 print("✅ [SESSION] Session is valid")
                 return .valid
             }
@@ -593,14 +615,29 @@ class InstagramService: ObservableObject {
                     self.isSessionExpired = false   // clear on successful login
                     KeychainService.shared.saveSession(self.session)
                     print("✅ Logged in as @\(username)")
+                    self.resetUploadPhaseAfterRelogin()
                 }
             } else {
                 await MainActor.run {
                     self.isLoggedIn = true
                     self.isSessionExpired = false   // clear on successful login
                     KeychainService.shared.saveSession(self.session)
+                    self.resetUploadPhaseAfterRelogin()
                 }
             }
+        }
+    }
+
+    /// If an upload was stuck in `.sessionExpired` state, transition it back to `.paused`
+    /// so the magician can tap "Resume" without having to force-quit the app.
+    @MainActor
+    private func resetUploadPhaseAfterRelogin() {
+        let um = UploadManager.shared
+        if case .sessionExpired = um.uploadPhase {
+            um.uploadPhase = .paused
+            um.currentPhaseDescription = String(localized: "Session restored — tap Resume to continue")
+            print("🔓 [SESSION] uploadPhase reset from .sessionExpired → .paused after re-login")
+            LogManager.shared.info("Upload phase reset to paused after re-login", category: .auth)
         }
     }
     
@@ -1144,7 +1181,14 @@ class InstagramService: ObservableObject {
         if isLocked {
             throw InstagramError.botDetected("App is in lockdown mode. Wait for countdown to finish.")
         }
-        
+
+        // Hard block: session was invalidated (403 login_required). Do NOT send any more
+        // requests until the user re-logs in — continued requests accelerate bot flagging.
+        if isSessionExpired {
+            print("🔴 [SESSION] Blocked API call — session is expired. Re-login required.")
+            throw InstagramError.sessionExpired
+        }
+
         // ANTI-BOT: Check rate limit (max 55 actions/hour)
         let rateCheck = checkRateLimit()
         if rateCheck.limited {
@@ -1358,10 +1402,13 @@ class InstagramService: ObservableObject {
     
     func getUserMedia(userId: String? = nil, maxId: String? = nil) async throws -> ([InstagramMedia], String?) {
         let uid = userId ?? session.userId
-        var path = "/feed/user/\(uid)/"
-        if let maxId = maxId {
-            path += "?max_id=\(maxId)"
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "count", value: "18")]
+        if let maxId = maxId, !maxId.isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "max_id", value: maxId))
         }
+        let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+        let path = "/feed/user/\(uid)/\(query)"
         
         let data = try await apiRequest(method: "GET", path: path)
         
@@ -1500,7 +1547,8 @@ class InstagramService: ObservableObject {
             if status == "ok" {
                 print("✅ [ARCHIVE] Photo archived successfully")
                 LogManager.shared.success("Photo archived (ID: \(mediaId))", category: .api)
-                
+                invalidateArchiveCache()
+
                 // When called from S&A (skipPreCheck=true), S&A manages its own
                 // inter-archive timing — don't impose an upload cooldown here.
                 if !skipPreCheck {
@@ -1587,6 +1635,7 @@ class InstagramService: ObservableObject {
             if status == "ok" {
                 print("✅ [UNARCHIVE] Photo unarchived successfully")
                 LogManager.shared.success("Photo revealed/unarchived (ID: \(mediaId))", category: .api)
+                invalidateArchiveCache()
                 return true
             }
 
@@ -1959,12 +2008,85 @@ class InstagramService: ObservableObject {
     }
     
     // MARK: - Get Profile Info (Complete Profile Data)
+
+    private func extractProfileUserId(from dict: [String: Any]) -> String {
+        if let pkInt64 = dict["pk"] as? Int64 { return String(pkInt64) }
+        if let pkString = dict["pk"] as? String { return pkString }
+        if let pkInt = dict["pk"] as? Int { return String(pkInt) }
+        if let pkId = dict["pk_id"] as? String { return pkId }
+        if let idString = dict["id"] as? String { return idString }
+        if let idInt = dict["id"] as? Int { return String(idInt) }
+        return "0"
+    }
+
+    private func fetchWebProfileInfoFallback(username: String) async -> [String: Any]? {
+        var components = URLComponents(string: "https://www.instagram.com/api/v1/users/web_profile_info/")
+        components?.queryItems = [URLQueryItem(name: "username", value: username)]
+        guard let url = components?.url else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 20
+        let headers = buildHeaders()
+        for (key, value) in headers where key.lowercased() != "content-type" {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        request.setValue("936619743392459", forHTTPHeaderField: "X-IG-App-ID")
+        request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
+
+        do {
+            let (data, response) = try await getSession.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            LogManager.shared.debug("Profile web fallback HTTP \(status) for @\(username)", category: .profile)
+            guard status == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let dataDict = json["data"] as? [String: Any],
+                  let webUser = dataDict["user"] as? [String: Any] else {
+                if let raw = String(data: data, encoding: .utf8) {
+                    LogManager.shared.warning("Profile web fallback unexpected response: \(String(raw.prefix(180)))", category: .profile)
+                }
+                return nil
+            }
+
+            var merged: [String: Any] = [:]
+            merged["username"] = webUser["username"]
+            merged["full_name"] = webUser["full_name"]
+            merged["biography"] = webUser["biography"]
+            merged["external_url"] = webUser["external_url"]
+            merged["profile_pic_url"] = webUser["profile_pic_url_hd"] ?? webUser["profile_pic_url"]
+            merged["is_private"] = webUser["is_private"]
+            merged["is_verified"] = webUser["is_verified"]
+            if let id = webUser["id"] { merged["id"] = id; merged["pk"] = id }
+
+            if let followedBy = webUser["edge_followed_by"] as? [String: Any] {
+                merged["follower_count"] = followedBy["count"]
+            }
+            if let follows = webUser["edge_follow"] as? [String: Any] {
+                merged["following_count"] = follows["count"]
+            }
+            if let media = webUser["edge_owner_to_timeline_media"] as? [String: Any] {
+                merged["media_count"] = media["count"]
+            }
+
+            return merged
+        } catch {
+            LogManager.shared.warning("Profile web fallback failed: \(error.localizedDescription)", category: .profile)
+            return nil
+        }
+    }
     
-    func getProfileInfo(userId: String? = nil) async throws -> InstagramProfile? {
+    func getProfileInfo(
+        userId: String? = nil,
+        usernameHint: String? = nil,
+        fullNameHint: String? = nil,
+        profilePicURLHint: String? = nil,
+        isVerifiedHint: Bool? = nil
+    ) async throws -> InstagramProfile? {
         let uid = userId ?? session.userId
         let isOwnProfile = (uid == session.userId)
         print("📊 [PROFILE] Fetching complete profile for user ID: \(uid)")
         print("📊 [PROFILE] Is own profile: \(isOwnProfile)")
+        LogManager.shared.info("Profile header fetch started — uid:\(uid) own:\(isOwnProfile)", category: .profile)
         
         let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
         
@@ -1975,7 +2097,7 @@ class InstagramService: ObservableObject {
             return nil
         }
 
-        guard let user = json["user"] as? [String: Any] else {
+        guard var user = json["user"] as? [String: Any] else {
             let topKeys = json.keys.sorted().joined(separator: ", ")
             print("❌ [PROFILE] No 'user' key — top-level keys: \(topKeys)")
             LogManager.shared.error("getProfileInfo: missing 'user' key — keys: \(topKeys)", category: .api)
@@ -1984,29 +2106,21 @@ class InstagramService: ObservableObject {
         
         // Debug: Print user data
         print("📊 [PROFILE] User data keys: \(user.keys.sorted().joined(separator: ", "))")
+        LogManager.shared.debug("Profile user keys: \(user.keys.sorted().joined(separator: ","))", category: .profile)
         if let profilePicUrl = user["profile_pic_url"] as? String {
             print("📊 [PROFILE] Profile pic URL found: \(String(profilePicUrl.prefix(80)))...")
+            LogManager.shared.debug("Profile pic URL present: \(String(profilePicUrl.prefix(80)))", category: .profile)
         } else {
             print("⚠️ [PROFILE] No profile_pic_url field found")
+            LogManager.shared.warning("Profile pic URL missing in /users/info response", category: .profile)
         }
         
-        // Extract userId (handle different types)
-        let extractedUserId: String
-        if let pkInt64 = user["pk"] as? Int64 {
-            extractedUserId = String(pkInt64)
-            print("📊 [PROFILE] userId extracted as Int64: \(extractedUserId)")
-        } else if let pkString = user["pk"] as? String {
-            extractedUserId = pkString
-            print("📊 [PROFILE] userId extracted as String: \(extractedUserId)")
-        } else if let pkInt = user["pk"] as? Int {
-            extractedUserId = String(pkInt)
-            print("📊 [PROFILE] userId extracted as Int: \(extractedUserId)")
-        } else if let pkId = user["pk_id"] as? String {
-            extractedUserId = pkId
-            print("📊 [PROFILE] userId extracted from pk_id: \(extractedUserId)")
+        var extractedUserId = extractProfileUserId(from: user)
+        if extractedUserId == "0" {
+            print("⚠️ [PROFILE] Could not extract userId before fallback, defaulting to '0'")
+            LogManager.shared.warning("Profile userId missing before fallback", category: .profile)
         } else {
-            extractedUserId = "0"
-            print("⚠️ [PROFILE] Could not extract userId, defaulting to '0'")
+            print("📊 [PROFILE] userId extracted: \(extractedUserId)")
         }
         
         // Check if we're following this user and if there's a pending request
@@ -2066,6 +2180,7 @@ class InstagramService: ObservableObject {
 
         if shouldFetchProtectedData {
             print("✅ [PROFILE] Fetching followers, media, reels, tagged & highlights (profile is accessible)")
+            LogManager.shared.info("Profile protected data fetch allowed", category: .profile)
 
             // Fetch all in parallel
             async let followersTask   = getFollowedByUsers(userId: uid, count: 6)
@@ -2090,8 +2205,116 @@ class InstagramService: ObservableObject {
             catch { print("⚠️ [PROFILE] Highlights fetch failed (non-critical): \(error)") }
 
             print("📊 [PROFILE] Posts: \(mediaURLs.count), Reels: \(reelURLs.count), Tagged: \(taggedURLs.count), Highlights: \(highlights.count)")
+            LogManager.shared.info("Profile media loaded — posts:\(mediaURLs.count) reels:\(reelURLs.count) tagged:\(taggedURLs.count) highlights:\(highlights.count)", category: .profile)
         } else {
             print("⚠️ [PROFILE] Skipping data fetch (private profile, not following)")
+            LogManager.shared.warning("Profile protected data skipped — private:\(isPrivate) following:\(isFollowing) requested:\(isFollowRequested)", category: .profile)
+        }
+
+        // Some accounts/API buckets return a partial /users/{id}/info payload for the
+        // logged-in user while /feed/user still works. In that case the grid has posts
+        // but the header loses name, counters, or profile photo. Merge only missing
+        // fields from the lightweight current_user endpoint.
+        if isOwnProfile {
+            let headerLooksIncomplete =
+                (user["username"] as? String ?? "").isEmpty ||
+                (user["full_name"] as? String ?? "").isEmpty ||
+                (user["profile_pic_url"] as? String ?? "").isEmpty ||
+                user["follower_count"] == nil ||
+                user["following_count"] == nil ||
+                user["media_count"] == nil
+
+            if headerLooksIncomplete {
+                print("⚠️ [PROFILE] Header fields incomplete — merging /accounts/current_user fallback")
+                let missing = [
+                    (user["username"] as? String ?? "").isEmpty ? "username" : nil,
+                    (user["full_name"] as? String ?? "").isEmpty ? "full_name" : nil,
+                    (user["profile_pic_url"] as? String ?? "").isEmpty ? "profile_pic_url" : nil,
+                    user["follower_count"] == nil ? "follower_count" : nil,
+                    user["following_count"] == nil ? "following_count" : nil,
+                    user["media_count"] == nil ? "media_count" : nil
+                ].compactMap { $0 }.joined(separator: ",")
+                LogManager.shared.warning("Profile header incomplete — missing: \(missing). Trying current_user fallback", category: .profile)
+                do {
+                    let currentData = try await apiRequest(method: "GET", path: "/accounts/current_user/?edit=true")
+                    if let currentJSON = try? JSONSerialization.jsonObject(with: currentData) as? [String: Any],
+                       let currentUser = currentJSON["user"] as? [String: Any] {
+                        for (key, value) in currentUser where user[key] == nil || ((user[key] as? String)?.isEmpty == true) {
+                            user[key] = value
+                        }
+                        print("✅ [PROFILE] Fallback merged. Keys now: \(user.keys.sorted().joined(separator: ", "))")
+                        LogManager.shared.success("Profile current_user fallback merged — keys:\(currentUser.keys.sorted().joined(separator: ","))", category: .profile)
+                        extractedUserId = extractProfileUserId(from: user)
+                        if extractedUserId != "0" {
+                            LogManager.shared.info("Profile userId recovered after fallback: \(extractedUserId)", category: .profile)
+                        }
+                    } else {
+                        LogManager.shared.warning("Profile current_user fallback returned unexpected structure", category: .profile)
+                    }
+                } catch {
+                    print("⚠️ [PROFILE] current_user fallback failed: \(error.localizedDescription)")
+                    LogManager.shared.warning("Profile current_user fallback failed: \(error.localizedDescription)", category: .profile)
+                }
+            }
+        }
+
+        let fallbackUsername = [
+            user["username"] as? String,
+            usernameHint
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .first { !$0.isEmpty }
+
+        if isOwnProfile,
+           (user["follower_count"] == nil || user["following_count"] == nil),
+           let username = fallbackUsername {
+            LogManager.shared.warning("Profile counts missing after current_user fallback — trying web_profile_info for @\(username)", category: .profile)
+            if let webUser = await fetchWebProfileInfoFallback(username: username) {
+                for (key, value) in webUser where user[key] == nil || Self.robustInt(user[key]) == 0 {
+                    user[key] = value
+                }
+                extractedUserId = extractProfileUserId(from: user)
+                LogManager.shared.success("Profile web fallback merged — followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"])) posts:\(Self.robustInt(user["media_count"]))", category: .profile)
+            }
+        }
+
+        if !isOwnProfile {
+            let headerLooksIncomplete =
+                (user["username"] as? String ?? "").isEmpty ||
+                (user["profile_pic_url"] as? String ?? "").isEmpty ||
+                user["follower_count"] == nil ||
+                user["following_count"] == nil ||
+                extractedUserId == "0"
+
+            if headerLooksIncomplete, let username = fallbackUsername {
+                LogManager.shared.warning("Searched profile header incomplete — trying web_profile_info for @\(username)", category: .profile)
+                if let webUser = await fetchWebProfileInfoFallback(username: username) {
+                    for (key, value) in webUser where user[key] == nil || ((user[key] as? String)?.isEmpty == true) || Self.robustInt(user[key]) == 0 {
+                        user[key] = value
+                    }
+                    extractedUserId = extractProfileUserId(from: user)
+                    LogManager.shared.success("Searched profile web fallback merged — @\(user["username"] as? String ?? username) followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"])) posts:\(Self.robustInt(user["media_count"]))", category: .profile)
+                } else {
+                    LogManager.shared.warning("Searched profile web fallback unavailable for @\(username)", category: .profile)
+                }
+            }
+
+            if (user["username"] as? String ?? "").isEmpty, let username = fallbackUsername {
+                user["username"] = username
+            }
+            if (user["full_name"] as? String ?? "").isEmpty, let fullName = fullNameHint, !fullName.isEmpty {
+                user["full_name"] = fullName
+            }
+            if (user["profile_pic_url"] as? String ?? "").isEmpty, let picURL = profilePicURLHint, !picURL.isEmpty {
+                user["profile_pic_url"] = picURL
+            }
+            if user["is_verified"] == nil, let isVerified = isVerifiedHint {
+                user["is_verified"] = isVerified
+            }
+            if extractedUserId == "0" {
+                extractedUserId = uid
+                LogManager.shared.info("Searched profile userId recovered from requested uid: \(uid)", category: .profile)
+            }
         }
 
         // Robust profile pic: try HD version first, then standard field
@@ -2109,9 +2332,11 @@ class InstagramService: ObservableObject {
 
         let followerCount  = Self.robustInt(user["follower_count"])
         let followingCount = Self.robustInt(user["following_count"])
-        let mediaCount     = Self.robustInt(user["media_count"])
+        let parsedMediaCount = Self.robustInt(user["media_count"])
+        let mediaCount = parsedMediaCount > 0 ? parsedMediaCount : mediaURLs.count
         print("📊 [PROFILE] Parsed counts — followers: \(followerCount), following: \(followingCount), media: \(mediaCount)")
         print("📊 [PROFILE] Profile pic URL resolved: \(profilePicURL.isEmpty ? "EMPTY" : String(profilePicURL.prefix(80)))")
+        LogManager.shared.info("Profile header parsed — user:@\(user["username"] as? String ?? "") name:\((user["full_name"] as? String ?? "").isEmpty ? "EMPTY" : "OK") posts:\(mediaCount) followers:\(followerCount) following:\(followingCount) pic:\(profilePicURL.isEmpty ? "EMPTY" : "OK")", category: .profile)
 
         var profile = InstagramProfile(
             userId: extractedUserId,
@@ -2138,6 +2363,7 @@ class InstagramService: ObservableObject {
 
         print("✅ [PROFILE] Profile loaded for @\(profile.username)")
         print("📊 [PROFILE] Profile pic URL: \(profile.profilePicURL.isEmpty ? "EMPTY" : String(profile.profilePicURL.prefix(80)))")
+        LogManager.shared.success("Profile loaded — @\(profile.username.isEmpty ? "EMPTY" : profile.username) mediaURLs:\(profile.cachedMediaURLs.count) pic:\(profile.profilePicURL.isEmpty ? "EMPTY" : "OK")", category: .profile)
         return profile
     }
     
@@ -2403,10 +2629,13 @@ class InstagramService: ObservableObject {
         let uid = userId ?? session.userId
         print("📷 [MEDIA] Fetching \(amount) media items for user ID: \(uid), maxId: \(maxId ?? "none")")
         
-        var path = "/feed/user/\(uid)/"
-        if let maxId = maxId {
-            path += "?max_id=\(maxId)"
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "count", value: String(amount))]
+        if let maxId = maxId, !maxId.isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "max_id", value: maxId))
         }
+        let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+        let path = "/feed/user/\(uid)/\(query)"
         let data = try await apiRequest(method: "GET", path: path)
         
         // Debug: Print raw response
@@ -2527,8 +2756,15 @@ class InstagramService: ObservableObject {
             mediaItems.append(mediaItem)
         }
         
-        // Get next_max_id for pagination
-        let nextMaxId = json["next_max_id"] as? String
+        // Get next_max_id for pagination. Instagram may return this as String or NSNumber.
+        let nextMaxId: String?
+        if let s = json["next_max_id"] as? String, !s.isEmpty {
+            nextMaxId = s
+        } else if let n = json["next_max_id"] as? NSNumber {
+            nextMaxId = n.stringValue
+        } else {
+            nextMaxId = nil
+        }
         
         print("✅ [MEDIA] Fetched \(mediaItems.count) media items, next_max_id: \(nextMaxId ?? "none")")
         return (mediaItems, nextMaxId)
@@ -3175,12 +3411,57 @@ class InstagramService: ObservableObject {
         print("✅ [SEARCH] Found user ID: \(exactMatch.userId)")
         
         // Load full profile
-        guard let profile = try await getProfileInfo(userId: exactMatch.userId) else {
+        guard let profile = try await getProfileInfo(
+            userId: exactMatch.userId,
+            usernameHint: exactMatch.username,
+            fullNameHint: exactMatch.fullName,
+            profilePicURLHint: exactMatch.profilePicURL,
+            isVerifiedHint: exactMatch.isVerified
+        ) else {
             print("❌ [SEARCH] Failed to load profile for user ID: \(exactMatch.userId)")
             throw InstagramError.apiError("Error al cargar el perfil")
         }
-        
-        return profile
+
+        let headerIsEmpty = profile.username.isEmpty ||
+            profile.userId == "0" ||
+            profile.profilePicURL.isEmpty ||
+            profile.followerCount == 0 && profile.followingCount == 0
+
+        guard headerIsEmpty else { return profile }
+
+        LogManager.shared.warning("Search profile header empty for @\(exactMatch.username) — rebuilding from search/web fallback", category: .profile)
+
+        let webUser = await fetchWebProfileInfoFallback(username: exactMatch.username)
+        let webUsername = webUser?["username"] as? String
+        let webFullName = webUser?["full_name"] as? String
+        let webPicURL = webUser?["profile_pic_url"] as? String
+        let webUserId = extractProfileUserId(from: webUser ?? [:])
+
+        let rebuilt = InstagramProfile(
+            userId: webUserId != "0" ? webUserId : exactMatch.userId,
+            username: !(webUsername ?? "").isEmpty ? webUsername! : exactMatch.username,
+            fullName: !(webFullName ?? "").isEmpty ? webFullName! : exactMatch.fullName,
+            biography: webUser?["biography"] as? String ?? profile.biography,
+            externalUrl: webUser?["external_url"] as? String ?? profile.externalUrl,
+            profilePicURL: !(webPicURL ?? "").isEmpty ? webPicURL! : exactMatch.profilePicURL,
+            isVerified: webUser?["is_verified"] as? Bool ?? exactMatch.isVerified,
+            isPrivate: webUser?["is_private"] as? Bool ?? profile.isPrivate,
+            followerCount: Self.robustInt(webUser?["follower_count"]),
+            followingCount: Self.robustInt(webUser?["following_count"]),
+            mediaCount: max(Self.robustInt(webUser?["media_count"]), profile.mediaCount, profile.cachedMediaURLs.count),
+            followedBy: profile.followedBy,
+            isFollowing: profile.isFollowing,
+            isFollowRequested: profile.isFollowRequested,
+            cachedAt: Date(),
+            cachedMediaURLs: profile.cachedMediaURLs,
+            cachedReelURLs: profile.cachedReelURLs,
+            cachedTaggedURLs: profile.cachedTaggedURLs,
+            cachedHighlights: profile.cachedHighlights,
+            cachedMediaItems: profile.cachedMediaItems
+        )
+
+        LogManager.shared.success("Search profile rebuilt — @\(rebuilt.username) id:\(rebuilt.userId) followers:\(rebuilt.followerCount) following:\(rebuilt.followingCount) pic:\(rebuilt.profilePicURL.isEmpty ? "EMPTY" : "OK")", category: .profile)
+        return rebuilt
     }
     
     // MARK: - Amnesia Carousel (sidecar upload)
@@ -3700,8 +3981,9 @@ class InstagramService: ObservableObject {
         var createHeaders = buildHeaders()
         createHeaders.removeValue(forKey: "Cookie") // let URLSession use stored cookies
         for (k, v) in createHeaders { noteRequest.setValue(v, forHTTPHeaderField: k) }
-        let bodyString = body.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-        noteRequest.httpBody = bodyString.data(using: .utf8)
+        var components = URLComponents()
+        components.queryItems = body.map { URLQueryItem(name: $0.key, value: $0.value) }
+        noteRequest.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         trackAction()
         let (data, noteResponse) = try await postSession.data(for: noteRequest)
         if let http = noteResponse as? HTTPURLResponse {
@@ -3720,6 +4002,7 @@ class InstagramService: ObservableObject {
 
                 UserDefaults.standard.set(text, forKey: "last_note_text")
                 UserDefaults.standard.set(Date(), forKey: "last_note_sent_date")
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "last_note_sent_timestamp")
                 let cooldownUntil = Date().addingTimeInterval(60)
                 UserDefaults.standard.set(cooldownUntil, forKey: "note_cooldown_until")
 
@@ -4638,18 +4921,62 @@ class InstagramService: ObservableObject {
 
     // MARK: - Paginated Archived Photos Fetch
 
-    /// Fetches ALL archived photos from `feed/only_me_feed/` by paginating through every
-    /// page until `more_available` is false or `next_max_id` is absent.
-    /// Anti-bot: adds a 1–2 s human delay between pages. Max 10 pages (200 photos) as safety cap.
-    func getAllArchivedPhotos() async throws -> [(mediaId: String, imageURL: String, timestamp: Date?)] {
+    /// Fetches ALL archived photos from `feed/only_me_feed/` with rate-limit awareness and caching.
+    ///
+    /// **Anti-bot measures:**
+    /// - Results are cached for 10 minutes ONLY when the scan completed fully (not aborted).
+    /// - Maximum 50 pages (≈1000 photos). Keeps large archives accessible.
+    /// - 3–5 s human delay between pages.
+    /// - Hard stop when `actionsThisHour >= 45` to leave headroom for reveals and uploads.
+    /// - Aborts immediately if session expires or lockdown activates mid-scan.
+    ///
+    /// - Parameter forceRefresh: When true, bypass the cache and do a fresh network scan.
+    func getAllArchivedPhotos(forceRefresh: Bool = false) async throws -> [(mediaId: String, imageURL: String, timestamp: Date?)] {
+        // Cache hit — return immediately without any network calls
+        if !forceRefresh,
+           let cached = archivedPhotoCache,
+           let cacheDate = archivedPhotoCacheDate,
+           Date().timeIntervalSince(cacheDate) < archivedPhotoCacheTTL {
+            let age = Int(Date().timeIntervalSince(cacheDate))
+            print("📦 [ARCHIVE CACHE] Hit — \(cached.count) photos, age \(age)s")
+            LogManager.shared.info("Archive cache hit: \(cached.count) photos (\(age)s old)", category: .api)
+            return cached
+        }
+
         var allPhotos: [(mediaId: String, imageURL: String, timestamp: Date?)] = []
         var nextMaxId: String? = nil
-        let maxPages = 10
+        let maxPages = 50  // ≈1000 photos max — increased to reach older archives
+        var scanWasAborted = false  // Track if scan ended early (rate limit / session)
+
+        print("📦 [ARCHIVE] Starting fresh scan (forceRefresh=\(forceRefresh))...")
 
         for page in 0..<maxPages {
-            // Human delay between pages (skip on first page — caller may already have a delay)
+            // Hard stop: session expired or lockdown activated between pages
+            guard !isSessionExpired else {
+                print("🔴 [ARCHIVE] Scan aborted — session expired")
+                LogManager.shared.warning("Archive scan aborted: session expired", category: .api)
+                scanWasAborted = true
+                break
+            }
+            guard !isLocked else {
+                print("🚨 [ARCHIVE] Scan aborted — lockdown active")
+                LogManager.shared.warning("Archive scan aborted: lockdown active", category: .api)
+                scanWasAborted = true
+                break
+            }
+
+            // Hard stop: near rate limit — leave headroom for actual reveal/archive actions
+            let rateInfo = checkRateLimit()
+            if rateInfo.actionsUsed >= archiveScanRateLimitThreshold {
+                print("⚠️ [ARCHIVE] Scan stopped early — rate limit threshold (\(rateInfo.actionsUsed)/\(maxActionsPerHour)). Got \(allPhotos.count) photos so far.")
+                LogManager.shared.warning("Archive scan paused at \(rateInfo.actionsUsed)/\(maxActionsPerHour) — too close to rate limit", category: .api)
+                scanWasAborted = true
+                break
+            }
+
+            // Human-like delay between pages (longer than before to reduce request density)
             if page > 0 {
-                let delay = UInt64.random(in: 1_000_000_000...2_000_000_000)
+                let delay = UInt64.random(in: 3_000_000_000...5_000_000_000)
                 try await Task.sleep(nanoseconds: delay)
             }
 
@@ -4658,7 +4985,7 @@ class InstagramService: ObservableObject {
                 path += "?max_id=\(cursor)"
             }
 
-            print("📦 [ARCHIVE] Fetching page \(page + 1) from \(path)")
+            print("📦 [ARCHIVE] Fetching page \(page + 1)/\(maxPages) from \(path)")
             let data = try await apiRequest(method: "GET", path: path)
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -4669,23 +4996,40 @@ class InstagramService: ObservableObject {
             let items = json["items"] as? [[String: Any]] ?? []
             for item in items {
                 let mediaItem = item["media"] as? [String: Any] ?? item
-                let pkInt   = mediaItem["pk"] as? Int64
-                let pkStr   = (mediaItem["pk"] as? String).flatMap { Int64($0) }
-                guard let pk = pkInt ?? pkStr else { continue }
-                let mediaId = String(pk)
 
+                // pk can be Int64, NSNumber, or String depending on API version
+                var resolvedId: String? = nil
+                if let s = mediaItem["pk"] as? String, !s.isEmpty {
+                    resolvedId = s
+                } else if let n = mediaItem["pk"] as? NSNumber {
+                    resolvedId = n.stringValue
+                } else if let s = mediaItem["id"] as? String, !s.isEmpty {
+                    resolvedId = s
+                } else if let n = mediaItem["id"] as? NSNumber {
+                    resolvedId = n.stringValue
+                }
+                guard let mediaId = resolvedId else {
+                    print("⚠️ [ARCHIVE] Skipping item — could not parse pk/id: \(mediaItem.keys.sorted())")
+                    continue
+                }
+
+                // Image URL: try direct, then carousel first child
                 var imageURL = ""
                 if let iv = mediaItem["image_versions2"] as? [String: Any],
                    let candidates = iv["candidates"] as? [[String: Any]],
                    let url = candidates.first?["url"] as? String {
                     imageURL = url
+                } else if let carousel = mediaItem["carousel_media"] as? [[String: Any]],
+                          let first = carousel.first,
+                          let iv = first["image_versions2"] as? [String: Any],
+                          let candidates = iv["candidates"] as? [[String: Any]],
+                          let url = candidates.first?["url"] as? String {
+                    imageURL = url
                 }
 
                 let takenAt: Date?
-                if let t = mediaItem["taken_at"] as? TimeInterval {
-                    takenAt = Date(timeIntervalSince1970: t)
-                } else if let t = mediaItem["taken_at"] as? Int64 {
-                    takenAt = Date(timeIntervalSince1970: TimeInterval(t))
+                if let t = mediaItem["taken_at"] as? NSNumber {
+                    takenAt = Date(timeIntervalSince1970: t.doubleValue)
                 } else {
                     takenAt = nil
                 }
@@ -4693,11 +5037,11 @@ class InstagramService: ObservableObject {
                 allPhotos.append((mediaId: mediaId, imageURL: imageURL, timestamp: takenAt))
             }
 
-            print("📦 [ARCHIVE] Page \(page + 1): \(items.count) items (total so far: \(allPhotos.count))")
+            print("📦 [ARCHIVE] Page \(page + 1): \(items.count) items (total: \(allPhotos.count))")
 
-            // Check pagination
+            // Check pagination — next_max_id can be String or large NSNumber
             let moreAvailable = json["more_available"] as? Bool ?? false
-            if let cursor = json["next_max_id"] as? String {
+            if let cursor = json["next_max_id"] as? String, !cursor.isEmpty {
                 nextMaxId = cursor
             } else if let cursor = json["next_max_id"] as? NSNumber {
                 nextMaxId = cursor.stringValue
@@ -4705,10 +5049,19 @@ class InstagramService: ObservableObject {
                 nextMaxId = nil
             }
 
+            print("📦 [ARCHIVE] more_available=\(moreAvailable) nextMaxId=\(nextMaxId ?? "nil")")
             if !moreAvailable || nextMaxId == nil { break }
         }
 
-        LogManager.shared.info("Archive fetch complete: \(allPhotos.count) photos", category: .api)
+        // Only cache if the scan completed normally (not aborted by rate limit/session).
+        // Aborted scans return partial results without caching so the next call retries fully.
+        if scanWasAborted {
+            LogManager.shared.warning("Archive scan incomplete (\(allPhotos.count) photos) — NOT cached, will retry next time", category: .api)
+        } else {
+            archivedPhotoCache = allPhotos
+            archivedPhotoCacheDate = Date()
+            LogManager.shared.info("Archive scan complete: \(allPhotos.count) photos (cached for \(Int(archivedPhotoCacheTTL/60)) min)", category: .api)
+        }
         return allPhotos
     }
 }

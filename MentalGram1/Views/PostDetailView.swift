@@ -601,7 +601,7 @@ struct DetailVideoPlayer: View {
         GeometryReader { geo in
             ZStack {
                 if let player = manager.player {
-                    AVPlayerFillView(player: player)
+                    AVPlayerFillView(player: player, videoGravity: .resizeAspect)
                         .frame(width: geo.size.width, height: geo.size.height)
                 } else {
                     Rectangle()

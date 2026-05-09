@@ -10,8 +10,9 @@ struct GridVideoPlayer: View {
     var body: some View {
         GeometryReader { geometry in
             if let player = playerManager.player {
-                // Use AVPlayerLayer directly to get resizeAspectFill (no black bars)
-                AVPlayerFillView(player: player)
+                // Portrait reels fill the cell like Instagram. Horizontal videos
+                // use aspect-fit so they do not look zoomed/cropped.
+                AVPlayerFillView(player: player, videoGravity: playerManager.videoGravity)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
             } else {
@@ -32,21 +33,22 @@ struct GridVideoPlayer: View {
     }
 }
 
-/// UIViewRepresentable that uses AVPlayerLayer with .resizeAspectFill
-/// This eliminates black bars on videos (zooms to fill, crops excess)
+/// UIViewRepresentable that uses AVPlayerLayer with adaptive video gravity.
 struct AVPlayerFillView: UIViewRepresentable {
     let player: AVPlayer
+    let videoGravity: AVLayerVideoGravity
     
     func makeUIView(context: Context) -> PlayerFillUIView {
         let view = PlayerFillUIView()
         view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspectFill // KEY: Fill, no black bars
+        view.playerLayer.videoGravity = videoGravity
         view.backgroundColor = .clear
         return view
     }
     
     func updateUIView(_ uiView: PlayerFillUIView, context: Context) {
         uiView.playerLayer.player = player
+        uiView.playerLayer.videoGravity = videoGravity
     }
 }
 
@@ -64,12 +66,16 @@ class PlayerFillUIView: UIView {
 /// Manages AVPlayer lifecycle for grid videos
 class VideoPlayerManager: ObservableObject {
     @Published var player: AVPlayer?
+    @Published var videoGravity: AVLayerVideoGravity = .resizeAspectFill
     private var loopObserver: Any?
     
     func setupPlayer(url: String) {
         guard let videoURL = URL(string: url) else { return }
         
-        let player = AVPlayer(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
+        resolveVideoGravity(for: asset)
+
+        let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         player.isMuted = true // Silent playback
         player.play()
         
@@ -89,10 +95,36 @@ class VideoPlayerManager: ObservableObject {
     func cleanup() {
         player?.pause()
         player = nil
+        videoGravity = .resizeAspectFill
         
         if let observer = loopObserver {
             NotificationCenter.default.removeObserver(observer)
             loopObserver = nil
+        }
+    }
+
+    private func resolveVideoGravity(for asset: AVURLAsset) {
+        asset.loadValuesAsynchronously(forKeys: ["tracks"]) { [weak self] in
+            guard let self else { return }
+
+            var error: NSError?
+            let status = asset.statusOfValue(forKey: "tracks", error: &error)
+            guard status == .loaded,
+                  let track = asset.tracks(withMediaType: .video).first else {
+                return
+            }
+
+            let transformedSize = track.naturalSize.applying(track.preferredTransform)
+            let width = abs(transformedSize.width)
+            let height = abs(transformedSize.height)
+            let isHorizontal = width > height * 1.05
+
+            DispatchQueue.main.async {
+                self.videoGravity = isHorizontal ? .resizeAspect : .resizeAspectFill
+                if isHorizontal {
+                    print("🎬 [VIDEO] Horizontal reel detected (\(Int(width))x\(Int(height))) — using aspect-fit")
+                }
+            }
         }
     }
 }

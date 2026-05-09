@@ -288,6 +288,10 @@
 "backup.just_now" = "Gerade eben";
 "backup.min_ago" = "Vor %d min";
 "backup.h_ago" = "Vor %d h";
+"backup.info.auto" = "Das Backup wird automatisch ausgeführt, wenn die App in den Hintergrund wechselt. Du kannst es auch manuell mit „Jetzt sichern\" starten.";
+"backup.info.what" = "Was gesichert wird: alle Einstellungen, Date Force, Force Reel, aktive Sets und Set-Metadaten.";
+"backup.info.photos" = "Set-Fotos werden mit iCloud Drive synchronisiert. Du kannst sie in der Dateien-App → iCloud Drive → Vault → Photos ansehen.";
+"backup.info.excluded" = "Nicht gesichert: Instagram-Sitzung, Geräte-ID und Cooldown-Timer (gerätespezifisch).";
 "Never" = "Nie";
 "Just now" = "Gerade eben";
 "explore.load_error" = "Inhalt konnte nicht geladen werden";
@@ -763,6 +767,7 @@
 "postpred.help.during.timing.dialogue" = "Offnen Sie Instagram. Gehen Sie zu meinem Profil. Scrollen Sie nach unten, es war die ganze Zeit da.";
 "postpred.help.tip.timing" = "**Enthullungsgeschwindigkeit.** Ein Buchstabe oder eine Ziffer: ~2-3 Sek. Funf Buchstaben (z. B. MAGIC): ~12-15 Sek. Jeder weitere Buchstabe fugt ~2-3 Sek. hinzu.";
 "postpred.help.tip.vibration" = "**Vibration = bereit.** Das haptische Feedback signalisiert, dass das Foto auf echtem Instagram live ist. Fuhren Sie den Zuschauer nach der Vibration.";
+"postpred.help.tip.ring" = "**Oranger Ring = bestätigt.** Nach einer erfolgreichen Enthüllung erscheint ein orangefarbener Farbverlaufsring um dein Profilfoto — genau wie der Instagram-Story-Ring. Er bestätigt, dass das Foto auf echtem Instagram live ist. Der Ring wird beim Start einer neuen Performance-Sitzung automatisch zurückgesetzt.";
 "postpred.help.tip.position" = "**Ursprungliche Position.** Das Foto erscheint genau dort, wo es im Raster war, mit seinem ursprunglichen Datum. Moglicherweise muss gescrollt werden.";
 "postpred.help.tip.upload" = "**Wahrend des Uploads.** Verwenden Sie die App nicht, wechseln Sie nicht das WLAN-Netz und sperren Sie den Bildschirm nicht. Eine Benachrichtigung fordert Sie auf, zwischen den Uploads zuruckzukehren.";
 "postpred.help.tip.banks" = "**Anzahl der Banken.** Jede Bank = eine Buchstaben- oder Ziffernposition. Planen Sie Ihre Sets entsprechend dem langsten Wort oder der langsten Zahl, die Sie enthullen mochten.";
@@ -795,9 +800,12 @@
 "postpred.help.inputs.group.alpha" = "FÜR ALPHABETISCHE SETS";
 "postpred.help.inputs.group.universal" = "UNIVERSELL — ALLE SET-TYPEN";
 "postpred.help.input.covert.label" = "VERDECKTE EINGABE";
-"postpred.help.input.api.label" = "API / AUTOMATISIERUNG";
-"postpred.help.input.api.step1" = "Verwende ein externes Automatisierungstool (Kurzbefehle, NFC-Tag, Begleit-App), um das Wort oder die Zahl über das URL-Schema an Post Prediction zu senden.";
-"postpred.help.input.api.step2" = "Nützlich, wenn ein Drittanbieter-Auslöser oder ein physisches Hilfsmittel die Enthüllung automatisch zum richtigen Zeitpunkt auslöst.";
+"postpred.help.input.api.label" = "AUTOMATISCHE API-ENTHÜLLUNG";
+"postpred.help.input.api.intro" = "Verbinde Inject (11z.co) oder eine benutzerdefinierte API. Öffne zuerst Performance — die App fragt alle 2 s im Hintergrund ab. Sobald der Zuschauer seine Auswahl bestätigt, wird die Enthüllung automatisch mit dreifacher Vibration ausgelöst.";
+"postpred.help.input.api.step1" = "In Einstellungen → Post Prediction, stelle Auto Input auf **API** und wähle deine Quelle (Inject oder benutzerdefinierte API).";
+"postpred.help.input.api.step2" = "Öffne die Performance-Ansicht auf deinem Gerät, bevor du die Vorstellung beginnst.";
+"postpred.help.input.api.step3" = "Bitte den Zuschauer, seine Auswahl im Inject-Link oder deinem benutzerdefinierten Formular zu treffen.";
+"postpred.help.input.api.step4" = "Innerhalb von 2 Sekunden erkennt die App den neuen Wert, enthüllt die passenden Fotos und vibriert dreimal zur Bestätigung.";
 "Check your connection and try again." = "Überprüfe deine Verbindung und versuche es erneut.";
 "Try Again" = "Erneut versuchen";
 "This keeps happening. Try logging out and back in." = "Das passiert immer wieder. Versuche, dich ab- und wieder anzumelden.";
@@ -1459,5 +1467,14 @@
 "guide.amnesia.script.optionA.text" = "„Ich schließe auch.\" [Magier schließt Karussell in App → Swap aktiviert]\n\n„Jetzt sind wir beide getrennt. Nur die Bilder bleiben... hier.\" [Zeigt auf Kopf]\n\n[Augen geschlossen] Hand ausgestreckt: „Mit jeder Bewegung... wird ein Bild unschärfer... als wäre es nie ganz da gewesen.\" [Drei langsame Gesten]\n\n„Fertig. Du kannst die Augen öffnen.\"";
 "guide.amnesia.script.optionB.phase" = "OPTION B — UNAUFFÄLLIGES SCROLLEN";
 "guide.amnesia.script.optionB.text" = "[Magier scrollt beiläufig in der App und schließt Karussell während er spricht]\n\n„Gedächtnis ist kein Foto. Es ist eine Rekonstruktion. Jedes Mal wenn du dich erinnerst, schreibt dein Geist es leicht um. In diesem Moment... ist Intervention möglich.\"\n\n„Wie viele Bilder erinnerst du dich genau?\" [Zuschauer: vier]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Direkt zu Performance öffnen";
+"settings.launch_direct.detail" = "Sets-Tab überspringen — App öffnet immer Performance";
+"settings.lockscreen.description" = "Zeigt beim Öffnen von Performance einen gefälschten Sperrbildschirm. Tippe die Ziffern deiner Geheimzahl, tippe außerhalb des Nummernfelds zum Sperren und fülle die restlichen Punkte aus.";
+"settings.lockscreen.choose_wallpaper" = "Hintergrundbild wählen";
+"settings.lockscreen.warning_no_wallpaper" = "Hintergrundbild wählen zum Aktivieren";
+"action.change" = "Ändern";
+"action.remove" = "Entfernen";
+
 "guide.amnesia.script.climax.phase" = "HÖHEPUNKT";
 "guide.amnesia.script.climax.text" = "„Öffne Instagram erneut. Suche denselben Post.\"\n\n[Zuschauer sieht 5 Bilder]\n\n„Wie viele siehst du?\" — Fünf.\n\n„Schau auf das Datum. Ist es dasselbe wie zuvor?\" — Ja.\n\n„Instagram lügt nicht. Es kann keine Daten ändern. So wurde es hochgeladen.\"\n\n[Pause]\n\n„Was passiert ist, ist nicht, dass du ein Bild vergessen hast. Dein Geist wurde geführt, es nicht zu sehen. Und jetzt weißt du, dass das möglich ist.\"";

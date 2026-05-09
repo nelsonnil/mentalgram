@@ -25,6 +25,10 @@
 "backup.just_now" = "अभी-अभी";
 "backup.min_ago" = "%d मिनट पहले";
 "backup.h_ago" = "%d घंटे पहले";
+"backup.info.auto" = "जब भी ऐप बैकग्राउंड में जाता है, बैकअप अपने आप हो जाता है। आप \"अभी बैकअप करें\" से इसे मैन्युअल रूप से भी चला सकते हैं।";
+"backup.info.what" = "क्या सेव होता है: सभी सेटिंग्स, Date Force, Force Reel, सक्रिय सेट और सेट मेटाडेटा।";
+"backup.info.photos" = "सेट की फ़ोटो iCloud Drive से सिंक होती हैं। फ़ाइलें ऐप → iCloud Drive → Vault → Photos में देखें।";
+"backup.info.excluded" = "सेव नहीं होता: Instagram सेशन, डिवाइस ID और कूलडाउन टाइमर (डिवाइस-विशिष्ट).";
 
 // ─── Settings & App UI ──────────────────────────────────────────────────────
 
@@ -575,6 +579,7 @@
 "postpred.help.during.timing.dialogue" = "Instagram खोलें। मेरी प्रोफाइल पर जाएं। नीचे स्क्रॉल करें, यह हमेशा से वहाँ था।";
 "postpred.help.tip.timing" = "**प्रकटीकरण गति।** एक अक्षर या अंक: ~2-3 सेकंड। पाँच अक्षर (जैसे MAGIC): ~12-15 सेकंड।";
 "postpred.help.tip.vibration" = "**कंपन = तैयार।** हैप्टिक फीडबैक संकेत है कि फोटो असली Instagram पर लाइव है।";
+"postpred.help.tip.ring" = "**नारंगी रिंग = पुष्टि।** सफल reveal के बाद, आपकी प्रोफ़ाइल फ़ोटो के चारों ओर एक नारंगी ग्रेडिएंट रिंग दिखाई देती है — बिल्कुल Instagram Story रिंग जैसी। यह पुष्टि करती है कि फ़ोटो असली Instagram पर लाइव है। नई Performance सत्र खोलने पर रिंग स्वचालित रूप से रीसेट हो जाती है।";
 "postpred.help.tip.position" = "**मूल स्थिति।** फोटो ग्रिड में ठीक उसी स्थान पर, मूल तारीख के साथ दिखती है।";
 "postpred.help.tip.upload" = "**अपलोड के दौरान।** ऐप का उपयोग न करें, Wi-Fi नेटवर्क न बदलें, स्क्रीन लॉक न करें।";
 "postpred.help.tip.banks" = "**बैंकों की संख्या।** प्रत्येक बैंक = एक अक्षर या अंक स्थान।";
@@ -613,9 +618,12 @@
 "postpred.help.inputs.group.alpha" = "वर्णमाला सेट के लिए";
 "postpred.help.inputs.group.universal" = "सार्वभौमिक — सभी सेट प्रकार";
 "postpred.help.input.covert.label" = "गुप्त टाइपिंग";
-"postpred.help.input.api.label" = "API / स्वचालन";
-"postpred.help.input.api.step1" = "URL Scheme के माध्यम से Post Prediction को शब्द या संख्या भेजने के लिए बाहरी ऑटोमेशन टूल (शॉर्टकट, NFC टैग, कम्पेनियन ऐप) का उपयोग करें।";
-"postpred.help.input.api.step2" = "उपयोगी जब तृतीय-पक्ष ट्रिगर या भौतिक प्रोप सही समय पर स्वचालित रूप से रहस्योद्घाटन शुरू करता है।";
+"postpred.help.input.api.label" = "API ऑटो रिवील";
+"postpred.help.input.api.intro" = "Inject (11z.co) या कस्टम API कनेक्ट करें। पहले Performance खोलें — ऐप बैकग्राउंड में हर 2 सेकंड में चेक करता है। जैसे ही दर्शक अपना चुनाव सबमिट करता है, ट्रिपल वाइब्रेशन के साथ रिवील अपने आप होता है।";
+"postpred.help.input.api.step1" = "Settings → Post Prediction में Auto Input को **API** पर सेट करें और अपना सोर्स चुनें (Inject या Custom API)।";
+"postpred.help.input.api.step2" = "प्रेजेंटेशन शुरू करने से पहले अपने डिवाइस पर Performance व्यू खोलें।";
+"postpred.help.input.api.step3" = "दर्शक से कहें कि वे Inject लिंक या आपके कस्टम फॉर्म में अपना चुनाव करें।";
+"postpred.help.input.api.step4" = "2 सेकंड के अंदर ऐप नई वैल्यू डिटेक्ट करता है, संबंधित फ़ोटो रिवील करता है और तीन बार वाइब्रेट करके पुष्टि करता है।";
 "explore.load_error" = "सामग्री लोड नहीं हो सकी";
 
 // General UI strings (auto-generated)
@@ -926,5 +934,14 @@
 "guide.amnesia.script.optionA.text" = "'मैं भी बंद करता हूं।' [जादूगर ऐप में कैरोसेल बंद करता है → स्वैप सक्रिय]\n\n'अब हम दोनों डिस्कनेक्ट हैं। केवल छवियां बची हैं... यहां।' [सिर की ओर इशारा]\n\n[आंखें बंद] हाथ फैलाकर: 'हर गतिविधि के साथ... एक छवि धुंधली होती जा रही है...' [तीन धीमे इशारे]\n\n'हो गया। आंखें खोलिए।'";
 "guide.amnesia.script.optionB.phase" = "विकल्प B — गुप्त स्क्रॉलिंग";
 "guide.amnesia.script.optionB.text" = "[जादूगर बात करते हुए ऐप स्क्रॉल करके कैरोसेल बंद करता है]\n\n'स्मृति एक फोटो नहीं है। यह पुनर्निर्माण है। जब भी आप कुछ याद करते हैं, आपका मन इसे थोड़ा फिर से लिखता है। उस क्षण में... हस्तक्षेप संभव है।'\n\n'आपको कितनी छवियां याद हैं?' [दर्शक: चार]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "सीधे Performance खोलें";
+"settings.launch_direct.detail" = "Sets टैब छोड़ें — ऐप हमेशा Performance पर खुलता है";
+"settings.lockscreen.description" = "Performance खोलते समय एक नकली लॉक स्क्रीन दिखाता है। अपना गुप्त नंबर दर्ज करें, नंपैड के बाहर टैप करके लॉक करें, फिर बाकी डॉट्स भरें।";
+"settings.lockscreen.choose_wallpaper" = "वॉलपेपर चुनें";
+"settings.lockscreen.warning_no_wallpaper" = "सक्रिय करने के लिए वॉलपेपर चुनें";
+"action.change" = "बदलें";
+"action.remove" = "हटाएं";
+
 "guide.amnesia.script.climax.phase" = "चरमोत्कर्ष";
 "guide.amnesia.script.climax.text" = "'Instagram फिर खोलिए। वही पोस्ट ढूंढिए।'\n\n[दर्शक 5 छवियां देखता है]\n\n'कितनी दिख रही हैं?' — पांच।\n\n'तिथि देखिए। वही है जो पहले देखी थी?' — हां।\n\n'Instagram झूठ नहीं बोलता। यह तिथियां नहीं बदल सकता।'\n\n[रुकें]\n\n'जो हुआ वह यह नहीं है कि आप एक छवि भूल गए। आपका मन इसे न देखने के लिए निर्देशित था। और अब आप जानते हैं कि यह संभव है।'";

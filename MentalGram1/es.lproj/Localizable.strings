@@ -288,6 +288,10 @@
 "backup.just_now" = "Ahora mismo";
 "backup.min_ago" = "Hace %d min";
 "backup.h_ago" = "Hace %d h";
+"backup.info.auto" = "El backup se ejecuta automáticamente cada vez que la app pasa a segundo plano. También puedes iniciarlo manualmente con \"Hacer backup ahora\".";
+"backup.info.what" = "Qué se guarda: todos los ajustes, Date Force, Force Reel, sets activos y metadatos de sets.";
+"backup.info.photos" = "Las fotos de los sets se sincronizan con iCloud Drive. Puedes verlas en la app Archivos → iCloud Drive → Vault → Photos.";
+"backup.info.excluded" = "No se guarda: sesión de Instagram, ID de dispositivo y timers de cooldown (son específicos del dispositivo).";
 "Never" = "Nunca";
 "Just now" = "Ahora mismo";
 "explore.load_error" = "No se pudo cargar el contenido";
@@ -806,6 +810,7 @@
 "postpred.help.during.timing.action" = "Cuando la app vibra, la revelacion esta en vivo en Instagram real. Dirige al espectador para que abra Instagram.";
 "postpred.help.during.timing.dialogue" = "Abre Instagram. Ve a mi perfil. Desplazate hacia abajo, siempre estuvo ahi.";
 "postpred.help.tip.timing" = "**Velocidad de revelacion.** Una letra o digito: ~2-3 segundos. Cinco letras (p. ej. MAGIC): ~12-15 segundos. Cada letra adicional suma ~2-3 segundos.";
+"postpred.help.tip.ring" = "**Aro naranja = confirmado.** Tras una revelación exitosa, aparece un aro naranja degradado alrededor de tu foto de perfil — igual que el aro de las Historias de Instagram. Confirma que la foto está en directo en Instagram real. El aro se resetea automáticamente al abrir una nueva sesión de Performance.";
 "postpred.help.tip.vibration" = "**Vibracion = listo.** El feedback haptico es la senal de que la foto esta en vivo en Instagram real. Una vez que vibra, dirige al espectador para que vea su perfil.";
 "postpred.help.tip.position" = "**Posicion original.** La foto reaparece exactamente donde estaba en la cuadricula, con su fecha original. Puede ser necesario desplazarse para encontrarla.";
 "postpred.help.tip.upload" = "**Durante la subida.** No uses la app, no cambies de red Wi-Fi ni bloquees la pantalla. Una notificacion te avisa para que vuelvas entre cada subida.";
@@ -838,9 +843,12 @@
 "postpred.help.inputs.group.numeric" = "PARA SETS NUMÉRICOS / PERSONALIZADOS";
 "postpred.help.inputs.group.alpha" = "PARA SETS ALFABÉTICOS";
 "postpred.help.inputs.group.universal" = "UNIVERSAL — TODOS LOS TIPOS DE SET";
-"postpred.help.input.api.label" = "API / AUTOMATIZACIÓN";
-"postpred.help.input.api.step1" = "Usa una herramienta de automatización externa (Atajos, tag NFC, app complementaria) para enviar la palabra o número a Post Prediction mediante URL Scheme.";
-"postpred.help.input.api.step2" = "Útil cuando un disparador de terceros o accesorio físico activa automáticamente la revelación en el momento preciso.";
+"postpred.help.input.api.label" = "REVELACIÓN AUTOMÁTICA POR API";
+"postpred.help.input.api.intro" = "Conecta Inject (11z.co) o una API personalizada. Abre Performance primero — la app sondea cada 2 s en segundo plano. En el momento en que el espectador envía su selección, la revelación se activa automáticamente con triple vibración.";
+"postpred.help.input.api.step1" = "En Ajustes → Post Prediction, pon Auto Input en **API** y elige tu fuente (Inject o API personalizada).";
+"postpred.help.input.api.step2" = "Abre la vista Performance en tu dispositivo antes de empezar la presentación.";
+"postpred.help.input.api.step3" = "Pide al espectador que haga su selección en el enlace de Inject o tu formulario personalizado.";
+"postpred.help.input.api.step4" = "En menos de 2 segundos la app detecta el nuevo valor, desvela las fotos correspondientes y vibra tres veces para confirmar.";
 "Check your connection and try again." = "Comprueba tu conexión e inténtalo de nuevo.";
 "Try Again" = "Reintentar";
 "This keeps happening. Try logging out and back in." = "Esto sigue ocurriendo. Intenta cerrar sesión y volver a iniciarla.";
@@ -1484,7 +1492,7 @@
 "guide.amnesia.what.title" = "¿Qué es?";
 "guide.amnesia.what.body" = "Un efecto de amnesia hipnótica con verificación en Instagram real. Preparas dos carruseles: uno visible de 4 imágenes y otro oculto de 5. El espectador entra en tu perfil desde su propio móvil, abre el carrusel visible y memoriza las 4 imágenes. Cuando tú cierras ese carrusel en Vault, se activa el cambio en Instagram: se archiva el de 4 y se desarchiva el de 5. La imagen extra no aparece en el móvil del espectador hasta que Instagram refresca, por eso el momento de cerrar y reabrir la app forma parte del método.";
 "guide.amnesia.trigger.title" = "El disparador";
-"guide.amnesia.trigger.body" = "El disparador se activa cuando tú cierras el carrusel dentro de Performance. El orden correcto es:\n\n1. Pide al espectador que abra Instagram, entre en tu perfil y toque el carrusel.\n2. Mientras está dentro del carrusel en su móvil, que mire las 4 imágenes y se fije en la fecha.\n3. En ese momento tú ya puedes cerrar el carrusel en Vault. Vault añade la imagen extra en Instagram real, pero el espectador no la verá hasta que refresque o cierre y abra Instagram.\n4. Cuando termine de memorizar, haz que cierre Instagram completamente. También puedes coger su móvil, hacer un pequeño scroll natural y dejarlo sobre la mesa.\n5. Al volver a abrir Instagram, verá 5 imágenes con la misma fecha y hora.\n\n❌ No cierres el carrusel en Vault antes de que el espectador haya entrado y visto las 4 imágenes iniciales.";
+"guide.amnesia.trigger.body" = "El disparador se activa cuando tú cierras el carrusel dentro de Performance. El orden correcto es:\n\n1. Pide al espectador que abra Instagram, entre en tu perfil y toque el carrusel.\n2. Mientras está dentro del carrusel en su móvil, que mire las 4 imágenes y se fije en la fecha.\n3. En ese momento tú ya puedes cerrar el carrusel en Vault. Vault añade la imagen extra en Instagram real, pero el espectador no la verá hasta que refresque o cierre y abra Instagram.\n\nIMPORTANTE: después de cerrar el carrusel en Vault, no salgas de Vault ni cierres la app. El proceso de archivar/desarchivar tarda unos segundos y debe terminar en segundo plano. Si sales demasiado pronto, el cambio puede cortarse.\n\n4. Espera a que Vault termine el estado de revelado. Después, cuando el espectador termine de memorizar, haz que cierre Instagram completamente. También puedes coger su móvil, hacer un pequeño scroll natural y dejarlo sobre la mesa.\n5. Al volver a abrir Instagram, verá 5 imágenes con la misma fecha y hora.\n\n❌ No cierres el carrusel en Vault antes de que el espectador haya entrado y visto las 4 imágenes iniciales.";
 "guide.amnesia.hidden.title" = "Imagen oculta";
 "guide.amnesia.hidden.body" = "La 5ª imagen (marcada con borde naranja en la app) es la que se añadirá al final. En el template ESP suele ser la estrella: el espectador recuerda círculo, cruz, ondas y cuadrado, pero no la estrella. Cuando le dices \"¿seguro que no recuerdas la estrella?\" no te creerá. Al abrir Instagram y comprobar que la estrella está en el mismo carrusel, con la misma fecha y hora, el recuerdo se rompe.";
 "guide.amnesia.options.title" = "Dos formas de activar el disparador";
@@ -1498,10 +1506,19 @@
 "guide.amnesia.script.opening.phase" = "APERTURA";
 "guide.amnesia.script.opening.text" = "\"Coge tu móvil. Abre Instagram, entra en mi perfil y toca este carrusel. No mires solo la portada: entra dentro y desliza las imágenes una por una. Memoriza cada figura y fíjate también en la fecha de subida. Cuando estés dentro del carrusel, dime que ya lo estás viendo.\"";
 "guide.amnesia.script.close.phase" = "CIERRE DE INSTAGRAM";
-"guide.amnesia.script.close.text" = "[Cuando el espectador ya está dentro del carrusel en su móvil, el mago cierra el carrusel en Vault. Ese cierre activa el cambio: Instagram pasa del carrusel de 4 imágenes al de 5. El espectador no lo verá todavía porque su app conserva la vista en caché.]\n\n\"Ahora cierra Instagram completamente desde el multitarea. No lo minimices: ciérralo del todo. Quiero que las imágenes estén solo en tu memoria, no en la pantalla.\"";
+"guide.amnesia.script.close.text" = "[Cuando el espectador ya está dentro del carrusel en su móvil, el mago cierra el carrusel en Vault. Ese cierre activa el cambio: Instagram pasa del carrusel de 4 imágenes al de 5. El espectador no lo verá todavía porque su app conserva la vista en caché.]\n\n[IMPORTANTE: no salgas de Vault ni cierres la app todavía. Espera a que termine el proceso de archivar/desarchivar; si sales antes, se puede cortar.]\n\n\"Ahora cierra Instagram completamente desde el multitarea. No lo minimices: ciérralo del todo. Quiero que las imágenes estén solo en tu memoria, no en la pantalla.\"";
 "guide.amnesia.script.optionA.phase" = "OPCIÓN A — PASE DE MANOS";
 "guide.amnesia.script.optionA.text" = "\"Cierro también.\" [El mago cierra el carrusel en su app → swap activado]\n\n\"Ahora los dos estamos desconectados. Solo quedan las imágenes... aquí.\" [Señala la cabeza]\n\n[Ojos cerrados] Con la mano extendida: \"Con cada movimiento... una imagen se va volviendo menos nítida... como si nunca hubiera estado del todo.\" [Tres pases lentos]\n\n\"Ya está. Puedes abrir los ojos.\"";
 "guide.amnesia.script.optionB.phase" = "OPCIÓN B — SCROLL DISIMULADO";
 "guide.amnesia.script.optionB.text" = "[Si prefieres, toma su móvil un segundo, haz un pequeño scroll natural mientras sigues hablando y déjalo en la mesa. Eso fuerza una salida/refresco sin llamar la atención.]\n\n\"La memoria no es una fotografía. Es una reconstrucción. Cada vez que recuerdas algo, tu mente lo reescribe ligeramente. En ese instante... se puede intervenir.\"\n\n\"Nómbrame todas las figuras que recuerdas.\" [El espectador nombra cuatro]";
 "guide.amnesia.script.climax.phase" = "CLÍMAX";
 "guide.amnesia.script.climax.text" = "\"Has dicho círculo, cruz, ondas y cuadrado... pero no has dicho la estrella. ¿Seguro que no estaba la estrella?\"\n\n[El espectador no lo creerá.]\n\n\"Abre Instagram otra vez y entra en el mismo carrusel.\"\n\n[Ahora ve 5 imágenes.]\n\n\"Desliza hasta el final. ¿Cuántas hay ahora? ¿Y la fecha?\"\n\n[La estrella aparece subida en el mismo carrusel, con la misma fecha y hora.]\n\n\"No ha aparecido ahora. Instagram dice que ya estaba ahí. Lo que cambió no fue el post: fue tu recuerdo.\"";
+
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Abrir directamente en Actuación";
+"settings.launch_direct.detail" = "Omite la pestaña de Sets — la app se abre en Actuación siempre";
+"settings.lockscreen.description" = "Muestra una pantalla de bloqueo falsa al entrar en Actuación. Pulsa los dígitos de tu número secreto, pulsa fuera del teclado para bloquearlo y rellena los puntos restantes.";
+"settings.lockscreen.choose_wallpaper" = "Elegir fondo de pantalla";
+"settings.lockscreen.warning_no_wallpaper" = "Selecciona un fondo para activar";
+"action.change" = "Cambiar";
+"action.remove" = "Eliminar";

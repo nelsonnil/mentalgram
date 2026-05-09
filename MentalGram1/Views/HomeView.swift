@@ -1089,8 +1089,8 @@ struct SettingsView: View {
             modernToggleRow(
                 icon: "bolt.fill",
                 iconColor: Self.colorData,
-                title: "Launch directly to Performance",
-                detail: "Skip the Sets tab — app opens on Performance every time",
+                title: "settings.launch_direct.title",
+                detail: "settings.launch_direct.detail",
                 isOn: $launchDirectlyToPerformance
             )
             modernDivider()
@@ -1452,7 +1452,7 @@ struct SettingsView: View {
             Text("Auto Input")
                 .font(VaultTheme.Typography.bodyBold())
                 .foregroundColor(VaultTheme.Colors.textPrimary)
-            Text("Text fetched automatically when Performance opens")
+            Text("Polls every 2 s while Performance is active. Updates automatically when a new value arrives — no need to reopen the app.")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
@@ -1642,7 +1642,7 @@ struct SettingsView: View {
                     Text("Magic API source")
                         .font(VaultTheme.Typography.body())
                         .foregroundColor(VaultTheme.Colors.textPrimary)
-                    Text("Fetch text from Inject or Custom API when Performance opens")
+                    Text("Polls every 2 s while Performance is active. Detects the spectator's selection as soon as they submit it.")
                         .font(VaultTheme.Typography.caption())
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                 }
@@ -2612,6 +2612,7 @@ struct ForceNumberRevealSettingsCard: View {
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     @ObservedObject private var dataManager     = DataManager.shared
     @ObservedObject private var secretSettings  = SecretInputSettings.shared
+    @ObservedObject private var integrations    = IntegrationsSettings.shared
     @State private var isExpanded   = false
     @State private var showingHelp  = false
 
@@ -2619,13 +2620,7 @@ struct ForceNumberRevealSettingsCard: View {
     @AppStorage("ocr_camera")        private var ocrCamera:        Int    = 0
     @AppStorage("noteTopInputMode")  private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")   private var bioTopInputMode:  String = "off"
-
-    private var ocrEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { settings.ocrEnabled },
-            set: { newValue in settings.ocrEnabled = newValue }
-        )
-    }
+    @AppStorage("ppTopInputMode")    private var ppTopInputMode:   String = "off"
 
     private var activeNumberSet: PhotoSet? {
         guard let id = activeSetSettings.activeNumberSetId else { return nil }
@@ -2715,10 +2710,11 @@ struct ForceNumberRevealSettingsCard: View {
 
                 Divider()
 
-                // ── OCR Recognition ──────────────────────────────────
-                PostPredictionOCRView(
+                // ── Input Mode (Off / API / OCR) — mutually exclusive ───────
+                PostPredictionInputModeView(
                     settings: settings,
-                    ocrEnabledBinding: ocrEnabledBinding,
+                    ppTopInputMode: $ppTopInputMode,
+                    apiSource: $integrations.ppApiSource,
                     ocrCamera: $ocrCamera,
                     ocrLanguage: $ocrLanguage,
                     activeWordSet: activeWordSet,
@@ -2740,6 +2736,184 @@ struct ForceNumberRevealSettingsCard: View {
 // MARK: - Post Prediction Sub-Views
 // Extracted as standalone View structs to keep ForceNumberRevealSettingsCard's
 // body type-graph shallow and prevent SwiftUI TupleView stack overflows.
+
+// MARK: - PostPredictionInputModeView (Off / API / OCR — unified, mutually exclusive)
+
+private struct PostPredictionInputModeView: View {
+    @ObservedObject var settings: ForceNumberRevealSettings
+    @Binding var ppTopInputMode: String
+    @Binding var apiSource: ApiSource
+    @Binding var ocrCamera: Int
+    @Binding var ocrLanguage: String
+    let activeWordSet: PhotoSet?
+    let activeNumberSet: PhotoSet?
+
+    private var currentMode: AutoInputMode {
+        AutoInputMode(rawValue: ppTopInputMode) ?? .off
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            Text("Auto Input")
+                .font(VaultTheme.Typography.bodyBold())
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+            Text("Choose one input method. Open Performance first, then ask the spectator to make their selection.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+
+            // ── Off / API / OCR pills ─────────────────────────────────
+            HStack(spacing: 8) {
+                ForEach([AutoInputMode.off, AutoInputMode.api, AutoInputMode.ocr], id: \.rawValue) { mode in
+                    let isSelected = currentMode == mode
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            ppTopInputMode = mode.rawValue
+                            settings.ocrEnabled = (mode == .ocr)
+                            if mode != .api { apiSource = .none }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: mode.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(mode.displayName)
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundColor(isSelected ? .white : VaultTheme.Colors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity)
+                        .background(isSelected ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                        .cornerRadius(8)
+                    }
+                    .contentShape(Rectangle())
+                }
+            }
+
+            // ── API source sub-picker ─────────────────────────────────
+            if currentMode == .api {
+                VStack(alignment: .leading, spacing: 6) {
+                    Divider().background(Color(hex: "#3A3A3C"))
+                    Text("API Source")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .textCase(.uppercase)
+                    Text("Polls every 2 s while Performance is active. Reveals automatically when a new word arrives.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                    HStack(spacing: 6) {
+                        ForEach(ApiSource.allCases.filter { $0 != .none }, id: \.rawValue) { src in
+                            let isActive = apiSource == src
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    apiSource = isActive ? .none : src
+                                }
+                            } label: {
+                                Text(src.displayName.replacingOccurrences(of: "Custom API ", with: "API "))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(isActive ? .white : VaultTheme.Colors.textSecondary)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 5)
+                                    .background(isActive ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                                    .cornerRadius(6)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                    }
+                }
+                .padding(.top, 2)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal:   .opacity.combined(with: .move(edge: .top))
+                ))
+            }
+
+            // ── OCR sub-panel ─────────────────────────────────────────
+            if currentMode == .ocr {
+                VStack(alignment: .leading, spacing: 10) {
+                    Divider().background(Color(hex: "#3A3A3C"))
+                    Text("Camera starts silently when Performance opens. Recognized text auto-reveals: letters → word set, digits → number set.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    HStack(spacing: VaultTheme.Spacing.sm) {
+                        Image(systemName: "text.cursor")
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Word set: \(activeWordSet?.name ?? "None selected")")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(activeWordSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
+                            Text("Number set: \(activeNumberSet?.name ?? "None selected")")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(activeNumberSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Camera")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .textCase(.uppercase)
+                        HStack(spacing: 6) {
+                            ForEach([0, 1], id: \.self) { val in
+                                let sel = ocrCamera == val
+                                Button { ocrCamera = val } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: val == 0 ? "camera.fill" : "camera.rotate.fill")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text(val == 0 ? "Rear" as LocalizedStringKey : "Front")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .foregroundColor(sel ? .white : VaultTheme.Colors.textSecondary)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .frame(maxWidth: .infinity)
+                                    .background(sel ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                                    .cornerRadius(8)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Language")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .textCase(.uppercase)
+                        Menu {
+                            ForEach(OCRConfiguration.supportedLanguages, id: \.code) { lang in
+                                Button { ocrLanguage = lang.code } label: {
+                                    if ocrLanguage == lang.code {
+                                        Label(lang.display, systemImage: "checkmark")
+                                    } else {
+                                        Text(lang.display)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "globe").font(.system(size: 12))
+                                Text(OCRConfiguration.displayName(for: ocrLanguage))
+                                    .font(.system(size: 12, weight: .semibold))
+                                Spacer()
+                                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11))
+                            }
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                            .padding(.horizontal, 10).padding(.vertical, 8)
+                            .background(Color(hex: "#2C2C2E"))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+                .padding(.top, 2)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal:   .opacity.combined(with: .move(edge: .top))
+                ))
+            }
+        }
+    }
+}
 
 private struct PostPredictionActiveSetView: View {
     let activeNumberSet: PhotoSet?
@@ -2856,104 +3030,6 @@ private struct PostPredictionCoverTypingView: View {
     }
 }
 
-private struct PostPredictionOCRView: View {
-    @ObservedObject var settings: ForceNumberRevealSettings
-    let ocrEnabledBinding: Binding<Bool>
-    @Binding var ocrCamera: Int
-    @Binding var ocrLanguage: String
-    let activeWordSet: PhotoSet?
-    let activeNumberSet: PhotoSet?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-            HStack {
-                Image(systemName: "camera.viewfinder")
-                    .foregroundColor(SettingsView.colorTricks)
-                    .frame(width: 20)
-                Text("OCR Recognition")
-                    .font(VaultTheme.Typography.bodyBold())
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                Spacer()
-                Toggle("", isOn: ocrEnabledBinding).labelsHidden()
-            }
-            Text("Camera starts silently when Performance opens. Recognized text auto-reveals: letters → word set, digits → number set.")
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textSecondary)
-
-            if settings.ocrEnabled {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: VaultTheme.Spacing.sm) {
-                        Image(systemName: "text.cursor")
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                            .frame(width: 16)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Word set: \(activeWordSet?.name ?? "None selected")")
-                                .font(VaultTheme.Typography.caption())
-                                .foregroundColor(activeWordSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
-                            Text("Number set: \(activeNumberSet?.name ?? "None selected")")
-                                .font(VaultTheme.Typography.caption())
-                                .foregroundColor(activeNumberSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Camera")
-                            .font(VaultTheme.Typography.captionSmall())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                            .textCase(.uppercase)
-                        HStack(spacing: 6) {
-                            ForEach([0, 1], id: \.self) { val in
-                                let sel = ocrCamera == val
-                                Button { ocrCamera = val } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: val == 0 ? "camera.fill" : "camera.rotate.fill")
-                                            .font(.system(size: 11, weight: .semibold))
-                                        Text(val == 0 ? "Rear" as LocalizedStringKey : "Front")
-                                            .font(.system(size: 12, weight: .semibold))
-                                    }
-                                    .foregroundColor(sel ? .white : VaultTheme.Colors.textSecondary)
-                                    .padding(.horizontal, 10).padding(.vertical, 7)
-                                    .frame(maxWidth: .infinity)
-                                    .background(sel ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
-                                    .cornerRadius(8)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Language")
-                            .font(VaultTheme.Typography.captionSmall())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                            .textCase(.uppercase)
-                        Menu {
-                            ForEach(OCRConfiguration.supportedLanguages, id: \.code) { lang in
-                                Button { ocrLanguage = lang.code } label: {
-                                    if ocrLanguage == lang.code {
-                                        Label(lang.display, systemImage: "checkmark")
-                                    } else {
-                                        Text(lang.display)
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Image(systemName: "globe").font(.system(size: 12))
-                                Text(OCRConfiguration.displayName(for: ocrLanguage))
-                                    .font(.system(size: 12, weight: .semibold))
-                                Spacer()
-                                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11))
-                            }
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
-                            .padding(.horizontal, 10).padding(.vertical, 8)
-                            .background(Color(hex: "#2C2C2E"))
-                            .cornerRadius(8)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 private struct PostPredictionURLSchemeView: View {
     private let templateURL = "vault://reveal?word=<your word>"
@@ -3414,6 +3490,7 @@ struct DateForceSettingsCard: View {
 
 private struct BackupCard: View {
     @ObservedObject var backup: CloudBackupService
+    @ObservedObject private var drive = iCloudDriveSync.shared
     @State private var showRestoreConfirm = false
     @State private var showRestoredAlert = false
     @State private var isRestoring = false
@@ -3475,13 +3552,69 @@ private struct BackupCard: View {
                         .foregroundColor(VaultTheme.Colors.textPrimary)
                     Spacer()
                     HStack(spacing: 5) {
+                        let hasError = backup.lastKVError != nil || drive.lastError != nil
                         Circle()
-                            .fill(backup.iCloudAvailable ? Color.green : Color.gray)
+                            .fill(hasError ? Color.orange : (backup.iCloudAvailable ? Color.green : Color.gray))
                             .frame(width: 7, height: 7)
-                        Text(backup.iCloudAvailable ? "Active" : "Inactive")
+                        Text(hasError ? "Warning" : (backup.iCloudAvailable ? "Active" : "Inactive"))
                             .font(VaultTheme.Typography.body())
                             .foregroundColor(VaultTheme.Colors.textSecondary)
                     }
+                }
+
+                // Sets backup status row
+                if backup.backedUpSetsBytes > 0 || backup.hasCloudBackup {
+                    HStack {
+                        Text("Sets in backup")
+                            .font(VaultTheme.Typography.body())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.icloud.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.green)
+                            Text(backup.backedUpSetsBytes > 0 ? "\(backup.backedUpSetsBytes / 1024) KB" : "OK")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                    }
+                }
+
+                // Photos in iCloud Drive status row
+                HStack {
+                    Text("Photos in iCloud Drive")
+                        .font(VaultTheme.Typography.body())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        if let driveErr = drive.lastError {
+                            Image(systemName: "exclamationmark.icloud.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.orange)
+                            Text(driveErr.isICloudFull ? "iCloud full" : "Unavailable")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(.orange)
+                        } else {
+                            Image(systemName: "icloud.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.blue)
+                            Text(drive.cloudFileCount > 0 ? "\(drive.cloudFileCount) photos" : "Synced")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                    }
+                }
+
+                // Error / warning banner
+                if let kvErr = backup.lastKVError {
+                    warningBanner(icon: "exclamationmark.triangle.fill", message: kvErr, color: .orange)
+                }
+                if let driveErr = drive.lastError {
+                    warningBanner(
+                        icon: driveErr.isICloudFull ? "icloud.slash.fill" : "exclamationmark.icloud.fill",
+                        message: driveErr.errorDescription ?? driveErr.localizedDescription,
+                        color: driveErr.isICloudFull ? .red : .orange
+                    )
                 }
 
                 Button(action: { backup.syncToCloud() }) {
@@ -3528,10 +3661,56 @@ private struct BackupCard: View {
                 }
                 .disabled(!backup.hasCloudBackup || isRestoring || backup.isSyncing)
 
-                Text("Backup runs automatically when the app is closed. Includes all your sets and images.")
-                    .font(VaultTheme.Typography.caption())
-                    .foregroundColor(VaultTheme.Colors.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 8) {
+                    infoRow(icon: "gear.badge.checkmark",
+                            text: String(localized: "backup.info.auto"))
+                    infoRow(icon: "slider.horizontal.3",
+                            text: String(localized: "backup.info.what"))
+                    infoRow(icon: "photo.on.rectangle",
+                            text: String(localized: "backup.info.photos"))
+                    infoRow(icon: "icloud.slash",
+                            text: String(localized: "backup.info.excluded"))
+                }
+
+                HStack(spacing: 8) {
+                    Button(action: {
+                        let report = backup.backupDiagnostics()
+                        print(report)
+                        LogManager.shared.info(report, category: .general)
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "stethoscope")
+                            Text("KV Diag")
+                                .font(VaultTheme.Typography.caption().weight(.medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(Color.gray.opacity(0.08))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                    }
+
+                    Button(action: {
+                        // Use DispatchQueue (not Task.detached) to avoid Swift concurrency
+                        // issues with the blocking url(forUbiquityContainerIdentifier:) call
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            iCloudDriveSync.shared.runDiagnostics()
+                        }
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "folder.badge.questionmark")
+                            Text("Drive Diag")
+                                .font(VaultTheme.Typography.caption().weight(.medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(Color.gray.opacity(0.08))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+                    }
+                }
             }
         }
         .alert("Restore from iCloud?", isPresented: $showRestoreConfirm) {
@@ -3547,6 +3726,38 @@ private struct BackupCard: View {
         } message: {
             Text("Your settings and sets have been restored from iCloud.")
         }
+    }
+
+    private func infoRow(icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.blue.opacity(0.7))
+                .frame(width: 16)
+                .padding(.top, 1)
+            Text(text)
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func warningBanner(icon: String, message: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(color)
+                .frame(width: 16)
+                .padding(.top, 1)
+            Text(message)
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(color.opacity(0.08))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(color.opacity(0.25), lineWidth: 1))
     }
 
     private func performRestore() {
@@ -3768,8 +3979,8 @@ struct LockscreenInputSettingsCard: View {
 
     var body: some View {
         CollapsibleCard(icon: "lock.fill", iconColor: SettingsView.colorData,
-                        title: "Lockscreen Input",
-                        subtitle: "Fake iOS lockscreen for secret digit entry",
+                        title: "guide.lockscreen.title",
+                        subtitle: "guide.lockscreen.subtitle",
                         isExpanded: $isExpanded,
                         trailing: {
                             Button { showingHelp = true } label: {
@@ -3780,7 +3991,7 @@ struct LockscreenInputSettingsCard: View {
                             .buttonStyle(.plain)
                         }) {
             HStack {
-                Text("Enabled")
+                Text("settings.enabled", comment: "Toggle label")
                     .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 Spacer()
@@ -3795,14 +4006,14 @@ struct LockscreenInputSettingsCard: View {
                 )).labelsHidden()
             }
 
-            Text("Shows a fake lockscreen when entering Performance. Tap digits for your secret number, tap outside the numpad to lock it, then fill the remaining dots.")
+            Text("settings.lockscreen.description", comment: "Lockscreen card description")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
 
             Divider()
 
             VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                Text("Wallpaper")
+                Text("guide.lockscreen.help.wallpaper.title", comment: "Wallpaper section header")
                     .font(VaultTheme.Typography.bodyBold())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
 
@@ -3818,7 +4029,7 @@ struct LockscreenInputSettingsCard: View {
                             Button {
                                 showingPicker = true
                             } label: {
-                                Label("Change", systemImage: "photo.on.rectangle")
+                                Label(String(localized: "action.change"), systemImage: "photo.on.rectangle")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 12)
@@ -3832,7 +4043,7 @@ struct LockscreenInputSettingsCard: View {
                                 settings.clearWallpaper()
                                 settings.isEnabled = false
                             } label: {
-                                Label("Remove", systemImage: "trash")
+                                Label(String(localized: "action.remove"), systemImage: "trash")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(VaultTheme.Colors.error)
                             }
@@ -3846,7 +4057,7 @@ struct LockscreenInputSettingsCard: View {
                         HStack(spacing: 8) {
                             Image(systemName: "photo.badge.plus")
                                 .font(.system(size: 16))
-                            Text("Choose Wallpaper")
+                            Text("settings.lockscreen.choose_wallpaper", comment: "Choose wallpaper button")
                                 .font(.system(size: 14, weight: .medium))
                         }
                         .foregroundColor(.white)
@@ -3862,7 +4073,7 @@ struct LockscreenInputSettingsCard: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(VaultTheme.Colors.warning)
                                 .font(.system(size: 12))
-                            Text("Select a wallpaper to activate")
+                            Text("settings.lockscreen.warning_no_wallpaper", comment: "Warning when no wallpaper set")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.warning)
                         }
@@ -3894,45 +4105,45 @@ private struct LockscreenInputHelpSheet: View {
                     helpSection(
                         icon: "lock.fill",
                         iconColor: SettingsView.colorData,
-                        title: "What is Lockscreen Input?",
-                        body: "When you open Performance, the app shows a fake iOS-style passcode screen before revealing your profile. To anyone watching it looks like you are simply unlocking your phone."
+                        title: String(localized: "guide.lockscreen.help.what.title"),
+                        body: String(localized: "guide.lockscreen.help.what.body")
                     )
 
                     helpSection(
                         icon: "hand.point.up.left.fill",
                         iconColor: SettingsView.colorData,
-                        title: "How to enter your secret number",
-                        body: "1. Tap the digits of your secret number on the numpad — they register silently.\n\n2. Tap anywhere outside the numpad to \"lock\" those digits in place.\n\n3. Fill the remaining dots by tapping any digits — they are ignored.\n\n4. Once all 4 dots are filled the lockscreen dismisses and Performance opens."
+                        title: String(localized: "guide.lockscreen.help.how.title"),
+                        body: String(localized: "guide.lockscreen.help.how.body")
                     )
 
                     helpSection(
                         icon: "photo.fill",
                         iconColor: SettingsView.colorData,
-                        title: "Wallpaper",
-                        body: "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Without a wallpaper the lockscreen input cannot be enabled."
+                        title: String(localized: "guide.lockscreen.help.wallpaper.title"),
+                        body: String(localized: "guide.lockscreen.help.wallpaper.body")
                     )
 
                     helpSection(
                         icon: "eye.slash.fill",
                         iconColor: SettingsView.colorData,
-                        title: "Why use it?",
-                        body: "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram — completely natural to any observer."
+                        title: String(localized: "guide.lockscreen.help.why.title"),
+                        body: String(localized: "guide.lockscreen.help.why.body")
                     )
 
                     helpSection(
                         icon: "square.grid.2x2.fill",
                         iconColor: SettingsView.colorData,
-                        title: "Same secret number — many tricks",
-                        body: "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore"
+                        title: String(localized: "guide.lockscreen.help.tricks.title"),
+                        body: String(localized: "guide.lockscreen.help.tricks.body")
                     )
                 }
                 .padding(20)
             }
-            .navigationTitle("Lockscreen Input")
+            .navigationTitle(String(localized: "guide.lockscreen.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button(String(localized: "action.done")) { dismiss() }
                         .fontWeight(.semibold)
                 }
             }

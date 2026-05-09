@@ -138,6 +138,7 @@ struct ForcePostPickerView: View {
                                 isSelected: isPostSelected(post),
                                 onTap: { select(post) }
                             )
+                            .onAppear { loadMoreIfNeeded(currentPost: post) }
                         }
                     }
 
@@ -232,14 +233,15 @@ struct ForcePostPickerView: View {
                 try await Task.sleep(nanoseconds: pause)
 
                 let (fetched, nextId) = try await instagram.getUserMediaItems(userId: userId, amount: 18)
+                let uniqueFetched = uniquePosts(fetched)
                 await MainActor.run {
-                    posts = fetched
+                    posts = uniqueFetched
                     nextMaxId = nextId
                     hasMorePages = nextId != nil
                     isSearching = false
                 }
 
-                await downloadThumbnails(for: fetched)
+                await downloadThumbnails(for: uniqueFetched)
 
             } catch {
                 let msg = "\(error)"
@@ -262,6 +264,7 @@ struct ForcePostPickerView: View {
 
     private func loadMorePosts() {
         guard let maxId = nextMaxId, !searchedUserId.isEmpty else { return }
+        guard !isLoadingMore else { return }
         isLoadingMore = true
 
         Task {
@@ -272,18 +275,37 @@ struct ForcePostPickerView: View {
                 let (fetched, nextId) = try await instagram.getUserMediaItems(
                     userId: searchedUserId, amount: 18, maxId: maxId
                 )
+                let existingKeys = await MainActor.run {
+                    Set(posts.map { $0.mediaId.isEmpty ? $0.imageURL : $0.mediaId })
+                }
+                let fresh = fetched.filter {
+                    !existingKeys.contains($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId)
+                }
+                let uniqueFresh = uniquePosts(fresh)
                 await MainActor.run {
-                    posts.append(contentsOf: fetched)
+                    posts.append(contentsOf: uniqueFresh)
                     nextMaxId = nextId
-                    hasMorePages = nextId != nil
+                    hasMorePages = nextId != nil && nextId != maxId
                     isLoadingMore = false
                 }
-                await downloadThumbnails(for: fetched)
+                await downloadThumbnails(for: uniqueFresh)
 
             } catch {
                 await MainActor.run { isLoadingMore = false }
                 print("⚠️ [FORCE POST] Pagination error: \(error)")
             }
+        }
+    }
+
+    private func loadMoreIfNeeded(currentPost: InstagramMediaItem) {
+        guard hasMorePages, !isLoadingMore else { return }
+        let currentKey = currentPost.mediaId.isEmpty ? currentPost.imageURL : currentPost.mediaId
+        guard let index = posts.firstIndex(where: {
+            ($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId) == currentKey
+        }) else { return }
+        let threshold = max(1, Int(Double(posts.count) * 0.75))
+        if index >= threshold {
+            loadMorePosts()
         }
     }
 
@@ -318,6 +340,14 @@ struct ForcePostPickerView: View {
               let url = URL(string: urlString),
               let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
         return UIImage(data: data)
+    }
+
+    private func uniquePosts(_ items: [InstagramMediaItem]) -> [InstagramMediaItem] {
+        var seen = Set<String>()
+        return items.filter { item in
+            let key = item.mediaId.isEmpty ? item.imageURL : item.mediaId
+            return seen.insert(key).inserted
+        }
     }
 }
 

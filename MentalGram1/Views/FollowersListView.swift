@@ -128,7 +128,12 @@ struct FollowersListView: View {
         loadingProfileUserId = follower.userId
         Task {
             do {
-                let profile = try await instagram.getProfileInfo(userId: follower.userId)
+                let profile = try await instagram.getProfileInfo(
+                    userId: follower.userId,
+                    usernameHint: follower.username,
+                    fullNameHint: follower.fullName,
+                    profilePicURLHint: follower.profilePicURL
+                )
                 await MainActor.run {
                     loadingProfileUserId = nil
                     if let profile {
@@ -280,7 +285,12 @@ struct FollowersListView: View {
                                         localSelectedIds.append(follower.userId)
                                         // Pre-cargar perfil completo en background
                                         Task {
-                                            if let p = try? await instagram.getProfileInfo(userId: follower.userId) {
+                                            if let p = try? await instagram.getProfileInfo(
+                                                userId: follower.userId,
+                                                usernameHint: follower.username,
+                                                fullNameHint: follower.fullName,
+                                                profilePicURLHint: follower.profilePicURL
+                                            ) {
                                                 await MainActor.run {
                                                     dateForce.preloadedProfiles[follower.userId] = (
                                                         username: p.username,

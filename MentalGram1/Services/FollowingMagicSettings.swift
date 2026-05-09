@@ -70,9 +70,13 @@ class FollowingMagicSettings: ObservableObject {
     }
 
     /// Scales the pending offset by 1 000 (K-mode) when the real count is >= 10 000.
-    func applyKModeScaling() {
-        pendingOffset = pendingOffset * 1_000
-        print("🎩 [MAGIC] K-mode activated — offset scaled to \(pendingOffset)")
+    /// The result is capped so the scaled addition never exceeds `realCount`, which
+    /// keeps the inflated total at most 2× the real count and avoids unrealistic
+    /// displays like "+20K on a 12K profile".
+    func applyKModeScaling(cappedTo realCount: Int) {
+        let scaled = pendingOffset * 1_000
+        pendingOffset = min(scaled, max(1, realCount))
+        print("🎩 [MAGIC] K-mode activated — offset scaled to \(pendingOffset) (cap=\(realCount))")
     }
 
     /// Clears the pending offset after the trick is revealed.

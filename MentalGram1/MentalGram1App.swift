@@ -64,6 +64,17 @@ struct MentalGram1App: App {
                 .onAppear {
                     UIApplication.shared.isIdleTimerDisabled = true
                     handleFirstLaunch()
+                    // Ensure the Vault folder exists in iCloud Drive immediately (creates marker file).
+                    // Then do a full photo sync in the background with retry logic.
+                    iCloudDriveSync.shared.ensureCloudFolderExists()
+                    iCloudDriveSync.shared.syncAllPhotosToCloud { uploaded, skipped, error in
+                        if let error = error {
+                            LogManager.shared.warning("iCloud Drive sync issue: \(error.localizedDescription)", category: .general)
+                        } else {
+                            let total = iCloudDriveSync.shared.cloudFileCount
+                            print("☁️ [DRIVE] Launch sync: \(uploaded) uploaded, \(skipped) already synced, \(total) total in cloud")
+                        }
+                    }
                 }
         }
         .onChange(of: scenePhase) { phase in
@@ -72,7 +83,9 @@ struct MentalGram1App: App {
             case .background:
                 UIApplication.shared.isIdleTimerDisabled = false
                 um.beginBackgroundWork()
-                CloudBackupService.shared.syncToCloud()
+                // Immediate backup on every app background — guarantees the backup
+                // is always up to date when the user switches apps or force-quits.
+                DataManager.shared.forceImmediateBackup()
             case .active:
                 UIApplication.shared.isIdleTimerDisabled = true
                 um.endBackgroundWork()

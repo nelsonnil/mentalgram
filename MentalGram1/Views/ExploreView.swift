@@ -132,7 +132,7 @@ struct ExploreView: View {
                             } else {
                                 ForEach(searchResults) { result in
                                     SearchResultRow(result: result, onTap: {
-                                        loadUserProfile(userId: result.userId)
+                                        loadUserProfile(result: result)
                                     })
                                 }
                             }
@@ -300,19 +300,18 @@ struct ExploreView: View {
             return
         }
 
-        // ANTI-BOT: Debounce 1.2 s — only the last keystroke in a burst fires an API call.
-        // isSearching is set AFTER the sleep so rapid-cancel cycles don't flash the spinner.
+        // No additional debounce here — the 400 ms debounce in handleSearchTextChange
+        // already ensures only one request fires per typing burst.
+        // We keep a cancellable Task so a new query mid-flight cancels the previous one.
+        searchTask?.cancel()
         searchTask = Task {
-            try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2 s
-
             guard !Task.isCancelled else { return }
 
             guard !InstagramService.shared.isLocked else {
                 print("🚫 [EXPLORE] Search skipped — lockdown active")
+                await MainActor.run { isSearching = false }
                 return
             }
-
-            await MainActor.run { isSearching = true }
 
             do {
                 let results = try await InstagramService.shared.searchUsers(query: query)
@@ -330,7 +329,8 @@ struct ExploreView: View {
         }
     }
     
-    private func loadUserProfile(userId: String) {
+    private func loadUserProfile(result: UserSearchResult) {
+        let userId = result.userId
         guard !InstagramService.shared.isLocked else {
             print("🚫 [SEARCH] Profile load skipped — lockdown active")
             return
@@ -351,7 +351,13 @@ struct ExploreView: View {
         
         Task {
             do {
-                let profile = try await InstagramService.shared.getProfileInfo(userId: userId)
+                let profile = try await InstagramService.shared.getProfileInfo(
+                    userId: userId,
+                    usernameHint: result.username,
+                    fullNameHint: result.fullName,
+                    profilePicURLHint: result.profilePicURL,
+                    isVerifiedHint: result.isVerified
+                )
                 
                 await MainActor.run {
                     if let profile = profile {
@@ -435,13 +441,20 @@ struct ExploreView: View {
             if newValue.isEmpty {
                 searchTask?.cancel()
                 searchResults = []
+                isSearching = false
             } else if newValue.count >= 4 {
+                // Show spinner immediately so the user knows the tap registered
+                isSearching = true
                 let query = newValue
                 searchDebounceTask = Task {
-                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    // 400 ms debounce — waits for the user to pause typing before firing.
+                    // The 2nd debounce inside performSearch is now bypassed (see below).
+                    try? await Task.sleep(nanoseconds: 400_000_000)
                     guard !Task.isCancelled else { return }
                     performSearch(query: query)
                 }
+            } else {
+                isSearching = false
             }
             return
         }
@@ -752,42 +765,31 @@ struct ExploreGridView: View {
     @ObservedObject var exploreManager = ExploreManager.shared
     var onTapMedia: (Int) -> Void = { _ in }
 
+    private let columns = [
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2)
+    ]
+
     var body: some View {
-        LazyVStack(spacing: 2) {
-            // Create rows of 3 items
-            ForEach(0..<((mediaItems.count + 2) / 3), id: \.self) { rowIndex in
-                HStack(spacing: 2) {
-                    ForEach(0..<3, id: \.self) { colIndex in
-                        let index = rowIndex * 3 + colIndex
-                        if index < mediaItems.count {
-                            ExploreMediaCell(
-                                media: mediaItems[index],
-                                cachedImage: cachedImages[mediaItems[index].imageURL]
-                            )
-                            .onTapGesture {
-                                onTapMedia(index)
-                            }
-                            .onAppear {
-                                // Trigger load more when this item appears
-                                exploreManager.loadMoreIfNeeded(currentItem: mediaItems[index])
-                            }
-                        } else {
-                            // Invisible placeholder to keep grid aligned
-                            Color.clear
-                                .aspectRatio(4/5, contentMode: .fit)
-                        }
-                    }
+        LazyVGrid(columns: columns, spacing: 2) {
+            ForEach(Array(mediaItems.enumerated()), id: \.element.mediaId) { index, media in
+                ExploreMediaCell(
+                    media: media,
+                    cachedImage: cachedImages[media.imageURL]
+                )
+                .onTapGesture {
+                    onTapMedia(index)
+                }
+                .onAppear {
+                    exploreManager.loadMoreIfNeeded(currentItem: media)
                 }
             }
-            
-            // Loading indicator at bottom when loading more
+
             if exploreManager.isLoadingMore {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .padding()
-                    Spacer()
-                }
+                ProgressView()
+                    .padding()
+                    .gridCellColumns(3)
             }
         }
     }
@@ -799,9 +801,14 @@ struct SearchResultRow: View {
     let result: UserSearchResult
     let onTap: () -> Void
     @State private var profileImage: UIImage?
-    
+    @State private var isLoading = false
+
     var body: some View {
-        Button(action: onTap) {
+        Button(action: {
+            guard !isLoading else { return }
+            isLoading = true
+            onTap()
+        }) {
             HStack(spacing: 12) {
                 // Profile picture
                 if let image = profileImage {
@@ -819,29 +826,36 @@ struct SearchResultRow: View {
                                 .foregroundColor(.gray)
                         )
                 }
-                
+
                 // User info
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(result.username)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.primary)
-                        
+
                         if result.isVerified {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.system(size: 12))
                                 .foregroundColor(.blue)
                         }
                     }
-                    
+
                     if !result.fullName.isEmpty {
                         Text(result.fullName)
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 Spacer()
+
+                // Loading indicator appears immediately on tap while the profile loads
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.85)
+                        .padding(.trailing, 4)
+                }
             }
             .responsiveHorizontalPadding()
             .padding(.vertical, 8)
@@ -849,14 +863,15 @@ struct SearchResultRow: View {
         }
         .buttonStyle(PlainButtonStyle())
         .onAppear {
+            isLoading = false
             loadProfileImage()
         }
     }
-    
+
     private func loadProfileImage() {
         guard !result.profilePicURL.isEmpty,
               let url = URL(string: result.profilePicURL) else { return }
-        
+
         Task {
             if let (data, _) = try? await URLSession.shared.data(from: url),
                let image = UIImage(data: data) {

@@ -192,8 +192,9 @@ struct ArchivedPhotosPickerView: View {
 
         Task {
             do {
-                // Full paginated fetch — may take a few seconds for large archives
-                let raw = try await instagram.getAllArchivedPhotos()
+                // Full paginated fetch — pass forceRefresh so the InstagramService
+                // data cache is also bypassed (not just the thumbnail cache)
+                let raw = try await instagram.getAllArchivedPhotos(forceRefresh: forceRefresh)
                 var photos = raw.map {
                     ArchivedPhoto(mediaId: $0.mediaId, imageURL: $0.imageURL, timestamp: $0.timestamp)
                 }

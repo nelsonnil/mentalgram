@@ -16,8 +16,9 @@ extension View {
 // MARK: - Screen size helpers
 
 extension UIScreen {
-    /// true on iPhone SE 2nd/3rd gen (375 pt) and smaller — use to scale down fixed sizes
-    static var isSmall: Bool { main.bounds.width < 390 }
+    /// true on compact-width phones (<400 pt, incl. iPhone 15/15 Pro at 393 pt)
+    /// used to scale down fixed sizes so Performance doesn't look zoomed.
+    static var isSmall: Bool { main.bounds.width < 400 }
 }
 
 /// Returns one value on iPhone SE / small screens, another on standard and large screens.

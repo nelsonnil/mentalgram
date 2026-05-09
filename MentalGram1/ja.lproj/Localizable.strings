@@ -24,6 +24,10 @@
 "backup.just_now" = "たった今";
 "backup.min_ago" = "%d分前";
 "backup.h_ago" = "%d時間前";
+"backup.info.auto" = "バックアップはアプリがバックグラウンドに移行するたびに自動で実行されます。「今すぐバックアップ」で手動実行することもできます。";
+"backup.info.what" = "バックアップ対象：すべての設定、Date Force、Force Reel、アクティブなセットとそのメタデータ。";
+"backup.info.photos" = "セットの写真はiCloud Driveに同期されます。ファイルアプリ → iCloud Drive → Vault → Photos で確認できます。";
+"backup.info.excluded" = "バックアップ対象外：Instagramセッション、デバイスIDとクールダウンタイマー（デバイス固有の情報）。";
 "nav.settings" = "設定";
 "nav.my_sets" = "マイセット";
 "nav.performance" = "パフォーマンス";
@@ -549,6 +553,7 @@
 "postpred.help.during.timing.dialogue" = "Instagramを開いてください。私のプロフィールを見てください。下にスクロールしてください。ずっとそこにありましたよ。";
 "postpred.help.tip.timing" = "**公開速度。** 1文字または数字: 約2〜3秒。5文字 (例: MAGIC): 約12〜15秒。追加の各文字は約2〜3秒加算されます。";
 "postpred.help.tip.vibration" = "**振動 = 準備完了。** 触覚フィードバックは、写真が本物のInstagramで公開されたことを示します。振動後、観客を誘導します。";
+"postpred.help.tip.ring" = "**オレンジのリング = 確認済み。** リビールが成功すると、プロフィール写真の周りにオレンジのグラデーションリングが表示されます — InstagramストーリーのリングとまったくEXACT同じです。本物のInstagramで写真が公開されたことを確認します。リングは新しいPerformanceセッションを開くと自動的にリセットされます。";
 "postpred.help.tip.position" = "**元の位置。** 写真はグリッドの元の場所に、元の日付で再表示されます。スクロールが必要な場合があります。";
 "postpred.help.tip.upload" = "**アップロード中。** アプリを使用せず、Wi-Fiネットワークを変えず、画面をロックしないでください。";
 "postpred.help.tip.banks" = "**バンク数。** 各バンク = 1つの文字または数字の位置。公開したい最も長い単語や数字に合わせてセットを計画してください。";
@@ -581,9 +586,12 @@
 "postpred.help.inputs.group.alpha" = "アルファベットセット用";
 "postpred.help.inputs.group.universal" = "ユニバーサル — 全セットタイプ";
 "postpred.help.input.covert.label" = "秘密入力";
-"postpred.help.input.api.label" = "API / 自動化";
-"postpred.help.input.api.step1" = "外部の自動化ツール（ショートカット、NFCタグ、コンパニオンアプリ）を使って、URLスキーム経由でPost Predictionに言葉や数字を送信します。";
-"postpred.help.input.api.step2" = "サードパーティのトリガーや物理的な小道具が適切なタイミングで自動的に公開を起動する場合に便利です。";
+"postpred.help.input.api.label" = "API 自動リビール";
+"postpred.help.input.api.intro" = "Inject (11z.co) またはカスタム API を接続します。まず Performance を開いてください — アプリはバックグラウンドで 2 秒ごとに確認します。観客が選択を送信した瞬間、トリプル振動とともに自動でリビールが発動します。";
+"postpred.help.input.api.step1" = "設定 → Post Prediction で Auto Input を **API** に設定し、ソース（Inject またはカスタム API）を選択します。";
+"postpred.help.input.api.step2" = "プレゼンテーションを始める前に、デバイスで Performance ビューを開きます。";
+"postpred.help.input.api.step3" = "観客に Inject リンクまたはカスタムフォームで選択するよう依頼します。";
+"postpred.help.input.api.step4" = "2 秒以内にアプリが新しい値を検出し、対応する写真をリビールして 3 回振動で確認します。";
 "explore.load_error" = "コンテンツを読み込めませんでした";
 "Loading profile…" = "プロフィールを読み込み中…";
 "Capturing followers…" = "フォロワーを取得中…";
@@ -1277,5 +1285,14 @@
 "guide.amnesia.script.optionA.text" = "「私も閉じます。」[マジシャンがアプリでカルーセルを閉じる → スワップ起動]\n\n「これで二人ともオフラインです。画像だけが残っています...ここに。」[頭を指す]\n\n[目を閉じた状態] 手を伸ばして:「動くたびに...一枚の画像がぼやけていきます...まるでそこにあったことがなかったかのように。」[ゆっくり3回のパス]\n\n「できました。目を開けてください。」";
 "guide.amnesia.script.optionB.phase" = "オプションB — さりげないスクロール";
 "guide.amnesia.script.optionB.text" = "[マジシャンが話しながらアプリをスクロールしてカルーセルを閉じる]\n\n「記憶は写真ではありません。再構築です。何かを思い出すたびに、あなたの心はそれをわずかに書き直します。その不安定な瞬間に...介入することができます。」\n\n「正確に何枚の画像を覚えていますか？」[観客:4枚]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Performanceに直接開く";
+"settings.launch_direct.detail" = "Setsタブをスキップ — アプリは常にPerformanceで開きます";
+"settings.lockscreen.description" = "Performanceを開くときに偽のロック画面を表示します。秘密番号の数字をタップし、テンキー外をタップしてロックし、残りのドットを埋めてください。";
+"settings.lockscreen.choose_wallpaper" = "壁紙を選択";
+"settings.lockscreen.warning_no_wallpaper" = "有効にするには壁紙を選択してください";
+"action.change" = "変更";
+"action.remove" = "削除";
+
 "guide.amnesia.script.climax.phase" = "クライマックス";
 "guide.amnesia.script.climax.text" = "「Instagramをもう一度開いてください。同じ投稿を探してください。」\n\n[観客が5枚の画像を見る]\n\n「何枚見えますか？」— 5枚。\n\n「日付を確認してください。さっきと同じですか？」— はい。\n\n「Instagramは嘘をつきません。日付は変更できません。こうしてアップロードされました。」\n\n[間]\n\n「起きたことは画像を忘れたのではありません。あなたの心はそれを見ないように導かれました。そして今、それが可能だとわかりました。」";

@@ -20,6 +20,7 @@ struct PerformanceView: View {
     // OCR
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
+    @AppStorage("ppTopInputMode")   private var ppTopInputMode:   String = "off"
     // Text templates — user-defined wrappers with {word} token
     @AppStorage("note_template") private var noteTemplate: String = ""
     @AppStorage("bio_template")  private var bioTemplate:  String = ""
@@ -66,6 +67,9 @@ struct PerformanceView: View {
 
     // MARK: - Fake Lockscreen input
     @State private var showingLockscreen = false
+    /// Prevents re-presenting the lockscreen when onAppear re-fires after the
+    /// fullScreenCover is dismissed (which happens on every iOS version).
+    @State private var lockscreenWasShown = false
 
     // MARK: - Spectator profile overlay
     @State private var selectedSpectator: InstagramFollower? = nil
@@ -87,6 +91,14 @@ struct PerformanceView: View {
     @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
     private let minRefreshInterval: TimeInterval = 60  // 60s minimum between full profile fetches
 
+    // MARK: - API Polling (continuous watch mode)
+    /// Background task that polls the Inject/Custom API every 4–6 s while the view is visible.
+    /// When the spectator's selection arrives, updates bio/note and vibrates — no need to re-open the app.
+    @State private var apiPollingTask: Task<Void, Never>? = nil
+    /// Last change token received from the API for each target ("bio" / "note" / "pp").
+    /// First poll only seeds this baseline; later polls trigger only when the token changes.
+    @State private var lastApiPollTokens: [String: String] = [:]
+
     // MARK: - Auto-refresh on Performance entry
     /// Persisted timestamp of the last full profile refresh. Used to decide whether
     /// to auto-refresh silently when the user opens Performance view.
@@ -98,7 +110,13 @@ struct PerformanceView: View {
     /// Prevents back-to-back reveal operations that look automated to Instagram.
     @AppStorage("perf_lastRevealCompletedTimestamp") private var lastRevealCompletedTimestamp: Double = 0
     private let interRevealCooldown: TimeInterval = 90   // seconds
-    
+
+    // MARK: - Post Prediction visual ring
+    /// Orange ring appears on the profile avatar after a successful PP reveal.
+    /// Persists when the user exits Performance so they see it as confirmation.
+    /// Reset to false every time the user opens a new Performance session.
+    @AppStorage("postPredRevealRingActive") private var postPredRevealRingActive: Bool = false
+
     // MARK: - Sub-views (split to help Swift type-checker)
 
     private var performanceRoot: some View {
@@ -155,31 +173,32 @@ struct PerformanceView: View {
             InstagramBottomBar(
                 profileImageURL: profile?.profilePicURL,
                 cachedImage: profile?.profilePicURL != nil ? cachedImages[profile!.profilePicURL] : nil,
-            isHome: true, isSearch: false,
-            onHomePress: {},
+                isHome: true, isSearch: false,
+                onHomePress: {},
                 onSearchPress: {
-                // Capture buffer ONCE before any consumer resets it.
-                // FollowingMagic's captureFromBuffer() calls reset() internally,
-                // which would empty the buffer before ForceReel can read it.
-                let capturedDigits = SecretNumberManager.shared.digitBuffer
-                let capturedNumber = capturedDigits.reduce(0) { $0 * 10 + $1 }
+                    // Capture buffer ONCE before any consumer resets it.
+                    // FollowingMagic's captureFromBuffer() calls reset() internally,
+                    // which would empty the buffer before ForceReel can read it.
+                    let capturedDigits = SecretNumberManager.shared.digitBuffer
+                    let capturedNumber = capturedDigits.reduce(0) { $0 * 10 + $1 }
 
-                if FollowingMagicSettings.shared.isEnabled && !capturedDigits.isEmpty {
-                    FollowingMagicSettings.shared.captureFromBuffer()
-                }
-                if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel && capturedNumber > 0 {
-                    ForceReelSettings.shared.pendingPosition = capturedNumber
-                    print("🎭 [FORCE] Position captured: \(capturedNumber)")
-                    // Buffer may already be reset by FollowingMagic above; only reset if still populated.
-                    if SecretNumberManager.shared.hasDigits {
-                        SecretNumberManager.shared.reset()
+                    if FollowingMagicSettings.shared.isEnabled && !capturedDigits.isEmpty {
+                        FollowingMagicSettings.shared.captureFromBuffer()
                     }
-                }
+                    if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel && capturedNumber > 0 {
+                        ForceReelSettings.shared.pendingPosition = capturedNumber
+                        print("🎭 [FORCE] Position captured: \(capturedNumber)")
+                        // Buffer may already be reset by FollowingMagic above; only reset if still populated.
+                        if SecretNumberManager.shared.hasDigits {
+                            SecretNumberManager.shared.reset()
+                        }
+                    }
                     showingExplore = true
                 },
-            onReelsPress: {},
-            onMessagesPress: {},
-            onProfilePress: {}
+                onReelsPress: {},
+                onMessagesPress: {},
+                onProfilePress: {},
+                showRevealRing: postPredRevealRingActive
         )
     }
 
@@ -194,11 +213,8 @@ struct PerformanceView: View {
             onMediaAppear: loadMoreIfNeeded,
             onAutoFollowedByTap: { handleAutoFollowedByTap() },
             onAddLocalImages: { photos in
-                for item in photos {
-                    if let image = item.image { cachedImages[item.pseudoURL] = image }
-                    insertRevealURL(item.pseudoURL)
-                }
-                print("⚡️ [PERF] \(photos.count) photo(s) pre-inserted instantly — API unarchive in progress")
+                batchInsertRevealURLs(photos)
+                print("⚡️ [PERF] \(photos.count) photo(s) pre-inserted instantly as contiguous block — API unarchive in progress")
             },
             onRevealComplete: { revealedPhotos in
                 for item in revealedPhotos {
@@ -222,6 +238,15 @@ struct PerformanceView: View {
                     }
                 }
                 Task { await refreshMediaGridSilently() }
+            },
+            onAmnesiaSwapComplete: {
+                // InstagramProfileView completed a swap — refresh the grid after a
+                // short delay so the new carousel images appear without manual pull-to-refresh.
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_500_000_000) // 3.5 s CDN processing
+                    await refreshMediaGridSilently()
+                    print("🎭 [AMNESIA] Grid auto-refreshed after swap (InstagramProfileView path)")
+                }
             },
             mediaItemsByURL: mediaItemsByURL,
             isLoading: isLoading,
@@ -269,7 +294,7 @@ struct PerformanceView: View {
                 }
                 let noteOcr     = noteTopInputMode == "ocr"
                 let bioOcr      = bioTopInputMode  == "ocr"
-                let postPredOcr = forceRevealSettings.ocrEnabled
+                let postPredOcr = ppTopInputMode == "ocr"
                 guard noteOcr || bioOcr || postPredOcr else { return }
                 if ocrCoordinator.isRunning {
                     ocrCoordinator.stop()
@@ -295,8 +320,6 @@ struct PerformanceView: View {
                     return
                 }
 
-                // Full-power vibration: confirms recognition to the magician
-                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
                 // Lock OCR for the rest of this Performance session — one reveal per trick.
                 ocrUsedInSession = true
                 // Execute all active OCR targets sequentially (bio → note → post prediction)
@@ -304,7 +327,7 @@ struct PerformanceView: View {
                 Task {
                     let hasBio  = bioTopInputMode  == "ocr"
                     let hasNote = noteTopInputMode == "ocr"
-                    let hasPost = forceRevealSettings.ocrEnabled
+                    let hasPost = ppTopInputMode == "ocr"
 
                     if hasBio {
                         print("📷 [OCR] Step 1/3 — applying to biography")
@@ -444,14 +467,22 @@ struct PerformanceView: View {
             print("🔄 [PERF] Grid updated locally — \(newURLs.count) items (no API call)")
         }
         .onAppear {
+            // Reset Post Prediction visual ring — new session starts clean.
+            // The ring from the previous trick is cleared so the magician can see
+            // a fresh confirmation for the current trick.
+            postPredRevealRingActive = false
+
             // Screen always on — managed globally by MentalGram1App
-            // Show fake lockscreen for secret digit entry
-            if LockscreenInputSettings.shared.isReady {
+            // Show fake lockscreen for secret digit entry (one-shot per session).
+            // Guard required: onAppear re-fires when fullScreenCover is dismissed,
+            // which would instantly re-present the lockscreen in an infinite loop.
+            if !lockscreenWasShown && LockscreenInputSettings.shared.isReady {
+                lockscreenWasShown = true
                 showingLockscreen = true
                 print("🔒 [LOCKSCREEN] Showing fake lockscreen for secret input")
             }
             // Show fake home screen if enabled and image is available
-            else if fakeHomeScreenEnabled && illusionService.hasImage {
+            else if fakeHomeScreenEnabled && illusionService.hasImage && !showingLockscreen {
                 showingHomeScreenIllusion = true
                 print("🏠 [ILLUSION] Fake home screen active — tap to reveal profile")
             }
@@ -472,11 +503,15 @@ struct PerformanceView: View {
             let needsVolume = FollowingMagicSettings.shared.isEnabled
                 || noteTopInputMode == "ocr"
                 || bioTopInputMode  == "ocr"
-                || forceRevealSettings.ocrEnabled
+                || ppTopInputMode == "ocr"
             if needsVolume {
                 VolumeButtonMonitor.shared.prepareVolume()
                 VolumeButtonMonitor.shared.startMonitoring()
             }
+
+            // API polling: watch Inject/Custom API in background.
+            // Vibrates + updates bio/note the moment the spectator's selection arrives.
+            startApiPollingIfNeeded()
 
             // PRE-FLIGHT: Validate session before any API call.
             // If the session is expired/challenged, isSessionExpired is set to true
@@ -537,7 +572,8 @@ struct PerformanceView: View {
                     await autoUploadLatestGalleryPhoto()
                 }
 
-                // 2. URL scheme action OR clipboard OR API auto-mode (never more than one)
+                // 2. URL scheme action OR clipboard (API mode is handled only by polling).
+                // The polling baseline prevents old Inject/API values from firing on app launch.
                 if let action = urlAction.consume() {
                     if action.mode.hasPrefix("profilepic") {
                         await applyURLProfilePicAction(mode: action.mode, data: action.text)
@@ -546,13 +582,6 @@ struct PerformanceView: View {
                     }
                 } else if clipboardAutoMode != "" {
                     await applyClipboardAutoMode()
-                } else {
-                    if integrations.noteApiSource != .none && noteTopInputMode == "api" {
-                        await applyApiAutoMode(target: "note")
-                    }
-                    if integrations.bioApiSource != .none && bioTopInputMode == "api" {
-                        await applyApiAutoMode(target: "bio")
-                    }
                 }
             }
             ocrUsedInSession = false
@@ -603,10 +632,29 @@ struct PerformanceView: View {
                 }
             }
         }
+        // URL scheme arriving while PerformanceView is already visible (tab 0 already selected).
+        // onAppear won't fire in that case, so we consume the action here directly.
+        .onChange(of: urlAction.pendingMode) { mode in
+            guard !mode.isEmpty else { return }
+            Task { @MainActor in
+                guard let action = urlAction.consume() else { return }
+                guard !instagram.isSessionExpired else { return }
+                print("📲 [URL] Consuming in-view action: \(action.mode)")
+                if action.mode.hasPrefix("profilepic") {
+                    await applyURLProfilePicAction(mode: action.mode, data: action.text)
+                } else {
+                    await applyURLAction(mode: action.mode, text: action.text)
+                }
+            }
+        }
         .onDisappear {
+            // Reset one-shot flags so they fire again on the next entry into Performance
+            lockscreenWasShown = false
+
             // Stop volume monitoring and OCR when leaving Performance
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
+            stopApiPolling()
 
             // Anti-bot: if we auto-paused an upload on appear, signal SetDetailView to resume it.
             // Only resume if the upload is still in .paused state (user didn't cancel/error).
@@ -734,10 +782,6 @@ struct PerformanceView: View {
 
         // ── Word reveal via vault://reveal?word= ─────────────────────────────
         if mode == "reveal" {
-            guard ForceNumberRevealSettings.shared.isEnabled else {
-                print("🚫 [URL] Reveal blocked: Post Prediction not enabled")
-                return
-            }
             let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !word.isEmpty else { return }
             print("📲 [URL] Reveal word: \"\(word)\"")
@@ -752,10 +796,6 @@ struct PerformanceView: View {
 
         // ── Custom Set reveal via vault://reveal?slot= ────────────────────────
         if mode == "reveal_slot" {
-            guard ForceNumberRevealSettings.shared.isEnabled else {
-                print("🚫 [URL] Custom slot reveal blocked: Post Prediction not enabled")
-                return
-            }
             guard let slot = Int(text), (1...100).contains(slot) else {
                 print("⚠️ [URL] Invalid slot value: \"\(text)\"")
                 return
@@ -778,10 +818,6 @@ struct PerformanceView: View {
 
         // ── Playing Card reveal via vault://reveal?card= ──────────────────────
         if mode == "reveal_card" {
-            guard ForceNumberRevealSettings.shared.isEnabled else {
-                print("🚫 [URL] Card reveal blocked: Post Prediction not enabled")
-                return
-            }
             let symbol = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !symbol.isEmpty else { return }
             guard let activeId = ActiveSetSettings.shared.activeCardSetId,
@@ -892,7 +928,7 @@ struct PerformanceView: View {
     // MARK: - Magic API Auto-Mode
 
     /// Fetches a value from the configured API source and applies it as note or biography.
-    private func applyApiAutoMode(target: String) async {
+    private func applyApiAutoMode(target: String, preloadedValue: String? = nil) async {
         guard instagram.isLoggedIn, !instagram.isLocked else {
             print("🚫 [API AUTO] Lockdown active or not logged in — skipping")
             return
@@ -901,17 +937,24 @@ struct PerformanceView: View {
         let source = target == "note" ? integrations.noteApiSource : integrations.bioApiSource
         guard source != .none else { return }
 
-        print("⚡ [API AUTO] Fetching from \(source.displayName) for target=\(target)…")
-        guard let text = await integrations.fetchValue(for: source), !text.isEmpty else {
-            print("⚠️ [API AUTO] No value received from \(source.displayName)")
-            LogManager.shared.warning("Magic API returned no value (\(source.displayName))", category: .general)
-            return
+        let text: String
+        if let preloaded = preloadedValue, !preloaded.isEmpty {
+            text = preloaded
+            print("⚡ [API AUTO] Using preloaded value for target=\(target): \"\(text.prefix(40))\"")
+        } else {
+            print("⚡ [API AUTO] Fetching from \(source.displayName) for target=\(target)…")
+            guard let fetched = await integrations.fetchValue(for: source), !fetched.isEmpty else {
+                print("⚠️ [API AUTO] No value received from \(source.displayName)")
+                LogManager.shared.warning("Magic API returned no value (\(source.displayName))", category: .general)
+                return
+            }
+            text = fetched
         }
 
         // Skip if same value was already sent within 2 hours — avoids Instagram duplicate spam rejection
         let ud = UserDefaults.standard
-        let lastKey   = target == "note" ? "last_note_text"      : "last_biography_text"
-        let dateKey   = target == "note" ? "last_note_sent_date"  : "last_biography_sent_date"
+        let lastKey   = target == "note" ? "last_note_auto_input"      : "last_biography_text"
+        let dateKey   = target == "note" ? "last_note_auto_sent_date"  : "last_biography_sent_date"
         let trimmed   = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
             let sentDate   = ud.object(forKey: dateKey) as? Date ?? .distantPast
@@ -937,16 +980,15 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(composed, limit: 60)
-                // Optimistic: show note bubble instantly, before API confirms
-                await MainActor.run {
-                    lastNoteText = final
-                    lastNoteSentTimestamp = Date().timeIntervalSince1970
-                }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     print("✅ [API AUTO] Note sent: \"\(final)\"")
                     ud.set(trimmed, forKey: lastKey)          // raw text for dedup
                     ud.set(Date(), forKey: dateKey)           // timestamp so dedup expires in 2h
+                    await MainActor.run {
+                        lastNoteText = final
+                        lastNoteSentTimestamp = Date().timeIntervalSince1970
+                    }
                     fireDoubleConfirmationVibration()
                 }
             } else {
@@ -988,6 +1030,105 @@ struct PerformanceView: View {
         }
     }
 
+    // MARK: - API Polling
+
+    /// Starts polling the Inject/Custom API every ~2 s while PerformanceView is visible.
+    /// Triggers bio/note update + vibration, and Post Prediction word reveal, the moment
+    /// a new value arrives from the spectator.
+    private func startApiPollingIfNeeded() {
+        let bioActive  = integrations.bioApiSource  != .none && bioTopInputMode  == "api"
+        let noteActive = integrations.noteApiSource != .none && noteTopInputMode == "api"
+        let ppActive   = integrations.ppApiSource   != .none && ppTopInputMode   == "api"
+        guard bioActive || noteActive || ppActive else { return }
+        guard apiPollingTask == nil else { return }
+
+        print("🔔 [API POLL] Starting — bio=\(bioActive) note=\(noteActive) pp=\(ppActive) interval=2s")
+        apiPollingTask = Task { @MainActor in
+            await seedApiPollingBaselines(bioActive: bioActive, noteActive: noteActive, ppActive: ppActive)
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled else { break }
+                guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionExpired else { continue }
+
+                // ── bio / note ────────────────────────────────────────────────
+                for target in ["bio", "note"] {
+                    let source = target == "note" ? integrations.noteApiSource : integrations.bioApiSource
+                    let mode   = target == "note" ? noteTopInputMode : bioTopInputMode
+                    guard source != .none, mode == "api" else { continue }
+
+                    guard let payload = await integrations.fetchPayload(for: source) else { continue }
+                    let newValue = payload.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !newValue.isEmpty else { continue }
+
+                    let tokenKey = "\(target):\(source.rawValue)"
+                    if lastApiPollTokens[tokenKey] == nil {
+                        lastApiPollTokens[tokenKey] = payload.changeToken
+                        print("🔔 [API POLL] Baseline for \(target) seeded — waiting for fresh change")
+                        LogManager.shared.info("API poll baseline seeded for \(target); waiting for fresh input", category: .general)
+                        continue
+                    }
+                    guard payload.changeToken != lastApiPollTokens[tokenKey] else { continue }
+
+                    lastApiPollTokens[tokenKey] = payload.changeToken
+                    print("🔔 [API POLL] New value for \(target): \"\(newValue.prefix(40))\"")
+                    LogManager.shared.info("API poll detected new \(target): \"\(newValue.prefix(40))\"", category: .general)
+                    await applyApiAutoMode(target: target, preloadedValue: newValue)
+                }
+
+                // ── Post Prediction word reveal ───────────────────────────────
+                guard integrations.ppApiSource != .none, ppTopInputMode == "api" else { continue }
+                guard let ppPayload = await integrations.fetchPayload(for: integrations.ppApiSource) else { continue }
+                let ppValue = ppPayload.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !ppValue.isEmpty else { continue }
+
+                let ppTokenKey = "pp:\(integrations.ppApiSource.rawValue)"
+                if lastApiPollTokens[ppTokenKey] == nil {
+                    lastApiPollTokens[ppTokenKey] = ppPayload.changeToken
+                    print("🔔 [API POLL] Baseline for pp seeded — waiting for fresh change")
+                    LogManager.shared.info("API poll baseline seeded for pp; waiting for fresh input", category: .general)
+                    continue
+                }
+                guard ppPayload.changeToken != lastApiPollTokens[ppTokenKey] else { continue }
+
+                lastApiPollTokens[ppTokenKey] = ppPayload.changeToken
+                let word = ppValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                print("🔔 [API POLL] New PP word: \"\(word.prefix(40))\"")
+                LogManager.shared.info("API poll detected new PP word: \"\(word.prefix(40))\"", category: .general)
+                // Route through the same path as URL scheme reveals
+                ForceNumberRevealSettings.shared.urlRevealActive = true
+                pendingOCRWord = word
+            }
+        }
+    }
+
+    private func seedApiPollingBaselines(bioActive: Bool, noteActive: Bool, ppActive: Bool) async {
+        let targets: [(key: String, source: ApiSource)] = [
+            noteActive ? ("note", integrations.noteApiSource) : nil,
+            bioActive ? ("bio", integrations.bioApiSource) : nil,
+            ppActive ? ("pp", integrations.ppApiSource) : nil
+        ].compactMap { $0 }
+
+        for target in targets where target.source != .none {
+            guard let payload = await integrations.fetchPayload(for: target.source) else { continue }
+            let value = payload.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { continue }
+
+            let tokenKey = "\(target.key):\(target.source.rawValue)"
+            lastApiPollTokens[tokenKey] = payload.changeToken
+            print("🔔 [API POLL] Baseline for \(target.key) seeded immediately — waiting for fresh change")
+            LogManager.shared.info("API poll baseline seeded for \(target.key); waiting for fresh input", category: .general)
+        }
+    }
+
+    private func stopApiPolling() {
+        guard apiPollingTask != nil else { return }
+        apiPollingTask?.cancel()
+        apiPollingTask = nil
+        lastApiPollTokens = [:]
+        print("🔔 [API POLL] Stopped")
+    }
+
     // MARK: - OCR → Post Prediction
 
     /// Routes the OCR result to InstagramProfileView via pendingOCRWord binding.
@@ -1004,8 +1145,8 @@ struct PerformanceView: View {
         }
 
         let ud = UserDefaults.standard
-        let lastKey = target == "note" ? "last_note_text"     : "last_biography_text"
-        let dateKey = target == "note" ? "last_note_sent_date" : "last_biography_sent_date"
+        let lastKey = target == "note" ? "last_note_auto_input"      : "last_biography_text"
+        let dateKey = target == "note" ? "last_note_auto_sent_date"  : "last_biography_sent_date"
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Dedup on the raw detected word — expires after 2 hours
@@ -1033,15 +1174,14 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(composed, limit: 60)
-                // Optimistic: show note bubble instantly, before API confirms
-                await MainActor.run {
-                    lastNoteText = final
-                    lastNoteSentTimestamp = Date().timeIntervalSince1970
-                }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     ud.set(trimmed, forKey: lastKey)  // raw word for dedup
                     ud.set(Date(), forKey: dateKey)   // timestamp so dedup expires in 2h
+                    await MainActor.run {
+                        lastNoteText = final
+                        lastNoteSentTimestamp = Date().timeIntervalSince1970
+                    }
                     print("✅ [OCR] Note sent: \"\(final)\"")
                     fireDoubleConfirmationVibration()
                 }
@@ -1103,6 +1243,11 @@ struct PerformanceView: View {
                     amnesiaSettings.uploadState = .ready
                     fireDoubleConfirmationVibration()
                 }
+                // Wait for Instagram's CDN to process the swap before fetching the
+                // updated grid — without this delay the old images are still served.
+                try? await Task.sleep(nanoseconds: 3_500_000_000) // 3.5 s
+                await refreshMediaGridSilently()
+                print("🎭 [AMNESIA] Grid refreshed after swap")
             } catch {
                 await MainActor.run {
                     amnesiaSettings.uploadState = .ready
@@ -1140,23 +1285,24 @@ struct PerformanceView: View {
     private func checkAndLoadProfile() {
         // ALWAYS try to load from cache first (anti-bot: no automatic requests)
         if let cached = ProfileCacheService.shared.loadProfile() {
-            print("📦 [CACHE] Loading profile from cache (no auto-request)")
-            print("📦 [CACHE]   cachedMediaURLs: \(cached.cachedMediaURLs.count), cachedMediaItems: \(cached.cachedMediaItems.count)")
-            // Show full grid state on entry so we can diagnose order/duplicate issues
-            print("📦 [CACHE] Grid on entry (newest→oldest):")
-            for (i, url) in cached.cachedMediaURLs.enumerated() {
-                if let item = cached.cachedMediaItems.first(where: { $0.imageURL == url }) {
-                    let date = item.takenAt.map { "\($0)" } ?? "noDate"
-                    print("  [\(i)] id=\(item.mediaId) date=\(date)")
-                } else {
-                    print("  [\(i)] url=\(url.suffix(50)) — no matching item")
-                }
-            }
+            print("📦 [CACHE] Loading profile from cache — \(cached.cachedMediaURLs.count) posts, \(cached.cachedMediaItems.count) items")
+
             self.profile = cached
             self.allMediaURLs = cached.cachedMediaURLs
             self.hasMorePages = true  // let the API decide; deduplication handles the first page
+
+            // Build mediaItemsByURL in O(n) using a dictionary keyed by imageURL.
+            // Previous code used first(where:) inside a loop → O(n²) with 100+ posts.
             for item in cached.cachedMediaItems { mediaItemsByURL[item.imageURL] = item }
+
             loadCachedImages()
+
+            // Some old cached profiles were stored with zeroed stats; refresh once on startup
+            // so followers/following/posts are never blank on initial app launch.
+            if cached.followerCount == 0 && cached.followingCount == 0 && cached.mediaCount == 0 {
+                print("📦 [CACHE] Cached profile has zero stats — triggering one background refresh")
+                loadProfileSync()
+            }
         } else {
             print("📦 [CACHE] No cached profile found, loading fresh")
             loadProfileSync()
@@ -1333,122 +1479,74 @@ struct PerformanceView: View {
     
     private func loadCachedImages() {
         guard let profile = profile else { return }
-        
-        print("📦 [CACHE] Loading cached images...")
-        
-        // Load profile pic
-        print("📦 [CACHE] Looking for profile pic: \(String(profile.profilePicURL.prefix(80)))")
-        // If a local pending pic exists (just uploaded, CDN not ready yet) use it immediately.
+
+        // ── 1. Serve everything that is already on disk (synchronous, free) ──────
         if let pending = ProfileCacheService.shared.pendingProfilePic {
             cachedImages[profile.profilePicURL] = pending
-            print("⚡️ [CACHE] Profile pic: using pending local image (CDN not waited)")
         } else if let image = ProfileCacheService.shared.loadImage(forURL: profile.profilePicURL) {
             cachedImages[profile.profilePicURL] = image
-            print("✅ [CACHE] Profile pic loaded from cache")
-        } else {
-            print("⚠️ [CACHE] Profile pic not found in cache, will download")
-            Task {
-                if let image = await downloadImage(from: profile.profilePicURL) {
-                    await MainActor.run {
-                        // Save to disk always (needed for future sessions)
-                        ProfileCacheService.shared.saveImage(image, forURL: profile.profilePicURL)
-                        // Only display from CDN if there's no local pending override
-                        if ProfileCacheService.shared.pendingProfilePic == nil {
-                            cachedImages[profile.profilePicURL] = image
-                        print("✅ [CACHE] Profile pic downloaded and cached")
-                        } else {
-                            print("⚡️ [CACHE] Profile pic downloaded but skipped display (local pending override active)")
-                        }
-                    }
-                }
-            }
         }
-        
-        // Load media thumbnails
-        var loadedCount = 0
-        var missingMediaURLs: [String] = []
-        for url in profile.cachedMediaURLs {
-            if let image = ProfileCacheService.shared.loadImage(forURL: url) {
-                cachedImages[url] = image
-                loadedCount += 1
-            } else {
-                missingMediaURLs.append(url)
-            }
-        }
-        print("📦 [CACHE] Loaded \(loadedCount)/\(profile.cachedMediaURLs.count) media thumbnails from cache")
-        
-        // If some media thumbnails are missing, download them
-        if !missingMediaURLs.isEmpty {
-            print("🖼️ [CACHE] Downloading \(missingMediaURLs.count) missing media thumbnails...")
-            Task {
-                for url in missingMediaURLs {
-                    if let image = await downloadImage(from: url) {
-                        await MainActor.run {
-                            cachedImages[url] = image
-                            ProfileCacheService.shared.saveImage(image, forURL: url)
-                        }
-                    }
-                }
-                print("✅ [CACHE] Finished downloading missing media thumbnails")
-            }
-        }
-        
-        // Load followed by profile pics
-        var followerPicsLoaded = 0
-        var missingFollowerURLs: [String] = []
-        for follower in profile.followedBy {
-            if let picURL = follower.profilePicURL {
-                if let image = ProfileCacheService.shared.loadImage(forURL: picURL) {
-                cachedImages[picURL] = image
-                followerPicsLoaded += 1
-                } else {
-                    missingFollowerURLs.append(picURL)
-                }
-            }
-        }
-        print("📦 [CACHE] Loaded \(followerPicsLoaded)/\(profile.followedBy.count) follower pics from cache")
-        
-        // If some follower pics are missing, download them
-        if !missingFollowerURLs.isEmpty {
-            print("🖼️ [CACHE] Downloading \(missingFollowerURLs.count) missing follower pics...")
-            Task {
-                for url in missingFollowerURLs {
-                    if let image = await downloadImage(from: url) {
-                        await MainActor.run {
-                            cachedImages[url] = image
-                            ProfileCacheService.shared.saveImage(image, forURL: url)
-                        }
-                    }
-                }
-                print("✅ [CACHE] Finished downloading missing follower pics")
-            }
-        }
-        
-        // Load reel + tagged + highlight cover thumbnails from disk cache
+
         let highlightCoverURLs = profile.cachedHighlights.map { $0.coverImageURL }
-        let allExtraURLs = profile.cachedReelURLs + profile.cachedTaggedURLs + highlightCoverURLs
-        var missingExtraURLs: [String] = []
-        for url in allExtraURLs {
+        let followerPicURLs    = profile.followedBy.compactMap { $0.profilePicURL }
+        let allURLs = [profile.profilePicURL]
+            + profile.cachedMediaURLs
+            + followerPicURLs
+            + profile.cachedReelURLs
+            + profile.cachedTaggedURLs
+            + highlightCoverURLs
+
+        var missingURLs: [String] = []
+        var hitCount = 0
+        for url in allURLs where cachedImages[url] == nil {
             if let image = ProfileCacheService.shared.loadImage(forURL: url) {
                 cachedImages[url] = image
+                hitCount += 1
             } else {
-                missingExtraURLs.append(url)
+                missingURLs.append(url)
             }
         }
-        if !missingExtraURLs.isEmpty {
-            Task {
-                for url in missingExtraURLs {
-                    if let image = await downloadImage(from: url) {
+        print("📦 [CACHE] disk-hit \(hitCount), to-download \(missingURLs.count) — total \(cachedImages.count)")
+
+        guard !missingURLs.isEmpty else { return }
+
+        // ── 2. Download missing images in parallel, max 4 concurrent connections ─
+        Task {
+            let concurrencyLimit = 4
+            await withTaskGroup(of: (String, UIImage?).self) { group in
+                var inFlight = 0
+                var pending = missingURLs.makeIterator()
+
+                // Seed the first batch
+                while inFlight < concurrencyLimit, let url = pending.next() {
+                    let u = url
+                    group.addTask { (u, await self.downloadImage(from: u)) }
+                    inFlight += 1
+                }
+
+                for await (url, image) in group {
+                    inFlight -= 1
+                    if let img = image {
+                        let u = url
+                        let i = img
                         await MainActor.run {
-                            cachedImages[url] = image
-                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                            // Prefer the local pending override for the profile pic
+                            if u == profile.profilePicURL,
+                               ProfileCacheService.shared.pendingProfilePic != nil { return }
+                            self.cachedImages[u] = i
+                            ProfileCacheService.shared.saveImage(i, forURL: u)
                         }
+                    }
+                    // Enqueue next URL as a slot frees up
+                    if let url = pending.next() {
+                        let u = url
+                        group.addTask { (u, await self.downloadImage(from: u)) }
+                        inFlight += 1
                     }
                 }
             }
+            print("✅ [CACHE] Parallel download finished — total \(await MainActor.run { self.cachedImages.count })")
         }
-        
-        print("📦 [CACHE] Total cached images loaded: \(cachedImages.count)")
     }
     
     private func downloadAndCacheImages(profile: InstagramProfile) {
@@ -1615,11 +1713,13 @@ struct PerformanceView: View {
     private func downloadImage(from urlString: String) async -> UIImage? {
         guard !urlString.isEmpty else {
             print("⚠️ [DOWNLOAD] Empty URL string")
+            LogManager.shared.warning("Image download skipped: empty URL", category: .cache)
             return nil
         }
         
         guard let url = URL(string: urlString) else {
             print("❌ [DOWNLOAD] Invalid URL: \(urlString)")
+            LogManager.shared.warning("Image download invalid URL: \(String(urlString.prefix(80)))", category: .cache)
             return nil
         }
         
@@ -1631,18 +1731,21 @@ struct PerformanceView: View {
                 
                 if httpResponse.statusCode != 200 {
                     print("❌ [DOWNLOAD] Non-200 status code")
+                    LogManager.shared.warning("Image download HTTP \(httpResponse.statusCode): \(String(urlString.prefix(80)))", category: .cache)
                     return nil
                 }
             }
             
             guard let image = UIImage(data: data) else {
                 print("❌ [DOWNLOAD] Failed to create UIImage from data")
+                LogManager.shared.warning("Image download decode failed: \(String(urlString.prefix(80))) bytes:\(data.count)", category: .cache)
                 return nil
             }
             
             return image
         } catch {
             print("❌ [DOWNLOAD] Error: \(error.localizedDescription)")
+            LogManager.shared.warning("Image download error: \(error.localizedDescription) url:\(String(urlString.prefix(80)))", category: .cache)
             return nil
         }
     }
@@ -1699,6 +1802,74 @@ struct PerformanceView: View {
     }
 
     // MARK: - Silent Media Grid Refresh (after Force Number Reveal unarchive)
+
+    /// Inserts a batch of reveal:// pseudo-URLs as a **contiguous block** at a single anchor position.
+    ///
+    /// Problem solved: if each letter is placed individually by its own `uploadDate`, letters uploaded
+    /// over several minutes (due to anti-bot delays) can land in positions that interleave with real posts
+    /// whose dates fall within that window — breaking the word order in the grid.
+    ///
+    /// Solution: all letters share one insertion index (derived from the newest date in the batch).
+    /// Since `jobs` is in reversed-word order [A, L, O, H], inserting each at the same index
+    /// pushes the previous ones right: A→[A], L→[L,A], O→[O,L,A], H→[H,O,L,A] ✓
+    @MainActor
+    private func batchInsertRevealURLs(_ photos: [(pseudoURL: String, image: UIImage?)]) {
+        guard !photos.isEmpty else { return }
+
+        // Cache images
+        for item in photos { if let img = item.image { cachedImages[item.pseudoURL] = img } }
+
+        // Single photo: delegate to the date-aware individual inserter
+        if photos.count == 1 { insertRevealURL(photos[0].pseudoURL); return }
+
+        // Collect upload dates for all photos in the batch
+        let allSetPhotos = DataManager.shared.sets.flatMap { $0.photos }
+        for item in photos {
+            let mediaId = String(item.pseudoURL.dropFirst("reveal://".count))
+            if let d = allSetPhotos.first(where: { $0.mediaId == mediaId })?.uploadDate {
+                revealDates[item.pseudoURL] = d
+            }
+        }
+
+        // Anchor = newest date in the batch (position the whole group here)
+        guard let anchorDate = photos.compactMap({ revealDates[$0.pseudoURL] }).max() else {
+            // No dates at all — fallback: insert all at position 0 (same as individual fallback)
+            for item in photos {
+                guard !allMediaURLs.contains(item.pseudoURL) else { continue }
+                allMediaURLs.insert(item.pseudoURL, at: 0)
+            }
+            print("⚡️ [REVEAL BATCH] No dates — \(photos.count) photos at pos 0 (fallback)")
+            return
+        }
+
+        // Pinned-post prefix detection (same logic as insertRevealURL)
+        var maxDate: Date = .distantPast
+        var maxDateIndex = 0
+        for (i, url) in allMediaURLs.enumerated() {
+            let d: Date? = url.hasPrefix("reveal://") ? revealDates[url] : mediaItemsByURL[url]?.takenAt
+            if let d = d, d > maxDate { maxDate = d; maxDateIndex = i }
+        }
+        let pinnedEnd = maxDate == .distantPast ? 0 : maxDateIndex
+
+        // Find one insertion index for the entire group
+        var insertAt = allMediaURLs.count  // default: append at end
+        for i in pinnedEnd..<allMediaURLs.count {
+            let url = allMediaURLs[i]
+            let d: Date? = url.hasPrefix("reveal://") ? revealDates[url] : mediaItemsByURL[url]?.takenAt
+            guard let d = d else { continue }
+            if d <= anchorDate { insertAt = i; break }
+        }
+
+        // Insert every photo at the SAME index — each new insertion shifts the previous to the right,
+        // so the jobs order [A,L,O,H] produces the grid order [H,O,L,A] (correct word direction).
+        var inserted = 0
+        for item in photos {
+            guard !allMediaURLs.contains(item.pseudoURL) else { continue }
+            allMediaURLs.insert(item.pseudoURL, at: insertAt)
+            inserted += 1
+        }
+        print("⚡️ [REVEAL BATCH] \(inserted)/\(photos.count) photos inserted at pos \(insertAt) (pinnedEnd=\(pinnedEnd), anchor=\(anchorDate))")
+    }
 
     /// Inserts a reveal:// pseudo-URL at the correct chronological position (newest-first).
     ///
@@ -2186,7 +2357,12 @@ struct PerformanceView: View {
                         if i > 0 {
                             try? await Task.sleep(nanoseconds: UInt64.random(in: 700_000_000...1_500_000_000))
                         }
-                        if let p = try? await instagram.getProfileInfo(userId: follower.userId) {
+                        if let p = try? await instagram.getProfileInfo(
+                            userId: follower.userId,
+                            usernameHint: follower.username,
+                            fullNameHint: follower.fullName,
+                            profilePicURLHint: follower.profilePicURL
+                        ) {
                             await MainActor.run {
                                 dateForce.appendAutoSpectator(
                                     username: follower.username,
@@ -2246,6 +2422,16 @@ struct InstagramProfileView: View {
     @AppStorage("perf_lastRevealCompletedTimestamp") private var lastRevealCompletedTimestamp: Double = 0
     private let interRevealCooldown: TimeInterval = 90
 
+    // Post Prediction visual feedback ring — set true when a PP reveal unarchives ≥1 photo.
+    // Read by InstagramBottomBar (orange ring on profile avatar).
+    // Reset to false when PerformanceView appears (new trick session).
+    @AppStorage("postPredRevealRingActive") private var postPredRevealRingActive: Bool = false
+
+    // Post Prediction input mode — shared key with PerformanceView so both structs
+    // read the same UserDefaults value without needing a binding.
+    // "off" | "api" | "ocr"
+    @AppStorage("ppTopInputMode") private var ppTopInputMode: String = "off"
+
     // Error alert for when reveal fails (e.g. set not uploaded)
     @State private var revealErrorTitle: String = ""
     @State private var revealErrorMessage: String = ""
@@ -2259,6 +2445,9 @@ struct InstagramProfileView: View {
     var onAddLocalImages: (([(pseudoURL: String, image: UIImage?)]) -> Void)? = nil
     /// Called after all API unarchives complete — inserts any remaining images AND triggers CDN refresh.
     var onRevealComplete: (([(pseudoURL: String, image: UIImage?)]) -> Void)? = nil
+    /// Called after a successful Amnesia Carousel swap so PerformanceView can
+    /// silently refresh the grid and show the new carousel images automatically.
+    var onAmnesiaSwapComplete: (() -> Void)? = nil
 
     // Media items dictionary for post viewer (keyed by imageURL)
     var mediaItemsByURL: [String: InstagramMediaItem] = [:]
@@ -2307,24 +2496,15 @@ struct InstagramProfileView: View {
     @State private var postsOCRLabelOverride:  String? = nil   // for word results
 
     // Effective override for follower/following stats.
-    // During the waiting phase (transferOffset > 0, animation not yet started),
-    // returns the pre-deflated value directly so it shows from the very first frame
-    // without any flash. During animation, falls through to the timer-driven @State.
+    // Transfer phase 2 must stay visually neutral until the magician presses volume.
+    // The timer-driven @State below is the only thing allowed to alter the own profile.
     private var effectiveFollowerOverride: String? {
         if let o = followerOverride { return o }
-        guard followingMagic.transferEnabled,
-              followingMagic.transferOffset > 0,
-              !followingMagic.isTransferCounting,
-              followingMagic.targetFollowers else { return nil }
-        return formatMagicCount(max(0, profile.followerCount - followingMagic.transferOffset))
+        return nil
     }
     private var effectiveFollowingOverride: String? {
         if let o = followingOverride { return o }
-        guard followingMagic.transferEnabled,
-              followingMagic.transferOffset > 0,
-              !followingMagic.isTransferCounting,
-              !followingMagic.targetFollowers else { return nil }
-        return formatMagicCount(max(0, profile.followingCount - followingMagic.transferOffset))
+        return nil
     }
     
     var body: some View {
@@ -2353,6 +2533,21 @@ struct InstagramProfileView: View {
                 await Task { await onAsyncRefresh() }.value
             }
             .background(Color.white)
+        // Race-condition fix for URL-scheme reveals:
+        // When vault://reveal?word=X arrives while PerformanceView is loading,
+        // pendingOCRWord may be set BEFORE InstagramProfileView enters the hierarchy.
+        // SwiftUI's onChange only fires on CHANGES (not on initial value), so the
+        // reveal would be silently skipped.  onAppear catches that missed value.
+        .onAppear {
+            if let word = pendingOCRWord, !word.isEmpty {
+                // Re-use the same logic as onChange by briefly clearing and re-setting
+                // the value so the onChange fires reliably regardless of timing.
+                pendingOCRWord = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    pendingOCRWord = word
+                }
+            }
+        }
         // Keep following count display in sync with digit buffer
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
@@ -2391,7 +2586,7 @@ struct InstagramProfileView: View {
             let fromURL = ForceNumberRevealSettings.shared.urlRevealActive
             ForceNumberRevealSettings.shared.urlRevealActive = false  // reset immediately
             // URL reveals bypass the ocrEnabled guard — they only need the master switch
-            guard ForceNumberRevealSettings.shared.ocrEnabled || fromURL else { return }
+            guard ppTopInputMode == "ocr" || fromURL else { return }
             guard !UploadManager.shared.isActive else {
                 print("⚠️ [OCR-PP] Reveal blocked: upload is active")
                 return
@@ -2459,7 +2654,6 @@ struct InstagramProfileView: View {
         .onChange(of: pendingSlotReveal) { slot in
             guard let slot = slot else { return }
             pendingSlotReveal = nil
-            guard ForceNumberRevealSettings.shared.isEnabled else { return }
             guard let activeId = ActiveSetSettings.shared.activeCustomSetId,
                   let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) else {
                 print("⚠️ [URL] pendingSlotReveal: no active custom set")
@@ -2472,7 +2666,6 @@ struct InstagramProfileView: View {
         .onChange(of: pendingCardReveal) { symbol in
             guard let symbol = symbol, !symbol.isEmpty else { return }
             pendingCardReveal = nil
-            guard ForceNumberRevealSettings.shared.isEnabled else { return }
             guard SetType.cardSlotLabels.contains(symbol) else {
                 print("⚠️ [URL] pendingCardReveal: '\(symbol)' is not a valid card symbol")
                 return
@@ -2519,23 +2712,39 @@ struct InstagramProfileView: View {
     @ViewBuilder private var profileInfoSection: some View {
         VStack(spacing: seAdapt(12, 16)) {
                     HStack(alignment: .center, spacing: 0) {
-                // Profile pic + note bubble stacked vertically
-                VStack(spacing: 0) {
-                    // Note bubble: shown if note exists AND was sent within last 24h.
-                    // Uses @AppStorage so it re-renders instantly on optimistic write.
-                    let noteIsActive = !lastNoteText.isEmpty
-                        && lastNoteSentTimestamp > 0
-                        && Date().timeIntervalSince1970 - lastNoteSentTimestamp < 86400
-                    if noteIsActive {
-                        NotesBubbleView(text: lastNoteText)
-                            // The small circle is always at the very bottom
-                            // of the view. Pull the view down -8 pt so the
-                            // circle sits inside the profile-picture circle.
-                            .padding(.bottom, -8)
-                    }
+
+                        // ── Profile picture ──────────────────────────────────────────
+                        // The note bubble is an overlay so it NEVER affects the HStack layout.
+                        // Placed with a negative y-offset it floats above the profile circle
+                        // without pushing the name/stats column to the right.
+                        let noteIsActive = !lastNoteText.isEmpty
+                            && lastNoteSentTimestamp > 0
+                            && Date().timeIntervalSince1970 - lastNoteSentTimestamp < 86400
 
                         ZStack(alignment: .bottomTrailing) {
                         let picSize: CGFloat = seAdapt(77, 86)
+                            // Outer gradient ring — visible only after a PP reveal succeeds
+                            if postPredRevealRingActive {
+                                Circle()
+                                    .stroke(
+                                        AngularGradient(
+                                            colors: [
+                                                Color(red: 0.99, green: 0.78, blue: 0.12),
+                                                Color(red: 0.99, green: 0.42, blue: 0.13),
+                                                Color(red: 0.90, green: 0.14, blue: 0.49),
+                                                Color(red: 0.52, green: 0.17, blue: 0.83),
+                                                Color(red: 0.99, green: 0.78, blue: 0.12)
+                                            ],
+                                            center: .center
+                                        ),
+                                        lineWidth: 3
+                                    )
+                                    .frame(width: picSize + 8, height: picSize + 8)
+                                    // White gap between gradient ring and photo
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: picSize + 4, height: picSize + 4)
+                            }
                             if let image = cachedImages[profile.profilePicURL] {
                                 Image(uiImage: image)
                                     .resizable()
@@ -2572,6 +2781,17 @@ struct InstagramProfileView: View {
                             UIApplication.shared.open(webURL)
                         }
                     }
+                        // Note bubble floats ABOVE the profile circle — overlay keeps it
+                        // outside the layout flow so nothing shifts to the right.
+                        .overlay(alignment: .top) {
+                            if noteIsActive {
+                                NotesBubbleView(text: lastNoteText)
+                                    .fixedSize()
+                                    // Negative offset: lifts the bubble above the profile circle.
+                                    // Dot intentionally overlaps the top of the profile picture.
+                                    .offset(y: -26)
+                                    .allowsHitTesting(false)
+                            }
                         }
                         .padding(.leading, UIScreen.main.bounds.width * 0.04)
                         
@@ -2797,7 +3017,11 @@ struct InstagramProfileView: View {
             case 1:
                 ReelsGridView(reelURLs: profile.cachedReelURLs, cachedImages: cachedImages)
             case 2:
-                PhotosGridView(mediaURLs: profile.cachedTaggedURLs, cachedImages: cachedImages)
+                if profile.cachedTaggedURLs.isEmpty {
+                    TaggedEmptyStateView()
+                } else {
+                    PhotosGridView(mediaURLs: profile.cachedTaggedURLs, cachedImages: cachedImages)
+                }
             default:
                 EmptyView()
             }
@@ -2884,12 +3108,19 @@ struct InstagramProfileView: View {
         secretManager.addDigit(digit)
         updateFollowingOverride()
 
-        // Natural tab navigation: swipe left = next tab, right = previous tab
+        // Every accepted secret swipe must also change tabs. At the edges,
+        // bounce inward so a right swipe on Posts still moves to Reels instead
+        // of registering a digit while the screen appears unchanged.
         withAnimation(.easeInOut(duration: 0.18)) {
-            selectedTab = dx < 0
-                ? min(2, selectedTab + 1)
-                : max(0, selectedTab - 1)
+            selectedTab = tabAfterSecretSwipe(dx: dx)
         }
+    }
+
+    private func tabAfterSecretSwipe(dx: CGFloat) -> Int {
+        if dx < 0 {
+            return selectedTab < 2 ? selectedTab + 1 : 1
+        }
+        return selectedTab > 0 ? selectedTab - 1 : 1
     }
 
     private func updateFollowingOverride() {
@@ -2905,8 +3136,8 @@ struct InstagramProfileView: View {
         }
     }
 
-    /// Inflates own following/followers from (realCount - transferOffset) up to realCount.
-    /// The pre-deflated value was already set in onAppear; this just animates back to real.
+    /// Inflates own following/followers from the real count up to realCount + transferOffset.
+    /// The profile stays untouched until the magician presses volume for phase 2.
     private func startTransferInflation() {
         let offset     = followingMagic.transferOffset
         let realCount  = followingMagic.targetFollowers
@@ -2920,7 +3151,7 @@ struct InstagramProfileView: View {
         followingMagic.isTransferCounting = true
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
-        var current = max(0, realCount - offset)
+        var current = realCount
 
         transferCountdownTimer = Timer.scheduledTimer(
             withTimeInterval: Double(intervalMs) / 1000.0,
@@ -2935,16 +3166,22 @@ struct InstagramProfileView: View {
                 self.followingOverride = text
                 self.followerOverride  = nil
             }
-            if current >= realCount {
+            if current >= realCount + offset {
                 timer.invalidate()
                 self.transferCountdownTimer = nil
-                self.followerOverride  = nil
-                self.followingOverride = nil
+                let finalText = self.formatMagicCount(realCount + offset)
+                if self.followingMagic.targetFollowers {
+                    self.followerOverride  = finalText
+                    self.followingOverride = nil
+                } else {
+                    self.followingOverride = finalText
+                    self.followerOverride  = nil
+                }
                 self.followingMagic.isTransferCounting = false
                 self.followingMagic.transferOffset = 0
                 VolumeButtonMonitor.shared.stopMonitoring()
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                print("🎩 [TRANSFER] Inflation complete — back to real count: \(self.formatMagicCount(realCount))")
+                print("🎩 [TRANSFER] Inflation complete — showing transferred count: \(finalText)")
             }
         }
     }
@@ -3019,8 +3256,11 @@ struct InstagramProfileView: View {
             // IMPORTANT: do NOT add to revealedIds — we didn't unarchive it in this session,
             // so scheduling a re-archive would risk archiving something already archived on
             // Instagram (state-desync) which triggers bot detection.
-            if photosInBank.contains(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
-                print("ℹ️ [FORCE#] Digit \(digit) bank \(i + 1): already unarchived locally — skipping (not added to re-archive)")
+            if let alreadyVisible = photosInBank.first(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }),
+               let visibleMediaId = alreadyVisible.mediaId {
+                print("ℹ️ [FORCE#] Digit \(digit) bank \(i + 1): already unarchived locally — skipping API call, inserting in fake grid")
+                let localImage: UIImage? = alreadyVisible.imageData.flatMap { UIImage(data: $0) }
+                revealedPhotos.append((pseudoURL: "reveal://\(visibleMediaId)", image: localImage))
                 skipCount += 1
                 continue
             }
@@ -3111,7 +3351,14 @@ struct InstagramProfileView: View {
 
         // Already unarchived locally → nothing to do
         if set.photos.contains(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
-            print("ℹ️ [CUSTOM] Slot \(slot): already unarchived locally")
+            print("ℹ️ [CUSTOM] Slot \(slot): already unarchived locally — inserting in fake grid")
+            if let visiblePhoto = set.photos.first(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }),
+               let visibleMediaId = visiblePhoto.mediaId {
+                let localImage: UIImage? = visiblePhoto.imageData.flatMap { UIImage(data: $0) }
+                await MainActor.run {
+                    onRevealComplete?([(pseudoURL: "reveal://\(visibleMediaId)", image: localImage)])
+                }
+            }
             await MainActor.run { clearOCRPeek() }
             return
         }
@@ -3225,7 +3472,14 @@ struct InstagramProfileView: View {
         ForceNumberRevealSettings.shared.cancelPendingReArchive()
 
         if set.photos.contains(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
-            print("ℹ️ [CARD] \(symbol): already unarchived locally")
+            print("ℹ️ [CARD] \(symbol): already unarchived locally — inserting in fake grid")
+            if let visiblePhoto = set.photos.first(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }),
+               let visibleMediaId = visiblePhoto.mediaId {
+                let localImage: UIImage? = visiblePhoto.imageData.flatMap { UIImage(data: $0) }
+                await MainActor.run {
+                    onRevealComplete?([(pseudoURL: "reveal://\(visibleMediaId)", image: localImage)])
+                }
+            }
             await MainActor.run { clearOCRPeek() }
             return
         }
@@ -3305,6 +3559,7 @@ struct InstagramProfileView: View {
             let mediaId: String
             let pseudoURL: String
             let localImage: UIImage?
+            let requiresUnarchive: Bool
         }
 
         var jobs: [LetterJob] = []
@@ -3324,8 +3579,13 @@ struct InstagramProfileView: View {
             print("📷 [OCR-PP] [\(idx+1)/\(letters.count)] '\(letter)' → '\(symbol)' bank '\(bank.name)' pos\(bank.position)")
 
             // Already unarchived locally — skip
-            if photos.contains(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }) {
-                print("ℹ️ [OCR-PP] '\(letter)' already unarchived — skip")
+            if let alreadyVisible = photos.first(where: { $0.symbol == symbol && $0.mediaId != nil && !$0.isArchived }),
+               let visibleMediaId = alreadyVisible.mediaId {
+                print("ℹ️ [OCR-PP] '\(letter)' already unarchived — keep visible in fake grid (no API call)")
+                let localImage = alreadyVisible.imageData.flatMap { UIImage(data: $0) }
+                jobs.append(LetterJob(letter: letter, photo: alreadyVisible, mediaId: visibleMediaId,
+                                      pseudoURL: "reveal://\(visibleMediaId)", localImage: localImage,
+                                      requiresUnarchive: false))
                 continue
             }
             guard let photo = photos.first(where: { $0.symbol == symbol && $0.mediaId != nil && $0.isArchived }),
@@ -3336,7 +3596,8 @@ struct InstagramProfileView: View {
             }
             let localImage = photo.imageData.flatMap { UIImage(data: $0) }
             jobs.append(LetterJob(letter: letter, photo: photo, mediaId: mediaId,
-                                  pseudoURL: "reveal://\(mediaId)", localImage: localImage))
+                                  pseudoURL: "reveal://\(mediaId)", localImage: localImage,
+                                  requiresUnarchive: true))
         }
 
         // ── Diagnose failure when no jobs were found ──────────────────────────────
@@ -3372,6 +3633,11 @@ struct InstagramProfileView: View {
         for (jobIdx, job) in jobs.enumerated() {
             guard !instagram.isLocked else { break }
 
+            if !job.requiresUnarchive {
+                print("ℹ️ [OCR-PP] '\(job.letter)' already visible on Instagram — skipped API call")
+                continue
+            }
+
             do {
                 let result = try await instagram.reveal(mediaId: job.mediaId)
                 if result.success {
@@ -3406,6 +3672,8 @@ struct InstagramProfileView: View {
         if !revealedIds.isEmpty {
             UserDefaults.standard.set(set.id.uuidString, forKey: "perf_lastRevealedSetId")
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "perf_lastRevealedSetTimestamp")
+            // Activate orange ring on the profile avatar — persists until next Performance session
+            await MainActor.run { postPredRevealRingActive = true }
         }
 
         // Trigger ONE CDN refresh now that all photos are unarchived on Instagram
@@ -3428,11 +3696,37 @@ struct InstagramProfileView: View {
         Task {
             do {
                 try await instagram.swapAmnesiaCarousels(settings: amnesiaSettings)
-                await MainActor.run { amnesiaSettings.uploadState = .ready }
+                await MainActor.run {
+                    amnesiaSettings.uploadState = .ready
+
+                    // ── Visual feedback: orange ring on profile avatars ────────────
+                    // Reuses the Post Prediction ring flag so both header and bottom-bar
+                    // avatars light up. Cleared when PerformanceView re-enters (new trick).
+                    postPredRevealRingActive = true
+
+                    // ── Haptic feedback: triple full-power vibration ──────────────
+                    // Mirrors Post Prediction API reveal confirmation so the magician
+                    // can feel the swap in their pocket without looking at the screen.
+                    fireAmnesiaVibration()
+
+                    // Signal PerformanceView to refresh the grid after CDN delay.
+                    onAmnesiaSwapComplete?()
+                }
             } catch {
                 await MainActor.run { amnesiaSettings.uploadState = .ready }
                 LogManager.shared.log("Amnesia swap error: \(error.localizedDescription)", level: .error, category: .general)
             }
+        }
+    }
+
+    /// Triple full-power vibration with 1.5 s gaps — identical pattern to Post Prediction API reveal.
+    private func fireAmnesiaVibration() {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run { AudioServicesPlaySystemSound(kSystemSoundID_Vibrate) }
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run { AudioServicesPlaySystemSound(kSystemSoundID_Vibrate) }
         }
     }
 
@@ -3500,43 +3794,61 @@ struct InstagramHeaderView: View {
     let isVerified: Bool
     let onRefresh: () -> Void
     let onPlusPress: () -> Void
+    @State private var didLogLayout = false
+    
     var body: some View {
-        HStack {
-            // Plus button (closes Performance and goes to Sets)
+        HStack(spacing: 0) {
+            // Keep side controls fixed so long usernames on compact devices
+            // cannot visually push/crop + and menu icons into screen corners.
             Button(action: onPlusPress) {
-                IGIcon(asset: "Instagram_plus", fallback: "plus.app", size: 24)
+                IGIcon(asset: "Instagram_plus", fallback: "plus.app", size: 22)
+                    .frame(width: 30, height: 30, alignment: .leading)
+                    .contentShape(Rectangle())
             }
-            
-            Spacer()
-            
-            // Username with dropdown
+            .frame(width: 34, alignment: .leading)
+
             HStack(spacing: 4) {
                 if isVerified {
                     IGIcon(asset: "instagram_verified", fallback: "checkmark.seal.fill", size: 16, color: .blue)
                 }
                 Text(username)
-                    .font(.system(size: seAdapt(20, 24), weight: .semibold))
+                    .font(.system(size: 21, weight: .semibold))
                     .foregroundColor(.black)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.78)
                 IGIcon(asset: "instagram_chevron_down", fallback: "chevron.down", size: 12)
             }
-            
-            Spacer()
-            
-            HStack(spacing: seAdapt(14, 20)) {
-                Button(action: {}) {
-                    IGIcon(asset: "instagram_threads", fallback: "at", size: seAdapt(20, 22))
-                }
+            .frame(maxWidth: .infinity)
+            .layoutPriority(0)
 
+            HStack(spacing: 16) {
                 Button(action: {}) {
-                    IGIcon(asset: "Instagram_menu", fallback: "line.3.horizontal", size: seAdapt(22, 24))
+                    IGIcon(asset: "instagram_threads", fallback: "at", size: 20)
+                }
+                Button(action: {}) {
+                    IGIcon(asset: "Instagram_menu", fallback: "line.3.horizontal", size: 22)
                 }
             }
+            .frame(width: 72, alignment: .trailing)
         }
         .responsiveHorizontalPadding()
         .frame(height: 44)
         .background(Color.white)
+        .onAppear {
+            guard !didLogLayout else { return }
+            didLogLayout = true
+
+            let screen = UIScreen.main.bounds
+            let safeTop = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow }?
+                .safeAreaInsets.top ?? 0
+
+            let message = "Header layout: screen=\(Int(screen.width))x\(Int(screen.height)) scale=\(UIScreen.main.scale), safeTop=\(Int(safeTop)), isSmall=\(UIScreen.isSmall), username='\(username)', left=34, right=72, iconPlus=22, iconMenu=22"
+            print("📐 [LAYOUT] \(message)")
+            LogManager.shared.info(message, category: .general)
+        }
     }
 }
 
@@ -3674,7 +3986,10 @@ struct AutoFollowedByView: View {
         guard loadingUserId == nil else { return }
         loadingUserId = userId
         Task {
-            if let p = try? await InstagramService.shared.getProfileInfo(userId: userId) {
+            if let p = try? await InstagramService.shared.getProfileInfo(
+                userId: userId,
+                usernameHint: username
+            ) {
                 await MainActor.run {
                     loadingUserId = nil
                     openedProfile = p
@@ -3938,6 +4253,41 @@ struct PhotosGridView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Tagged Empty State
+
+struct TaggedEmptyStateView: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            Spacer(minLength: 112)
+
+            ZStack {
+                Circle()
+                    .fill(Color(white: 0.95))
+                    .frame(width: 82, height: 82)
+
+                Image(systemName: "person.crop.rectangle")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundColor(.black)
+            }
+
+            Text("Photos and videos of you")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.black)
+
+            Text("When people tag you in photos and videos, they'll appear here.")
+                .font(.system(size: 15))
+                .foregroundColor(Color(white: 0.48))
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .padding(.horizontal, 42)
+
+            Spacer(minLength: 160)
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color.white)
     }
 }
 
@@ -4252,7 +4602,24 @@ struct InstagramBottomBar: View {
     let onReelsPress: () -> Void
     let onMessagesPress: () -> Void
     let onProfilePress: () -> Void
-    
+    /// When true, replaces the default black border with an orange gradient ring —
+    /// visual confirmation that Post Prediction revealed a photo on Instagram.
+    var showRevealRing: Bool = false
+
+    /// Instagram-style orange gradient used for the "story ring" effect.
+    private var storyRingGradient: AngularGradient {
+        AngularGradient(
+            colors: [
+                Color(red: 0.99, green: 0.78, blue: 0.12), // warm yellow
+                Color(red: 0.99, green: 0.42, blue: 0.13), // vivid orange
+                Color(red: 0.90, green: 0.14, blue: 0.49), // hot pink
+                Color(red: 0.52, green: 0.17, blue: 0.83), // violet
+                Color(red: 0.99, green: 0.78, blue: 0.12)  // wrap back
+            ],
+            center: .center
+        )
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Rectangle()
@@ -4295,21 +4662,7 @@ struct InstagramBottomBar: View {
                 .padding(.bottom, 44)
                 
                 Button(action: onProfilePress) {
-                    if let image = cachedImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 26, height: 26)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.black, lineWidth: 1.5)
-                            )
-                    } else {
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 26))
-                            .foregroundColor(.black)
-                    }
+                    profileAvatarView
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 10)
@@ -4317,6 +4670,38 @@ struct InstagramBottomBar: View {
             }
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var profileAvatarView: some View {
+        if let image = cachedImage {
+            ZStack {
+                // Gradient ring (visible only when a PP reveal succeeded)
+                if showRevealRing {
+                    Circle()
+                        .stroke(storyRingGradient, lineWidth: 2.5)
+                        .frame(width: 32, height: 32)
+                }
+                // White gap between ring and photo (Instagram-style)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: showRevealRing ? 29 : 28, height: showRevealRing ? 29 : 28)
+                // Profile picture
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 26, height: 26)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(showRevealRing ? Color.clear : Color.black, lineWidth: 1.5)
+                    )
+            }
+        } else {
+            Image(systemName: "person.crop.circle")
+                .font(.system(size: 26))
+                .foregroundColor(.black)
+        }
     }
 }
 
@@ -4348,53 +4733,50 @@ private struct NotesTailShape: Shape {
 struct NotesBubbleView: View {
     let text: String
 
-    private let cr:    CGFloat = 12   // corner radius (always crisp circles)
-    private let tailW: CGFloat = 13   // width of tail at bubble junction
-    private let tailH: CGFloat = 9    // height of tail below bubble
-    private let tailX: CGFloat = 9    // x offset from bubble left edge
-    private let dotD:  CGFloat = 5    // small circle diameter
+    // Tail & dot geometry
+    private let tailW: CGFloat = 10
+    private let tailH: CGFloat = 7
+    private let tailX: CGFloat = 14   // distance from bubble left edge
+    private let dotD:  CGFloat = 8
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // ── Bubble body: RoundedRectangle → perfect circles at any size ─
+            // ── Capsule bubble — width hugs the text, no fixed frame ──────
             Text(text)
-                .font(.system(size: 10, weight: .regular))
+                .font(.system(size: 11, weight: .regular))
                 .foregroundColor(.black)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .frame(minWidth: 54, maxWidth: 100)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
+                .frame(minWidth: 42, maxWidth: 110)
                 .background(
-                    RoundedRectangle(cornerRadius: cr)
+                    Capsule(style: .continuous)
                         .fill(Color.white)
-                        .shadow(color: .black.opacity(0.10), radius: 3, x: 0, y: 1)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: cr)
-                                .stroke(Color(UIColor.systemGray4), lineWidth: 1)
-                        )
+                        .shadow(color: .black.opacity(0.14), radius: 4, x: 0, y: 1)
                 )
-                .zIndex(1)   // draws on top of the tail below
+                .zIndex(1)
 
-            // ── Tail: 1 pt overlap so top edge hides under the bubble ─────
+            // ── Tiny curved tail, overlaps bubble bottom by 2 pt ─────────
+            // No stroke — pure white fill seamlessly joins the capsule.
             NotesTailShape()
                 .fill(Color.white)
-                .overlay(NotesTailShape().stroke(Color(UIColor.systemGray4), lineWidth: 1))
                 .frame(width: tailW, height: tailH)
                 .padding(.leading, tailX)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .offset(y: -1)
-                .zIndex(0)   // renders behind bubble body
+                .offset(y: -2)
+                .zIndex(0)
 
-            // ── Small separate circle aligned with tail tip ───────────────
+            // ── Small separate dot — mirrors Instagram's speech-bubble ────
             Circle()
                 .fill(Color.white)
-                .overlay(Circle().stroke(Color(UIColor.systemGray4), lineWidth: 0.7))
+                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                 .frame(width: dotD, height: dotD)
                 .padding(.leading, tailX + tailW * 0.5 - dotD * 0.5)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 3)
+                .padding(.top, 1)
         }
     }
 }
@@ -4447,7 +4829,12 @@ struct SpectatorProfileCover: View {
         .task {
             print("👤 [SPECTATOR] Loading profile for @\(follower.username)")
             do {
-                if let p = try await InstagramService.shared.getProfileInfo(userId: follower.userId) {
+                if let p = try await InstagramService.shared.getProfileInfo(
+                    userId: follower.userId,
+                    usernameHint: follower.username,
+                    fullNameHint: follower.fullName,
+                    profilePicURLHint: follower.profilePicURL
+                ) {
                     await MainActor.run {
                         profile = p
                         isLoading = false

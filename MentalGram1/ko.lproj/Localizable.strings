@@ -24,6 +24,10 @@
 "backup.just_now" = "방금 전";
 "backup.min_ago" = "%d분 전";
 "backup.h_ago" = "%d시간 전";
+"backup.info.auto" = "앱이 백그라운드로 전환될 때마다 백업이 자동으로 실행됩니다. \"지금 백업\"으로 수동 실행도 가능합니다.";
+"backup.info.what" = "백업 항목: 모든 설정, Date Force, Force Reel, 활성 세트 및 세트 메타데이터.";
+"backup.info.photos" = "세트 사진은 iCloud Drive에 동기화됩니다. 파일 앱 → iCloud Drive → Vault → Photos에서 확인할 수 있습니다.";
+"backup.info.excluded" = "백업 제외: Instagram 세션, 기기 ID 및 쿨다운 타이머 (기기 고유 항목).";
 "nav.settings" = "설정";
 "nav.my_sets" = "내 세트";
 "nav.performance" = "퍼포먼스";
@@ -549,6 +553,7 @@
 "postpred.help.during.timing.dialogue" = "Instagram을 여세요. 제 프로필로 가세요. 아래로 스크롤하세요. 항상 거기 있었어요.";
 "postpred.help.tip.timing" = "**공개 속도.** 문자 또는 숫자 1개: 약 2-3초. 5글자 (예: MAGIC): 약 12-15초. 추가 글자마다 약 2-3초 추가됩니다.";
 "postpred.help.tip.vibration" = "**진동 = 준비 완료.** 햅틱 피드백은 사진이 실제 Instagram에서 공개되었다는 신호입니다.";
+"postpred.help.tip.ring" = "**주황색 링 = 확인됨.** 성공적인 공개 후 프로필 사진 주위에 주황색 그라데이션 링이 나타납니다 — Instagram 스토리 링과 똑같습니다. 사진이 실제 Instagram에 공개되었음을 확인합니다. 링은 새 Performance 세션을 열 때 자동으로 재설정됩니다.";
 "postpred.help.tip.position" = "**원래 위치.** 사진은 그리드의 원래 위치에, 원래 날짜로 다시 나타납니다.";
 "postpred.help.tip.upload" = "**업로드 중.** 앱을 사용하지 말고, Wi-Fi 네트워크를 변경하거나 화면을 잠그지 마세요.";
 "postpred.help.tip.banks" = "**뱅크 수.** 각 뱅크 = 문자 또는 숫자 하나의 위치. 공개하려는 가장 긴 단어나 숫자에 맞게 세트를 계획하세요.";
@@ -581,9 +586,12 @@
 "postpred.help.inputs.group.alpha" = "알파벳 세트용";
 "postpred.help.inputs.group.universal" = "범용 — 모든 세트 유형";
 "postpred.help.input.covert.label" = "비밀 입력";
-"postpred.help.input.api.label" = "API / 자동화";
-"postpred.help.input.api.step1" = "외부 자동화 도구（단축어, NFC 태그, 동반 앱）를 사용하여 URL 스킴을 통해 Post Prediction에 단어나 숫자를 전송합니다.";
-"postpred.help.input.api.step2" = "서드파티 트리거나 물리적 소품이 적절한 시점에 자동으로 공개를 실행할 때 유용합니다.";
+"postpred.help.input.api.label" = "API 자동 리빌";
+"postpred.help.input.api.intro" = "Inject (11z.co) 또는 커스텀 API를 연결하세요. Performance를 먼저 열면 — 앱이 백그라운드에서 2초마다 확인합니다. 관객이 선택을 제출하는 순간 트리플 진동과 함께 자동으로 리빌이 실행됩니다.";
+"postpred.help.input.api.step1" = "설정 → Post Prediction에서 Auto Input을 **API**로 설정하고 소스（Inject 또는 커스텀 API）를 선택합니다.";
+"postpred.help.input.api.step2" = "프레젠테이션을 시작하기 전에 기기에서 Performance 화면을 엽니다.";
+"postpred.help.input.api.step3" = "관객에게 Inject 링크 또는 커스텀 양식에서 선택하도록 요청합니다.";
+"postpred.help.input.api.step4" = "2초 이내에 앱이 새 값을 감지하여 해당 사진을 공개하고 세 번 진동으로 확인합니다.";
 "explore.load_error" = "콘텐츠를 불러올 수 없습니다";
 "Loading profile…" = "프로필 로딩 중…";
 "Capturing followers…" = "팔로워 캡처 중…";
@@ -1278,5 +1286,14 @@
 "guide.amnesia.script.optionA.text" = "'저도 닫겠습니다.' [마술사가 앱에서 캐러셀 닫음 → 스왑 활성화]\n\n'이제 우리 둘 다 연결이 끊겼습니다. 이미지만 남아 있습니다...여기에.' [머리를 가리킴]\n\n[눈 감은 상태] 손을 뻗어: '움직일 때마다... 이미지가 흐릿해집니다... 마치 처음부터 거기 없었던 것처럼.' [천천히 3번 동작]\n\n'됐습니다. 눈을 뜨세요.'";
 "guide.amnesia.script.optionB.phase" = "옵션 B — 은밀한 스크롤";
 "guide.amnesia.script.optionB.text" = "[마술사가 말하면서 앱을 스크롤하고 캐러셀을 닫음]\n\n'기억은 사진이 아닙니다. 재구성입니다. 무언가를 기억할 때마다 마음이 약간 다시 씁니다. 그 불안정한 순간에... 개입이 가능합니다.'\n\n'정확히 몇 장의 이미지를 기억하시나요?' [관객: 4장]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Performance로 바로 열기";
+"settings.launch_direct.detail" = "Sets 탭 건너뛰기 — 앱이 항상 Performance로 열립니다";
+"settings.lockscreen.description" = "Performance 진입 시 가짜 잠금 화면을 표시합니다. 비밀 번호의 숫자를 탭하고, 숫자패드 외부를 탭하여 잠근 후 나머지 점을 채우세요.";
+"settings.lockscreen.choose_wallpaper" = "배경화면 선택";
+"settings.lockscreen.warning_no_wallpaper" = "활성화하려면 배경화면을 선택하세요";
+"action.change" = "변경";
+"action.remove" = "제거";
+
 "guide.amnesia.script.climax.phase" = "클라이맥스";
 "guide.amnesia.script.climax.text" = "'Instagram을 다시 여세요. 같은 게시물을 찾으세요.'\n\n[관객이 5장을 봄]\n\n'몇 장이 보이나요?' — 5장.\n\n'날짜를 확인하세요. 아까와 같나요?' — 네.\n\n'Instagram은 거짓말하지 않습니다. 날짜를 수정할 수 없습니다. 이렇게 업로드되었습니다.'\n\n[잠시 멈춤]\n\n'일어난 일은 이미지를 잊은 것이 아닙니다. 당신의 마음이 보지 못하도록 안내되었습니다. 이제 그것이 가능하다는 것을 알게 되었습니다.'";

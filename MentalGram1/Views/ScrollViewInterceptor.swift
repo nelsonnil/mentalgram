@@ -133,6 +133,7 @@ struct ScrollViewInterceptor: UIViewRepresentable {
             let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height)
             let clampedY = min(max(0, targetY), maxY)
 
+            cachedForcedY = clampedY
             targetContentOffset.pointee.y = clampedY
             print("🎯 [FORCE] → final clampedY=\(clampedY)  maxY=\(maxY)  contentH=\(scrollView.contentSize.height)")
         }
@@ -141,19 +142,7 @@ struct ScrollViewInterceptor: UIViewRepresentable {
 
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
             originalDelegate?.scrollViewDidEndDecelerating?(scrollView)
-
-            if isActive && !released, let targetY = cachedForcedY {
-                let currentY = scrollView.contentOffset.y
-                // If the scroll stopped within one screen-height of the target,
-                // the spectator has seen the forced post → release the trick.
-                let tolerance = scrollView.bounds.height * 0.5
-                if abs(currentY - targetY) < tolerance {
-                    released = true
-                    DispatchQueue.main.async { [weak self] in
-                        self?.hasActivatedBinding?.wrappedValue = true
-                    }
-                }
-            }
+            releaseIfSettled(on: scrollView)
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -161,15 +150,26 @@ struct ScrollViewInterceptor: UIViewRepresentable {
 
             // If the user drags slowly and stops without deceleration,
             // check release condition here too.
-            if !decelerate && isActive && !released, let targetY = cachedForcedY {
-                let currentY = scrollView.contentOffset.y
-                let tolerance = scrollView.bounds.height * 0.5
-                if abs(currentY - targetY) < tolerance {
-                    released = true
-                    DispatchQueue.main.async { [weak self] in
-                        self?.hasActivatedBinding?.wrappedValue = true
-                    }
-                }
+            if !decelerate { releaseIfSettled(on: scrollView) }
+        }
+
+        private func releaseIfSettled(on scrollView: UIScrollView) {
+            guard isActive && !released, let targetY = cachedForcedY else { return }
+
+            let visibleH = max(
+                1,
+                scrollView.bounds.height
+                    - scrollView.adjustedContentInset.top
+                    - scrollView.adjustedContentInset.bottom
+            )
+            let tolerance = min(max(visibleH * 0.08, 24), 64)
+            let currentY = scrollView.contentOffset.y
+
+            guard abs(currentY - targetY) <= tolerance else { return }
+
+            released = true
+            DispatchQueue.main.async { [weak self] in
+                self?.hasActivatedBinding?.wrappedValue = true
             }
         }
 
@@ -180,27 +180,29 @@ struct ScrollViewInterceptor: UIViewRepresentable {
             let screenW      = UIScreen.main.bounds.width
             let topInset     = scrollView.adjustedContentInset.top
             let botInset     = scrollView.adjustedContentInset.bottom
-            let visibleH     = scrollView.bounds.height - topInset - botInset
+            let safeTop      = scrollView.safeAreaInsets.top
+            let safeBottom   = scrollView.safeAreaInsets.bottom
+            let visibleH     = max(1, scrollView.bounds.height - topInset - botInset)
 
             // Use the ACTUAL thumbnail dimensions to get the real rendered image height.
             // PostCardView uses .scaledToFit() at full width, so height = screenW × (h/w).
-            // Capped at visibleH so we center the visible portion for very tall reels.
+            // Capped at visibleH so very tall media still lands with the forced post dominant.
             let imageHeight: CGFloat = {
                 let thumb = forcedThumbnail
                 if let img = thumb {
                     let ratio = img.size.height / max(img.size.width, 1)
                     let natural = screenW * ratio
-                    return min(natural, visibleH - headerHeight)
+                    return min(natural, max(1, visibleH - headerHeight))
                 }
                 return screenW  // fallback: assume square
             }()
 
-            // Helper: given the absolute content-Y of the card top, return the
-            // contentOffset.y that centres the image in the visible area.
-            func centeredOffset(cardAbsoluteY: CGFloat) -> CGFloat {
-                let imageCenterInContent = cardAbsoluteY + headerHeight + imageHeight / 2
-                // Target: image center lands exactly at the visual mid-point of the visible area.
-                return imageCenterInContent - topInset - visibleH / 2
+            // Helper: place the forced post near the top of the visible viewport.
+            // This keeps the forced card visually dominant instead of centering it
+            // and accidentally giving the previous post too much screen presence.
+            func dominantOffset(cardAbsoluteY: CGFloat) -> CGFloat {
+                let cardTopMargin = min(max(visibleH * 0.025, 8), 18)
+                return cardAbsoluteY - topInset - cardTopMargin
             }
 
             // ── Primary: locate the card view by its accessibility identifier ──────
@@ -213,14 +215,17 @@ struct ScrollViewInterceptor: UIViewRepresentable {
                 let frame = view.convert(view.bounds, to: scrollView)
                 let absoluteCardY = frame.minY + scrollView.contentOffset.y
 
-                let y = centeredOffset(cardAbsoluteY: absoluteCardY)
+                let y = dominantOffset(cardAbsoluteY: absoluteCardY)
 
                 print("""
                 🎯 [FORCE DEBUG] via findView
+                   targetMode        = dominantTop
                    absoluteCardY     = \(absoluteCardY)  (frame.minY \(frame.minY) + offset \(scrollView.contentOffset.y))
-                   topInset          = \(topInset)   visibleH = \(visibleH)
+                   topInset          = \(topInset)   bottomInset = \(botInset)
+                   safeAreaTop       = \(safeTop)   safeAreaBottom = \(safeBottom)
+                   visibleH          = \(visibleH)
                    imageHeight(real) = \(imageHeight)   screenW = \(screenW)
-                   centeredOffset    = \(y)
+                   dominantOffset    = \(y)
                 """)
 
                 cachedForcedY = y
@@ -235,22 +240,25 @@ struct ScrollViewInterceptor: UIViewRepresentable {
 
             // ── Fallback: estimate absolute card top from uniform row heights ───────
             // forcedIndex * avg gives the card's TOP in content coords.
-            // We then apply the same centering formula.
+            // We then apply the same dominant alignment formula.
             let contentHeight = scrollView.contentSize.height
             guard contentHeight > 0 else { return nil }
             let avg = contentHeight / CGFloat(max(1, totalPostCount))
             let cardAbsoluteY = CGFloat(forcedIndex) * avg
 
-            let y = centeredOffset(cardAbsoluteY: cardAbsoluteY)
+            let y = dominantOffset(cardAbsoluteY: cardAbsoluteY)
 
             print("""
             🎯 [FORCE DEBUG] via fallback
+               targetMode        = dominantTop
                forcedIndex       = \(forcedIndex) / \(totalPostCount)
                avg card height   = \(avg)
                cardAbsoluteY     = \(cardAbsoluteY)
-               topInset          = \(topInset)   visibleH = \(visibleH)
+               topInset          = \(topInset)   bottomInset = \(botInset)
+               safeAreaTop       = \(safeTop)   safeAreaBottom = \(safeBottom)
+               visibleH          = \(visibleH)
                imageHeight(real) = \(imageHeight)   screenW = \(screenW)
-               centeredOffset    = \(y)
+               dominantOffset    = \(y)
             """)
 
             cachedForcedY = y

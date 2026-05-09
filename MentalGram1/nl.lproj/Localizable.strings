@@ -24,6 +24,10 @@
 "backup.just_now" = "Zojuist";
 "backup.min_ago" = "%d min geleden";
 "backup.h_ago" = "%d u geleden";
+"backup.info.auto" = "De back-up wordt automatisch uitgevoerd wanneer de app naar de achtergrond gaat. Je kunt hem ook handmatig starten via 'Nu back-uppen'.";
+"backup.info.what" = "Wat wordt opgeslagen: alle instellingen, Date Force, Force Reel, actieve sets en set-metadata.";
+"backup.info.photos" = "Setfoto's worden gesynchroniseerd met iCloud Drive. Bekijk ze via de Bestanden-app → iCloud Drive → Vault → Photos.";
+"backup.info.excluded" = "Niet opgeslagen: Instagram-sessie, apparaat-ID en cooldown-timers (apparaatspecifiek).";
 "nav.settings" = "Instellingen";
 "nav.my_sets" = "Mijn sets";
 "nav.performance" = "Optreden";
@@ -549,6 +553,7 @@
 "postpred.help.during.timing.dialogue" = "Open Instagram. Ga naar mijn profiel. Scroll naar beneden, het was er altijd al.";
 "postpred.help.tip.timing" = "**Onthullingssnelheid.** Een letter of cijfer: ~2-3 sec. Vijf letters (bijv. MAGIC): ~12-15 sec. Elke extra letter voegt ~2-3 sec toe.";
 "postpred.help.tip.vibration" = "**Trillen = klaar.** De haptische feedback signaleert dat de foto live is op echt Instagram. Begeleid de toeschouwer na het trillen.";
+"postpred.help.tip.ring" = "**Oranje ring = bevestigd.** Na een geslaagde onthulling verschijnt er een oranje kleurverloopring rondom je profielfoto — precies zoals de Instagram Story-ring. Het bevestigt dat de foto live is op echt Instagram. De ring wordt automatisch gereset bij het openen van een nieuwe Performance-sessie.";
 "postpred.help.tip.position" = "**Oorspronkelijke positie.** De foto verschijnt op exact dezelfde plek in het raster met de oorspronkelijke datum.";
 "postpred.help.tip.upload" = "**Tijdens het uploaden.** Gebruik de app niet, wissel niet van Wi-Fi-netwerk en vergrendel het scherm niet.";
 "postpred.help.tip.banks" = "**Aantal banken.** Elke bank = een letter- of cijferpositie. Plan uw sets op basis van het langste woord of getal dat u wilt onthullen.";
@@ -581,9 +586,12 @@
 "postpred.help.inputs.group.alpha" = "VOOR ALFABETISCHE SETS";
 "postpred.help.inputs.group.universal" = "UNIVERSEEL — ALLE SET-TYPEN";
 "postpred.help.input.covert.label" = "HEIMELIJKE INVOER";
-"postpred.help.input.api.label" = "API / AUTOMATISERING";
-"postpred.help.input.api.step1" = "Gebruik een externe automatiseringstool (Opdrachten, NFC-tag, companion-app) om het woord of getal via URL Scheme naar Post Prediction te sturen.";
-"postpred.help.input.api.step2" = "Handig wanneer een externe trigger of fysieke prop de onthulling automatisch op het juiste moment activeert.";
+"postpred.help.input.api.label" = "API AUTO REVEAL";
+"postpred.help.input.api.intro" = "Verbind Inject (11z.co) of een eigen API. Open Performance eerst — de app controleert elke 2 s op de achtergrond. Zodra de toeschouwer zijn keuze instuurt, wordt de onthulling automatisch geactiveerd met een drievoudige trilling.";
+"postpred.help.input.api.step1" = "Zet in Instellingen → Post Prediction Auto Input op **API** en kies je bron (Inject of eigen API).";
+"postpred.help.input.api.step2" = "Open de Performance-weergave op je apparaat voordat je met de presentatie begint.";
+"postpred.help.input.api.step3" = "Vraag de toeschouwer zijn keuze te maken via de Inject-link of je eigen formulier.";
+"postpred.help.input.api.step4" = "Binnen 2 seconden detecteert de app de nieuwe waarde, onthult de bijbehorende foto's en trilt drie keer ter bevestiging.";
 "explore.load_error" = "Kan inhoud niet laden";
 "Loading profile…" = "Profiel laden…";
 "Capturing followers…" = "Volgers ophalen…";
@@ -1276,5 +1284,14 @@
 "guide.amnesia.script.optionA.text" = "'Ik sluit ook.' [Goochelaar sluit carrousel in app → swap geactiveerd]\n\n'Nu zijn we allebei losgekoppeld. Alleen de afbeeldingen blijven... hier.' [Wijst naar hoofd]\n\n[Ogen gesloten] Hand uitgestrekt: 'Met elke beweging... wordt een afbeelding minder scherp... alsof het er nooit helemaal was.' [Drie langzame passen]\n\n'Klaar. Je kunt je ogen openen.'";
 "guide.amnesia.script.optionB.phase" = "OPTIE B — DISCRETE SCROLL";
 "guide.amnesia.script.optionB.text" = "[Goochelaar scrolt nonchalant in app en sluit carrousel terwijl hij praat]\n\n'Geheugen is geen foto. Het is een reconstructie. Elke keer dat je iets herinnert, herschrijft je geest het een beetje. In dat moment van instabiliteit... is interventie mogelijk.'\n\n'Hoeveel afbeeldingen herinner je je precies?' [Toeschouwer: vier]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Direct naar Performance openen";
+"settings.launch_direct.detail" = "Sets-tabblad overslaan — app opent altijd op Performance";
+"settings.lockscreen.description" = "Toont een nep-vergrendelscherm bij het openen van Performance. Tik de cijfers van je geheime nummer, tik buiten het numpad om te vergrendelen en vul de resterende puntjes in.";
+"settings.lockscreen.choose_wallpaper" = "Achtergrond kiezen";
+"settings.lockscreen.warning_no_wallpaper" = "Selecteer een achtergrond om te activeren";
+"action.change" = "Wijzigen";
+"action.remove" = "Verwijderen";
+
 "guide.amnesia.script.climax.phase" = "CLIMAX";
 "guide.amnesia.script.climax.text" = "'Open Instagram opnieuw. Zoek hetzelfde bericht.'\n\n[Toeschouwer ziet 5 afbeeldingen]\n\n'Hoeveel zie je?' — Vijf.\n\n'Kijk naar de datum. Is het dezelfde als eerder?' — Ja.\n\n'Instagram liegt niet. Het kan geen datums wijzigen. Zo is het geüpload.'\n\n[Pauze]\n\n'Wat er is gebeurd is niet dat je een afbeelding bent vergeten. Je geest werd geleid om hem niet te zien. En nu weet je dat dat mogelijk is.'";

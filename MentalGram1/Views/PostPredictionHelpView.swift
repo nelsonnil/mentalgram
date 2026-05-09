@@ -269,6 +269,26 @@ struct PostPredictionHelpView: View {
                                  description: "postpred.help.input.url.example.card")
                 }
             }
+
+            // ── E: API Auto Reveal (Inject / Custom API polling) ─────────
+            PPInputMethodBlock(
+                label: "postpred.help.input.api.label",
+                labelColor: Color(hex: "FFD60A"),
+                badges: [
+                    PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
+                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9")),
+                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
+                    PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
+                ]
+            ) {
+                PPBodyText("postpred.help.input.api.intro")
+                VStack(alignment: .leading, spacing: 8) {
+                    PPStepBullet("postpred.help.input.api.step1", color: Color(hex: "FFD60A"))
+                    PPStepBullet("postpred.help.input.api.step2", color: Color(hex: "FFD60A"))
+                    PPStepBullet("postpred.help.input.api.step3", color: Color(hex: "FFD60A"))
+                    PPStepBullet("postpred.help.input.api.step4", color: Color(hex: "FFD60A"))
+                }
+            }
         }
     }
 
@@ -332,6 +352,8 @@ struct PostPredictionHelpView: View {
                      text: "postpred.help.tip.timing")
             PPTipRow(icon: "iphone.radiowaves.left.and.right", color: VaultTheme.Colors.primary,
                      text: "postpred.help.tip.vibration")
+            PPTipRow(icon: "circle.fill", color: Color(red: 0.99, green: 0.42, blue: 0.13),
+                     text: "postpred.help.tip.ring")
             PPTipRow(icon: "square.grid.3x3.fill", color: VaultTheme.Colors.secondary,
                      text: "postpred.help.tip.position")
             PPTipRow(icon: "wifi", color: VaultTheme.Colors.error,

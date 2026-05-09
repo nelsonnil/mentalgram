@@ -288,6 +288,10 @@
 "backup.just_now" = "À l'instant";
 "backup.min_ago" = "Il y a %d min";
 "backup.h_ago" = "Il y a %d h";
+"backup.info.auto" = "La sauvegarde s'exécute automatiquement chaque fois que l'app passe en arrière-plan. Vous pouvez aussi la lancer manuellement avec « Sauvegarder maintenant ».";
+"backup.info.what" = "Ce qui est sauvegardé : tous les réglages, Date Force, Force Reel, les sets actifs et leurs métadonnées.";
+"backup.info.photos" = "Les photos des sets sont synchronisées sur iCloud Drive. Consultez-les dans l'app Fichiers → iCloud Drive → Vault → Photos.";
+"backup.info.excluded" = "Non sauvegardé : session Instagram, identifiant d'appareil et minuteries de délai (spécifiques à l'appareil).";
 "Never" = "Jamais";
 "Just now" = "À l'instant";
 "explore.load_error" = "Impossible de charger le contenu";
@@ -763,6 +767,7 @@
 "postpred.help.during.timing.dialogue" = "Ouvrez Instagram. Allez sur mon profil. Faites defiler vers le bas, c'etait la depuis le debut.";
 "postpred.help.tip.timing" = "**Vitesse de revelation.** Une lettre ou un chiffre: ~2-3 secondes. Cinq lettres (ex. MAGIC): ~12-15 secondes. Chaque lettre supplementaire ajoute ~2-3 secondes.";
 "postpred.help.tip.vibration" = "**Vibration = pret.** Le retour haptique signale que la photo est en direct sur Instagram reel. Une fois la vibration sentie, guidez le spectateur.";
+"postpred.help.tip.ring" = "**Anneau orange = confirmé.** Après une révélation réussie, un anneau dégradé orange apparaît autour de votre photo de profil — exactement comme l'anneau d'une Story Instagram. Il confirme que la photo est en direct sur Instagram réel. L'anneau se réinitialise automatiquement à l'ouverture d'une nouvelle session Performance.";
 "postpred.help.tip.position" = "**Position originale.** La photo reapparait exactement la ou elle etait dans la grille, avec sa date d'origine. Il peut etre necessaire de faire defiler pour la trouver.";
 "postpred.help.tip.upload" = "**Pendant le telechargement.** N'utilisez pas l'app, ne changez pas de reseau Wi-Fi et ne laissez pas l'ecran se verrouiller. Une notification vous invite a revenir entre chaque telechargement.";
 "postpred.help.tip.banks" = "**Nombre de Banques.** Chaque banque = une position de lettre ou de chiffre. Planifiez vos sets en fonction du mot ou nombre le plus long que vous souhaitez reveler.";
@@ -795,9 +800,12 @@
 "postpred.help.inputs.group.alpha" = "POUR SETS ALPHABÉTIQUES";
 "postpred.help.inputs.group.universal" = "UNIVERSEL — TOUS TYPES DE SETS";
 "postpred.help.input.covert.label" = "FRAPPE DISCRÈTE";
-"postpred.help.input.api.label" = "API / AUTOMATISATION";
-"postpred.help.input.api.step1" = "Utilisez un outil d'automatisation externe (Raccourcis, tag NFC, app compagnon) pour envoyer le mot ou le nombre à Post Prediction via le schéma d'URL.";
-"postpred.help.input.api.step2" = "Utile lorsqu'un déclencheur tiers ou un accessoire physique déclenche automatiquement la révélation au bon moment.";
+"postpred.help.input.api.label" = "RÉVÉLATION AUTOMATIQUE API";
+"postpred.help.input.api.intro" = "Connectez Inject (11z.co) ou une API personnalisée. Ouvrez Performance en premier — l'app interroge toutes les 2 s en arrière-plan. Dès que le spectateur soumet sa sélection, la révélation se déclenche automatiquement avec une triple vibration.";
+"postpred.help.input.api.step1" = "Dans Réglages → Post Prediction, réglez Auto Input sur **API** et choisissez votre source (Inject ou API personnalisée).";
+"postpred.help.input.api.step2" = "Ouvrez la vue Performance sur votre appareil avant de commencer la présentation.";
+"postpred.help.input.api.step3" = "Demandez au spectateur de faire son choix dans le lien Inject ou votre formulaire personnalisé.";
+"postpred.help.input.api.step4" = "En moins de 2 secondes l'app détecte la nouvelle valeur, révèle les photos correspondantes et vibre trois fois pour confirmer.";
 "Check your connection and try again." = "Vérifiez votre connexion et réessayez.";
 "Try Again" = "Réessayer";
 "This keeps happening. Try logging out and back in." = "Cela se reproduit. Essayez de vous déconnecter et de vous reconnecter.";
@@ -1459,5 +1467,14 @@
 "guide.amnesia.script.optionA.text" = "« Je ferme aussi. » [Le magicien ferme le carrousel dans son appli → swap activé]\n\n« Maintenant nous sommes tous les deux déconnectés. Il ne reste que les images... ici. » [Pointe la tête]\n\n[Yeux fermés] Main tendue : « À chaque mouvement... une image devient moins nette... comme si elle n'avait jamais vraiment été là. » [Trois passes lentes]\n\n« C'est fait. Tu peux ouvrir les yeux. »";
 "guide.amnesia.script.optionB.phase" = "OPTION B — DÉFILEMENT DISCRET";
 "guide.amnesia.script.optionB.text" = "[Le magicien fait défiler son appli nonchalamment et ferme le carrousel en parlant]\n\n« La mémoire n'est pas une photographie. C'est une reconstruction. Chaque fois que tu te souviens de quelque chose, ton esprit le réécrit légèrement. Dans cet instant... on peut intervenir. »\n\n« Combien d'images te rappelles-tu exactement ? » [Spectateur : quatre]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Ouvrir directement sur Performance";
+"settings.launch_direct.detail" = "Ignorer l'onglet Sets — l'app s'ouvre toujours sur Performance";
+"settings.lockscreen.description" = "Affiche un faux écran de verrouillage à l'ouverture de Performance. Tapez les chiffres de votre numéro secret, tapez en dehors du clavier pour le verrouiller, puis remplissez les points restants.";
+"settings.lockscreen.choose_wallpaper" = "Choisir un fond d'écran";
+"settings.lockscreen.warning_no_wallpaper" = "Sélectionnez un fond d'écran pour activer";
+"action.change" = "Modifier";
+"action.remove" = "Supprimer";
+
 "guide.amnesia.script.climax.phase" = "APOGÉE";
 "guide.amnesia.script.climax.text" = "« Rouvre Instagram. Cherche ce même post. »\n\n[Le spectateur voit 5 images]\n\n« Combien en vois-tu ? » — Cinq.\n\n« Regarde la date. C'est la même qu'avant ? » — Oui.\n\n« Instagram ne ment pas. Il ne peut pas modifier les dates. C'était publié ainsi. »\n\n[Pause]\n\n« Ce qui s'est passé n'est pas que tu as oublié une image. Ton esprit a été guidé pour ne pas la voir. Et maintenant tu sais que c'est possible. »";

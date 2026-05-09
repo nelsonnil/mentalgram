@@ -52,7 +52,18 @@ struct UserProfileView: View {
         self._isFollowing = State(initialValue: profile.isFollowing)
         self._isFollowRequested = State(initialValue: profile.isFollowRequested)
         self._currentProfile = State(initialValue: profile)
-        self._allMediaURLs = State(initialValue: profile.cachedMediaURLs)
+        if !profile.cachedMediaItems.isEmpty {
+            var seenMediaIds = Set<String>()
+            let uniqueURLs = profile.cachedMediaItems.compactMap { item -> String? in
+                let key = item.mediaId.isEmpty ? item.imageURL : item.mediaId
+                guard seenMediaIds.insert(key).inserted else { return nil }
+                return item.imageURL
+            }
+            self._allMediaURLs = State(initialValue: uniqueURLs)
+        } else {
+            var seenURLs = Set<String>()
+            self._allMediaURLs = State(initialValue: profile.cachedMediaURLs.filter { seenURLs.insert($0).inserted })
+        }
         self._hasMorePages = State(initialValue: true)  // let the API decide; deduplication handles the first page
         var initialItems: [String: InstagramMediaItem] = [:]
         for item in profile.cachedMediaItems { initialItems[item.imageURL] = item }
@@ -387,7 +398,11 @@ struct UserProfileView: View {
                             case 1:
                                 ReelsGridView(reelURLs: currentProfile.cachedReelURLs, cachedImages: cachedImages)
                             case 2:
-                                PhotosGridView(mediaURLs: currentProfile.cachedTaggedURLs, cachedImages: cachedImages)
+                                if currentProfile.cachedTaggedURLs.isEmpty {
+                                    TaggedEmptyStateView()
+                                } else {
+                                    PhotosGridView(mediaURLs: currentProfile.cachedTaggedURLs, cachedImages: cachedImages)
+                                }
                             default:
                                 EmptyView()
                             }
@@ -433,9 +448,10 @@ struct UserProfileView: View {
             if followingMagic.isEnabled && followingMagic.pendingOffset > 0 {
                 let useFollowers = followingMagic.targetFollowers
                 let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-                // Auto K-mode: if >= 10K, each unit of offset represents 1K
+                // Auto K-mode: if >= 10K, each unit of offset represents 1K.
+                // Capped so the scaled addition never exceeds realCount (max 2× real).
                 if realCount >= 10_000 {
-                    followingMagic.applyKModeScaling()
+                    followingMagic.applyKModeScaling(cappedTo: realCount)
                 }
                 let inflated = realCount + followingMagic.pendingOffset
                 if useFollowers { magicFollowerText  = formatFollowing(inflated) }
@@ -509,11 +525,19 @@ struct UserProfileView: View {
         secretManager.addDigit(digit)
         updateFollowingOverride()
 
+        // Every accepted secret swipe must also change tabs. At the edges,
+        // bounce inward so a right swipe on Posts still moves to Reels instead
+        // of registering a digit while the screen appears unchanged.
         withAnimation(.easeInOut(duration: 0.18)) {
-            selectedTab = dx < 0
-                ? min(2, selectedTab + 1)
-                : max(0, selectedTab - 1)
+            selectedTab = tabAfterSecretSwipe(dx: dx)
         }
+    }
+
+    private func tabAfterSecretSwipe(dx: CGFloat) -> Int {
+        if dx < 0 {
+            return selectedTab < 2 ? selectedTab + 1 : 1
+        }
+        return selectedTab > 0 ? selectedTab - 1 : 1
     }
 
     // MARK: - Following Counter Magic
@@ -750,12 +774,21 @@ struct UserProfileView: View {
         Task {
             do {
                 // Fetch next batch
-                let (mediaItems, newMaxId) = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 21, maxId: nextMaxId)
+                let requestedMaxId = nextMaxId
+                let (mediaItems, newMaxId) = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 21, maxId: requestedMaxId)
                 
                 await MainActor.run {
-                    // Deduplicate: skip URLs already shown (handles first page re-fetch when nextMaxId starts nil)
-                    let existingSet = Set(allMediaURLs)
-                    let freshItems = mediaItems.filter { !existingSet.contains($0.imageURL) }
+                    // Deduplicate by stable mediaId first. CDN image URLs can change
+                    // between pages/sessions and make the same post look "new".
+                    let existingURLs = Set(allMediaURLs)
+                    let existingMediaIds = Set(mediaItemsByURL.values.map { $0.mediaId })
+                    var seenIncomingIds = Set<String>()
+                    let freshItems = mediaItems.filter { item in
+                        let key = item.mediaId.isEmpty ? item.imageURL : item.mediaId
+                        guard seenIncomingIds.insert(key).inserted else { return false }
+                        if !item.mediaId.isEmpty, existingMediaIds.contains(item.mediaId) { return false }
+                        return !existingURLs.contains(item.imageURL)
+                    }
 
                     for item in freshItems { mediaItemsByURL[item.imageURL] = item }
 
@@ -770,7 +803,7 @@ struct UserProfileView: View {
 
                     allMediaURLs.append(contentsOf: urlsToDisplay)
                     nextMaxId = newMaxId
-                    hasMorePages = (newMaxId != nil) && (allMediaURLs.count < maxPhotosOtherProfile)
+                    hasMorePages = (newMaxId != nil) && (newMaxId != requestedMaxId) && (allMediaURLs.count < maxPhotosOtherProfile)
                     isLoadingMore = false
 
                     print("📜 [USER] Loaded \(urlsToDisplay.count) new (skipped \(mediaItems.count - freshItems.count) dupes), total: \(allMediaURLs.count), hasMore: \(hasMorePages)")
@@ -909,7 +942,13 @@ struct UserProfileView: View {
                 print("🔍 [REFRESH] Fetching updated profile...")
                 
                 // Solo obtener info básica del perfil para verificar estado
-                guard let updatedProfile = try await InstagramService.shared.getProfileInfo(userId: profile.userId) else {
+                guard let updatedProfile = try await InstagramService.shared.getProfileInfo(
+                    userId: profile.userId,
+                    usernameHint: profile.username,
+                    fullNameHint: profile.fullName,
+                    profilePicURLHint: profile.profilePicURL,
+                    isVerifiedHint: profile.isVerified
+                ) else {
                     print("❌ [REFRESH] Failed to fetch updated profile")
                     return
                 }

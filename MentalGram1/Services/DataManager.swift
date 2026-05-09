@@ -506,8 +506,16 @@ class DataManager: ObservableObject {
         if let data = try? JSONEncoder().encode(sets) {
             UserDefaults.standard.set(data, forKey: setsKey)
         }
-        // Sync metadata to iCloud KV store after every save
-        CloudBackupService.shared.syncToCloud()
+        // Schedule a debounced backup (60 s delay) so that accidental deletes or crashes
+        // within that window do NOT immediately overwrite the existing iCloud backup.
+        // The backup is guaranteed to run when the app backgrounds (see MentalGram1App.swift).
+        CloudBackupService.shared.scheduleDebouncedSync()
+    }
+
+    /// Forces an immediate iCloud backup — call this when the app goes to background
+    /// so the backup is always current when the user switches apps or force-quits.
+    func forceImmediateBackup() {
+        CloudBackupService.shared.syncToCloud(immediate: true)
     }
 
     private func loadSets() {
@@ -521,25 +529,49 @@ class DataManager: ObservableObject {
         }
     }
 
-    /// One-time migration: moves sets stored under the old global key into the
-    /// current account's scoped key, then removes the old key so it only runs once.
-    private func migrateLegacySetsIfNeeded() {
+    /// Moves sets stored under the old global key ("com.vault.sets") into the
+    /// account-scoped key ("com.vault.sets.<userId>"), then removes the old key.
+    /// Called on init (one-time migration) AND after a cloud restore (where
+    /// CloudBackupService writes data back to the legacy key).
+    /// `forceOverwrite`: when true, overwrites any existing scoped data (used on restore).
+    func migrateLegacySetsIfNeeded(forceOverwrite: Bool = false) {
         guard let legacyData = UserDefaults.standard.data(forKey: legacySetsKey) else { return }
-        // Only migrate if the scoped key doesn't already have data
-        if UserDefaults.standard.data(forKey: setsKey) == nil {
+        let hasScoped = UserDefaults.standard.data(forKey: setsKey) != nil
+        if !hasScoped || forceOverwrite {
             UserDefaults.standard.set(legacyData, forKey: setsKey)
-            print("👤 [ACCOUNT] Migrated legacy sets → '\(setsKey)'")
+            print("👤 [ACCOUNT] Migrated legacy sets → '\(setsKey)' (forceOverwrite=\(forceOverwrite))")
+        } else {
+            print("👤 [ACCOUNT] Scoped key already has data — skipping migration (use forceOverwrite to override)")
         }
-        // Remove legacy key so this never runs again
         UserDefaults.standard.removeObject(forKey: legacySetsKey)
-        print("👤 [ACCOUNT] Legacy sets key removed")
+        print("👤 [ACCOUNT] Legacy sets key '\(legacySetsKey)' removed")
     }
 
     /// Called after a cloud restore to reload sets from the newly written UserDefaults.
+    /// restoreFromCloud() writes data to the legacy "com.vault.sets" key.
+    /// We must run migrateLegacySetsIfNeeded() first so it gets moved to the scoped key,
+    /// then loadSets() can find it.
     func reloadAfterRestore() {
         DispatchQueue.main.async {
+            print("☁️ [BACKUP] reloadAfterRestore: currentUserId='\(self.currentUserId.isEmpty ? "guest" : self.currentUserId)'")
+
+            // Check what's in UserDefaults before migration
+            let scopedKey = self.setsKey
+            let legacyData = UserDefaults.standard.data(forKey: self.legacySetsKey)
+            let scopedData = UserDefaults.standard.data(forKey: scopedKey)
+            print("☁️ [BACKUP]   legacy key '\(self.legacySetsKey)': \(legacyData != nil ? "\(legacyData!.count / 1024) KB" : "EMPTY")")
+            print("☁️ [BACKUP]   scoped key '\(scopedKey)': \(scopedData != nil ? "\(scopedData!.count / 1024) KB" : "EMPTY")")
+
+            // CRITICAL: Move restored legacy sets data → account-scoped key.
+            // forceOverwrite=true so restore always wins over stale local data.
+            self.migrateLegacySetsIfNeeded(forceOverwrite: true)
+
+            // Now load from the scoped key
             self.loadSets()
-            print("☁️ [BACKUP] DataManager reloaded from restored UserDefaults (\(self.sets.count) sets)")
+
+            let postScopedData = UserDefaults.standard.data(forKey: scopedKey)
+            print("☁️ [BACKUP] ✅ Restore complete: \(self.sets.count) sets loaded (scoped key now \(postScopedData != nil ? "\(postScopedData!.count / 1024) KB" : "EMPTY"))")
+            LogManager.shared.success("iCloud restore: \(self.sets.count) sets reloaded into DataManager", category: .general)
         }
     }
     

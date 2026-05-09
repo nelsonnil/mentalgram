@@ -1,6 +1,3 @@
-// Localizable.strings — zh-Hans
-// Instagram fake UI (Performance view)
-
 "ig.stat.posts" = "帖子";
 "ig.stat.followers" = "粉丝";
 "ig.stat.following" = "关注";
@@ -25,6 +22,10 @@
 "backup.just_now" = "刚刚";
 "backup.min_ago" = "%d 分钟前";
 "backup.h_ago" = "%d 小时前";
+"backup.info.auto" = "每次应用进入后台时会自动执行备份。您也可以通过\"立即备份\"手动触发。";
+"backup.info.what" = "备份内容：所有设置、Date Force、Force Reel、活跃套组及套组元数据。";
+"backup.info.photos" = "套组照片会同步至 iCloud 云盘。可在文件 App → iCloud 云盘 → Vault → Photos 中查看。";
+"backup.info.excluded" = "不备份：Instagram 会话、设备 ID 和冷却计时器（设备专属）。";
 
 // ─── Settings & App UI ──────────────────────────────────────────────────────
 
@@ -646,6 +647,7 @@
 "postpred.help.during.timing.dialogue" = "打开Instagram。去我的主页。向下滑动，它一直在那里。";
 "postpred.help.tip.timing" = "**揭示速度。** 一个字母或数字：约2-3秒。五个字母（如MAGIC）：约12-15秒。每个额外字母增加约2-3秒。";
 "postpred.help.tip.vibration" = "**振动=就绪。** 触觉反馈是照片在真实Instagram上生效的信号。振动后引导观众。";
+"postpred.help.tip.ring" = "**橙色光环 = 已确认。** 成功揭示后，您的头像周围会出现橙色渐变光环——与 Instagram 动态光环完全相同。这确认照片已在真实 Instagram 上生效。进入新的 Performance 会话时，光环会自动重置。";
 "postpred.help.tip.position" = "**原始位置。** 照片在网格的原始位置以原始日期重新出现，可能需要滑动才能找到。";
 "postpred.help.tip.upload" = "**上传期间。** 不要使用应用，不要更换Wi-Fi网络，不要锁屏。";
 "postpred.help.tip.banks" = "**库的数量。** 每个库=一个字母或数字的位置。根据要揭示的最长单词或数字规划您的合集。";
@@ -684,9 +686,12 @@
 "postpred.help.inputs.group.alpha" = "用于字母套组";
 "postpred.help.inputs.group.universal" = "通用 — 所有套组类型";
 "postpred.help.input.covert.label" = "隐蔽输入";
-"postpred.help.input.api.label" = "API / 自动化";
-"postpred.help.input.api.step1" = "使用外部自动化工具（快捷指令、NFC 标签、配套应用）通过 URL Scheme 向 Post Prediction 发送词语或数字。";
-"postpred.help.input.api.step2" = "当第三方触发器或物理道具在正确时机自动触发揭示时非常有用。";
+"postpred.help.input.api.label" = "API 自动揭示";
+"postpred.help.input.api.intro" = "连接 Inject (11z.co) 或自定义 API。先打开 Performance — 应用每 2 秒在后台查询一次。观众提交选择的瞬间，揭示会自动触发并伴随三次震动。";
+"postpred.help.input.api.step1" = "在设置 → Post Prediction 中，将 Auto Input 设为 **API** 并选择来源（Inject 或自定义 API）。";
+"postpred.help.input.api.step2" = "在开始表演前，在设备上打开 Performance 界面。";
+"postpred.help.input.api.step3" = "请观众在 Inject 链接或您的自定义表单中做出选择。";
+"postpred.help.input.api.step4" = "2 秒内应用检测到新值，揭示对应照片，并三次震动确认。";
 "explore.load_error" = "无法加载内容";
 
 // General UI strings (auto-generated)
@@ -982,5 +987,14 @@
 "guide.amnesia.script.optionA.text" = "「我也关闭。」[魔术师在应用中关闭轮播→交换激活]\n\n「现在我们两个都断开连接了。只剩下图片……在这里。」[指向头部]\n\n[闭眼] 伸出手：「每次移动……一张图片变得不那么清晰……好像它从来就没有完全在那里。」[三次缓慢手势]\n\n「好了。可以睁开眼睛了。」";
 "guide.amnesia.script.optionB.phase" = "选项B——隐蔽滑动";
 "guide.amnesia.script.optionB.text" = "[魔术师在说话时随意在应用中滑动并关闭轮播]\n\n「记忆不是照片。它是重建。每次你记起某事，你的大脑都会稍微重写它。在那个不稳定的瞬间……可以进行干预。」\n\n「你确切记得几张图片？」[观众：四张]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "直接打开 Performance";
+"settings.launch_direct.detail" = "跳过 Sets 标签页 — 应用每次都直接打开 Performance";
+"settings.lockscreen.description" = "进入 Performance 时显示伪锁屏界面。点击秘密数字，点击数字键盘外部锁定，然后填满剩余圆点。";
+"settings.lockscreen.choose_wallpaper" = "选择壁纸";
+"settings.lockscreen.warning_no_wallpaper" = "请选择壁纸以激活";
+"action.change" = "更改";
+"action.remove" = "移除";
+
 "guide.amnesia.script.climax.phase" = "高潮";
 "guide.amnesia.script.climax.text" = "「再次打开Instagram。找到同一篇帖子。」\n\n[观众看到5张图片]\n\n「你看到几张？」——五张。\n\n「看一下日期。和之前一样吗？」——是的。\n\n「Instagram不会说谎。它无法修改日期。就是这样上传的。」\n\n[停顿]\n\n「发生的不是你忘记了一张图片。你的大脑被引导着没有看到它。现在你知道这是可能的了。」";

@@ -182,6 +182,10 @@
 "backup.just_now" = "Just now";
 "backup.min_ago" = "%d min ago";
 "backup.h_ago" = "%d h ago";
+"backup.info.auto" = "Backup runs automatically every time the app goes to background. You can also trigger it manually with \"Back up now\".";
+"backup.info.what" = "What's backed up: all settings, Date Force, Force Reel, active sets and set metadata.";
+"backup.info.photos" = "Set photos are synced to iCloud Drive. View them in the Files app → iCloud Drive → Vault → Photos.";
+"backup.info.excluded" = "Not backed up: Instagram session, device ID and cooldown timers (device-specific).";
 "explore.load_error" = "Could not load content";
 "action.retry" = "Retry";
 "settings.icloud_applied" = "iCloud backup applied successfully";
@@ -272,6 +276,7 @@
 "postpred.help.during.timing.dialogue" = "\"Open Instagram. Go to my profile. Scroll down — it was there all along.\"";
 "postpred.help.tip.timing" = "**Reveal speed.** One letter or digit: ~2–3 seconds. Five letters (e.g. 'MAGIC'): ~12–15 seconds. Each additional letter adds ~2–3 seconds.";
 "postpred.help.tip.vibration" = "**Vibration = ready.** The haptic feedback is the signal that the photo is live on real Instagram. Once it vibrates, direct the spectator to scroll their profile.";
+"postpred.help.tip.ring" = "**Orange ring = confirmed.** After a successful reveal, an orange gradient ring appears around your profile photo — exactly like an Instagram Story ring. It confirms the photo is live on real Instagram. The ring resets automatically when you open a new Performance session.";
 "postpred.help.tip.position" = "**Original position.** The photo reappears exactly where it was in the grid, with its original date — it may require scrolling to find it.";
 "postpred.help.tip.upload" = "**During upload.** Do not use the app, change Wi-Fi networks, or let the screen lock. A notification prompts you to return between each upload.";
 "postpred.help.tip.banks" = "**Number of Banks.** Each bank = one letter or digit position. Plan your sets around the longest word or number you want to reveal.";
@@ -280,9 +285,12 @@
 "postpred.help.inputs.group.numeric" = "FOR NUMBER, CUSTOM & CARD SETS";
 "postpred.help.inputs.group.alpha" = "FOR ALPHABETIC SETS";
 "postpred.help.inputs.group.universal" = "UNIVERSAL — ALL SET TYPES";
-"postpred.help.input.api.label" = "API / AUTOMATION";
-"postpred.help.input.api.step1" = "Use an external automation tool (Shortcuts, NFC tag, companion app) to send the word or number to Post Prediction via URL scheme.";
-"postpred.help.input.api.step2" = "Useful when a third-party trigger or physical prop automatically fires the reveal at the right moment.";
+"postpred.help.input.api.label" = "API AUTO REVEAL";
+"postpred.help.input.api.intro" = "Connect Inject (11z.co) or a custom API. Open Performance first — the app polls every 2 s in the background. The moment the spectator submits their selection, the reveal fires automatically with a triple vibration.";
+"postpred.help.input.api.step1" = "In Settings → Post Prediction, set Auto Input to **API** and choose your source (Inject or Custom API).";
+"postpred.help.input.api.step2" = "Open Performance view on your device before starting the presentation.";
+"postpred.help.input.api.step3" = "Ask the spectator to make their selection in the Inject link or your custom form.";
+"postpred.help.input.api.step4" = "Within 2 seconds the app detects the new value, reveals the matching photos, and vibrates three times to confirm.";
 "lockdown.challenge.title" = "Instagram Needs Confirmation";
 "lockdown.challenge.subtitle" = "Instagram detected unusual activity and wants to confirm it's you.";
 "lockdown.challenge.nav" = "Confirmation Pending";
@@ -880,7 +888,7 @@
 "guide.amnesia.what.title" = "What is it?";
 "guide.amnesia.what.body" = "A hypnotic amnesia effect verified on real Instagram. Vault prepares two carousels: a visible 4-image carousel and a hidden 5-image carousel. The spectator opens your profile on their own phone, enters the visible carousel and memorizes the 4 images. When you close that carousel in Vault, Instagram swaps the posts: the 4-image carousel is archived and the 5-image carousel is unarchived. The extra image will not appear on the spectator's phone until Instagram refreshes, so closing and reopening the app is part of the method.";
 "guide.amnesia.trigger.title" = "The trigger";
-"guide.amnesia.trigger.body" = "The trigger activates when you close the carousel inside Performance. Correct order:\n\n1. Ask the spectator to open Instagram, enter your profile and tap the carousel.\n2. While they are inside the carousel on their phone, have them look at the 4 images and notice the date.\n3. At that moment you can close the carousel in Vault. Vault adds the extra image on real Instagram, but the spectator will not see it until they refresh or close and reopen Instagram.\n4. When they finish memorizing, ask them to fully close Instagram. You can also take their phone, make a natural small scroll and leave it on the table.\n5. When Instagram opens again, they see 5 images with the same date and time.\n\n❌ Do not close the carousel in Vault before the spectator has entered and seen the initial 4 images.";
+"guide.amnesia.trigger.body" = "The trigger activates when you close the carousel inside Performance. Correct order:\n\n1. Ask the spectator to open Instagram, enter your profile and tap the carousel.\n2. While they are inside the carousel on their phone, have them look at the 4 images and notice the date.\n3. At that moment you can close the carousel in Vault. Vault adds the extra image on real Instagram, but the spectator will not see it until they refresh or close and reopen Instagram.\n\nIMPORTANT: after closing the carousel in Vault, do not leave Vault or close the app. The archive/unarchive process takes a few seconds and must finish in the background. If you leave too early, the change can be interrupted.\n\n4. Wait until Vault finishes the revealing state. Then, when the spectator finishes memorizing, ask them to fully close Instagram. You can also take their phone, make a natural small scroll and leave it on the table.\n5. When Instagram opens again, they see 5 images with the same date and time.\n\n❌ Do not close the carousel in Vault before the spectator has entered and seen the initial 4 images.";
 "guide.amnesia.hidden.title" = "Hidden image";
 "guide.amnesia.hidden.body" = "The 5th image (marked with an orange border in the app) is the one that appears at the end. In the ESP template it is usually the star: the spectator remembers circle, cross, waves and square, but not the star. When you ask \"Are you sure you don't remember the star?\" they will not believe you. When they open Instagram and see the star in the same carousel, with the same date and time, the memory breaks.";
 "guide.amnesia.options.title" = "Two ways to activate the trigger";
@@ -894,10 +902,19 @@
 "guide.amnesia.script.opening.phase" = "OPENING";
 "guide.amnesia.script.opening.text" = "\"Take your phone. Open Instagram, enter my profile and tap this carousel. Don't just look at the cover: go inside and swipe through the images one by one. Memorize each symbol and also notice the upload date. When you are inside the carousel, tell me you can see it.\"";
 "guide.amnesia.script.close.phase" = "CLOSING INSTAGRAM";
-"guide.amnesia.script.close.text" = "[Once the spectator is inside the carousel on their phone, the magician closes the carousel in Vault. That activates the swap: Instagram changes from the 4-image carousel to the 5-image carousel. The spectator will not see it yet because their app keeps the current view cached.]\n\n\"Now close Instagram completely from the app switcher. Don't just minimize it: close it fully. I want the images to exist only in your memory, not on the screen.\"";
+"guide.amnesia.script.close.text" = "[Once the spectator is inside the carousel on their phone, the magician closes the carousel in Vault. That activates the swap: Instagram changes from the 4-image carousel to the 5-image carousel. The spectator will not see it yet because their app keeps the current view cached.]\n\n[IMPORTANT: do not leave Vault or close the app yet. Wait for the archive/unarchive process to finish; if you leave before it completes, it can be interrupted.]\n\n\"Now close Instagram completely from the app switcher. Don't just minimize it: close it fully. I want the images to exist only in your memory, not on the screen.\"";
 "guide.amnesia.script.optionA.phase" = "OPTION A — HAND PASSES";
 "guide.amnesia.script.optionA.text" = "\"I'll close mine too.\" [Magician closes carousel in app → swap activates]\n\n\"Now we're both disconnected. Only the images remain... here.\" [Points to spectator's head]\n\n[Eyes closed] Hand extended: \"With each movement... one image becomes less sharp... as if it was never quite there.\" [Three slow passes]\n\n\"That's it. You can open your eyes.\"";
 "guide.amnesia.script.optionB.phase" = "OPTION B — DISCREET SCROLL";
 "guide.amnesia.script.optionB.text" = "[Alternatively, take their phone for a second, make a natural small scroll while you keep talking and leave it on the table. This forces an exit/refresh without drawing attention.]\n\n\"Memory is not a photograph. It's a reconstruction. Every time you remember something, your mind rewrites it slightly. In that moment of instability... intervention is possible.\"\n\n\"Name every symbol you remember.\" [Spectator names four]";
 "guide.amnesia.script.climax.phase" = "CLIMAX";
 "guide.amnesia.script.climax.text" = "\"You named circle, cross, waves and square... but you didn't name the star. Are you sure the star wasn't there?\"\n\n[The spectator will not believe it.]\n\n\"Open Instagram again and enter the same carousel.\"\n\n[They now see 5 images.]\n\n\"Swipe to the end. How many are there now? And the date?\"\n\n[The star is there in the same carousel, with the same date and time.]\n\n\"It did not appear now. Instagram says it was already there. The post did not change: your memory did.\"";
+
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Launch directly to Performance";
+"settings.launch_direct.detail" = "Skip the Sets tab — app opens on Performance every time";
+"settings.lockscreen.description" = "Shows a fake lockscreen when entering Performance. Tap digits for your secret number, tap outside the numpad to lock it, then fill the remaining dots.";
+"settings.lockscreen.choose_wallpaper" = "Choose Wallpaper";
+"settings.lockscreen.warning_no_wallpaper" = "Select a wallpaper to activate";
+"action.change" = "Change";
+"action.remove" = "Remove";

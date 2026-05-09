@@ -405,7 +405,7 @@ struct NoteHelpView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 IPHBullet(icon: "network", iconColor: Color(hex: "0A84FF"),
-                          text: "The app calls the Instagram API directly to post the note. Set up an API source in \"Auto Input\" to pull the text from an external service (e.g. a personal webhook or Make/Zapier automation).")
+                          text: "Open Performance first, then ask the spectator to make their selection in Inject or your custom API. The app polls every 2 s and posts the note automatically when a new value arrives — triple vibration confirms success.")
             }
 
             iphDivider
@@ -415,7 +415,7 @@ struct NoteHelpView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 IPHBullet(icon: "link", iconColor: accent,
-                          text: "Trigger the note from any automation app using vault://note?text=<your text>. Combine with Apple Shortcuts to send the note automatically when Performance opens.")
+                          text: "Trigger the note from any automation app using vault://note?text=<your text>. Works even if Performance is already open — no need to reopen the app.")
             }
 
             iphDivider
@@ -549,7 +549,7 @@ struct BiographyHelpView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 IPHBullet(icon: "network", iconColor: Color(hex: "0A84FF"),
-                          text: "The app calls the Instagram Graph API to update your bio. Configure an API source in \"Auto Input\" to receive the prediction text from an external system before the show.")
+                          text: "Open Performance first, then ask the spectator to make their selection in Inject or your custom API. The app polls every 2 s and updates the bio automatically when a new value arrives — triple vibration confirms success.")
             }
 
             iphDivider
@@ -559,7 +559,7 @@ struct BiographyHelpView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 IPHBullet(icon: "link", iconColor: accent,
-                          text: "Trigger the biography update using vault://bio?text=<your text>. Create an Apple Shortcut that sends this URL when Performance opens for a hands-free reveal.")
+                          text: "Trigger the biography update using vault://bio?text=<your text>. Works even if Performance is already open — no need to reopen the app.")
                 IPHBullet(icon: "link", iconColor: accent,
                           text: "You can also use URL schemes from other apps (Tasker, NFC tags, Focus Mode automations) to update the bio at the right moment.")
             }

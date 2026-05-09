@@ -1,5 +1,3 @@
-/* Localizable.strings — pl */
-
 "ig.stat.posts" = "posty";
 "ig.stat.followers" = "obserwujący";
 "ig.stat.following" = "obserwowanych";
@@ -24,6 +22,10 @@
 "backup.just_now" = "Przed chwilą";
 "backup.min_ago" = "%d min temu";
 "backup.h_ago" = "%d godz. temu";
+"backup.info.auto" = "Kopia zapasowa jest tworzona automatycznie przy każdym przejściu aplikacji w tło. Możesz też uruchomić ją ręcznie, używając opcji „Utwórz kopię teraz\".";
+"backup.info.what" = "Co jest zapisywane: wszystkie ustawienia, Date Force, Force Reel, aktywne sety i ich metadane.";
+"backup.info.photos" = "Zdjęcia setów są synchronizowane z iCloud Drive. Możesz je zobaczyć w aplikacji Pliki → iCloud Drive → Vault → Photos.";
+"backup.info.excluded" = "Nie jest zapisywane: sesja Instagram, ID urządzenia i timery cooldown (specyficzne dla urządzenia).";
 "nav.settings" = "Ustawienia";
 "nav.my_sets" = "Moje sety";
 "nav.performance" = "Występ";
@@ -549,6 +551,7 @@
 "postpred.help.during.timing.dialogue" = "Otworz Instagram. Przejdz do mojego profilu. Przewin w dol, to bylo tam od zawsze.";
 "postpred.help.tip.timing" = "**Szybkosc ujawnienia.** Jedna litera lub cyfra: ~2-3 sek. Piec liter (np. MAGIC): ~12-15 sek. Kazda kolejna litera dodaje ~2-3 sek.";
 "postpred.help.tip.vibration" = "**Wibracja = gotowe.** Haptyczne sprzezenie zwrotne sygnalizuje, ze zdjecie jest na zywo na prawdziwym Instagramie.";
+"postpred.help.tip.ring" = "**Pomarańczowy pierścień = potwierdzono.** Po pomyślnym ujawnieniu wokół zdjęcia profilowego pojawia się pomarańczowy pierścień gradientowy — dokładnie jak pierścień Instagram Story. Potwierdza, że zdjęcie jest live na prawdziwym Instagramie. Pierścień resetuje się automatycznie przy otwarciu nowej sesji Performance.";
 "postpred.help.tip.position" = "**Oryginalna pozycja.** Zdjecie pojawia sie tam, gdzie bylo w siatce, z oryginaln. dat..";
 "postpred.help.tip.upload" = "**Podczas przesylania.** Nie uzywaj aplikacji, nie zmieniaj sieci Wi-Fi i nie blokuj ekranu.";
 "postpred.help.tip.banks" = "**Liczba bankow.** Kazdy bank = jedna pozycja litery lub cyfry. Planuj zestawy pod katem najdluzszego slowa lub liczby, ktr. chcesz ujawnic.";
@@ -581,9 +584,12 @@
 "postpred.help.inputs.group.alpha" = "DLA ZESTAWÓW ALFABETYCZNYCH";
 "postpred.help.inputs.group.universal" = "UNIWERSALNE — WSZYSTKIE TYPY ZESTAWÓW";
 "postpred.help.input.covert.label" = "UKRYTE WPISYWANIE";
-"postpred.help.input.api.label" = "API / AUTOMATYZACJA";
-"postpred.help.input.api.step1" = "Użyj zewnętrznego narzędzia automatyzacji (Skróty, tag NFC, aplikacja towarzysząca), aby wysłać słowo lub liczbę do Post Prediction przez URL Scheme.";
-"postpred.help.input.api.step2" = "Przydatne, gdy zewnętrzny wyzwalacz lub fizyczny rekwizyt automatycznie uruchamia ujawnienie we właściwym momencie.";
+"postpred.help.input.api.label" = "AUTOMATYCZNE UJAWNIENIE API";
+"postpred.help.input.api.intro" = "Połącz Inject (11z.co) lub własne API. Najpierw otwórz Performance — aplikacja odpytuje co 2 s w tle. W momencie gdy widz wyśle swój wybór, ujawnienie uruchamia się automatycznie z potrójną wibracją.";
+"postpred.help.input.api.step1" = "W Ustawieniach → Post Prediction ustaw Auto Input na **API** i wybierz źródło (Inject lub własne API).";
+"postpred.help.input.api.step2" = "Otwórz widok Performance na urządzeniu przed rozpoczęciem prezentacji.";
+"postpred.help.input.api.step3" = "Poproś widza o dokonanie wyboru w linku Inject lub Twoim formularzu.";
+"postpred.help.input.api.step4" = "W ciągu 2 sekund aplikacja wykrywa nową wartość, ujawnia odpowiednie zdjęcia i wibruje trzykrotnie w celu potwierdzenia.";
 "explore.load_error" = "Nie można załadować treści";
 "Loading profile…" = "Ładowanie profilu…";
 "Capturing followers…" = "Pobieranie obserwujących…";
@@ -1277,5 +1283,14 @@
 "guide.amnesia.script.optionA.text" = "'Ja też zamykam.' [Mag zamyka karuzelę w aplikacji → zamiana aktywowana]\n\n'Teraz oboje jesteśmy rozłączeni. Pozostały tylko obrazy... tutaj.' [Wskazuje głowę]\n\n[Zamknięte oczy] Wyciągnięta dłoń: 'Z każdym ruchem... jeden obraz staje się mniej wyraźny... jakby nigdy tam w pełni nie był.' [Trzy powolne pasaże]\n\n'Gotowe. Możesz otworzyć oczy.'";
 "guide.amnesia.script.optionB.phase" = "OPCJA B — DYSKRETNE PRZEWIJANIE";
 "guide.amnesia.script.optionB.text" = "[Mag beztrosko przewija aplikację i zamyka karuzelę podczas mówienia]\n\n'Pamięć nie jest fotografią. To rekonstrukcja. Za każdym razem gdy coś pamiętasz, twój umysł lekko to przepisuje. W tym momencie niestabilności... interwencja jest możliwa.'\n\n'Ile dokładnie obrazów pamiętasz?' [Widz: cztery]";
+// MARK: - Launch Direct & Lockscreen Settings
+"settings.launch_direct.title" = "Otwieraj bezpośrednio w Performance";
+"settings.launch_direct.detail" = "Pomijaj kartę Sets — aplikacja zawsze otwiera się w Performance";
+"settings.lockscreen.description" = "Wyświetla fałszywy ekran blokady przy otwieraniu Performance. Naciśnij cyfry swojego tajnego numeru, naciśnij poza klawiaturą numeryczną, aby zablokować, a następnie wypełnij pozostałe kropki.";
+"settings.lockscreen.choose_wallpaper" = "Wybierz tapetę";
+"settings.lockscreen.warning_no_wallpaper" = "Wybierz tapetę, aby aktywować";
+"action.change" = "Zmień";
+"action.remove" = "Usuń";
+
 "guide.amnesia.script.climax.phase" = "KULMINACJA";
 "guide.amnesia.script.climax.text" = "'Otwórz Instagrama ponownie. Znajdź ten sam post.'\n\n[Widz widzi 5 obrazów]\n\n'Ile widzisz?' — Pięć.\n\n'Sprawdź datę. Czy to ta sama co poprzednio?' — Tak.\n\n'Instagram nie kłamie. Nie może modyfikować dat. Tak zostało przesłane.'\n\n[Pauza]\n\n'To, co się stało, to nie to, że zapomniałeś o jednym obrazie. Twój umysł został poprowadzony, żeby go nie widzieć. I teraz wiesz, że to jest możliwe.'";
