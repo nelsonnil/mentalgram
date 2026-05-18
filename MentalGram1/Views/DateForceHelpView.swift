@@ -1623,8 +1623,8 @@ private struct DFHMetric: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label).font(.system(size: 13, weight: .semibold)).foregroundColor(color)
                 Text(desc).font(VaultTheme.Typography.caption()).foregroundColor(VaultTheme.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                .fixedSize(horizontal: false, vertical: true)
+        }
         }
         .padding(VaultTheme.Spacing.sm).background(color.opacity(0.06)).cornerRadius(VaultTheme.CornerRadius.sm)
     }
@@ -1661,12 +1661,12 @@ private struct DFHShowStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
             Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(color).tracking(1.5)
-            VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
+                    VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
                     Circle().fill(color.opacity(0.5)).frame(width: 4, height: 4).padding(.top, 8)
                     Text(action).font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                 if let d = dialogue {
                     HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
                         Rectangle().fill(color).frame(width: 2).cornerRadius(1)

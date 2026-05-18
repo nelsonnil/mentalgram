@@ -10,6 +10,13 @@ import Combine
 ///   vault://reveal?slot=<number>        → Custom Set Reveal: unarchive the photo at slot 1–100
 ///   vault://reveal?card=<symbol>        → Playing Card Reveal: unarchive a card (e.g. J♠, 10♥, K♦)
 ///
+/// Line breaks in note/bio text — supported encodings (any of these work):
+///   %0A          — standard URL-encoded newline  (vault://bio?text=Line1%0ALine2)
+///   \n           — literal backslash-n           (vault://bio?text=Line1\nLine2)
+///   {newline}    — named token                   (vault://bio?text=Line1{newline}Line2)
+///   {br}         — short alias for {newline}
+///   <br>         — HTML tag (some tools emit this)
+///
 /// Flow:
 ///   1. App receives URL → URLActionManager.shared.handleURL(_:)
 ///   2. HomeView observes pendingMode and switches to the Performance tab (tab 0)
@@ -103,15 +110,37 @@ class URLActionManager: ObservableObject {
             return false
         }
 
-        guard let textItem = components?.queryItems?.first(where: { $0.name == "text" }),
-              let raw = textItem.value,
-              !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
+        // Primary path: URLComponents with automatic percent-decoding.
+        // Fallback: parse from the raw query string directly. Some automation
+        // tools (e.g. iOS Shortcuts "URL" action) do not percent-encode
+        // newlines in variables, which can cause URLComponents to return nil
+        // queryItems while the raw query string still carries the text value.
+        let extractedText: String? = {
+            // 1 – URLComponents (handles %0A → \n automatically)
+            if let v = components?.queryItems?.first(where: { $0.name == "text" })?.value,
+               !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return v.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            // 2 – Raw query string fallback (handles literal newlines and other
+            //     malformed query strings that URLComponents rejects)
+            guard let rawQuery = url.query ?? url.absoluteString.components(separatedBy: "?").dropFirst().first else {
+                return nil
+            }
+            for param in rawQuery.components(separatedBy: "&") {
+                guard param.hasPrefix("text=") else { continue }
+                let raw = String(param.dropFirst(5)) // drop "text="
+                let decoded = raw.removingPercentEncoding ?? raw
+                let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            return nil
+        }()
+
+        guard let text = extractedText else {
             print("⚠️ [URL] Missing or empty 'text' parameter in URL: \(url)")
             return false
         }
 
-        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         print("📲 [URL] vault://\(host) received, text=\"\(text.prefix(40))\"")
 
         DispatchQueue.main.async {

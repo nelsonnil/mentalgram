@@ -134,7 +134,9 @@ class ProfileCacheService: ObservableObject {
             cachedReelURLs: p.cachedReelURLs,
             cachedTaggedURLs: p.cachedTaggedURLs,
             cachedHighlights: p.cachedHighlights,
-            cachedMediaItems: mediaItems ?? p.cachedMediaItems
+            cachedMediaItems: mediaItems ?? p.cachedMediaItems,
+            cachedReelItems: p.cachedReelItems,
+            cachedNextMaxId: p.cachedNextMaxId
         )
     }
     

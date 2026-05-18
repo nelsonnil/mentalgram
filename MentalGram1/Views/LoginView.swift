@@ -353,17 +353,24 @@ struct InstagramWebLoginView: UIViewRepresentable {
 
 struct ReloginSheet: View {
     @Binding var isPresented: Bool
+    @State private var showWebLogin = false
 
     var body: some View {
-        NavigationView {
-            InstagramWebLoginView(isPresented: $isPresented)
-                .navigationTitle("Re-login")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Cancel") { isPresented = false }
+        if showWebLogin {
+            NavigationView {
+                InstagramWebLoginView(isPresented: $isPresented)
+                    .navigationTitle(String(localized: "relogin.nav_title"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(String(localized: "relogin.cancel")) { isPresented = false }
+                        }
                     }
-                }
+            }
+        } else {
+            CookieConsentWarningView {
+                showWebLogin = true
+            }
         }
     }
 }

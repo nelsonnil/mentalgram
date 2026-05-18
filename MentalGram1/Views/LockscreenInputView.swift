@@ -2,7 +2,9 @@ import SwiftUI
 import Combine
 
 struct LockscreenInputView: View {
-    let onDismiss: () -> Void
+    /// Returns the hidden digits captured before the magician taps outside the keypad.
+    /// Empty means the fake lockscreen was cancelled without committing a reveal input.
+    let onDismiss: ([Int]) -> Void
 
     @State private var allDigits: [Int] = []
     @State private var secretDigits: [Int] = []
@@ -175,7 +177,7 @@ struct LockscreenInputView: View {
             Spacer()
 
             Button {
-                onDismiss()
+                onDismiss([])
             } label: {
                 Text("Cancel")
                     .font(.system(size: 16, weight: .regular))
@@ -219,7 +221,7 @@ struct LockscreenInputView: View {
         print("🔒 [LOCKSCREEN] Secret number committed: \(secretDigits) (value: \(secretDigits.reduce(0) { $0 * 10 + $1 }))")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            onDismiss()
+            onDismiss(secretDigits)
         }
     }
 

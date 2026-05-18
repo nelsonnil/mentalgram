@@ -21,11 +21,12 @@
 "ig.searching" = "搜尋中...";
 "ig.follow_requested" = "已要求";
 "explore.no_results" = "找不到結果";
+"explore.search_blocked_upload" = "上傳時無法搜尋。\n請於上傳完成後再試。";
 "backup.never" = "從未";
 "backup.just_now" = "剛剛";
 "backup.min_ago" = "%d 分鐘前";
 "backup.h_ago" = "%d 小時前";
-"backup.info.auto" = "每次應用程式進入背景時會自動執行備份。您也可以透過「立即備份」手動觸發。";
+"backup.info.auto" = "只有點一下「立即備份」時才會執行備份。絕不會自動覆寫 iCloud。";
 "backup.info.what" = "備份內容：所有設定、Date Force、Force Reel、啟用中的套組及其元資料。";
 "backup.info.photos" = "套組照片會同步至 iCloud 雲端硬碟。可在檔案 App → iCloud 雲端硬碟 → Vault → Photos 中查看。";
 "backup.info.excluded" = "不備份：Instagram 工作階段、裝置 ID 和冷卻計時器（裝置專屬）。";
@@ -517,6 +518,7 @@
 "force_reel.remove_all" = "全部刪除";
 "force_reel.slot_n" = "位置 %d";
 "force_reel.downloading" = "下載中…";
+"force_reel.video_missing" = "影片未下載 — 請在表演前重新選擇此 Reel";
 "force_reel.picker.placeholder" = "使用者名稱（例如 beyonce）";
 "force_reel.picker.empty_state" = "搜尋帳號以查看其影片";
 "force_reel.picker.no_reels" = "找不到 @%@ 的影片";
@@ -667,6 +669,19 @@
 "ig.set_not_uploaded_title" = "套組未上傳";
 "ig.set_not_uploaded_body" = "套組\"%@\"尚未上傳到 Instagram。請前往 Sets 先上傳它。";
 "session.reason.challenge" = "Instagram 已請求重複安全驗證（%lld 次）。重新登入以恢復工作階段。";
+"session.reason.normal" = "Instagram 工作階段已過期。這通常發生在更改密碼、長時間不活動或發生安全事件之後。點按下方的重新登入以恢復工作階段。";
+"session.reason.restriction" = "Instagram 已對此帳號套用臨時限制。\n\n常見原因：\n• Instagram 官方應用程式與此應用程式同時開啟\n• 帳號較新，尚未建立活動歷史記錄\n• Instagram 偵測到異常或自動化活動\n\n新帳號更容易受到影響——提前累積貼文、粉絲和互動能大幅降低此風險。\n\n開啟 Instagram 應用程式，依照對應步驟操作：\n\n• 僅顯示「關閉」按鈕 → 點按關閉，然後直接返回此處重新登入。無需等待。\n• 顯示具體結束日期 → 等到那天，再重新登入。\n• 要求透過電話或郵件輸入驗證碼 → 先在 Instagram 應用程式中完成驗證，然後返回此處。";
+"session.panel.title.normal" = "工作階段已過期";
+"session.panel.title.restriction" = "臨時限制";
+"session.panel.title.challenge" = "需要驗證";
+"session.panel.nav_title" = "工作階段資訊";
+"session.panel.close" = "關閉";
+"session.panel.relogin" = "重新登入";
+"session.panel.relogin.restriction_hint" = "在 Instagram 應用程式中完成對應步驟後（關閉、驗證或等待結束日期），點按此處恢復工作階段。";
+"session.panel.credentials_saved" = "已儲存的憑證將自動填入。";
+"session.panel.credentials_missing" = "沒有已儲存的憑證，需要手動輸入。";
+"session.panel.emergency_logout" = "緊急登出";
+"session.panel.emergency_logout.hint" = "完全清除工作階段。您需要從頭開始重新登入。";
 
 // Tab and context menu labels
 "Sets" = "套組";
@@ -835,6 +850,22 @@
 "limits.help.calm.body" = "Instagram 偶爾會顯示一個簡短的提示,要求您確認是本人。對於任何連接到該平台的應用程式來說,這都是完全正常的,與封鎖帳號毫無關係。Vault 採用與真實應用程式相同的反機器人防護措施,每一項都經過了充分測試。";
 "limits.help.calm.infobox" = "在開發過程中,我個人觸發此類提示超過 100 次,帳號從未被封鎖。其他採用相同方式的應用程式也都正常運作 — 如果真有任何風險,Vault 不會發布。";
 
+"limits.help.budget.title" = "消耗每小時API配額的操作";
+"limits.help.budget.intro" = "Instagram每個工作階段每小時允許約55次API操作。應用程式會自動追蹤。以下是計入配額的內容——以及不計入的內容：";
+"limits.help.budget.free" = "免費";
+"limits.help.budget.free.items" = "滾動相片牆 · 音量鍵動畫 · 輸入秘密數字 · 查看已開啟的主頁（快取） · 瀏覽設定或指南";
+"limits.help.budget.low" = "消耗低";
+"limits.help.budget.low.items" = "開啟應用程式（1次） · 載入粉絲清單（1次） · 揭示字母/照片（各1次） · 計數器故障——首次開啟新主頁（4次） · 搜尋主頁（2次）";
+"limits.help.budget.high" = "消耗高";
+"limits.help.budget.high.items" = "同步與封存——每張照片2次 · 上傳照片——每張1次 · 開啟5個不同粉絲主頁——約20次";
+"limits.help.budget.reset" = "配額每60分鐘重置一次。如果應用程式自動暫停，表示已用完每小時配額——等待即可，應用程式會自動恢復。";
+"limits.help.rehearsal.title" = "安全排練——黃金法則";
+"limits.help.rehearsal.body" = "大多數機器人偵測發生在測試期間，而非演出期間。幾個簡單的習慣可以消除90%的風險：";
+"limits.help.rehearsal.tip1" = "開啟同一粉絲的主頁一次→快取數天。與同一個人進行多少次計數器故障練習都可以——零成本。";
+"limits.help.rehearsal.tip2" = "將同步與封存和照片上傳分散在不同時間——不要在演出前集中操作。";
+"limits.help.rehearsal.avoid1" = "排練時不要連續開啟4-5個不同粉絲的主頁。每個新主頁需要消耗約4次API呼叫。";
+"limits.help.rehearsal.avoid2" = "測試時不要反覆重新啟動應用程式——每次重新啟動都會觸發工作階段驗證。";
+"limits.help.rehearsal.tip" = "最安全的排練方式：開啟你將要使用的那個粉絲主頁，做一次效果，然後返回。重複同樣的操作順序→從第二次起完全免費。";
 "limits.help.warning.title" = "如果出現\"異常活動\"提示";
 "limits.help.warning.intro" = "別擔心 — 這不是封鎖。只是 Instagram 在確認本人身份。依照以下步驟操作:";
 "limits.help.warning.step1" = "打開官方 Instagram 應用程式,在提示上點擊\"Dismiss\"。";
@@ -852,6 +883,59 @@
 "limits.help.best.item2" = "提前一晚或至少在表演前一小時準備好您的 Set(Sync & Archive),而不是在排練後立即進行。";
 "limits.help.best.item3" = "如果您經常表演,請使用與主帳號分開的專用 Instagram 帳號。";
 "limits.help.best.item4" = "Vault 會自動處理所有等待時間 — 您什麼都不用想。";
+
+"limits.help.testing.title" = "為什麼 Instagram 可能會要求安全驗證？";
+"limits.help.testing.body" = "在測試應用程式期間，Instagram 偵測到異常活動是正常的。測試時，會在短時間內連續執行許多操作——修改個人簡介、發布備註、揭示照片——並且使用新帳號，這在 Instagram 的安全系統看來可能像是自動化行為。\n\n在真實演出中，這種情況永遠不會發生：各操作之間由演出的自然節奏自然間隔，使一切看起來都像正常的人工使用。";
+"limits.help.testing.fix" = "如果 Instagram 要求驗證電子郵件或電話號碼，這只是一次性的安全檢查。透過瀏覽器在 instagram.com 上完成驗證，帳號即可恢復正常使用。";
+
+"limits.help.session.title" = "如果應用程式顯示「無網路」畫面";
+"limits.help.session.body" = "有時 Instagram 會暫時撤銷工作階段 — 應用程式會顯示一個通用的「無連線」畫面，以免觀眾看到技術內容。這不是封號。\n\n要查看真實說明並解決問題，請點按該畫面右下角的 ⓘ 按鈕。";
+"limits.help.session.case1.label" = "只出現「關閉」按鈕";
+"limits.help.session.case1.action" = "在 Instagram 應用程式中點按「關閉」，然後直接返回此處重新登入。無需等待 — 可立即登入。";
+"limits.help.session.case2.label" = "顯示具體結束日期";
+"limits.help.session.case2.action" = "等到那天，再重新登入。Instagram 設置了短暫的冷卻期 — 您的帳號沒有問題。";
+"limits.help.session.case3.label" = "要求透過電話或郵件輸入驗證碼";
+"limits.help.session.case3.action" = "先在 Instagram 應用程式中完成驗證，完成後返回此處點按重新登入。";
+"limits.help.session.new_account" = "活動記錄較少的新帳號更容易遇到這種情況。循序漸進地累積貼文、粉絲和互動 — Instagram 對有成熟歷史記錄的帳號信任度更高。";
+"limits.help.session.contact" = "如果機器人偵測持續發生，請聯絡開發者並分享您的日誌（設定 → 匯出日誌）。這有助於分析問題並改善所有人的保護。";
+
+"limits.help.gauge.title" = "您每小時 55 次操作預算";
+"limits.help.gauge.body" = "Instagram 將每個連接的應用限制為每小時 55 次操作。預算採用滾動 60 分鐘視窗機制，每次操作在執行後正好 60 分鐘後到期，因此計數器會自動下降，無需強制重置。";
+"limits.help.gauge.cache" = "首次開啟 Performance 或追蹤者資料時，應用程式會聯絡 Instagram（消耗預算）。此後的每次訪問都會從快取中即時免費載入。";
+"limits.help.gauge.hardstop" = "當達到 55 次限制時，應用程式會自動停止向 Instagram 發送任何進一步的請求。不會發送任何內容，不會觸發任何操作——它會靜默等待，直到預算重置。您無需做任何事情。";
+"limits.help.gauge.zone.safe" = "安全 (>20)";
+"limits.help.gauge.zone.low" = "偏低 (8–20)";
+"limits.help.gauge.zone.critical" = "危險 (<8)";
+
+"limits.help.table.title" = "每項功能消耗的操作次數";
+"limits.help.table.subtitle" = "首次使用的消耗 vs. 結果已快取時的消耗。";
+"limits.help.table.col.action" = "功能";
+"limits.help.table.col.first" = "首次";
+"limits.help.table.col.again" = "再次";
+"limits.help.table.row.performance" = "開啟 Performance";
+"limits.help.table.row.followers" = "追蹤者清單";
+"limits.help.table.row.profile.new" = "新追蹤者資料";
+"limits.help.table.row.sa" = "Sync & Archive（每張照片）";
+"limits.help.table.row.upload" = "上傳（每張照片）";
+"limits.help.table.row.reveal" = "揭示（每個字母/照片）";
+"limits.help.table.row.notebio" = "更改備註或簡介";
+"limits.help.table.row.explore" = "探索 / 搜尋";
+"limits.help.sa.auto" = "在包含揭示和資料訪問的完整表演後，應用程式會在 Sync & Archive 前自動增加短暫等待時間。這是正常的，可以保護您的工作階段。";
+
+"limits.help.profiles.title" = "訪問資料 — 消耗最多的操作";
+"limits.help.profiles.body" = "每次開啟新的追蹤者資料需要消耗 4–5 次操作。第二次訪問同一資料是免費的（從快取載入）。因此，快速開啟 3–4 個不同資料可能會耗盡預算並觸發機器人偵測。";
+"limits.help.profiles.max" = "建議：每次工作階段最多開啟 2 個新資料。避免在 Sync & Archive 前訪問新資料。";
+"limits.help.reddot.title" = "紅點";
+"limits.help.reddot.body" = "當剩餘操作少於 8 次時，追蹤者清單標題圖示上會出現一個小紅點。只有您能看到它，在表演過程中不可見。";
+"limits.help.reddot.block" = "如果在預算處於危險區時嘗試開啟新資料，應用程式會以強烈震動阻止該操作。不會發出任何 API 呼叫，您的工作階段保持安全。";
+"limits.help.reddot.location.followers" = "追蹤者清單";
+"limits.help.reddot.location.performance" = "紙飛機圖示（Performance）";
+
+"limits.help.noban.title" = "您的帳號永遠不會被封禁。";
+"limits.help.noban.body" = "Instagram 有時會要求確認您的身份——僅此而已。這不是封禁，不是警告，也不會對您的帳號造成任何風險。Vault 已在數百個真實 Instagram 帳號上進行了測試，沒有任何帳號被封禁或永久限制。如果出現提示，按照上述步驟操作，不到一分鐘您就能恢復正常使用。";
+
+"perf.safety_gate.wait" = "偵測到過多快速載入。\n請等待 %lld 秒…";
+"perf.safety_gate.retrying" = "正在重試…";
 
 // ── Counter Glitch demo ──
 "Espectador" = "觀眾";

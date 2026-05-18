@@ -214,6 +214,12 @@ class ForceNumberRevealSettings: ObservableObject {
             LogManager.shared.warning("Auto re-archive deferred: Sync & Archive in progress", category: .upload)
             let retryDate = Date().addingTimeInterval(5 * 60)
             reArchiveScheduledAt = retryDate
+            // BUG-FIX: Previously this branch only set the in-memory date and
+            // returned. If the app was killed before the 5-min retry, the
+            // re-archive job was silently lost. Persist + reschedule the task
+            // so the retry actually fires after the deferral window.
+            persistPending(ids: mediaIds, deadline: retryDate)
+            scheduleTask(ids: mediaIds, afterSeconds: 5 * 60, deadline: retryDate)
             return
         }
 
@@ -301,6 +307,18 @@ class ForceNumberRevealSettings: ObservableObject {
                 let retryDate = Date().addingTimeInterval(Double(autoReArchiveMinutes) * 60)
                 reArchiveScheduledAt = retryDate
                 scheduleTask(ids: remaining, afterSeconds: Double(autoReArchiveMinutes) * 60, deadline: retryDate)
+                return
+            }
+
+            let archiveSafety = InstagramSafetyGate.shared.canArchive(mediaId: mediaId)
+            if !archiveSafety.allowed {
+                print("🛡️ [RE-ARCHIVE] Safety pause — \(archiveSafety.reason), retry in \(archiveSafety.waitSeconds)s")
+                LogManager.shared.warning("SAFETY BLOCK — auto re-archive postponed: \(archiveSafety.reason)", category: .upload)
+                updatePersisted(remaining: remaining)
+                let retryDate = Date().addingTimeInterval(TimeInterval(max(archiveSafety.waitSeconds, 60)))
+                reArchiveScheduledAt = retryDate
+                persistPending(ids: remaining, deadline: retryDate)
+                scheduleTask(ids: remaining, afterSeconds: TimeInterval(max(archiveSafety.waitSeconds, 60)), deadline: retryDate)
                 return
             }
 

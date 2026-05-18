@@ -200,8 +200,7 @@ class DataManager: ObservableObject {
         saveSets()
         addLog(action: "set_created", details: "Created set \(name) with \(setPhotos.count) photos")
 
-        // Upload the new set's images to iCloud Drive in background
-        iCloudDriveSync.shared.syncSetPhotos(setId: newSet.id)
+        // Backup is manual-only: do not upload new set images automatically.
 
         return newSet
     }
@@ -312,9 +311,13 @@ class DataManager: ObservableObject {
         for setIndex in sets.indices {
             if let photoIndex = sets[setIndex].photos.firstIndex(where: { $0.id == photoId }) {
                 if let mediaId = mediaId {
+                    let previousMediaId = sets[setIndex].photos[photoIndex].mediaId
                     sets[setIndex].photos[photoIndex].mediaId = mediaId
-                    // Only set date if not explicitly provided
-                    if uploadDate == nil {
+                    // Only assign a default upload date when this is the first time
+                    // the photo receives a mediaId (fresh upload/import). Reveal/archive
+                    // updates pass the same mediaId again and must preserve the original
+                    // date, otherwise revealed cards/posts jump to the top of the grid.
+                    if uploadDate == nil && previousMediaId == nil {
                         sets[setIndex].photos[photoIndex].uploadDate = Date()
                     }
                 }
@@ -496,8 +499,7 @@ class DataManager: ObservableObject {
         sets.removeAll { $0.id == id }
         saveSets()
         addLog(action: "set_deleted", details: "Deleted set \(id)")
-        // Remove the set's photo folder from iCloud Drive too
-        iCloudDriveSync.shared.deleteSetFromCloud(setId: id)
+        // Backup is manual-only: do not delete the cloud copy automatically.
     }
     
     // MARK: - Persistence
@@ -506,14 +508,10 @@ class DataManager: ObservableObject {
         if let data = try? JSONEncoder().encode(sets) {
             UserDefaults.standard.set(data, forKey: setsKey)
         }
-        // Schedule a debounced backup (60 s delay) so that accidental deletes or crashes
-        // within that window do NOT immediately overwrite the existing iCloud backup.
-        // The backup is guaranteed to run when the app backgrounds (see MentalGram1App.swift).
-        CloudBackupService.shared.scheduleDebouncedSync()
+        // Backup is manual-only. Saving local sets must never overwrite cloud backup.
     }
 
-    /// Forces an immediate iCloud backup — call this when the app goes to background
-    /// so the backup is always current when the user switches apps or force-quits.
+    /// Forces an immediate iCloud backup. Keep for explicit user actions only.
     func forceImmediateBackup() {
         CloudBackupService.shared.syncToCloud(immediate: true)
     }

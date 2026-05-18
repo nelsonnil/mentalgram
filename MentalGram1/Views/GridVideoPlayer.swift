@@ -2,30 +2,45 @@ import SwiftUI
 import AVKit
 import Combine
 
-/// Video player for grid cells - auto-plays, loops silently, fills cell (no black bars)
+/// Video player for grid cells - auto-plays, loops, fills cell (no black bars).
+/// Set `muted: false` for feed-style playback (with audio) or leave it true for
+/// thumbnail-style background reels.
 struct GridVideoPlayer: View {
     let videoURL: String
+    var muted: Bool = true
+    /// Show a poster image as background while the AVPlayer warms up.
+    /// Avoids the "black flash" while AVPlayer loads its first frame.
+    var posterImage: UIImage? = nil
     @StateObject private var playerManager = VideoPlayerManager()
     
     var body: some View {
         GeometryReader { geometry in
-            if let player = playerManager.player {
-                // Portrait reels fill the cell like Instagram. Horizontal videos
-                // use aspect-fit so they do not look zoomed/cropped.
-                AVPlayerFillView(player: player, videoGravity: playerManager.videoGravity)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    )
+            ZStack {
+                // Poster shows the cached thumbnail behind the player. When the
+                // player hasn't drawn its first frame yet (or fails to load) we
+                // still see the photo instead of an empty black rectangle.
+                if let poster = posterImage {
+                    Image(uiImage: poster)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.25))
+                }
+
+                if let player = playerManager.player {
+                    AVPlayerFillView(player: player, videoGravity: playerManager.videoGravity)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                } else if posterImage == nil {
+                    ProgressView().scaleEffect(0.8)
+                }
             }
         }
         .onAppear {
-            playerManager.setupPlayer(url: videoURL)
+            playerManager.setupPlayer(url: videoURL, muted: muted)
         }
         .onDisappear {
             playerManager.cleanup()
@@ -63,20 +78,65 @@ class PlayerFillUIView: UIView {
     }
 }
 
+// MARK: - Single-audio coordinator
+// Guarantees only one unmuted AVPlayer produces audio at any given time.
+// Both VideoPlayerManager (grid/feed) and DetailVideoPlayerManager (fullscreen)
+// register here when they start unmuted playback.
+class VideoPlaybackCoordinator {
+    static let shared = VideoPlaybackCoordinator()
+    private weak var activeUnmutedPlayer: AVPlayer?
+
+    /// Call when an unmuted player starts. Pauses the previous one automatically.
+    func activate(_ newPlayer: AVPlayer) {
+        if let old = activeUnmutedPlayer, old !== newPlayer {
+            old.pause()
+        }
+        activeUnmutedPlayer = newPlayer
+    }
+
+    /// Call when a player is cleaned up so the reference doesn't linger.
+    func deactivate(_ player: AVPlayer) {
+        if activeUnmutedPlayer === player {
+            activeUnmutedPlayer = nil
+        }
+    }
+}
+
 /// Manages AVPlayer lifecycle for grid videos
 class VideoPlayerManager: ObservableObject {
     @Published var player: AVPlayer?
     @Published var videoGravity: AVLayerVideoGravity = .resizeAspectFill
     private var loopObserver: Any?
+    private var isMuted = true
     
-    func setupPlayer(url: String) {
-        guard let videoURL = URL(string: url) else { return }
-        
+    func setupPlayer(url: String, muted: Bool = true) {
+        guard let videoURL = URL(string: url) else {
+            print("⚠️ [VIDEO] Invalid URL: \(url.prefix(80))")
+            return
+        }
+        self.isMuted = muted
+
+        // iOS requires an active AVAudioSession for AVPlayer to render video
+        // frames even when the player is muted. Without this, the first frame
+        // never renders and the cell stays black.
+        try? AVAudioSession.sharedInstance().setCategory(
+            muted ? .ambient : .playback,
+            mode: .default,
+            options: muted ? [.mixWithOthers] : []
+        )
+        try? AVAudioSession.sharedInstance().setActive(true, options: [])
+
         let asset = AVURLAsset(url: videoURL)
         resolveVideoGravity(for: asset)
 
         let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
-        player.isMuted = true // Silent playback
+        player.isMuted = muted
+
+        // If unmuted, tell the coordinator — it will pause any other active player.
+        if !muted {
+            VideoPlaybackCoordinator.shared.activate(player)
+        }
+
         player.play()
         
         // Loop video when it ends
@@ -93,7 +153,10 @@ class VideoPlayerManager: ObservableObject {
     }
     
     func cleanup() {
-        player?.pause()
+        if let p = player {
+            if !isMuted { VideoPlaybackCoordinator.shared.deactivate(p) }
+            p.pause()
+        }
         player = nil
         videoGravity = .resizeAspectFill
         

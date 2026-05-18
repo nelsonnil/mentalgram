@@ -33,6 +33,11 @@ class UploadManager: ObservableObject {
     // Auto re-archive checks this flag and defers if active.
     @Published var isSyncArchiveActive: Bool = false
 
+    // MARK: - Challenge gate
+    // Set to true when a challenge_required occurs on a POST endpoint.
+    // Blocks auto-resume: the user must tap Resume manually after verifying in Instagram.
+    @Published var requiresManualResumeAfterChallenge: Bool = false
+
     // MARK: - Re-verify state (survives view dismissal)
     @Published var isReverifying: Bool = false
     @Published var reverifyProgress: Int = 0
@@ -98,6 +103,7 @@ class UploadManager: ObservableObject {
     
     // MARK: - Error State
     @Published var showingError: String? = nil
+    @Published var safetyBlockMessage: String? = nil
     @Published var failedPhotoIndex: Int? = nil
     @Published var isPhotoRejected = false
     @Published var botDetectionTime: Date? = nil
@@ -122,6 +128,7 @@ class UploadManager: ObservableObject {
     // MARK: - Reset Error State
     func resetErrorState() {
         showingError = nil
+        safetyBlockMessage = nil
         failedPhotoIndex = nil
         isPhotoRejected = false
         botCountdownSeconds = 0
@@ -148,6 +155,7 @@ class UploadManager: ObservableObject {
         cooldownRetryDisabledUntil = nil
         requestPause = false
         autoResumePending = false
+        requiresManualResumeAfterChallenge = false
         activeTask?.cancel()
         activeTask = nil
         clearWaitPersistence()
@@ -429,6 +437,26 @@ class UploadManager: ObservableObject {
                 print("⚠️ [NOTIF] Failed to schedule session-expired notification: \(error.localizedDescription)")
             } else {
                 print("🔔 [NOTIF] Session-expired notification sent")
+            }
+        }
+    }
+
+    func sendUploadSafetyPauseNotification() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["uploadSafetyPause"])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Upload paused for safety"
+        content.body = "Vault detected too much Instagram activity or a verification check. Open the app before resuming."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(identifier: "uploadSafetyPause", content: content, trigger: trigger)
+        center.add(request) { error in
+            if let error {
+                print("⚠️ [NOTIF] Failed to schedule upload-safety notification: \(error.localizedDescription)")
+            } else {
+                print("🔔 [NOTIF] Upload-safety notification sent")
             }
         }
     }

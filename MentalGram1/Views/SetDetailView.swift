@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import CryptoKit
 import UniformTypeIdentifiers
 import PhotosUI
@@ -120,6 +121,17 @@ struct SetDetailView: View {
     @State private var isPausingBeforeArchive = false
     /// Seconds remaining in the current pause or inter-archive cooldown (shown as countdown).
     @State private var saCountdownSeconds: Int = 0
+    /// Re-evaluation tick driving countdowns on the S&A button (post-reveal hold,
+    /// per-set cooldown). Bumped every second by a timer while the section is
+    /// visible. Keeps the SwiftUI body in sync without forcing the whole view
+    /// to re-render on every model change.
+    @State private var safetyCountdownTick: Int = 0
+    /// Set when the archive loop stops early for a benign reason (budget cap,
+    /// rate limit, post-reveal). Surfaced in the result banner so the magician
+    /// knows pending photos are deferred, not failed.
+    @State private var archiveStopReason: String? = nil
+    /// Presents the LockdownDetailsSheet from the "Start Uploading" button when locked.
+    @State private var showingLockdownSheet: Bool = false
 
     // GRID ANCHOR — taken_at override computed automatically at upload time.
     // Set to (oldest post in the current first-page fetch) - 1 second so the prediction
@@ -193,23 +205,89 @@ struct SetDetailView: View {
 
     @ViewBuilder private var sessionExpiredBanner: some View {
         if instagram.isSessionExpired {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.lock.fill").foregroundColor(.white)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Session expired")
-                        .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
-                    Text("Log out and log in again to continue uploading.")
-                        .font(.system(size: 12)).foregroundColor(.white.opacity(0.85))
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.lock.fill")
+                        .foregroundColor(.white)
+                        .font(.system(size: 18))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Session expired")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text("Instagram rejected the session. Re-login to refresh, or read why before retrying.")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.9))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer()
+
+                HStack(spacing: 8) {
+                    Button(action: { showSessionRelogin = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Re-login")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.white)
+                        .cornerRadius(8)
+                    }
+                    Button(action: { showSessionInfo = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Why?")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.white.opacity(0.18))
+                        .cornerRadius(8)
+                    }
+                    Spacer()
+                }
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(Color.red).cornerRadius(10).padding(.horizontal, 16)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.red)
+            .cornerRadius(10)
+            .padding(.horizontal, 16)
+            .sheet(isPresented: $showSessionInfo) {
+                MagicianSessionPanel(
+                    showRelogin: $showSessionRelogin,
+                    dismissPanel: { showSessionInfo = false }
+                )
+            }
+            .sheet(isPresented: $showSessionRelogin) {
+                ReloginSheet(isPresented: $showSessionRelogin)
+            }
+            .sheet(isPresented: $showingLockdownSheet) {
+                LockdownDetailsSheet()
+            }
         }
     }
 
     @ViewBuilder private var reverifySection: some View {
-        if instagram.isLoggedIn && visibleUploadedPhotos.isEmpty && !allUploadedPhotos.isEmpty && !isSyncing && !isArchivingAll {
+        // ANTI-CRASH: Do NOT show while S&A is running or just completed — at the
+        // moment `isArchivingAll` flips to false all photos may be locally still
+        // in transition (isArchived update pending). Evaluating `allUploadedPhotos`
+        // before that settles can produce an inconsistent state and a SwiftUI
+        // body crash. `archiveAllCompleted` stays true until the next navigation
+        // away and back, so this guard also suppresses the accidental launch of
+        // a background archive scan (which caused the /feed/only_me_feed/ scan
+        // visible in logs while S&A was still running its second archive).
+        if instagram.isLoggedIn
+            && visibleUploadedPhotos.isEmpty
+            && !allUploadedPhotos.isEmpty
+            && !isSyncing
+            && !isArchivingAll
+            && !archiveAllCompleted
+            && !uploadManager.isSyncArchiveActive {
             VStack(spacing: 6) {
                 if uploadManager.isReverifying {
                     HStack(spacing: 8) {
@@ -355,6 +433,10 @@ struct SetDetailView: View {
     }
 
     var body: some View {
+        bodyWithPresentation
+    }
+
+    private var bodyBase: some View {
         ZStack {
             VaultTheme.Colors.background.ignoresSafeArea()
             mainScrollContent
@@ -365,6 +447,10 @@ struct SetDetailView: View {
         .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private var bodyWithAlerts: some View {
+        bodyBase
         .alert("Error", isPresented: .constant(uploadManager.showingError != nil), presenting: uploadManager.showingError) { _ in
             if uploadManager.isPhotoRejected {
                 // Photo rejected: Offer skip or replace (only non-auto-retryable alert)
@@ -380,6 +466,17 @@ struct SetDetailView: View {
         } message: { error in
             Text(error)
         }
+        .alert("Safety Pause", isPresented: .constant(uploadManager.safetyBlockMessage != nil), presenting: uploadManager.safetyBlockMessage) { _ in
+            Button("OK") {
+                uploadManager.safetyBlockMessage = nil
+            }
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    private var bodyWithLifecycle: some View {
+        bodyWithAlerts
         .onChange(of: instagram.networkChangedDuringUpload) { changed in
             // Network changed during active upload → request pause
             if changed && uploadManager.isUploading && isThisSetActive {
@@ -407,6 +504,15 @@ struct SetDetailView: View {
             // calls (upload + archive) from the same session trigger bot detection.
             guard isThisSetActive && uploadManager.isPaused && !uploadManager.isSyncArchiveActive else {
                 uploadManager.autoResumePending = false
+                return
+            }
+            // After a POST challenge_required the user must tap Resume manually to
+            // confirm they've verified in Instagram. Auto-resuming would repeat the
+            // exact failure pattern (04:39 scenario in the logs).
+            guard !uploadManager.requiresManualResumeAfterChallenge else {
+                uploadManager.autoResumePending = false
+                print("⏸️ [UPLOAD] Auto-resume blocked — challenge requires manual confirmation")
+                LogManager.shared.warning("Auto-resume blocked: challenge requires manual resume", category: .upload)
                 return
             }
             uploadManager.autoResumePending = false
@@ -446,6 +552,10 @@ struct SetDetailView: View {
             guard !newItems.isEmpty else { return }
             loadBulkPhotosIntoEmptySlots(items: newItems)
         }
+    }
+
+    private var bodyWithPresentation: some View {
+        bodyWithLifecycle
         .alert("Delete Photo", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 if let symbol = deleteTargetSymbol {
@@ -542,6 +652,18 @@ struct SetDetailView: View {
     
     // MARK: - Verify & Sync Section
 
+    /// Drives the post-reveal / set-cooldown countdown on the S&A button.
+    /// Declared as a stored property so the publisher isn't recreated on each
+    /// SwiftUI body evaluation.
+    private let safetySectionTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    /// Re-login sheet bound to the session-expired banner (so the magician
+    /// doesn't have to navigate to Settings to fix a dead session).
+    @State private var showSessionRelogin = false
+    /// Info sheet (same content as the WiFi-style overlay's "i" button) bound
+    /// to the session-expired banner.
+    @State private var showSessionInfo = false
+
     /// Banner visible only when logged in and there are locally-visible uploaded photos
     /// that could be desynced from Instagram's real archive state.
     @ViewBuilder
@@ -549,7 +671,13 @@ struct SetDetailView: View {
         // Keep the section visible while any S&A operation is active, even if
         // visibleUploadedPhotos becomes empty mid-archive (all photos archived).
         let saIsActive = isSyncing || isArchivingAll || uploadManager.isSyncArchiveActive || archiveAllCompleted
-        if instagram.isLoggedIn && (!visibleUploadedPhotos.isEmpty || saIsActive) {
+        // ANTI-FLASH: when the session is expired we surface the action buttons
+        // through `sessionExpiredBanner` (Re-login + Why). Showing the disabled
+        // red S&A here on top of that produces the visual "red flash" the user
+        // reported when returning to the app from the WiFi overlay.
+        if instagram.isLoggedIn
+            && (!visibleUploadedPhotos.isEmpty || saIsActive)
+            && !instagram.isSessionExpired {
             VStack(spacing: 8) {
 
                 // ── Phase 1 running: verifying ─────────────────────────
@@ -640,16 +768,23 @@ struct SetDetailView: View {
                                 .font(.subheadline.bold())
                                 .foregroundColor(.green)
                         } else {
-                            Image(systemName: "exclamationmark.triangle.fill")
+                            // Partial finish — most likely a safe pause (budget
+                            // cap) rather than a genuine failure. Phrase the
+                            // subtitle accordingly and prefer the explicit
+                            // stoppedReason captured during the archive loop.
+                            Image(systemName: "clock.badge.checkmark.fill")
                                 .foregroundColor(.orange)
                                 .font(.system(size: 16))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(String(format: String(localized: "Archived %d/%d photos"), archiveAllProgress, archiveAllTotal))
                                     .font(.subheadline.bold())
                                     .foregroundColor(.orange)
-                                Text(String(format: String(localized: "%d failed — tap Sync & Archive to retry"), archiveAllTotal - archiveAllProgress))
+                                let remaining = archiveAllTotal - archiveAllProgress
+                                Text(archiveStopReason
+                                     ?? String(format: String(localized: "%d remaining — tap Sync & Archive in a few minutes to finish"), remaining))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         Spacer()
@@ -683,8 +818,19 @@ struct SetDetailView: View {
 
                 // ── Idle: main action button ───────────────────────────
                 } else {
+                    // Tick the countdown view every second while idle so the
+                    // post-reveal hold / set-cooldown labels stay accurate.
+                    let _ = safetyCountdownTick
                     let rateCheck = instagram.checkRateLimit()
                     let saRateLimited = rateCheck.limited || rateCheck.remaining < 3
+
+                    // ANTI-BOT: surface post-reveal hold and per-set cooldown
+                    // so the magician sees *why* the button is gated and waits
+                    // instead of looking for a workaround.
+                    let postRevealLeft = InstagramSafetyGate.shared.postRevealSecondsRemaining
+                    let setCooldown = InstagramSafetyGate.shared.canSyncSet(setId: currentSet.id.uuidString)
+                    let setCooldownLeft = setCooldown.allowed ? 0 : setCooldown.waitSeconds
+                    let saBlockedBySafety = postRevealLeft > 0 || setCooldownLeft > 0
 
                     // Rate limit warning banner
                     if saRateLimited {
@@ -744,26 +890,71 @@ struct SetDetailView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "FF9F0A").opacity(0.3), lineWidth: 1))
                     }
 
-                    // PRIMARY: Sync & Archive (single safe action)
+                    // PRIMARY: Sync & Archive (single safe action — Re-verify
+                    // was removed in May 2026; it bypassed the post-reveal
+                    // protection that S&A respects and turned into a bot-
+                    // detection vector on the second sync).
+                    let sessionDead = instagram.isSessionExpired
+                    let saDisabled = isSyncing
+                        || isArchivingAll
+                        || uploadManager.isSyncArchiveActive
+                        || saRateLimited
+                        || saBlockedBySafety
+                        || sessionDead
+                    let saIconName: String = {
+                        if sessionDead { return "person.crop.circle.badge.exclamationmark" }
+                        if saBlockedBySafety { return "shield.lefthalf.filled" }
+                        if saRateLimited { return "clock.badge.exclamationmark" }
+                        return "archivebox.circle.fill"
+                    }()
+                    let saIconColor: Color = {
+                        if sessionDead { return .red }
+                        if saBlockedBySafety { return Color(hex: "FF9F0A") }
+                        if saRateLimited { return .orange }
+                        return .purple
+                    }()
+                    let saTitleColor: Color = saDisabled ? .secondary : .primary
+                    let saSubtitle: String = {
+                        if sessionDead {
+                            return String(localized: "Session expired — open Settings and log in again")
+                        }
+                        if postRevealLeft > 0 {
+                            return String(
+                                format: String(localized: "Recent reveals are protected — wait %@"),
+                                formatCountdown(postRevealLeft)
+                            )
+                        }
+                        if setCooldownLeft > 0 {
+                            return String(
+                                format: String(localized: "Same set just synced — wait %@ before syncing again"),
+                                formatCountdown(setCooldownLeft)
+                            )
+                        }
+                        if saRateLimited {
+                            return String(localized: "Rate limit active — wait a few minutes")
+                        }
+                        return String(localized: "Verifies state · then archives with safe delays · no duplicate API calls")
+                    }()
+                    let saPulse = syncArchivePulse && !saDisabled
+
                     Button(action: {
                         guard !isSyncing, !isArchivingAll else { return }
                         Task { await syncThenArchiveAll() }
                     }) {
                         HStack(spacing: 10) {
-                            Image(systemName: saRateLimited ? "clock.badge.exclamationmark" : "archivebox.circle.fill")
+                            Image(systemName: saIconName)
                                 .font(.system(size: 22))
-                                .foregroundColor(saRateLimited ? .orange : .purple)
-                                .opacity(!saRateLimited && !isSyncing && !isArchivingAll ? 1.0 : 0.6)
+                                .foregroundColor(saIconColor)
+                                .opacity(saDisabled ? 0.6 : 1.0)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Sync & Archive (\(visibleUploadedPhotos.count) visible)")
                                     .font(.subheadline.bold())
-                                    .foregroundColor(saRateLimited ? .secondary : .primary)
-                                Text(saRateLimited
-                                     ? "Rate limit active — wait a few minutes"
-                                     : "Verifies state · then archives with safe delays · no duplicate API calls")
+                                    .foregroundColor(saTitleColor)
+                                Text(saSubtitle)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(2)
+                                    .monospacedDigit()
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -772,60 +963,41 @@ struct SetDetailView: View {
                         }
                         .padding(12)
                         .background(
-                            (saRateLimited ? Color.orange : Color.purple)
-                                .opacity(syncArchivePulse && !saRateLimited ? 0.16 : 0.08)
+                            saIconColor.opacity(saPulse ? 0.16 : 0.08)
                         )
                         .cornerRadius(10)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(
-                            (saRateLimited ? Color.orange : Color.purple)
-                                .opacity(syncArchivePulse && !saRateLimited ? 0.5 : 0.25), lineWidth: syncArchivePulse && !saRateLimited ? 1.5 : 1))
+                            saIconColor.opacity(saPulse ? 0.5 : 0.25),
+                            lineWidth: saPulse ? 1.5 : 1))
                         .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: syncArchivePulse)
                         .onAppear { syncArchivePulse = true }
                     }
                     .buttonStyle(.plain)
-                    .disabled(isSyncing || isArchivingAll || uploadManager.isSyncArchiveActive || saRateLimited)
-
-                    // SECONDARY: Verify only (read-only, no archive)
-                    Button(action: {
-                        guard !isSyncing else { return }
-                        Task { await verifySyncAll() }
-                    }) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "checkmark.shield.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.blue)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Re-verify All")
-                                    .font(.subheadline.bold())
-                                    .foregroundColor(.primary)
-                                Text("Check if any photo is currently unarchived on Instagram")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(2)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(12)
-                        .background(Color.blue.opacity(0.08))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.blue.opacity(0.25), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isSyncing || isArchivingAll)
-
-                    Text("Use Re-verify All before Performance to detect public photos and avoid accidental reveal.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .disabled(saDisabled)
+                }
+            }
+            .onReceive(safetySectionTimer) { _ in
+                // Only tick when there's an active safety countdown to display,
+                // otherwise idle redraws are wasted work.
+                let needsTick = InstagramSafetyGate.shared.postRevealSecondsRemaining > 0
+                    || !InstagramSafetyGate.shared.canSyncSet(setId: currentSet.id.uuidString).allowed
+                if needsTick {
+                    safetyCountdownTick &+= 1
                 }
             }
         }
+    }
+
+    /// Renders a "Xm Ys" / "Ys" countdown for the safety labels on the S&A
+    /// button. Re-evaluated whenever `safetyCountdownTick` changes.
+    private func formatCountdown(_ seconds: Int) -> String {
+        let s = max(0, seconds)
+        let m = s / 60
+        let r = s % 60
+        if m > 0 {
+            return String(format: "%dm %02ds", m, r)
+        }
+        return String(format: "%ds", r)
     }
 
     private var syncResultTitle: String {
@@ -845,127 +1017,52 @@ struct SetDetailView: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Checks each locally-visible uploaded photo against Instagram's real archive status.
-    /// Outcome per photo:
-    ///  - Instagram says archived  → fix local state (no write API call) [fixed]
-    ///  - Instagram says visible   → truly public, candidate for Archive All [trulyVisible]
-    ///  - Instagram returns nil    → couldn't determine, skip [unknown]
-    /// Uses 1.5s delay between GETs to avoid rapid-request patterns.
-    private func verifySyncAll() async {
-        let photos = visibleUploadedPhotos
-        guard !photos.isEmpty, !isSyncing else {
-            print("⚠️ [SYNC] verifySyncAll called but already running or no photos")
-            return
-        }
+    /// ANTI-BOT: If a cold-start or warm-resume window is currently active, wait
+    /// for it to close before starting a batch operation. We surface a countdown
+    /// in the UI via `isPausingBeforeArchive` + `saCountdownSeconds` so the user
+    /// knows the sync is queued, not stuck. No-op if no window is active.
+    private func waitForColdStartIfNeeded(label: String) async {
+        guard InstagramSafetyGate.shared.isInColdStartWindow else { return }
+        let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+        guard remaining > 0 else { return }
 
-        print("🔄 [SYNC] Starting verify for \(photos.count) photo(s)")
-        LogManager.shared.info("State sync started: \(photos.count) visible photos to check", category: .general)
+        print("⏳ [\(label.uppercased())] Cold-start active — waiting \(remaining)s before starting batch")
+        LogManager.shared.info("[\(label)] Deferred — cold-start active, waiting \(remaining)s", category: .general)
 
         await MainActor.run {
-            isSyncing = true
-            syncProgress = 0
-            syncTotal = photos.count
-            syncFixedCount = 0
-            syncUnknownCount = 0
-            syncTrulyVisibleIds = []
-            syncCompleted = false
-            archiveAllCompleted = false
+            isPausingBeforeArchive = true
+            saCountdownSeconds = remaining
         }
 
-        var fixed = 0
-        var unknown = 0
-        var trulyVisible: [String] = []
-
-        for (index, photo) in photos.enumerated() {
-            guard let mediaId = photo.mediaId else {
-                print("⚠️ [SYNC] Photo index \(index) has no mediaId — skipping")
-                unknown += 1
-                continue
-            }
-
-            // Anti-bot gap: 1.5s between GET requests (skip before first)
-            if index > 0 {
-                print("⏳ [SYNC] Waiting 1.5s before next check...")
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-            }
-
-            await MainActor.run { syncProgress = index + 1 }
-            print("🔍 [SYNC] Checking photo \(index + 1)/\(photos.count) — mediaId: \(mediaId)")
-
-            do {
-                let result = try await instagram.getMediaIsArchived(mediaId: mediaId)
-
-                switch result {
-                case .some(true):
-                    // Desync: Instagram says archived, local says visible → fix local silently
-                    await MainActor.run {
-                        dataManager.updatePhoto(
-                            photoId: photo.id,
-                            mediaId: mediaId,
-                            isArchived: true,
-                            uploadStatus: .completed,
-                            errorMessage: nil
-                        )
-                        fixed += 1
-                    }
-                    print("🔄 [SYNC] ✅ FIXED desync: \(mediaId) → set local to archived")
-                    LogManager.shared.info(
-                        "State sync: fixed desync for \(mediaId) (local visible → Instagram archived)",
-                        category: .general
-                    )
-
-                case .some(false):
-                    // Truly public on Instagram
-                    trulyVisible.append(mediaId)
-                    print("🔍 [SYNC] ℹ️ Truly visible: \(mediaId) — Instagram confirms it's public")
-                    LogManager.shared.info("State sync: \(mediaId) confirmed public on Instagram", category: .general)
-
-                case .none:
-                    // Couldn't determine — API returned nil (no 'is_archived' field or error)
-                    unknown += 1
-                    print("⚠️ [SYNC] ❓ Unknown state for: \(mediaId) — API returned nil, skipping")
-                    LogManager.shared.warning("State sync: could not determine state for \(mediaId)", category: .general)
-                }
-            } catch {
-                // Session expired (403/401) → abort entire sync, show re-login prompt
-                let msg = error.localizedDescription
-                print("🚫 [SYNC] Session error — aborting sync: \(msg)")
-                LogManager.shared.warning("State sync aborted: session error — \(msg)", category: .api)
-                UploadManager.shared.sendSessionExpiredNotification()
-                await MainActor.run {
-                    isSyncing = false
-                    syncCompleted = false
-                    syncUnknownCount = photos.count
-                }
-                return
-            }
+        var left = remaining
+        while left > 0 && InstagramSafetyGate.shared.isInColdStartWindow {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            left -= 1
+            let snapshot = max(left, 0)
+            await MainActor.run { saCountdownSeconds = snapshot }
         }
-
-        print("🔄 [SYNC] Done — fixed: \(fixed), trulyVisible: \(trulyVisible.count), unknown: \(unknown)")
-        LogManager.shared.info(
-            "State sync complete: fixed=\(fixed), trulyVisible=\(trulyVisible.count), unknown=\(unknown)",
-            category: .general
-        )
 
         await MainActor.run {
-            syncFixedCount = fixed
-            syncUnknownCount = unknown
-            syncTrulyVisibleIds = trulyVisible
-            isSyncing = false
-            syncCompleted = true
-        }
-
-        // Auto-hide result banner only when there's nothing actionable
-        if trulyVisible.isEmpty {
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            await MainActor.run { syncCompleted = false }
+            isPausingBeforeArchive = false
+            saCountdownSeconds = 0
         }
     }
 
     /// Archives all confirmed-visible photos sequentially with anti-bot delays.
+    /// LEGACY: the active path is `syncThenArchiveAll`. This function is kept
+    /// for any future direct-archive entry points but is not currently wired to
+    /// any UI control. If you bring it back, note that `archivePhoto()` already
+    /// performs a 3–6.5s human-like delay internally, so we no longer add an
+    /// additional pre-call delay here (it would double-wait to 6–12s per item).
     private func archiveAllVisible() async {
         let ids = syncTrulyVisibleIds
         guard !ids.isEmpty, !isArchivingAll else { return }
+        let archiveSafety = InstagramSafetyGate.shared.decision(for: .archive)
+        guard archiveSafety.allowed else {
+            print("🛡️ [ARCHIVE-ALL] Skipped — \(archiveSafety.reason) (\(archiveSafety.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — Archive All blocked: \(archiveSafety.reason)", category: .api)
+            return
+        }
 
         print("📦 [ARCHIVE-ALL] Starting archive for \(ids.count) confirmed-visible photo(s)")
         LogManager.shared.info("Archive All started: \(ids.count) photo(s)", category: .general)
@@ -978,10 +1075,10 @@ struct SetDetailView: View {
         }
 
         for (index, mediaId) in ids.enumerated() {
-            // Human-like delay before each archive: 3–6s
-            let delaySeconds = Double.random(in: 3.0...6.0)
-            print("⏳ [ARCHIVE-ALL] Waiting \(String(format: "%.1f", delaySeconds))s before archiving \(index + 1)/\(ids.count)...")
-            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            // NOTE: previously added a 3–6s pre-archive sleep here, but
+            // archivePhoto() already does the same delay internally — keeping
+            // both caused 6–12s per item which is not what the inter-archive
+            // safety design calls for.
 
             // Check rate limit before each call (synchronous — no await needed)
             let rateLimit = instagram.checkRateLimit()
@@ -989,6 +1086,12 @@ struct SetDetailView: View {
             if rateLimit.limited || rateLimit.remaining < 2 {
                 print("⛔️ [ARCHIVE-ALL] Rate limit reached — stopping at \(index)/\(ids.count)")
                 LogManager.shared.warning("Archive All stopped: rate limit reached (used: \(rateLimit.actionsUsed))", category: .api)
+                break
+            }
+
+            let perItemSafety = InstagramSafetyGate.shared.canArchive(mediaId: mediaId)
+            if !perItemSafety.allowed {
+                LogManager.shared.warning("SAFETY BLOCK — Archive All paused for \(perItemSafety.waitSeconds)s: \(perItemSafety.reason)", category: .api)
                 break
             }
 
@@ -1055,6 +1158,21 @@ struct SetDetailView: View {
             print("⚠️ [RE-VERIFY] Skipped — lockdown active")
             return
         }
+        // ANTI-BOT: Cooldown 5 min between re-verify runs. The log showed the
+        // re-verify firing twice within 36 seconds (13:25:50 and 13:26:11),
+        // generating 12 GET /feed/user/ calls in 53s. Same per-set gate used
+        // by S&A, keyed by set ID so different sets don't share the cooldown.
+        let reverifyKey = "reverify_\(currentSet.id.uuidString)"
+        let reverifyCooldown = InstagramSafetyGate.shared.canSyncSet(setId: reverifyKey)
+        guard reverifyCooldown.allowed else {
+            let m = reverifyCooldown.waitSeconds / 60
+            let s = reverifyCooldown.waitSeconds % 60
+            let label = m > 0 ? "\(m)m \(s)s" : "\(s)s"
+            print("🛡️ [RE-VERIFY] Skipped — cooldown active (\(label))")
+            LogManager.shared.info("Re-verify cooldown: \(reverifyCooldown.waitSeconds)s remaining", category: .general)
+            return
+        }
+        InstagramSafetyGate.shared.markSetSyncStarted(setId: reverifyKey)
 
         let photoSnapshots: [(id: UUID, mediaId: String, isArchived: Bool, status: PhotoUploadStatus)] = photos.compactMap { p in
             guard let mid = p.mediaId else { return nil }
@@ -1335,6 +1453,67 @@ struct SetDetailView: View {
             print("⚠️ [S&A] Skipped — lockdown active")
             return
         }
+        // ANTI-BOT: If the session is already expired (commonly carried over
+        // from a previous bot-detection that persisted to UserDefaults), do
+        // not even start the batch — every GET would just rebuild the same
+        // 403 wall against an invalidated token. Bounce the user to re-login.
+        if instagram.isSessionExpired {
+            print("⚠️ [S&A] Skipped — session already expired (re-login required)")
+            LogManager.shared.warning("S&A blocked: session already expired — user must re-login", category: .auth)
+            UploadManager.shared.sendSessionExpiredNotification()
+            return
+        }
+        let archiveSafety = InstagramSafetyGate.shared.decision(for: .archive)
+        guard archiveSafety.allowed else {
+            print("🛡️ [S&A] Skipped — \(archiveSafety.reason) (\(archiveSafety.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — Sync & Archive blocked: \(archiveSafety.reason)", category: .api)
+            return
+        }
+        // ANTI-BOT: Refuse to re-sync the same set within 5 min. Repeating the
+        // exact same /media/{pk}/info/ sequence on the same 10 photos is the
+        // pattern that triggered the May 15 HTTP 403.
+        let setKey = currentSet.id.uuidString
+        let setCooldown = InstagramSafetyGate.shared.canSyncSet(setId: setKey)
+        guard setCooldown.allowed else {
+            print("🛡️ [S&A] Skipped — \(setCooldown.reason) (\(setCooldown.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — Sync & Archive blocked: \(setCooldown.reason)", category: .api)
+            return
+        }
+
+        // ANTI-BOT: If there has been a burst of recent API activity (e.g. the user
+        // Two-tier burst detection before S&A:
+        //   Heavy (12 actions / 10 min): covers a full performance with reveals, profile
+        //   visits and bio changes spread over several minutes → 120 s buffer.
+        //   Light  (8 actions / 90 s):  rapid-fire activity moments before → 20 s buffer.
+        let heavyBurst = instagram.hasRecentApiBurst(threshold: 12, seconds: 600)
+        let lightBurst = !heavyBurst && instagram.hasRecentApiBurst(threshold: 8, seconds: 90)
+        let burstBufferSec = heavyBurst ? 120 : (lightBurst ? 20 : 0)
+
+        if burstBufferSec > 0 {
+            let burstLabel = heavyBurst ? "heavy (12/600s)" : "light (8/90s)"
+            LogManager.shared.info("S&A: \(burstLabel) burst — adding \(burstBufferSec)s safety buffer", category: .api)
+            print("⏸️ [S&A] Burst detected (\(burstLabel)) — \(burstBufferSec)s buffer before first state check")
+            await MainActor.run {
+                isPausingBeforeArchive = true
+                saCountdownSeconds = burstBufferSec
+            }
+            for _ in 0..<burstBufferSec {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                await MainActor.run { saCountdownSeconds = max(0, saCountdownSeconds - 1) }
+            }
+            await MainActor.run {
+                isPausingBeforeArchive = false
+                saCountdownSeconds = 0
+            }
+        }
+
+        // ANTI-BOT: Wait out cold-start / warm-resume window before starting the
+        // full batch. Shows a countdown via isPausingBeforeArchive in the UI.
+        await waitForColdStartIfNeeded(label: "sync & archive")
+
+        // Mark set-sync start AFTER the cold-start wait so the 5-min cooldown
+        // is measured from when work actually began.
+        InstagramSafetyGate.shared.markSetSyncStarted(setId: setKey)
 
         // Lock out auto re-archive for the duration
         await MainActor.run {
@@ -1349,6 +1528,7 @@ struct SetDetailView: View {
             archiveAllCompleted = false
             isPausingBeforeArchive = false
             saCountdownSeconds = 0
+            archiveStopReason = nil
         }
 
         // ── PHASE 1: VERIFY ──────────────────────────────────────────────
@@ -1358,6 +1538,17 @@ struct SetDetailView: View {
         var confirmedToArchive: [String] = []
         var fixed = 0
         var unknown = 0
+        var skippedProtected = 0
+        // Track whether at least one /media/{pk}/info/ actually hit the network
+        // in this run. Used to randomize gaps only between real requests — back
+        // to back cache hits or protected-skips don't need to space apart.
+        var didNetworkRequestLast = false
+        // ANTI-BOT: If the session gets challenge_required during state checks,
+        // abort the whole S&A rather than continuing with the archive phase.
+        // In the May 16 incident, 3 challenge_required errors occurred during
+        // state checks but S&A continued, leading to archives going through and
+        // then a GET /feed/user/ triggering a second challenge_required.
+        var consecutiveChallengeErrors = 0
 
         for (index, photo) in photos.enumerated() {
             guard let mediaId = photo.mediaId else {
@@ -1365,17 +1556,40 @@ struct SetDetailView: View {
                 continue
             }
 
-            if index > 0 {
-                try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s anti-bot gap
+            // ANTI-BOT: Don't even ask Instagram about media we just revealed.
+            // The reveal → check → archive ping-pong is the pattern they flag.
+            if InstagramSafetyGate.shared.isMediaPostRevealProtected(mediaId: mediaId) {
+                skippedProtected += 1
+                await MainActor.run { syncProgress = index + 1 }
+                LogManager.shared.info("S&A: skipped state-check for \(mediaId) — post-reveal protected", category: .general)
+                continue
+            }
+
+            // ANTI-BOT: Randomized gap between real /media/info/ requests
+            // (2.5–4.5s) replaces the previous mechanical 1.5s. Mechanical
+            // intervals are trivially fingerprinted; jitter breaks the
+            // clockwork pattern. Cache hits / protected skips don't add a gap.
+            if didNetworkRequestLast {
+                let nanos = UInt64.random(in: 2_500_000_000...4_500_000_000)
+                let secs = Double(nanos) / 1_000_000_000
+                print(String(format: "⏳ [S&A] Waiting %.1fs before next check…", secs))
+                try? await Task.sleep(nanoseconds: nanos)
             }
 
             await MainActor.run { syncProgress = index + 1 }
 
             do {
+                // Distinguish cache-hit vs network-hit so the gap policy works.
+                // Pre-check: if the SafetyGate cache or InstagramService cache
+                // would serve this, the next iteration shouldn't add a long gap.
+                let beforeActions = instagram.actionsThisHour
                 let result = try await instagram.getMediaIsArchived(mediaId: mediaId)
+                didNetworkRequestLast = instagram.actionsThisHour > beforeActions
+
                 switch result {
                 case .some(true):
                     // Already archived on Instagram — fix local desync
+                    consecutiveChallengeErrors = 0
                     await MainActor.run {
                         dataManager.updatePhoto(
                             photoId: photo.id,
@@ -1390,12 +1604,26 @@ struct SetDetailView: View {
 
                 case .some(false):
                     // Truly public — queue for archive
+                    consecutiveChallengeErrors = 0
                     confirmedToArchive.append(mediaId)
                     LogManager.shared.info("State sync: \(mediaId) confirmed public on Instagram", category: .general)
 
                 case .none:
                     unknown += 1
+                    consecutiveChallengeErrors += 1
                     LogManager.shared.warning("State sync: could not determine state for \(mediaId)", category: .general)
+                }
+                // If 2+ consecutive state-checks fail (challenge_required), abort now.
+                // Continuing into the archive phase after a challenge streak risks
+                // compounding the bot signal with more API calls.
+                if consecutiveChallengeErrors >= 2 {
+                    LogManager.shared.warning("S&A aborted: \(consecutiveChallengeErrors) consecutive challenge errors during state checks — waiting for cooldown", category: .api)
+                    await MainActor.run {
+                        isSyncing = false
+                        uploadManager.isSyncArchiveActive = false
+                        archiveStopReason = String(localized: "Instagram verification required — wait a few minutes and try again")
+                    }
+                    return
                 }
             } catch {
                 // Session error — abort entirely
@@ -1407,6 +1635,9 @@ struct SetDetailView: View {
                 }
                 return
             }
+        }
+        if skippedProtected > 0 {
+            LogManager.shared.info("S&A: \(skippedProtected) photo(s) skipped (post-reveal protected)", category: .general)
         }
 
         let syncSummary = "fixed=\(fixed), toArchive=\(confirmedToArchive.count), unknown=\(unknown)"
@@ -1457,13 +1688,52 @@ struct SetDetailView: View {
         }
 
         var archived = 0
+        var stoppedReason: String? = nil
         for (index, mediaId) in confirmedToArchive.enumerated() {
             // Rate limit guard
             let rateLimit = instagram.checkRateLimit()
             if rateLimit.limited || rateLimit.remaining < 2 {
                 LogManager.shared.warning("S&A archive stopped: rate limit (used: \(rateLimit.actionsUsed))", category: .api)
+                stoppedReason = String(localized: "Hourly rate limit reached — try again later")
                 break
             }
+
+            let perItemSafety = InstagramSafetyGate.shared.canArchive(mediaId: mediaId)
+            if !perItemSafety.allowed {
+                LogManager.shared.warning("SAFETY BLOCK — S&A archive paused for \(perItemSafety.waitSeconds)s: \(perItemSafety.reason)", category: .api)
+                stoppedReason = String(localized: "Some photos are post-reveal protected — try again later")
+                break
+            }
+
+            // ANTI-BOT: Archive budget is 8 per 10-min rolling window. If we're
+            // at the cap, don't fail — pause in-place with a visible countdown
+            // and resume when a slot frees up. This converts what used to be a
+            // "failed to archive after retry" into a transparent safe pause.
+            // Wait can be up to ~10 min, but the loop polls the gate each
+            // second so as soon as the oldest archive falls out of the window
+            // we get a green light.
+            while true {
+                let budget = InstagramSafetyGate.shared.decision(for: .archive)
+                if budget.allowed { break }
+                // Bail out only when the wait is unreasonable (>12 min, which
+                // can only happen if the user just ran another big batch).
+                if budget.waitSeconds > 720 {
+                    LogManager.shared.warning("S&A archive deferred: budget cooldown \(budget.waitSeconds)s — \(budget.reason)", category: .api)
+                    stoppedReason = String(
+                        format: String(localized: "Safety pause — %d photo(s) will be archived later"),
+                        confirmedToArchive.count - archived
+                    )
+                    break
+                }
+                let snapshot = budget.waitSeconds
+                await MainActor.run { saCountdownSeconds = snapshot }
+                print("⏸️ [S&A] Budget pause — waiting \(snapshot)s before continuing (\(budget.reason))")
+                LogManager.shared.info("S&A: safe pause \(snapshot)s for archive budget (\(budget.reason))", category: .upload)
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            // If the inner while bailed out (long cooldown), stop the loop too.
+            if stoppedReason != nil { break }
+            await MainActor.run { saCountdownSeconds = 0 }
 
             print("📦 [S&A] Archiving \(index + 1)/\(confirmedToArchive.count): \(mediaId)")
 
@@ -1512,10 +1782,12 @@ struct SetDetailView: View {
         print("📦 [S&A] Done — \(archived)/\(confirmedToArchive.count) archived")
         LogManager.shared.info("Archive All complete: \(archived)/\(confirmedToArchive.count)", category: .general)
 
+        let finalStopReason = stoppedReason
         await MainActor.run {
             isArchivingAll = false
             archiveAllCompleted = true
             uploadManager.isSyncArchiveActive = false
+            archiveStopReason = finalStopReason
         }
     }
 
@@ -1914,20 +2186,52 @@ struct SetDetailView: View {
             let hasUnuploadedPhotos = currentSet.photos.contains { $0.mediaId == nil }
 
             if hasUnuploadedPhotos {
+                // Show lockdown countdown inline so the user never sees the wifi overlay
+                // just because they tapped "Start Uploading" while a safety lockdown is active.
+                let isLocked = instagram.isLocked
+                let lockSeconds: Int = {
+                    guard let until = instagram.lockUntil else { return 0 }
+                    return max(0, Int(until.timeIntervalSinceNow))
+                }()
+
                 Button {
                     guard !uploadManager.isActive else { return }
+                    if instagram.isLocked {
+                        // Tapping while locked: show the lockdown details sheet instead
+                        // of letting the upload attempt fail visually with a wifi overlay.
+                        showingLockdownSheet = true
+                        return
+                    }
                     dataManager.updateSetStatus(id: currentSet.id, status: .ready)
                     Task { await uploadAllPhotos() }
                 } label: {
-                    Label("Start Uploading", systemImage: "arrow.up.circle.fill")
-                        .font(.subheadline.bold())
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(VaultTheme.Colors.primary)
-                        .cornerRadius(VaultTheme.CornerRadius.sm)
+                    if isLocked && lockSeconds > 0 {
+                        let m = lockSeconds / 60
+                        let s = lockSeconds % 60
+                        let cd = m > 0 ? "\(m)m \(s)s" : "\(s)s"
+                        Label("Locked — \(cd)", systemImage: "lock.shield.fill")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.orange)
+                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                    } else {
+                        Label("Start Uploading", systemImage: "arrow.up.circle.fill")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(VaultTheme.Colors.primary)
+                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                    }
                 }
                 .disabled(uploadManager.isActive)
+                .onReceive(safetySectionTimer) { _ in
+                    // safetySectionTimer already ticks every second — reuse it to
+                    // refresh the lockdown countdown without adding a second timer.
+                    safetyCountdownTick += 1
+                }
             }
 
             if currentSet.type == .word || currentSet.type == .number {
@@ -2810,6 +3114,23 @@ struct SetDetailView: View {
             uploadManager.showingError = String(localized: "upload.error.no_images")
             return
         }
+
+        let rate = instagram.checkRateLimit()
+        if rate.actionsUsed >= 25 {
+            let message = uploadStartSafetyMessage(rateUsed: rate.actionsUsed)
+            print("🛡️ [UPLOAD] Start blocked — too many recent API calls (\(rate.actionsUsed)/55)")
+            LogManager.shared.warning("SAFETY BLOCK — upload start blocked: \(rate.actionsUsed)/55 recent API actions", category: .upload)
+            uploadManager.safetyBlockMessage = message
+            return
+        }
+
+        let uploadSafety = InstagramSafetyGate.shared.decision(for: .upload)
+        guard uploadSafety.allowed else {
+            let message = "Upload paused for safety.\n\nReason: \(uploadSafety.reason).\n\nWait \(uploadSafety.waitSeconds)s before trying again."
+            LogManager.shared.warning("SAFETY BLOCK — upload start blocked: \(uploadSafety.reason)", category: .upload)
+            uploadManager.safetyBlockMessage = message
+            return
+        }
         
 
         // Safe to reset: no active task exists at this point
@@ -2859,6 +3180,47 @@ struct SetDetailView: View {
     }
     
     private func resumeUpload() {
+        // Clear challenge gate: user tapped Resume manually, acknowledging they checked Instagram
+        uploadManager.requiresManualResumeAfterChallenge = false
+
+        let rate = instagram.checkRateLimit()
+        if rate.actionsUsed >= 25 {
+            let message = uploadStartSafetyMessage(rateUsed: rate.actionsUsed)
+            print("🛡️ [UPLOAD] Resume blocked — too many recent API calls (\(rate.actionsUsed)/55)")
+            LogManager.shared.warning("SAFETY BLOCK — upload resume blocked: \(rate.actionsUsed)/55 recent API actions", category: .upload)
+            uploadManager.safetyBlockMessage = message
+            return
+        }
+
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            let message = "Resuming safely. Upload will continue after app warm-up (\(remaining)s)."
+            print("⏳ [UPLOAD] Resume delayed — cold-start window \(remaining)s")
+            LogManager.shared.info("[COLD-START] Upload resume delayed — \(remaining)s", category: .upload)
+            uploadManager.safetyBlockMessage = message
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 3...6)) * 1_000_000_000)
+                await MainActor.run {
+                    guard uploadManager.isPaused,
+                          isThisSetActive,
+                          !uploadManager.isSyncArchiveActive,
+                          !instagram.isLocked,
+                          !instagram.isSessionChallenged else { return }
+                    uploadManager.safetyBlockMessage = nil
+                    resumeUpload()
+                }
+            }
+            return
+        }
+
+        let uploadSafety = InstagramSafetyGate.shared.decision(for: .upload)
+        guard uploadSafety.allowed else {
+            let message = "Upload paused for safety.\n\nReason: \(uploadSafety.reason).\n\nWait \(uploadSafety.waitSeconds)s before resuming."
+            LogManager.shared.warning("SAFETY BLOCK — upload resume blocked: \(uploadSafety.reason)", category: .upload)
+            uploadManager.safetyBlockMessage = message
+            return
+        }
+
         resetErrorState()
         uploadManager.requestPause = false
         uploadManager.invalidateAllTimers()
@@ -2945,6 +3307,41 @@ struct SetDetailView: View {
                description.contains("no internet") ||
                description.contains("unreachable")
     }
+
+    private func isInstagramSafetyPauseError(_ error: Error) -> Bool {
+        let description = error.localizedDescription.lowercased()
+        return description.contains("safety pause")
+            || description.contains("verification pending")
+            || description.contains("requires verification")
+            || description.contains("challenge_required")
+            || description.contains("checkpoint")
+            || description.contains("checkpoint_challenge_required")
+            || description.contains("instagram verification")
+    }
+
+    @MainActor
+    private func pauseUploadForSafety(photoIndex: Int, message: String) {
+        uploadManager.failedPhotoIndex = photoIndex
+        uploadManager.requestPause = false
+        uploadManager.invalidateAllTimers()
+        uploadManager.uploadPhase = .paused
+        uploadManager.currentPhaseDescription = "Upload Paused - Safety"
+        uploadManager.safetyBlockMessage = message
+        uploadManager.activeTask = nil
+        uploadManager.sendUploadSafetyPauseNotification()
+        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+        LogManager.shared.warning("SAFETY BLOCK — upload paused: \(message)", category: .upload)
+    }
+
+    private func uploadStartSafetyMessage(rateUsed: Int) -> String {
+        """
+        Upload paused for safety.
+
+        Vault detected \(rateUsed) recent Instagram API actions before starting the upload. Uploading and archiving photos is one of the most sensitive operations, so continuing now could trigger Instagram verification.
+
+        Wait a few minutes, avoid browsing/refreshing profiles, then resume the upload.
+        """
+    }
     
     // Helper: Check if pause was requested and handle it
     private func checkPauseRequested(atPhotoIndex index: Int) async -> Bool {
@@ -2989,6 +3386,15 @@ struct SetDetailView: View {
             print("⏰ [UPLOAD] Global cooldown active: \(minutes)m \(seconds)s remaining")
             await waitWithCountdown(seconds: remainingCooldown, label: String(localized: "Cooldown Active"))
         }
+
+        let initialRate = instagram.checkRateLimit()
+        if initialRate.actionsUsed >= 25 && startFrom == 0 {
+            await pauseUploadForSafety(
+                photoIndex: startFrom,
+                message: uploadStartSafetyMessage(rateUsed: initialRate.actionsUsed)
+            )
+            return
+        }
         
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
         
@@ -3030,6 +3436,18 @@ struct SetDetailView: View {
                 uploadManager.currentPhaseDescription = String(localized: "Recovering interrupted archives…")
             }
 
+            // ANTI-BOT: Settling pause before the first rescue POST. The app may
+            // have just been re-opened after a crash/kill; firing the rescue
+            // archive immediately would land a POST right after the cold-start
+            // window closes. This 5–10s wait simulates the human moment of
+            // "picking the phone back up and re-orienting" and decorrelates the
+            // rescue from the launch timestamp. No UX impact: this only runs
+            // when there was an interrupted upload from a previous session.
+            let settlingSeconds = Double.random(in: 5...10)
+            print("⏳ [RESCUE] Settling pause \(String(format: "%.1f", settlingSeconds))s before first rescue archive")
+            LogManager.shared.info("Rescue settling pause: \(Int(settlingSeconds))s", category: .upload)
+            try? await Task.sleep(nanoseconds: UInt64(settlingSeconds * 1_000_000_000))
+
             for stuckPhoto in stuckPhotos {
                 guard let mediaId = stuckPhoto.mediaId else { continue }
 
@@ -3058,6 +3476,17 @@ struct SetDetailView: View {
                         print("⚠️ [RESCUE] Archive returned false for \(stuckPhoto.symbol) — marked as error")
                     }
                 } catch {
+                    if isInstagramSafetyPauseError(error) {
+                        await pauseUploadForSafety(
+                            photoIndex: 0,
+                            message: """
+                            Upload paused for safety.
+
+                            Vault detected Instagram verification or a safety pause while recovering an interrupted archive. It stopped instead of retrying to avoid a stronger checkpoint.
+                            """
+                        )
+                        return
+                    }
                     // Network or API error during rescue — mark as error rather than leaving stuck
                     dataManager.updatePhoto(photoId: stuckPhoto.id, mediaId: mediaId,
                                             isArchived: false, uploadStatus: .error,
@@ -3069,13 +3498,34 @@ struct SetDetailView: View {
         }
         // ─────────────────────────────────────────────────────────────────────────
 
-        let allPhotosToUpload = currentSet.photos.filter { $0.mediaId == nil }
+        // If the app/network dies while a photo is in .uploading before a mediaId is
+        // saved, it has no rescue path unless we explicitly make it pending again.
+        // Otherwise resume-from-index can skip it and leave it visually stuck forever.
+        let orphanedUploads = currentSet.photos.filter {
+            $0.mediaId == nil && $0.uploadStatus == .uploading
+        }
+        if !orphanedUploads.isEmpty {
+            LogManager.shared.warning("Recovered \(orphanedUploads.count) interrupted upload(s) with no mediaId before resume", category: .upload)
+            for orphan in orphanedUploads {
+                dataManager.updatePhoto(
+                    photoId: orphan.id,
+                    mediaId: nil,
+                    uploadStatus: .pending,
+                    errorMessage: "Recovered interrupted upload"
+                )
+            }
+        }
 
-        // If retrying, start from failed photo index
-        let photosToUpload = startFrom > 0 ? Array(allPhotosToUpload.dropFirst(startFrom)) : allPhotosToUpload
+        let pendingPhotoEntries = currentSet.photos.enumerated().filter { $0.element.mediaId == nil }
+
+        // If retrying, resume by the original photo index. Do NOT drop `startFrom`
+        // items from the filtered pending list; completed photos before the failed
+        // index are already removed from that list, so dropFirst(startFrom) can skip
+        // the actual failed photo and continue with the next letter.
+        let photosToUpload = pendingPhotoEntries.filter { $0.offset >= startFrom }
 
         // Safety: if nothing has imageData ready, stop cleanly (prevents infinite auto-bank recursion)
-        let anyReady = photosToUpload.contains { $0.imageData != nil }
+        let anyReady = photosToUpload.contains { $0.element.imageData != nil }
         if !anyReady {
             print("⚠️ [UPLOAD ALL] No photos with imageData — stopping upload cleanly")
             await MainActor.run {
@@ -3087,7 +3537,7 @@ struct SetDetailView: View {
             return
         }
 
-        let totalPhotos = allPhotosToUpload.count
+        let totalPhotos = pendingPhotoEntries.count
         let alreadyUploaded = totalPhotos - photosToUpload.count
         await MainActor.run {
             uploadManager.uploadProgress = UploadManager.UploadProgressInfo(current: alreadyUploaded, total: totalPhotos)
@@ -3101,8 +3551,9 @@ struct SetDetailView: View {
         // Reset consecutive retries at start
         await MainActor.run { uploadManager.consecutiveAutoRetries = 0 }
         
-        for (relativeIndex, photo) in photosToUpload.enumerated() {
-            let index = relativeIndex + startFrom
+        for (relativeIndex, entry) in photosToUpload.enumerated() {
+            let index = entry.offset
+            let photo = entry.element
             
             // Check if pause requested
             if await checkPauseRequested(atPhotoIndex: index) { return }
@@ -3116,6 +3567,21 @@ struct SetDetailView: View {
                     uploadManager.currentPhaseDescription = String(localized: "Upload Paused - Lockdown Active")
                     uploadManager.activeTask = nil
                 }
+                return
+            }
+
+            let liveRate = instagram.checkRateLimit()
+            if liveRate.actionsUsed >= 45 {
+                await pauseUploadForSafety(
+                    photoIndex: index,
+                    message: """
+                    Upload paused for safety.
+
+                    Vault has reached \(liveRate.actionsUsed) Instagram actions in the last hour. Continuing to upload/archive now would be risky.
+
+                    Wait before resuming. This protects the account from Instagram verification.
+                    """
+                )
                 return
             }
             
@@ -3174,8 +3640,10 @@ struct SetDetailView: View {
                             uploadDate: uploadTakenAt   // nil → DataManager defaults to Date()
                         )
                         
-                        // Wait before archiving (human-like delay)
-                        let waitSeconds = Double.random(in: 5...10)
+                        // Human-like pause before archiving. Simulates the user glancing at
+                        // the photo before deciding to hide it. Wide range (15-35s) avoids the
+                        // predictable 19-25s window that appeared in bot-detection logs.
+                        let waitSeconds = Double.random(in: 15...35)
                         print("   Waiting \(String(format: "%.1f", waitSeconds))s before archive...")
                         try await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
                         
@@ -3247,6 +3715,8 @@ struct SetDetailView: View {
 
                     // BOT DETECTION - STOP, lockdown
                     // Note: login_required is intentionally excluded — it means session expired, not bot
+                    let isSafetyPause = isInstagramSafetyPauseError(error)
+
                     let isBotError = errorDescription.contains("challenge") ||
                                      errorDescription.contains("spam") ||
                                      errorDescription.contains("checkpoint") ||
@@ -3266,7 +3736,35 @@ struct SetDetailView: View {
                     
                     // ===== HANDLE BY TYPE =====
                     
-                    if isSessionExpired {
+                    if isSafetyPause {
+                        let streak = await MainActor.run { InstagramService.shared.challengeRequiredStreak }
+                        let message: String
+                        if streak >= 2 {
+                            message = """
+                            ⚠️ Verificación pendiente no completada.
+
+                            Instagram sigue bloqueando la subida porque la verificación anterior no se completó en la app de Instagram. Cada reintento sin verificar empeora el bloqueo.
+
+                            Pasos obligatorios antes de reanudar:
+                            1. Abre la app de Instagram (o instagram.com)
+                            2. Completa la verificación de email/teléfono si aparece
+                            3. Espera al menos 10 minutos
+                            4. Luego vuelve a reanudar aquí
+                            """
+                        } else {
+                            message = """
+                            Upload paused for safety.
+
+                            Instagram is asking for verification or Vault detected a safety pause. The app will not auto-retry because retrying now can turn a warning into a stronger checkpoint.
+
+                            Open Instagram or instagram.com, complete any email/phone verification if shown, then wait a few minutes before resuming.
+                            """
+                        }
+                        LogManager.shared.warning("SAFETY BLOCK — upload stopped at \(photoInfo) (challenge streak:\(streak)): \(error.localizedDescription)", category: .upload)
+                        await pauseUploadForSafety(photoIndex: index, message: message)
+                        return
+
+                    } else if isSessionExpired {
                         LogManager.shared.error("Session expired at \(photoInfo) - re-login required", category: .auth)
 
                         // If the photo was already uploaded (has a mediaId in the DB), do NOT

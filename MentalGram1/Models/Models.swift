@@ -45,7 +45,7 @@ struct InstagramHighlight: Codable, Identifiable {
 
 // MARK: - Instagram Profile Models
 
-struct UserSearchResult: Identifiable {
+struct UserSearchResult: Identifiable, Codable {
     let id: String
     let userId: String
     let username: String
@@ -87,6 +87,12 @@ struct InstagramProfile: Codable, Identifiable {
     var cachedTaggedURLs: [String]          // Tagged tab thumbnails
     var cachedHighlights: [InstagramHighlight] // Story highlights (title + cover image)
     var cachedMediaItems: [InstagramMediaItem] // Full items for post viewer (likes, date, caption)
+    /// Full reel items including videoURL — used by ReelsGridView for in-grid playback.
+    var cachedReelItems: [InstagramMediaItem]  // Reel items with video URLs
+    /// Pagination cursor from the initial media fetch. Stored so that the first
+    /// pagination call can start from page 2 instead of re-fetching page 1
+    /// (which would waste a request and cause a 3-4s artificial delay).
+    var cachedNextMaxId: String?
 
     // Backward-compatible decoding (old cache files won't have newer fields)
     enum CodingKeys: String, CodingKey {
@@ -94,6 +100,7 @@ struct InstagramProfile: Codable, Identifiable {
         case isVerified, isPrivate, followerCount, followingCount, mediaCount
         case followedBy, isFollowing, isFollowRequested, cachedAt
         case cachedMediaURLs, cachedReelURLs, cachedTaggedURLs, cachedHighlights, cachedMediaItems
+        case cachedReelItems, cachedNextMaxId
     }
 
     init(from decoder: Decoder) throws {
@@ -118,6 +125,8 @@ struct InstagramProfile: Codable, Identifiable {
         cachedTaggedURLs   = try c.decodeIfPresent([String].self, forKey: .cachedTaggedURLs) ?? []
         cachedHighlights   = try c.decodeIfPresent([InstagramHighlight].self, forKey: .cachedHighlights) ?? []
         cachedMediaItems   = try c.decodeIfPresent([InstagramMediaItem].self, forKey: .cachedMediaItems) ?? []
+        cachedReelItems    = try c.decodeIfPresent([InstagramMediaItem].self, forKey: .cachedReelItems) ?? []
+        cachedNextMaxId    = try c.decodeIfPresent(String.self, forKey: .cachedNextMaxId)
     }
 
     init(userId: String, username: String, fullName: String, biography: String,
@@ -127,7 +136,9 @@ struct InstagramProfile: Codable, Identifiable {
          cachedAt: Date, cachedMediaURLs: [String],
          cachedReelURLs: [String] = [], cachedTaggedURLs: [String] = [],
          cachedHighlights: [InstagramHighlight] = [],
-         cachedMediaItems: [InstagramMediaItem] = []) {
+         cachedMediaItems: [InstagramMediaItem] = [],
+         cachedReelItems: [InstagramMediaItem] = [],
+         cachedNextMaxId: String? = nil) {
         self.userId = userId; self.username = username; self.fullName = fullName
         self.biography = biography; self.externalUrl = externalUrl
         self.profilePicURL = profilePicURL; self.isVerified = isVerified
@@ -139,6 +150,8 @@ struct InstagramProfile: Codable, Identifiable {
         self.cachedReelURLs = cachedReelURLs; self.cachedTaggedURLs = cachedTaggedURLs
         self.cachedHighlights = cachedHighlights
         self.cachedMediaItems = cachedMediaItems
+        self.cachedReelItems = cachedReelItems
+        self.cachedNextMaxId = cachedNextMaxId
     }
 }
 

@@ -20,11 +20,12 @@
 "ig.searching" = "검색 중...";
 "ig.follow_requested" = "요청됨";
 "explore.no_results" = "결과 없음";
+"explore.search_blocked_upload" = "업로드 중에는 검색할 수 없습니다.\n업로드 완료 후 다시 시도하세요.";
 "backup.never" = "없음";
 "backup.just_now" = "방금 전";
 "backup.min_ago" = "%d분 전";
 "backup.h_ago" = "%d시간 전";
-"backup.info.auto" = "앱이 백그라운드로 전환될 때마다 백업이 자동으로 실행됩니다. \"지금 백업\"으로 수동 실행도 가능합니다.";
+"backup.info.auto" = "\"지금 백업\"을 탭할 때만 백업이 실행됩니다. iCloud를 자동으로 덮어쓰지 않습니다.";
 "backup.info.what" = "백업 항목: 모든 설정, Date Force, Force Reel, 활성 세트 및 세트 메타데이터.";
 "backup.info.photos" = "세트 사진은 iCloud Drive에 동기화됩니다. 파일 앱 → iCloud Drive → Vault → Photos에서 확인할 수 있습니다.";
 "backup.info.excluded" = "백업 제외: Instagram 세션, 기기 ID 및 쿨다운 타이머 (기기 고유 항목).";
@@ -481,6 +482,7 @@
 "force_reel.remove_all" = "모두 제거";
 "force_reel.slot_n" = "슬롯 %d";
 "force_reel.downloading" = "다운로드 중…";
+"force_reel.video_missing" = "동영상이 다운로드되지 않음 — 공연 전에 이 릴을 다시 선택하세요";
 "force_reel.picker.placeholder" = "사용자 이름 (예: beyonce)";
 "force_reel.picker.empty_state" = "프로필을 검색하여 릴을 확인하세요";
 "force_reel.picker.no_reels" = "@%@의 릴을 찾을 수 없습니다";
@@ -620,6 +622,19 @@
 "ig.set_not_uploaded_title" = "세트 업로드 안 됨";
 "ig.set_not_uploaded_body" = "세트 \"%@\"이(가) 아직 Instagram에 업로드되지 않았습니다. Sets로 이동하여 먼저 업로드하세요.";
 "session.reason.challenge" = "Instagram이 반복 보안 인증을 요청했습니다(%lld회). 세션을 복원하려면 다시 로그인하세요.";
+"session.reason.normal" = "Instagram 세션이 만료되었습니다. 이는 보통 비밀번호 변경, 장기간 비활성 또는 보안 이벤트 이후에 발생합니다. 아래의 다시 로그인을 탭하여 복원하세요.";
+"session.reason.restriction" = "Instagram이 이 계정에 임시 제한을 적용했습니다.\n\n주요 원인:\n• 공식 Instagram 앱과 이 앱이 동시에 열려 있었던 경우\n• 계정이 새 것이고 아직 충분한 활동 기록이 없는 경우\n• Instagram이 비정상적이거나 자동화된 활동을 감지한 경우\n\n새 계정은 취약성이 더 높습니다. 미리 게시물, 팔로워, 인터랙션을 쌓아두면 이 위험이 크게 줄어듭니다.\n\nInstagram 앱을 열고 해당하는 단계를 따르세요:\n\n• 닫기 버튼만 표시됨 → 닫기를 탭한 후 바로 여기로 돌아와 다시 로그인하세요. 기다릴 필요 없습니다.\n• 특정 종료 날짜가 표시됨 → 그 날짜까지 기다린 후 다시 로그인하세요.\n• 전화번호 또는 이메일로 코드 요청 → Instagram 앱에서 먼저 인증을 완료한 후 여기로 돌아오세요.";
+"session.panel.title.normal" = "세션 만료됨";
+"session.panel.title.restriction" = "임시 제한";
+"session.panel.title.challenge" = "인증 필요";
+"session.panel.nav_title" = "세션 정보";
+"session.panel.close" = "닫기";
+"session.panel.relogin" = "다시 로그인";
+"session.panel.relogin.restriction_hint" = "Instagram 앱에서 단계를 완료한 후(닫기, 인증 또는 날짜 대기), 여기를 탭하여 세션을 복원하세요.";
+"session.panel.credentials_saved" = "저장된 자격 증명이 자동으로 채워집니다.";
+"session.panel.credentials_missing" = "저장된 자격 증명이 없습니다. 수동으로 입력해야 합니다.";
+"session.panel.emergency_logout" = "긴급 로그아웃";
+"session.panel.emergency_logout.hint" = "세션을 완전히 삭제합니다. 처음부터 다시 로그인해야 합니다.";
 "Sets" = "세트";
 "Your photos" = "내 사진";
 "Log out and log in again to continue uploading." = "업로드를 계속하려면 로그아웃 후 다시 로그인하세요.";
@@ -1185,6 +1200,22 @@
 "limits.help.calm.body" = "Instagram은 가끔 본인 확인을 요청하는 짧은 알림을 표시합니다. 이는 플랫폼에 연결된 모든 앱에서 발생하는 매우 일반적인 현상이며 계정 차단과는 전혀 관련이 없습니다. Vault는 실제 앱들이 사용하는 것과 동일한 봇 방지 조치를 탑재하고 있으며, 각 조치는 철저히 테스트되었습니다.";
 "limits.help.calm.infobox" = "개발 중에 제가 직접 이런 종류의 알림을 100회 이상 발생시켰지만, 제 계정은 한 번도 차단된 적이 없습니다. 같은 방식을 사용하는 다른 앱들도 문제없이 작동합니다 — 실제 위험이 있었다면 Vault는 출시되지 않았을 것입니다.";
 
+"limits.help.budget.title" = "시간당 API 예산을 소모하는 것들";
+"limits.help.budget.intro" = "인스타그램은 세션당 시간당 약 55번의 API 작업을 허용합니다. 앱이 자동으로 추적합니다. 무엇이 계산되고 무엇이 계산되지 않는지 확인하세요:";
+"limits.help.budget.free" = "무료";
+"limits.help.budget.free.items" = "그리드 스크롤 · 볼륨 버튼 애니메이션 · 비밀 번호 입력 · 이미 연 프로필 보기(캐시) · 설정이나 가이드 탐색";
+"limits.help.budget.low" = "낮음";
+"limits.help.budget.low.items" = "앱 열기(1) · 팔로워 목록 로드(1) · 글자/사진 공개(각 1) · 카운터 글리치 — 새 프로필 첫 열기(4) · 프로필 검색(2)";
+"limits.help.budget.high" = "높음";
+"limits.help.budget.high.items" = "Sync & Archive — 사진당 2회 · 사진 업로드 — 사진당 1회 · 5개의 다른 팔로워 프로필 열기 — 약 20회";
+"limits.help.budget.reset" = "예산은 60분마다 초기화됩니다. 앱이 자동으로 일시 정지되면 시간당 한도를 사용했다는 의미입니다 — 기다리면 자동으로 재개됩니다.";
+"limits.help.rehearsal.title" = "안전한 리허설 — 황금 규칙";
+"limits.help.rehearsal.body" = "봇 감지의 대부분은 공연 중이 아니라 테스트 중에 발생합니다. 몇 가지 간단한 습관으로 위험의 90%를 제거할 수 있습니다:";
+"limits.help.rehearsal.tip1" = "같은 팔로워의 프로필을 한 번 열면 → 며칠간 캐시됩니다. 같은 사람으로 카운터 글리치를 원하는 만큼 연습하세요 — 비용 없음.";
+"limits.help.rehearsal.tip2" = "Sync & Archive와 사진 업로드를 다른 시간대에 분산하세요 — 공연 직전에 몰아서 하지 마세요.";
+"limits.help.rehearsal.avoid1" = "리허설 중에 4~5개의 다른 팔로워 프로필을 연속으로 열지 마세요. 새 프로필을 열 때마다 ~4번의 API 호출이 소모됩니다.";
+"limits.help.rehearsal.avoid2" = "테스트 중에 앱을 반복적으로 재시작하지 마세요 — 재시작할 때마다 세션 확인이 실행됩니다.";
+"limits.help.rehearsal.tip" = "가장 안전한 리허설: 사용할 팔로워를 한 번 열고, 효과를 한 번 실행하고, 뒤로 가세요. 같은 순서를 반복하면 → 두 번째부터는 완전히 무료입니다.";
 "limits.help.warning.title" = "\"비정상적 활동\" 알림이 나타나면";
 "limits.help.warning.intro" = "걱정하지 마세요 — 이것은 계정 차단이 아닙니다. Instagram이 본인임을 확인하는 것뿐입니다. 다음 단계를 따르세요:";
 "limits.help.warning.step1" = "공식 Instagram 앱을 열고 알림에서 \"Dismiss\"를 탭하세요.";
@@ -1202,6 +1233,62 @@
 "limits.help.best.item2" = "세트(Sync & Archive)는 전날 밤 또는 공연 최소 1시간 전에 준비하세요. 연습 직후는 피하세요.";
 "limits.help.best.item3" = "자주 공연한다면 메인 계정과 분리된 전용 Instagram 계정을 사용하세요.";
 "limits.help.best.item4" = "Vault가 모든 대기 시간을 자동으로 관리합니다 — 당신은 아무것도 신경 쓸 필요가 없습니다.";
+
+"limits.help.testing.title" = "Instagram이 보안 확인을 요청하는 이유는?";
+"limits.help.testing.body" = "앱 테스트 중에 Instagram이 비정상적인 활동을 감지하는 것은 정상입니다. 테스트 시에는 짧은 시간 안에 바이오 변경, 메모, 사진 공개 등 많은 작업이 연속으로 수행되고 새 계정에서 진행되기 때문에, Instagram의 보안 시스템에는 자동화된 행동처럼 보일 수 있습니다.\n\n실제 공연에서는 이런 일이 절대 일어나지 않습니다. 공연의 자연스러운 흐름에 의해 작업들이 적절히 분산되기 때문에 모든 것이 일반적인 사람의 사용처럼 보입니다.";
+"limits.help.testing.fix" = "Instagram이 이메일 또는 전화번호 인증을 요청하면, 이는 일회성 보안 확인일 뿐입니다. 브라우저에서 instagram.com을 통해 완료하면 계정이 정상적으로 작동합니다.";
+
+"limits.help.session.title" = "앱에 \"인터넷 없음\" 화면이 표시될 때";
+"limits.help.session.body" = "때때로 Instagram이 일시적으로 세션을 취소합니다 — 그러면 앱은 관중이 기술적인 내용을 보지 못하도록 일반적인 \"연결 없음\" 화면을 표시합니다. 이것은 차단이 아닙니다.\n\n실제 설명을 확인하고 해결하려면 해당 화면의 오른쪽 하단에 있는 ⓘ 버튼을 탭하세요.";
+"limits.help.session.case1.label" = "닫기 버튼만 나타남";
+"limits.help.session.case1.action" = "Instagram 앱에서 닫기를 탭한 후 바로 여기로 돌아와 다시 로그인하세요. 기다릴 필요 없습니다 — 즉시 들어갈 수 있습니다.";
+"limits.help.session.case2.label" = "특정 종료 날짜가 표시됨";
+"limits.help.session.case2.action" = "그 날짜까지 기다린 후 다시 로그인하세요. Instagram이 짧은 대기 시간을 설정한 것입니다 — 계정은 괜찮습니다.";
+"limits.help.session.case3.label" = "전화번호 또는 이메일로 코드 요청";
+"limits.help.session.case3.action" = "먼저 Instagram 앱에서 인증을 완료하세요. 완료 후 여기로 돌아와 다시 로그인을 탭하세요.";
+"limits.help.session.new_account" = "활동 이력이 적은 새 계정은 이런 상황을 더 자주 겪습니다. 게시물, 팔로워, 인터랙션을 점진적으로 쌓으세요 — Instagram은 확립된 이력이 있는 계정을 훨씬 더 신뢰합니다.";
+"limits.help.session.contact" = "봇 탐지가 계속 발생하면 개발자에게 연락하고 로그를 공유하세요 (설정 → 로그 내보내기). 이는 문제를 분석하고 모두를 위한 보호를 개선하는 데 도움이 됩니다.";
+
+"limits.help.gauge.title" = "시간당 55회 행동 예산";
+"limits.help.gauge.body" = "Instagram은 연결된 앱을 시간당 55회 행동으로 제한합니다. 예산은 60분 롤링 윈도우로 작동합니다 — 각 행동은 실행 후 정확히 60분 후에 만료되므로, 강제 재설정 없이 카운터가 자동으로 감소합니다.";
+"limits.help.gauge.cache" = "처음으로 Performance 또는 팔로워 프로필을 열면 앱이 Instagram에 접속합니다(예산 사용). 이후 방문은 캐시에서 즉시 무료로 로드됩니다.";
+"limits.help.gauge.hardstop" = "55 한도에 도달하면, 앱은 자동으로 Instagram으로의 모든 추가 요청을 중단합니다. 아무것도 전송되지 않고, 아무것도 실행되지 않습니다 — 예산이 갱신될 때까지 조용히 대기합니다. 아무것도 할 필요가 없습니다.";
+"limits.help.gauge.zone.safe" = "안전 (>20)";
+"limits.help.gauge.zone.low" = "낮음 (8–20)";
+"limits.help.gauge.zone.critical" = "위험 (<8)";
+
+"limits.help.table.title" = "기능별 소비 행동 수";
+"limits.help.table.subtitle" = "첫 사용 시 비용 vs. 결과가 이미 캐시된 경우.";
+"limits.help.table.col.action" = "기능";
+"limits.help.table.col.first" = "첫 번째";
+"limits.help.table.col.again" = "재사용";
+"limits.help.table.row.performance" = "Performance 열기";
+"limits.help.table.row.followers" = "팔로워 목록";
+"limits.help.table.row.profile.new" = "새 팔로워 프로필";
+"limits.help.table.row.sa" = "Sync & Archive (사진당)";
+"limits.help.table.row.upload" = "업로드 (사진당)";
+"limits.help.table.row.reveal" = "리빌 (글자/사진당)";
+"limits.help.table.row.notebio" = "노트 또는 bio 변경";
+"limits.help.table.row.explore" = "탐색 / 검색";
+"limits.help.sa.auto" = "리빌과 프로필 방문을 포함한 완전한 퍼포먼스 후, 앱은 Sync & Archive 전에 자동으로 짧은 대기 시간을 추가합니다. 이는 정상입니다 — 세션을 보호합니다.";
+
+"limits.help.profiles.title" = "프로필 방문 — 가장 비용이 많이 드는 행동";
+"limits.help.profiles.body" = "새 팔로워 프로필을 열 때마다 4–5회 행동이 소비됩니다. 같은 프로필의 두 번째 방문은 캐시에서 로드되므로 무료입니다. 그래서 3–4개의 다른 프로필을 빠르게 열면 예산이 소진되고 봇 탐지가 활성화될 수 있습니다.";
+"limits.help.profiles.max" = "권장 사항: 세션당 최대 2개의 새 프로필만 여세요. Sync & Archive 직전에 새 프로필 방문을 피하세요.";
+"limits.help.reddot.title" = "빨간 점";
+"limits.help.reddot.body" = "행동이 8개 미만으로 남으면 팔로워 목록 헤더의 아이콘에 작은 빨간 점이 나타납니다. 퍼포먼스 중에는 보이지 않으며, 오직 당신만 볼 수 있습니다.";
+"limits.help.reddot.block" = "예산이 위험 수준일 때 새 프로필을 열려고 하면, 앱이 강한 진동으로 행동을 차단합니다. API 호출이 이루어지지 않아 세션이 안전하게 유지됩니다.";
+"limits.help.reddot.location.followers" = "팔로워 목록";
+"limits.help.reddot.location.performance" = "종이 비행기 아이콘 (Performance)";
+
+"limits.help.noban.title" = "계정은 절대로 차단되지 않습니다.";
+"limits.help.noban.body" = "Instagram이 가끔 본인 확인을 요청할 수 있습니다 — 그게 전부입니다. 밴이 아니고, 경고도 아니며, 계정에 어떤 위험도 없습니다. Vault는 수백 개의 실제 Instagram 계정으로 테스트되었으며, 단 하나의 계정도 밴되거나 영구적으로 제한된 적이 없습니다. 메시지가 나타나면 위의 단계를 따르면 1분 이내에 다시 사용할 수 있습니다.";
+
+"relogin.nav_title" = "다시 로그인";
+"relogin.cancel" = "취소";
+
+"perf.safety_gate.wait" = "빠른 로드가 너무 많이 감지되었습니다.\n%lld초 기다려 주세요…";
+"perf.safety_gate.retrying" = "다시 시도 중…";
 
 // ── Guide: Camouflage section ──
 "guide.section.camouflage" = "위장";

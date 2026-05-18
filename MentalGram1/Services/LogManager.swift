@@ -105,6 +105,11 @@ class LogManager: ObservableObject {
         cleanOldLogs()
 
         log("App started", level: .info, category: .general)
+        // Open the cold-start window so the SafetyGate blocks automatic API
+        // calls during the first ~45 seconds. Breaks the 3-endpoint warmup
+        // pattern that Instagram fingerprints as a bot.
+        InstagramSafetyGate.shared.markAppLaunch()
+        log("[COLD-START] Window opened — automatic IG calls blocked for ~45s", level: .info, category: .general)
     }
     
     // MARK: - Logging

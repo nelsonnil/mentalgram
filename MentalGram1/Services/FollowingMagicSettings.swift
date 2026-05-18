@@ -58,25 +58,48 @@ class FollowingMagicSettings: ObservableObject {
         self.transferOffset = UserDefaults.standard.integer(forKey: "followingMagicTransferOffset")
     }
 
-    /// Captures the current digit buffer as the pending offset and resets the buffer.
-    func captureFromBuffer() {
-        let buffer = SecretNumberManager.shared.digitBuffer
-        guard !buffer.isEmpty else { return }
-        let value = buffer.reduce(0) { $0 * 10 + $1 }
-        // Clamp to valid magic range 1–100
+    /// Captures a digit sequence as the raw pending offset used by Counter Glitch.
+    /// The raw input is kept untouched; the effective offset is computed later
+    /// from the real profile count so K-mode is explicit and logged.
+    @discardableResult
+    func capture(digits: [Int], source: String) -> Int? {
+        guard !digits.isEmpty else { return nil }
+        let value = digits.reduce(0) { $0 * 10 + $1 }
         pendingOffset = min(100, max(1, value))
-        print("🎩 [MAGIC] Following offset captured: \(pendingOffset)")
-        SecretNumberManager.shared.reset()
+        let target = targetFollowers ? "followers" : "following"
+        print("🎩 [MAGIC] Counter offset captured from \(source): \(pendingOffset) target:\(target)")
+        LogManager.shared.info(
+            "Counter offset captured source:\(source) target:\(target) offset:\(pendingOffset)",
+            category: .profile
+        )
+        return pendingOffset
     }
 
-    /// Scales the pending offset by 1 000 (K-mode) when the real count is >= 10 000.
-    /// The result is capped so the scaled addition never exceeds `realCount`, which
-    /// keeps the inflated total at most 2× the real count and avoids unrealistic
-    /// displays like "+20K on a 12K profile".
-    func applyKModeScaling(cappedTo realCount: Int) {
-        let scaled = pendingOffset * 1_000
-        pendingOffset = min(scaled, max(1, realCount))
-        print("🎩 [MAGIC] K-mode activated — offset scaled to \(pendingOffset) (cap=\(realCount))")
+    /// Captures the current digit buffer as the pending offset and resets the buffer.
+    @discardableResult
+    func captureFromBuffer(source: String = "grid") -> Int? {
+        let buffer = SecretNumberManager.shared.digitBuffer
+        let offset = capture(digits: buffer, source: source)
+        if offset != nil {
+            SecretNumberManager.shared.reset()
+        }
+        return offset
+    }
+
+    /// Converts the raw input into the effective animation offset.
+    /// For large accounts, performers ask for 1-10 and input e.g. 06, which should
+    /// display as 206K -> 200K. The stored input remains 6; only the effect uses 6000.
+    func effectiveOffset(for realCount: Int, rawOffset: Int? = nil) -> Int {
+        let input = rawOffset ?? pendingOffset
+        guard input > 0 else { return 0 }
+        if realCount >= 10_000 {
+            return input * 1_000
+        }
+        return input
+    }
+
+    func offsetMode(for realCount: Int) -> String {
+        realCount >= 10_000 ? "k" : "exact"
     }
 
     /// Clears the pending offset after the trick is revealed.

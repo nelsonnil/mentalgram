@@ -106,11 +106,16 @@ struct PostDetailView: View {
                         onLike: { toggleLike(peek.id) },
                         onSave: { toggleSave(peek.id) }
                     )
+                    .id("peek-\(peek.id)")
                     .frame(width: geo.size.width, height: geo.size.height)
                     .offset(y: geo.size.height + dragOffset)
                 }
 
                 // ── Current page ─────────────────────────────────────────────
+                // .id(item.id) forces SwiftUI to DESTROY and RECREATE the whole
+                // PostPageView (and its @StateObject children) each time the
+                // current item changes after a swipe, so onAppear fires and the
+                // new video starts playing automatically without a tap.
                 if let item = currentItem {
                     PostPageView(
                         item: item,
@@ -120,6 +125,7 @@ struct PostDetailView: View {
                         onLike: { toggleLike(item.id) },
                         onSave: { toggleSave(item.id) }
                     )
+                    .id("current-\(item.id)")
                     .frame(width: geo.size.width, height: geo.size.height)
                     .offset(y: dragOffset)
                 }
@@ -357,16 +363,34 @@ struct PostPageView: View {
 
     @ViewBuilder
     private var mediaContent: some View {
-        if item.mediaType == .video, let videoURL = item.videoURL {
+        if item.mediaType == .video, let videoURL = item.videoURL, !videoURL.isEmpty {
             // .id(videoURL) forces SwiftUI to destroy and recreate DetailVideoPlayer
             // whenever the video URL changes (e.g. switching between forced reels).
             // Without this, onAppear doesn't re-fire and the old video keeps playing.
-            DetailVideoPlayer(videoURL: videoURL)
+            // The poster keeps the thumbnail visible behind the player so we
+            // never see a black flash if AVPlayer takes a moment to load (or
+            // fails entirely because the CDN URL has expired).
+            DetailVideoPlayer(videoURL: videoURL, posterImage: cachedImage)
                 .id(videoURL)
         } else if let image = cachedImage {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
+        } else if item.mediaType == .video {
+            // Video without a videoURL — show poster fallback to imageURL.
+            AsyncImage(url: URL(string: item.imageURL)) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                default:
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(ProgressView().tint(.white))
+                }
+            }
+            .onAppear {
+                LogManager.shared.warning("DetailViewer: video item has no videoURL — showing thumbnail only (item.id=\(item.id))", category: .general)
+            }
         } else {
             AsyncImage(url: URL(string: item.imageURL)) { phase in
                 switch phase {
@@ -595,26 +619,48 @@ struct PostActionButton: View {
 
 struct DetailVideoPlayer: View {
     let videoURL: String
+    var posterImage: UIImage? = nil
     @StateObject private var manager = DetailVideoPlayerManager()
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                if let player = manager.player {
-                    AVPlayerFillView(player: player, videoGravity: .resizeAspect)
+                // Black base so there's never a white flash
+                Color.black
+
+                // Poster fades out once the AVPlayer layer is ready to render.
+                // Using opacity instead of conditional keeps layout stable and
+                // prevents the size-mismatch "cut" between the fill poster and
+                // the video frame.
+                if let poster = posterImage {
+                    Image(uiImage: poster)
+                        .resizable()
+                        .scaledToFit()       // same fit mode as the video → no crop mismatch
                         .frame(width: geo.size.width, height: geo.size.height)
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.25))
-                        .overlay(ProgressView().tint(.white))
+                        .clipped()
+                        .opacity(manager.playerReady ? 0 : 1)
+                        .animation(.easeOut(duration: 0.25), value: manager.playerReady)
                 }
 
-                // Play/Pause indicator (shown briefly when paused)
-                if !manager.isPlaying && manager.player != nil {
+                if let player = manager.player {
+                    AVPlayerFillView(player: player, videoGravity: manager.videoGravity)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
+
+                // Play icon ONLY when the user has explicitly paused —
+                // never shown during buffering/loading (avoids false "play" state).
+                if manager.userPaused {
                     Image(systemName: "play.fill")
                         .font(.system(size: 48))
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 8)
+                }
+
+                // Loading spinner while AVPlayer hasn't rendered its first frame.
+                if !manager.playerReady {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.1)
                 }
             }
             .onTapGesture {
@@ -626,34 +672,89 @@ struct DetailVideoPlayer: View {
     }
 }
 
-/// AVPlayer with sound enabled, loops automatically, supports tap-to-pause
+/// AVPlayer with sound enabled, loops automatically, supports tap-to-pause.
+/// Detects horizontal vs vertical video and adjusts videoGravity accordingly,
+/// matching the same logic used in GridVideoPlayer.
 private class DetailVideoPlayerManager: ObservableObject {
     @Published var player: AVPlayer?
-    @Published var isPlaying = false
+    @Published var videoGravity: AVLayerVideoGravity = .resizeAspectFill
+    /// True once the AVPlayerItem fires .readyToPlay — used to fade out the poster.
+    @Published var playerReady = false
+    /// True only when the USER has explicitly tapped to pause.
+    /// Loading/buffering phases must NOT set this to true so the
+    /// play icon never appears during auto-play.
+    @Published var userPaused = false
     private var loopObserver: Any?
+    private var statusObserver: NSKeyValueObservation?
 
     func setup(url: String) {
-        guard let videoURL = URL(string: url) else { return }
+        guard let videoURL = URL(string: url) else {
+            print("⚠️ [DETAIL-VIDEO] Invalid URL: \(url.prefix(80))")
+            LogManager.shared.warning("DetailVideoPlayer: invalid URL \(url.prefix(80))", category: .general)
+            return
+        }
 
-        // Allow audio to play even when silent switch is on
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // Allow audio to play even when silent switch is on.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true, options: [])
+        } catch {
+            print("⚠️ [DETAIL-VIDEO] AVAudioSession setup failed: \(error)")
+            LogManager.shared.warning("DetailVideoPlayer: AVAudioSession failed: \(error.localizedDescription)", category: .general)
+        }
 
-        let item = AVPlayerItem(url: videoURL)
+        print("▶️ [DETAIL-VIDEO] setup → \(url.prefix(120))")
+
+        let asset = AVURLAsset(url: videoURL)
+
+        // Resolve video gravity before playing: horizontal reels → aspectFit
+        // (no zoom-in on wide videos), vertical reels → aspectFill (fills screen).
+        asset.loadValuesAsynchronously(forKeys: ["tracks"]) { [weak self] in
+            guard let self else { return }
+            var err: NSError?
+            guard asset.statusOfValue(forKey: "tracks", error: &err) == .loaded,
+                  let track = asset.tracks(withMediaType: .video).first else { return }
+            let size = track.naturalSize.applying(track.preferredTransform)
+            let isHorizontal = abs(size.width) > abs(size.height) * 1.05
+            DispatchQueue.main.async {
+                self.videoGravity = isHorizontal ? .resizeAspect : .resizeAspectFill
+            }
+        }
+
+        let item = AVPlayerItem(asset: asset)
         let player = AVPlayer(playerItem: item)
         player.isMuted = false
+
+        // Tell the coordinator this is now the only active audio source.
+        // Any other unmuted player (grid feed, peek page) will be paused.
+        VideoPlaybackCoordinator.shared.activate(player)
+
+        // Watch readyToPlay to fade out the poster at the right moment.
+        statusObserver = item.observe(\.status, options: [.new]) { [weak self] obs, _ in
+            switch obs.status {
+            case .readyToPlay:
+                print("✅ [DETAIL-VIDEO] readyToPlay")
+                DispatchQueue.main.async { self?.playerReady = true }
+            case .failed:
+                let errDesc = obs.error?.localizedDescription ?? "unknown"
+                print("❌ [DETAIL-VIDEO] failed: \(errDesc)")
+                LogManager.shared.error("DetailVideoPlayer item failed: \(errDesc)", category: .general)
+            case .unknown:
+                break
+            @unknown default: break
+            }
+        }
+
         player.play()
-        isPlaying = true
 
         // Loop
         loopObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: item,
             queue: .main
-        ) { [weak player, weak self] _ in
+        ) { [weak player] _ in
             player?.seek(to: .zero)
             player?.play()
-            self?.isPlaying = true
         }
 
         self.player = player
@@ -661,22 +762,27 @@ private class DetailVideoPlayerManager: ObservableObject {
 
     func togglePlayPause() {
         guard let player = player else { return }
-        if isPlaying {
-            player.pause()
-            isPlaying = false
-        } else {
+        if userPaused {
             player.play()
-            isPlaying = true
+            userPaused = false
+        } else {
+            player.pause()
+            userPaused = true
         }
     }
 
     func cleanup() {
+        if let p = player { VideoPlaybackCoordinator.shared.deactivate(p) }
         player?.pause()
         if let obs = loopObserver {
             NotificationCenter.default.removeObserver(obs)
             loopObserver = nil
         }
+        statusObserver?.invalidate()
+        statusObserver = nil
         player = nil
-        isPlaying = false
+        playerReady = false
+        userPaused = false
+        videoGravity = .resizeAspectFill
     }
 }

@@ -20,11 +20,41 @@ struct UserProfileView: View {
     @State private var nextMaxId: String? = nil
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
-    private let maxPhotosOtherProfile = 50 // Anti-bot limit for other profiles
+    @State private var paginationRetryScheduled = false
+    @State private var profileOpenedAt: Date = Date()
+    private let maxPhotosOtherProfile = 300 // Enough depth for natural browsing/Force Post presentation.
 
-    // Post viewer state
-    @State private var showingPostViewer = false
-    @State private var selectedPostIndex = 0
+    // Single fullScreenCover controlled by an enum — avoids SwiftUI bugs when
+    // multiple .fullScreenCover modifiers are stacked on the same view.
+    enum ViewerSheet: Identifiable {
+        case posts(index: Int)
+        case reels(index: Int)
+        case tagged(index: Int)
+        var id: String {
+            switch self { case .posts(let i): return "posts-\(i)"
+                          case .reels(let i): return "reels-\(i)"
+                          case .tagged(let i): return "tagged-\(i)" }
+        }
+    }
+    @State private var activeViewer: ViewerSheet? = nil
+
+    // Convenience aliases kept so the rest of the code compiles without changes
+    private var showingPostViewer: Bool { if case .posts = activeViewer { return true }; return false }
+    private var selectedPostIndex: Int {
+        if case .posts(let i) = activeViewer { return i }; return 0
+    }
+    private var selectedReelIndex: Int {
+        if case .reels(let i) = activeViewer { return i }; return 0
+    }
+    private var selectedTaggedIndex: Int {
+        if case .tagged(let i) = activeViewer { return i }; return 0
+    }
+
+    // Lazy tab loading (reels/tagged are deferred for visited profiles)
+    @State private var reelsLoaded = false
+    @State private var taggedLoaded = false
+    @State private var isLoadingReels = false
+    @State private var isLoadingTagged = false
 
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
@@ -35,6 +65,7 @@ struct UserProfileView: View {
     @ObservedObject private var volumeMonitor = VolumeButtonMonitor.shared
     @State private var magicFollowingText: String? = nil   // overrides "following" column
     @State private var magicFollowerText: String?  = nil   // overrides "followers" column
+    @State private var digitFollowerPreviewText: String? = nil
     @State private var isCountingDown = false
     @State private var countdownTimer: Timer? = nil
     @State private var showGlitch = false
@@ -45,6 +76,9 @@ struct UserProfileView: View {
 
     // Force Post
     @ObservedObject private var forcePost = ForcePostSettings.shared
+
+    // Budget indicator (reactive — triggers re-render when actionsThisHour changes)
+    @ObservedObject private var instagram = InstagramService.shared
     
     init(profile: InstagramProfile, onClose: @escaping () -> Void) {
         self.profile = profile
@@ -64,7 +98,10 @@ struct UserProfileView: View {
             var seenURLs = Set<String>()
             self._allMediaURLs = State(initialValue: profile.cachedMediaURLs.filter { seenURLs.insert($0).inserted })
         }
-        self._hasMorePages = State(initialValue: true)  // let the API decide; deduplication handles the first page
+        // Start from the cursor returned during getProfileInfo so the first
+        // pagination call fetches page 2 directly, without re-loading page 1.
+        self._nextMaxId = State(initialValue: profile.cachedNextMaxId)
+        self._hasMorePages = State(initialValue: true)
         var initialItems: [String: InstagramMediaItem] = [:]
         for item in profile.cachedMediaItems { initialItems[item.imageURL] = item }
         self._mediaItemsByURL = State(initialValue: initialItems)
@@ -82,6 +119,10 @@ struct UserProfileView: View {
 
     private var forcePostActiveURL: String? {
         activeForceEntry?.mediaURL
+    }
+
+    private var forcePostActiveMediaId: String? {
+        activeForceEntry?.mediaId
     }
 
     /// Grid URLs with the forced post removed (spectator doesn't see it in grid)
@@ -238,7 +279,7 @@ struct UserProfileView: View {
                                     StatView(number: currentProfile.mediaCount, label: String(localized: "ig.stat.posts"))
                                         .frame(maxWidth: .infinity)
                                     StatView(number: currentProfile.followerCount, label: String(localized: "ig.stat.followers"),
-                                             overrideText: magicFollowerText)
+                                             overrideText: magicFollowerText ?? digitFollowerPreviewText)
                                         .frame(maxWidth: .infinity)
                                     StatView(number: currentProfile.followingCount, label: String(localized: "ig.stat.following"),
                                              overrideText: magicFollowingText ?? followingOverride)
@@ -331,12 +372,22 @@ struct UserProfileView: View {
                             }
                             
                             Button(action: {}) {
-                                Image(systemName: "person.badge.plus")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.primary)
-                                    .frame(width: 32, height: 32)
-                                    .background(Color(uiColor: .systemGray5))
-                                    .cornerRadius(8)
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "person.badge.plus")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.primary)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color(uiColor: .systemGray5))
+                                        .cornerRadius(8)
+                                    // Red dot: only when API budget is critically low.
+                                    if instagram.checkRateLimit().remaining < 8 {
+                                        Circle()
+                                            .fill(Color.red)
+                                            .frame(width: 8, height: 8)
+                                            .overlay(Circle().stroke(Color(uiColor: .systemGray5), lineWidth: 1.5))
+                                            .offset(x: 3, y: -3)
+                                    }
+                                }
                             }
                         }
                         .responsiveHorizontalPadding()
@@ -368,16 +419,21 @@ struct UserProfileView: View {
                                 selectedTab = 0
                                 secretManager.reset()
                                 followingOverride = nil
+                                digitFollowerPreviewText = nil
                             }
                             TabButton(icon: "play.rectangle", activeAsset: "instagram_reels_active", inactiveAsset: "instagram_reels_inactive", isSelected: selectedTab == 1) {
                                 selectedTab = 1
                                 secretManager.reset()
                                 followingOverride = nil
+                                digitFollowerPreviewText = nil
+                                fetchReelsIfNeeded()
                             }
                             TabButton(icon: "person.crop.square", activeAsset: "instagram_tagged_active", inactiveAsset: "instagram_tagged_inactive", isSelected: selectedTab == 2) {
                                 selectedTab = 2
                                 secretManager.reset()
                                 followingOverride = nil
+                                digitFollowerPreviewText = nil
+                                fetchTaggedIfNeeded()
                             }
                         }
                         .frame(height: 44)
@@ -391,38 +447,83 @@ struct UserProfileView: View {
                                     cachedImages: cachedImages,
                                     onMediaAppear: loadMoreIfNeeded,
                                     onTapIndex: { index in
-                                        selectedPostIndex = index
-                                        showingPostViewer = true
+                                        activeViewer = .posts(index: index)
                                     }
                                 )
                             case 1:
-                                ReelsGridView(reelURLs: currentProfile.cachedReelURLs, cachedImages: cachedImages)
+                                if isLoadingReels {
+                                    VStack { Spacer(); ProgressView(); Spacer() }
+                                        .frame(minHeight: 200)
+                                } else {
+                                    ReelsGridView(
+                                        reelURLs: currentProfile.cachedReelURLs,
+                                        cachedImages: cachedImages,
+                                    reelItems: currentProfile.cachedReelItems,
+                                    onTapIndex: { index in
+                                        activeViewer = .reels(index: index)
+                                    }
+                                    )
+                                }
                             case 2:
-                                if currentProfile.cachedTaggedURLs.isEmpty {
+                                if isLoadingTagged {
+                                    VStack { Spacer(); ProgressView(); Spacer() }
+                                        .frame(minHeight: 200)
+                                } else if currentProfile.cachedTaggedURLs.isEmpty {
                                     TaggedEmptyStateView()
                                 } else {
-                                    PhotosGridView(mediaURLs: currentProfile.cachedTaggedURLs, cachedImages: cachedImages)
+                                    PhotosGridView(
+                                        mediaURLs: currentProfile.cachedTaggedURLs,
+                                        cachedImages: cachedImages,
+                                        onTapIndex: { index in
+                                            activeViewer = .tagged(index: index)
+                                        }
+                                    )
                                 }
                             default:
                                 EmptyView()
                             }
                         }
                         .simultaneousGesture(
-                            DragGesture(minimumDistance: 20, coordinateSpace: .local)
+                            DragGesture(minimumDistance: 30, coordinateSpace: .local)
                                 .onEnded { value in handleGridSwipe(value) }
                         )
-                        .fullScreenCover(isPresented: $showingPostViewer) {
-                            PostScrollView(
-                                mediaURLs: postViewerURLs,
-                                mediaItemsByURL: postViewerItems,
-                                cachedImages: postViewerCachedImages,
-                                initialIndex: mappedPostViewerIndex(selectedPostIndex),
-                                username: currentProfile.username,
-                                profileImage: cachedImages[currentProfile.profilePicURL],
-                                userId: currentProfile.userId,
-                                forcePostURL: forcePostActiveURL,
-                                forcedThumbnail: forcePostThumbnail
-                            )
+                        .fullScreenCover(item: $activeViewer) { sheet in
+                            switch sheet {
+                            case .posts(let index):
+                                PostScrollView(
+                                    mediaURLs: postViewerURLs,
+                                    mediaItemsByURL: postViewerItems,
+                                    cachedImages: postViewerCachedImages,
+                                    initialIndex: mappedPostViewerIndex(index),
+                                    username: currentProfile.username,
+                                    profileImage: cachedImages[currentProfile.profilePicURL],
+                                    userId: currentProfile.userId,
+                                    forcePostURL: forcePostActiveURL,
+                                    forcePostMediaId: forcePostActiveMediaId,
+                                    forcedThumbnail: forcePostThumbnail
+                                )
+                            case .reels(let index):
+                                let reelMap = Dictionary(uniqueKeysWithValues: currentProfile.cachedReelItems.map { ($0.imageURL, $0) })
+                                PostScrollView(
+                                    mediaURLs: currentProfile.cachedReelURLs,
+                                    mediaItemsByURL: reelMap,
+                                    cachedImages: cachedImages,
+                                    initialIndex: index,
+                                    username: currentProfile.username,
+                                    profileImage: cachedImages[currentProfile.profilePicURL],
+                                    userId: currentProfile.userId
+                                )
+                            case .tagged(let index):
+                                PostScrollView(
+                                    mediaURLs: currentProfile.cachedTaggedURLs,
+                                    mediaItemsByURL: mediaItemsByURL,
+                                    cachedImages: cachedImages,
+                                    initialIndex: index,
+                                    username: currentProfile.username,
+                                    profileImage: cachedImages[currentProfile.profilePicURL],
+                                    userId: currentProfile.userId
+                                )
+                            }
                         }
                     }
                 }
@@ -439,37 +540,54 @@ struct UserProfileView: View {
             }
         }
         .onAppear {
+            profileOpenedAt = Date()
             print("🎨 [UI] UserProfileView appeared for @\(profile.username)")
             print("🎨 [UI] Profile has \(profile.cachedMediaURLs.count) media URLs")
             print("🎨 [UI] Profile pic URL: \(profile.profilePicURL)")
+            logVisibleCountState(reason: "profile appear")
             loadImages()
             // Start Following Counter Magic if a secret offset was captured
             print("🎩 [MAGIC] enabled=\(followingMagic.isEnabled) offset=\(followingMagic.pendingOffset)")
             if followingMagic.isEnabled && followingMagic.pendingOffset > 0 {
                 let useFollowers = followingMagic.targetFollowers
                 let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-                // Auto K-mode: if >= 10K, each unit of offset represents 1K.
-                // Capped so the scaled addition never exceeds realCount (max 2× real).
-                if realCount >= 10_000 {
-                    followingMagic.applyKModeScaling(cappedTo: realCount)
-                }
-                let inflated = realCount + followingMagic.pendingOffset
+                let rawOffset = followingMagic.pendingOffset
+                let offset = followingMagic.effectiveOffset(for: realCount, rawOffset: rawOffset)
+                let offsetMode = followingMagic.offsetMode(for: realCount)
+                let inflated = realCount + offset
                 if useFollowers { magicFollowerText  = formatFollowing(inflated) }
                 else            { magicFollowingText = formatFollowing(inflated) }
+                LogManager.shared.info(
+                    "Counter visited-deflate prepared @\(currentProfile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) input:\(rawOffset) effectiveOffset:\(offset) mode:\(offsetMode) start:\(inflated) end:\(realCount)",
+                    category: .profile
+                )
+                logVisibleCountState(reason: "magic override applied")
                 if followingMagic.transferEnabled {
-                    print("🎩 [TRANSFER] Pre-inflated to \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(followingMagic.pendingOffset)) — deflate to real on volume press")
+                    print("🎩 [TRANSFER] Pre-inflated to \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(offset)) — deflate to real on volume press")
                 } else {
-                    print("🎩 [MAGIC] Showing inflated: \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(followingMagic.pendingOffset))")
+                    print("🎩 [MAGIC] Showing inflated: \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(offset))")
                 }
                 VolumeButtonMonitor.shared.startMonitoring()
             }
         }
         .onDisappear {
-            countdownTimer?.invalidate()
-            countdownTimer = nil
+            // If deflation was still running when the user navigated away, it was
+            // interrupted — clear any stale transferOffset so the own-profile phase 2
+            // does not fire with an invalid (or leftover) offset.
+            if isCountingDown {
+                countdownTimer?.invalidate()
+                countdownTimer = nil
+                followingMagic.transferOffset = 0
+                VolumeButtonMonitor.shared.stopMonitoring()
+                print("🎩 [MAGIC] Deflation interrupted on navigate-away — transferOffset cleared")
+            } else {
+                countdownTimer?.invalidate()
+                countdownTimer = nil
+            }
             magicFollowingText = nil
             magicFollowerText  = nil
-            // Keep monitoring alive when Transfer deflation just finished
+            digitFollowerPreviewText = nil
+            // Keep monitoring alive when Transfer deflation fully finished
             // so own profile can still receive the volume press for phase 2.
             if followingMagic.transferEnabled && followingMagic.transferOffset > 0 {
                 print("🎩 [TRANSFER] Keeping monitoring alive for own-profile phase 2")
@@ -493,6 +611,7 @@ struct UserProfileView: View {
         }
         .onChange(of: secretManager.digitBuffer) { _ in
             updateFollowingOverride()
+            logVisibleCountState(reason: "digit buffer changed")
         }
         .onChange(of: volumeMonitor.upCount) { _ in
             guard followingMagic.pendingOffset > 0 && !isCountingDown && !showGlitch else { return }
@@ -514,7 +633,9 @@ struct UserProfileView: View {
         let dx = value.translation.width
         let absDx = abs(dx)
         let absDy = abs(value.translation.height)
-        guard absDx > absDy && absDx > 30 else { return }
+        // Require a clearly horizontal gesture: horizontal travel must be
+        // at least 2.5× the vertical drift AND at least 60 pt in total.
+        guard absDx > absDy * 2.5 && absDx > 60 else { return }
 
         let gridWidth = UIScreen.main.bounds.width
         let digit = SecretNumberManager.digit(
@@ -538,6 +659,13 @@ struct UserProfileView: View {
             return selectedTab < 2 ? selectedTab + 1 : 1
         }
         return selectedTab > 0 ? selectedTab - 1 : 1
+    }
+
+    private func logVisibleCountState(reason: String) {
+        LogManager.shared.info(
+            "Visible counts (\(reason)) @\(currentProfile.username) real followers:\(currentProfile.followerCount) following:\(currentProfile.followingCount) magicFollower:\(magicFollowerText ?? "nil") digitFollowerPreview:\(digitFollowerPreviewText ?? "nil") magicFollowing:\(magicFollowingText ?? "nil") followingOverride:\(followingOverride ?? "nil") pendingOffset:\(followingMagic.pendingOffset) transferOffset:\(followingMagic.transferOffset)",
+            category: .profile
+        )
     }
 
     // MARK: - Following Counter Magic
@@ -570,12 +698,16 @@ struct UserProfileView: View {
         guard followingMagic.pendingOffset > 0 else { return }
         isCountingDown = true
 
-        let offset = followingMagic.pendingOffset
+        let rawOffset = followingMagic.pendingOffset
         let useFollowers = followingMagic.targetFollowers
         let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
-        // K-mode: step by 1000 so each tick changes the K digit (e.g. 206K→205K)
-        let stepSize = realCount >= 10_000 ? 1_000 : 1
-        let visibleSteps = offset / stepSize
+        let offset = followingMagic.effectiveOffset(for: realCount, rawOffset: rawOffset)
+        let offsetMode = followingMagic.offsetMode(for: realCount)
+        // Step size scales with offset so the animation always finishes in countdownDuration.
+        // For K-mode the minimum step is 100 (= 0.1 K per visual update, smooth appearance).
+        let minStep = realCount >= 10_000 ? 100 : 1
+        let stepSize = max(minStep, offset / 200)
+        let visibleSteps = max(1, offset / stepSize)
         let totalMs = followingMagic.countdownDuration * 1000
         let intervalMs = max(16, totalMs / max(1, visibleSteps))
 
@@ -588,10 +720,14 @@ struct UserProfileView: View {
 
         if followingMagic.transferEnabled {
             var current = realCount + offset
+            LogManager.shared.info(
+                "Counter visited-deflate started @\(currentProfile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) input:\(rawOffset) effectiveOffset:\(offset) mode:\(offsetMode) start:\(current) end:\(realCount)",
+                category: .profile
+            )
 
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
                 current -= stepSize
-                setMagicText(self.formatFollowing(current))
+                setMagicText(self.formatFollowing(max(current, realCount)))
 
                 if current <= realCount {
                     timer.invalidate()
@@ -601,6 +737,10 @@ struct UserProfileView: View {
                     self.followingMagic.transferOffset = offset
                     self.followingMagic.clear()
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    LogManager.shared.info(
+                        "Counter visited-deflate completed @\(self.currentProfile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) input:\(rawOffset) effectiveOffset:\(offset) mode:\(offsetMode)",
+                        category: .profile
+                    )
                     print("🎩 [TRANSFER] Deflation complete — back to real: \(self.formatFollowing(realCount)), offset \(offset) saved for phase 2")
                 }
             }
@@ -610,9 +750,10 @@ struct UserProfileView: View {
 
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
                 current -= stepSize
-                setMagicText(self.formatFollowing(current))
+                let displayCurrent = max(current, realCount)
+                setMagicText(self.formatFollowing(displayCurrent))
 
-                if current <= target {
+                if displayCurrent <= target {
                     timer.invalidate()
                     self.countdownTimer = nil
                     setMagicText(nil)
@@ -629,7 +770,12 @@ struct UserProfileView: View {
     private func updateFollowingOverride() {
         if secretManager.digitBuffer.isEmpty {
             followingOverride = nil
+            digitFollowerPreviewText = nil
+        } else if followingMagic.targetFollowers {
+            followingOverride = nil
+            digitFollowerPreviewText = secretManager.followingDisplayString(originalCount: currentProfile.followerCount)
         } else {
+            digitFollowerPreviewText = nil
             followingOverride = secretManager.followingDisplayString(originalCount: currentProfile.followingCount)
         }
     }
@@ -654,9 +800,16 @@ struct UserProfileView: View {
             // Load profile pic
             print("🖼️ [UI] Loading profile pic: \(targetProfile.profilePicURL)")
             if !targetProfile.profilePicURL.isEmpty,
-               let url = URL(string: targetProfile.profilePicURL),
-               let (data, _) = try? await URLSession.shared.data(from: url),
-               let image = UIImage(data: data) {
+               let image = VisitedProfileCacheService.shared.loadImage(forURL: targetProfile.profilePicURL) {
+                await MainActor.run {
+                    cachedImages[targetProfile.profilePicURL] = image
+                    print("✅ [UI] Profile pic loaded from visited cache")
+                }
+            } else if !targetProfile.profilePicURL.isEmpty,
+                      let url = URL(string: targetProfile.profilePicURL),
+                      let (data, _) = try? await URLSession.shared.data(from: url),
+                      let image = UIImage(data: data) {
+                VisitedProfileCacheService.shared.saveImage(image, forURL: targetProfile.profilePicURL)
                 await MainActor.run {
                     cachedImages[targetProfile.profilePicURL] = image
                     print("✅ [UI] Profile pic loaded and cached")
@@ -668,11 +821,15 @@ struct UserProfileView: View {
             // Load follower pics
             print("🖼️ [UI] Loading \(targetProfile.followedBy.count) follower pics...")
             for follower in targetProfile.followedBy {
-                if let picURL = follower.profilePicURL,
-                   !picURL.isEmpty,
-                   let url = URL(string: picURL),
-                   let (data, _) = try? await URLSession.shared.data(from: url),
-                   let image = UIImage(data: data) {
+                guard let picURL = follower.profilePicURL, !picURL.isEmpty else { continue }
+                if let image = VisitedProfileCacheService.shared.loadImage(forURL: picURL) {
+                    await MainActor.run {
+                        cachedImages[picURL] = image
+                    }
+                } else if let url = URL(string: picURL),
+                          let (data, _) = try? await URLSession.shared.data(from: url),
+                          let image = UIImage(data: data) {
+                    VisitedProfileCacheService.shared.saveImage(image, forURL: picURL)
                     await MainActor.run {
                         cachedImages[picURL] = image
                     }
@@ -685,13 +842,18 @@ struct UserProfileView: View {
             let allURLs = targetProfile.cachedMediaURLs + targetProfile.cachedReelURLs + targetProfile.cachedTaggedURLs + highlightCoverURLs
             print("🖼️ [UI] Loading \(allURLs.count) thumbnails (posts:\(targetProfile.cachedMediaURLs.count) reels:\(targetProfile.cachedReelURLs.count) tagged:\(targetProfile.cachedTaggedURLs.count) highlights:\(highlightCoverURLs.count))...")
             for mediaURL in allURLs {
-                guard !mediaURL.isEmpty,
-                      let url = URL(string: mediaURL),
-                      let (data, _) = try? await URLSession.shared.data(from: url),
-                      let image = UIImage(data: data) else { continue }
-                
-                await MainActor.run {
-                    cachedImages[mediaURL] = image
+                guard !mediaURL.isEmpty else { continue }
+                if let image = VisitedProfileCacheService.shared.loadImage(forURL: mediaURL) {
+                    await MainActor.run {
+                        cachedImages[mediaURL] = image
+                    }
+                } else if let url = URL(string: mediaURL),
+                          let (data, _) = try? await URLSession.shared.data(from: url),
+                          let image = UIImage(data: data) {
+                    VisitedProfileCacheService.shared.saveImage(image, forURL: mediaURL)
+                    await MainActor.run {
+                        cachedImages[mediaURL] = image
+                    }
                 }
             }
             print("✅ [UI] All thumbnails loaded")
@@ -767,15 +929,63 @@ struct UserProfileView: View {
             print("🚫 [USER] Load more skipped — locked or challenged")
             return
         }
+        guard !UploadManager.shared.isActive else {
+            print("🛡️ [USER] Pagination skipped — upload active/paused")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile pagination skipped: upload active", category: .general)
+            return
+        }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .visitedProfilePagination)
+        guard safetyDecision.allowed else {
+            print("🛡️ [USER] Pagination skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile pagination: \(safetyDecision.reason)", category: .general)
+            return
+        }
+        InstagramSafetyGate.shared.record(.visitedProfilePagination)
         
         isLoadingMore = true
-        print("📜 [USER] Loading more media for @\(profile.username) (current count: \(allMediaURLs.count))...")
+        let cursorInfo = nextMaxId != nil ? "cursor=\(nextMaxId!.prefix(12))…" : "cursor=nil(p1)"
+        print("📜 [USER] Loading more media for @\(profile.username) (count:\(allMediaURLs.count) \(cursorInfo))...")
+        LogManager.shared.debug("Pagination start — @\(profile.username) count:\(allMediaURLs.count) \(cursorInfo)", category: .profile)
+
+        let existingURLsBeforeRequest = Set(allMediaURLs)
+        let existingMediaIdsBeforeRequest = Set(mediaItemsByURL.values.map { $0.mediaId })
         
         Task {
             do {
                 // Fetch next batch
                 let requestedMaxId = nextMaxId
-                let (mediaItems, newMaxId) = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 21, maxId: requestedMaxId)
+                var (mediaItems, newMaxId) = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 36, maxId: requestedMaxId)
+
+                // First pagination after opening a searched profile may rediscover page 1
+                // because getProfileInfo does not persist the feed cursor. If everything
+                // returned is already visible, use the cursor for the real next page.
+                // CRITICAL: this internal 2nd call must respect the SafetyGate and add
+                // a human-like delay (3-4s), otherwise we produce a 3-GETs-in-5s burst
+                // to the same userId — the exact pattern Instagram fingerprints as bot.
+                if requestedMaxId == nil, let discoveredMaxId = newMaxId {
+                    let hasFreshItem = mediaItems.contains { item in
+                        if !item.mediaId.isEmpty, existingMediaIdsBeforeRequest.contains(item.mediaId) { return false }
+                        return !existingURLsBeforeRequest.contains(item.imageURL)
+                    }
+                    if !hasFreshItem {
+                        let nextPageDecision = InstagramSafetyGate.shared.decision(for: .visitedProfilePagination)
+                        if nextPageDecision.allowed {
+                            print("📜 [USER] First pagination returned cached first page — fetching next cursor after pause")
+                            // Human-like 1.5–2.0s pause. cachedNextMaxId now prevents this
+                            // path for most users; this only fires for very short accounts
+                            // or stale cache without a saved cursor.
+                            let pauseNs = UInt64.random(in: 1_500_000_000...2_000_000_000)
+                            try? await Task.sleep(nanoseconds: pauseNs)
+                            InstagramSafetyGate.shared.record(.visitedProfilePagination)
+                            let nextPage = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 36, maxId: discoveredMaxId)
+                            mediaItems = nextPage.0
+                            newMaxId = nextPage.1
+                        } else {
+                            print("🛡️ [USER] Skipping internal nextPage — SafetyGate (\(nextPageDecision.reason), wait \(nextPageDecision.waitSeconds)s)")
+                            LogManager.shared.warning("SAFETY BLOCK — internal nextPage skipped: \(nextPageDecision.reason)", category: .general)
+                        }
+                    }
+                }
                 
                 await MainActor.run {
                     // Deduplicate by stable mediaId first. CDN image URLs can change
@@ -805,6 +1015,10 @@ struct UserProfileView: View {
                     nextMaxId = newMaxId
                     hasMorePages = (newMaxId != nil) && (newMaxId != requestedMaxId) && (allMediaURLs.count < maxPhotosOtherProfile)
                     isLoadingMore = false
+                    currentProfile.cachedMediaURLs = allMediaURLs
+                    currentProfile.cachedMediaItems = allMediaURLs.compactMap { mediaItemsByURL[$0] }
+                    currentProfile.cachedAt = Date()
+                    VisitedProfileCacheService.shared.saveProfile(currentProfile)
 
                     print("📜 [USER] Loaded \(urlsToDisplay.count) new (skipped \(mediaItems.count - freshItems.count) dupes), total: \(allMediaURLs.count), hasMore: \(hasMorePages)")
                     
@@ -821,23 +1035,137 @@ struct UserProfileView: View {
     }
     
     private func loadMoreIfNeeded(currentURL: String) {
-        // Trigger load when user reaches 80% of loaded items
+        guard !isLoadingMore else { return }
         guard let index = allMediaURLs.firstIndex(of: currentURL) else { return }
-        let threshold = max(1, Int(Double(allMediaURLs.count) * 0.8))
-        
+
+        // TIME GUARD: on large phones (iPhone 15 Pro Max) the entire initial 12-item
+        // load is visible without scrolling, so every item's .onAppear fires immediately
+        // on render — including the threshold item. This produces an unwanted
+        // /feed/user/ call on every profile open even without user interaction.
+        // Require the profile to have been open for at least 5 seconds before
+        // pagination fires. Once count > 12 (first page already loaded) this guard
+        // is lifted so subsequent pages load normally while the user scrolls.
+        let sinceOpen = Date().timeIntervalSince(profileOpenedAt)
+        guard allMediaURLs.count > 12 || sinceOpen > 5.0 else {
+            print("⏳ [USER] Pagination suppressed — \(allMediaURLs.count) items / \(String(format: "%.1f", sinceOpen))s since open")
+            return
+        }
+
+        let threshold = max(1, Int(Double(allMediaURLs.count) * 0.85))
+
         if index >= threshold {
-            print("📜 [USER] User reached 80% (\(index)/\(allMediaURLs.count)) - loading more...")
-            loadMoreMedia()
+            print("📜 [USER] Pagination trigger: index \(index)/\(allMediaURLs.count) — loading more…")
+            let decision = InstagramSafetyGate.shared.decision(for: .visitedProfilePagination)
+            if decision.allowed {
+                loadMoreMedia()
+            } else if !paginationRetryScheduled {
+                paginationRetryScheduled = true
+                let wait = max(1, decision.waitSeconds)
+                print("⏳ [USER] Pagination gated (\(decision.reason), \(wait)s) — will retry")
+                let openedSnapshot = profileOpenedAt
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(wait) + 0.3) {
+                    paginationRetryScheduled = false
+                    guard !isLoadingMore, hasMorePages else { return }
+                    // Re-apply time guard in retry path — if SafetyGate cleared quickly
+                    // (e.g. 2-3s) the user might still be in the initial-render phase.
+                    let sinceOpenNow = Date().timeIntervalSince(openedSnapshot)
+                    guard allMediaURLs.count > 12 || sinceOpenNow > 5.0 else {
+                        print("⏳ [USER] Pagination retry suppressed — still within 5s time guard")
+                        return
+                    }
+                    loadMoreMedia()
+                }
+            }
         }
     }
     
+    // MARK: - Lazy Tab Loading (reels / tagged)
+
+    /// Fetches reels for this profile the first time the reels tab is tapped.
+    private func fetchReelsIfNeeded() {
+        guard !reelsLoaded, !isLoadingReels else { return }
+        guard !UploadManager.shared.isActive else {
+            print("🛡️ [USER] Reels fetch skipped — upload active/paused")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile reels skipped: upload active", category: .general)
+            return
+        }
+        // If reels were already loaded as part of getProfileInfo (own profile or
+        // any future change), skip the extra request.
+        if !currentProfile.cachedReelURLs.isEmpty {
+            reelsLoaded = true
+            return
+        }
+        isLoadingReels = true
+        Task {
+            do {
+                let reels = try await InstagramService.shared.getUserReels(userId: currentProfile.userId, amount: 18)
+                let reelURLs = reels.map { $0.imageURL }
+                await MainActor.run {
+                    currentProfile.cachedReelURLs = reelURLs
+                    currentProfile.cachedReelItems = reels
+                    reelsLoaded = true
+                    isLoadingReels = false
+                    downloadImagesForURLs(reelURLs)
+                    LogManager.shared.info("Lazy reels loaded — \(reels.count) reels for @\(currentProfile.username)", category: .profile)
+                }
+            } catch {
+                await MainActor.run {
+                    reelsLoaded = true  // don't retry on every tap
+                    isLoadingReels = false
+                    LogManager.shared.warning("Lazy reels fetch failed for @\(currentProfile.username): \(error.localizedDescription)", category: .profile)
+                }
+            }
+        }
+    }
+
+    /// Fetches tagged posts for this profile the first time the tagged tab is tapped.
+    private func fetchTaggedIfNeeded() {
+        guard !taggedLoaded, !isLoadingTagged else { return }
+        guard !UploadManager.shared.isActive else {
+            print("🛡️ [USER] Tagged fetch skipped — upload active/paused")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile tagged skipped: upload active", category: .general)
+            return
+        }
+        if !currentProfile.cachedTaggedURLs.isEmpty {
+            taggedLoaded = true
+            return
+        }
+        isLoadingTagged = true
+        Task {
+            do {
+                let tagged = try await InstagramService.shared.getUserTagged(userId: currentProfile.userId, amount: 18)
+                let taggedURLs = tagged.map { $0.imageURL }
+                await MainActor.run {
+                    currentProfile.cachedTaggedURLs = taggedURLs
+                    taggedLoaded = true
+                    isLoadingTagged = false
+                    downloadImagesForURLs(taggedURLs)
+                    LogManager.shared.info("Lazy tagged loaded — \(tagged.count) posts for @\(currentProfile.username)", category: .profile)
+                }
+            } catch {
+                await MainActor.run {
+                    taggedLoaded = true  // don't retry on every tap
+                    isLoadingTagged = false
+                    LogManager.shared.warning("Lazy tagged fetch failed for @\(currentProfile.username): \(error.localizedDescription)", category: .profile)
+                }
+            }
+        }
+    }
+
     private func downloadImagesForURLs(_ urls: [String]) {
         Task {
             for url in urls {
-                guard !url.isEmpty,
-                      let urlObj = URL(string: url),
+                guard !url.isEmpty else { continue }
+                if let image = VisitedProfileCacheService.shared.loadImage(forURL: url) {
+                    await MainActor.run {
+                        cachedImages[url] = image
+                    }
+                    continue
+                }
+                guard let urlObj = URL(string: url),
                       let (data, _) = try? await URLSession.shared.data(from: urlObj),
                       let image = UIImage(data: data) else { continue }
+                VisitedProfileCacheService.shared.saveImage(image, forURL: url)
                 
                 await MainActor.run {
                     cachedImages[url] = image
@@ -932,6 +1260,18 @@ struct UserProfileView: View {
             print("🚫 [REFRESH] Intelligent refresh skipped — lockdown active")
             return
         }
+        guard !UploadManager.shared.isActive else {
+            print("🛡️ [REFRESH] Intelligent refresh skipped — upload active/paused")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile refresh skipped: upload active", category: .general)
+            return
+        }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .visitedProfileRefresh)
+        guard safetyDecision.allowed else {
+            print("🛡️ [REFRESH] Intelligent refresh skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile refresh: \(safetyDecision.reason)", category: .general)
+            return
+        }
+        InstagramSafetyGate.shared.record(.visitedProfileRefresh)
 
         // Haptic feedback (discreto, solo para el mago)
         let generator = UIImpactFeedbackGenerator(style: .light)
@@ -963,6 +1303,7 @@ struct UserProfileView: View {
                     isFollowing = updatedProfile.isFollowing
                     isFollowRequested = updatedProfile.isFollowRequested
                     currentProfile = updatedProfile
+                    VisitedProfileCacheService.shared.saveProfile(updatedProfile)
                     
                     // Actualizar imágenes solo si ahora tenemos acceso
                     if updatedProfile.isFollowing && !updatedProfile.isFollowRequested {

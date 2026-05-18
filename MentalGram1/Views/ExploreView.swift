@@ -1,4 +1,5 @@
 import SwiftUI
+import AudioToolbox
 
 // MARK: - Explore View (Instagram Explore Replica)
 
@@ -8,6 +9,7 @@ struct ExploreView: View {
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject var secretInputSettings = SecretInputSettings.shared
     @ObservedObject private var profileCache = ProfileCacheService.shared
+    @ObservedObject private var uploadManager = UploadManager.shared
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     @State private var ownProfileImage: UIImage? = nil
@@ -16,11 +18,13 @@ struct ExploreView: View {
     @State private var isSearching = false
     @State private var showingUserProfile = false
     @State private var searchedProfile: InstagramProfile?
+    @State private var loadingProfileUserId: String?
+    @State private var lastProfileOpenAt: Date = .distantPast
+    @State private var failedProfileIds: Set<String> = []
     @State private var searchTask: Task<Void, Never>?
     @FocusState private var isSearchFieldFocused: Bool
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
-    @State private var lastProfileLoadTime: Date = .distantPast // Anti-bot cooldown for profile loads
 
     // Post detail (fullscreen Instagram-style post viewer)
     @State private var showingPostDetail = false
@@ -122,16 +126,26 @@ struct ExploreView: View {
                                 .padding()
                             } else if searchResults.isEmpty {
                                 VStack(spacing: 12) {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 48))
-                                        .foregroundColor(.secondary)
-                                    Text("explore.no_results")
-                                        .foregroundColor(.secondary)
+                                    if uploadManager.isActive && !uploadManager.isPaused {
+                                        Image(systemName: "arrow.up.circle")
+                                            .font(.system(size: 48))
+                                            .foregroundColor(.secondary)
+                                        Text("explore.search_blocked_upload")
+                                            .foregroundColor(.secondary)
+                                            .multilineTextAlignment(.center)
+                                            .padding(.horizontal, 32)
+                                    } else {
+                                        Image(systemName: "magnifyingglass")
+                                            .font(.system(size: 48))
+                                            .foregroundColor(.secondary)
+                                        Text("explore.no_results")
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                                 .padding(.top, 60)
                             } else {
                                 ForEach(searchResults) { result in
-                                    SearchResultRow(result: result, onTap: {
+                                    SearchResultRow(result: result, isLoading: loadingProfileUserId == result.userId, onTap: {
                                         loadUserProfile(result: result)
                                     })
                                 }
@@ -244,6 +258,8 @@ struct ExploreView: View {
                 UserProfileView(profile: profile, onClose: {
                     withAnimation {
                         showingUserProfile = false
+                        searchedProfile = nil
+                        loadingProfileUserId = nil
                     }
                 })
                 .transition(.move(edge: .trailing))
@@ -272,10 +288,16 @@ struct ExploreView: View {
 
             // Load own profile pic for the bottom bar
             if ownProfileImage == nil, let picURL = profileCache.cachedProfile?.profilePicURL,
-               !picURL.isEmpty, let url = URL(string: picURL) {
+               !picURL.isEmpty {
+                if let cached = profileCache.loadImage(forURL: picURL) {
+                    ownProfileImage = cached
+                    return
+                }
                 Task {
+                    guard let url = URL(string: picURL) else { return }
                     if let (data, _) = try? await URLSession.shared.data(from: url),
                        let img = UIImage(data: data) {
+                        ProfileCacheService.shared.saveImage(img, forURL: picURL)
                         await MainActor.run { ownProfileImage = img }
                     }
                 }
@@ -300,6 +322,12 @@ struct ExploreView: View {
             return
         }
 
+        if let cachedResults = VisitedProfileCacheService.shared.loadSearchResults(for: query) {
+            searchResults = cachedResults
+            isSearching = false
+            return
+        }
+
         // No additional debounce here — the 400 ms debounce in handleSearchTextChange
         // already ensures only one request fires per typing burst.
         // We keep a cancellable Task so a new query mid-flight cancels the previous one.
@@ -313,8 +341,25 @@ struct ExploreView: View {
                 return
             }
 
+            guard !UploadManager.shared.isActive || UploadManager.shared.isPaused else {
+                print("🛡️ [EXPLORE] Search skipped — upload active/paused")
+                LogManager.shared.warning("SAFETY BLOCK — Explore search skipped: upload active", category: .general)
+                await MainActor.run { isSearching = false }
+                return
+            }
+
+            let safetyDecision = InstagramSafetyGate.shared.decision(for: .searchUsers)
+            guard safetyDecision.allowed else {
+                print("🛡️ [EXPLORE] Search skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+                LogManager.shared.warning("SAFETY BLOCK — search users: \(safetyDecision.reason)", category: .general)
+                await MainActor.run { isSearching = false }
+                return
+            }
+            InstagramSafetyGate.shared.record(.searchUsers)
+
             do {
                 let results = try await InstagramService.shared.searchUsers(query: query)
+                VisitedProfileCacheService.shared.saveSearchResults(results, for: query)
                 await MainActor.run {
                     guard !Task.isCancelled else { return }
                     searchResults = results
@@ -331,25 +376,76 @@ struct ExploreView: View {
     
     private func loadUserProfile(result: UserSearchResult) {
         let userId = result.userId
-        guard !InstagramService.shared.isLocked else {
-            print("🚫 [SEARCH] Profile load skipped — lockdown active")
+        guard loadingProfileUserId == nil else { return }
+
+        // Skip profiles that already failed with a non-retryable error this session.
+        guard !failedProfileIds.contains(userId) else {
+            print("⏭️ [SEARCH] Skipping \(result.username) — failed previously this session")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
 
-        // ANTI-BOT: Enforce minimum 5 s gap between consecutive profile loads.
-        let now = Date()
-        let elapsed = now.timeIntervalSince(lastProfileLoadTime)
-        guard elapsed >= 5 else {
-            print("⚠️ [SEARCH] Profile load throttled — only \(String(format: "%.1f", elapsed))s since last load (min 5s)")
+        // Budget guard: block profile opens when fewer than 8 actions remain.
+        // Cached profiles are always allowed.
+        let rateCheck = instagram.checkRateLimit()
+        if rateCheck.remaining < 8,
+           VisitedProfileCacheService.shared.loadProfile(userId: userId) == nil {
+            print("⚠️ [SEARCH] Profile open blocked — only \(rateCheck.remaining) actions remaining this hour")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
             return
         }
-        lastProfileLoadTime = now
+
+        // 3-second cooldown between consecutive profile opens from search results.
+        // Each new profile costs 4-5 API calls; rapid consecutive opens exhaust the
+        // hourly budget and trigger Instagram's challenge_required.
+        // Cached profiles bypass this guard since they make no API calls.
+        let sinceLastOpen = Date().timeIntervalSince(lastProfileOpenAt)
+        if sinceLastOpen < 3.0,
+           VisitedProfileCacheService.shared.loadProfile(userId: userId) == nil {
+            print("⏳ [SEARCH] Profile open throttled — \(String(format: "%.1f", sinceLastOpen))s since last open (min 3s)")
+            return
+        }
+
+        loadingProfileUserId = userId
+
+        if let cachedProfile = VisitedProfileCacheService.shared.loadProfile(userId: userId) {
+            searchedProfile = cachedProfile
+            showingUserProfile = true
+            loadingProfileUserId = nil
+            print("📦 [PROFILE] Opened @\(cachedProfile.username) from visited cache")
+            return
+        }
+
+        lastProfileOpenAt = Date()
+
+        guard !InstagramService.shared.isLocked else {
+            print("🚫 [SEARCH] Profile load skipped — lockdown active")
+            loadingProfileUserId = nil
+            return
+        }
+
+        guard !UploadManager.shared.isActive || UploadManager.shared.isPaused else {
+            print("🛡️ [SEARCH] Profile load skipped — upload active/paused")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile load skipped: upload active", category: .general)
+            loadingProfileUserId = nil
+            return
+        }
 
         isSearchFieldFocused = false
 
         print("🔍 [UI] Loading profile for user ID: \(userId)")
         
         Task {
+            let safetyDecision = InstagramSafetyGate.shared.decision(for: .visitedProfileOpen)
+            guard safetyDecision.allowed else {
+                print("🛡️ [PROFILE] Open skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+                LogManager.shared.warning("SAFETY BLOCK — visited profile open: \(safetyDecision.reason)", category: .general)
+                await MainActor.run { loadingProfileUserId = nil }
+                return
+            }
+            InstagramSafetyGate.shared.record(.visitedProfileOpen)
+
             do {
                 let profile = try await InstagramService.shared.getProfileInfo(
                     userId: userId,
@@ -363,22 +459,31 @@ struct ExploreView: View {
                     if let profile = profile {
                         print("✅ [UI] Profile loaded successfully: @\(profile.username)")
                         print("✅ [UI] Profile has \(profile.cachedMediaURLs.count) media URLs")
+                        VisitedProfileCacheService.shared.saveProfile(profile)
                         searchedProfile = profile
                         showingUserProfile = true
+                        loadingProfileUserId = nil
                         print("✅ [UI] showingUserProfile set to true")
                     } else {
                         print("❌ [UI] Profile is nil")
+                        loadingProfileUserId = nil
                     }
                 }
             } catch let error as InstagramError {
                 print("❌ [PROFILE] Instagram error loading profile: \(error)")
                 await MainActor.run {
+                    loadingProfileUserId = nil
                     lastError = error
                     showingConnectionError = true
+                    // Mark non-retryable errors so re-taps don't waste more API calls.
+                    let desc = error.localizedDescription.lowercased()
+                    let isHardFailure = desc.contains("400") || desc.contains("not found") || desc.contains("not authorized")
+                    if isHardFailure { failedProfileIds.insert(userId) }
                 }
             } catch {
                 print("❌ [PROFILE] Error loading profile: \(error)")
                 await MainActor.run {
+                    loadingProfileUserId = nil
                     lastError = .apiError(error.localizedDescription)
                     showingConnectionError = true
                 }
@@ -389,32 +494,50 @@ struct ExploreView: View {
     // MARK: - Secret Input Logic
     
     private func updateMaskTextCache() {
-        // Get latest follower username if mode is latestFollower
-        // We need to fetch it asynchronously if not cached
-        if secretInputSettings.mode == .latestFollower {
-            Task {
-                guard !instagram.isLocked, !instagram.isSessionChallenged else {
-                    await MainActor.run {
-                        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
-                    }
-                    return
-                }
-                do {
-                    let follower = try await instagram.getLatestFollower()
-                    await MainActor.run {
-                        let username = follower?.username
-                        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: username)
-                    }
-                } catch {
-                    // Fallback to generic "user" if fetch fails
-                    await MainActor.run {
-                        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
-                    }
-                }
-            }
-        } else {
-            // Custom mode - no need for async
+        // Custom mode — no async needed.
+        guard secretInputSettings.mode == .latestFollower else {
             maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
+            return
+        }
+
+        // ANTI-BOT: Persisted cache of the last follower username (TTL: 30 min).
+        // Use cached value immediately so the UI never blocks on a network fetch
+        // and we eliminate ~95% of the /friendships/.../followers/?count=1 calls
+        // that previously fired on every Explore entry — that endpoint is what
+        // got us a 401 in the most recent bot-detection log.
+        let cacheKey = "explore_lastFollowerUsername"
+        let timestampKey = "explore_lastFollowerUsername_ts"
+        let ttl: TimeInterval = 30 * 60
+        let now = Date().timeIntervalSince1970
+
+        let cachedUsername = UserDefaults.standard.string(forKey: cacheKey)
+        let cachedAt = UserDefaults.standard.double(forKey: timestampKey)
+        let cacheAge = now - cachedAt
+        let cacheFresh = cachedUsername != nil && cacheAge < ttl
+
+        // Show cached value (or generic fallback) instantly.
+        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: cachedUsername)
+
+        // Skip network refresh if cache is fresh enough.
+        guard !cacheFresh else { return }
+
+        // Background refresh — bail out silently on any guard.
+        Task {
+            guard !instagram.isLocked, !instagram.isSessionChallenged, !instagram.isSessionExpired else { return }
+            // Defer to getLatestFollower's internal guards (cold-start, burst,
+            // heavy-op) so this respects all the safety layers.
+            guard !instagram.isHeavyOperationActive else { return }
+            do {
+                let follower = try await instagram.getLatestFollower()
+                guard let username = follower?.username else { return }
+                UserDefaults.standard.set(username, forKey: cacheKey)
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: timestampKey)
+                await MainActor.run {
+                    maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: username)
+                }
+            } catch {
+                // Fallback already in place from the synchronous step above.
+            }
         }
     }
     
@@ -442,18 +565,18 @@ struct ExploreView: View {
                 searchTask?.cancel()
                 searchResults = []
                 isSearching = false
-            } else if newValue.count >= 4 {
+            } else if newValue.count >= 3 {
                 // Show spinner immediately so the user knows the tap registered
                 isSearching = true
                 let query = newValue
                 searchDebounceTask = Task {
-                    // 400 ms debounce — waits for the user to pause typing before firing.
-                    // The 2nd debounce inside performSearch is now bypassed (see below).
-                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    // 500 ms debounce — waits for the user to pause typing before firing.
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                     guard !Task.isCancelled else { return }
                     performSearch(query: query)
                 }
             } else {
+                searchResults = []
                 isSearching = false
             }
             return
@@ -482,11 +605,22 @@ struct ExploreView: View {
             isUpdatingMask = false
 
             if hasSpace {
-                // SPACE = word complete → reveal + trigger ONE search with the mask text
+                // SPACE = word complete → reveal + fire final search with the mask text
                 handleSpacePressed()
-                // handleSpacePressed calls performSearch internally (see below)
+                // handleSpacePressed calls performSearch internally
+            } else if masked.count >= 3 {
+                // Fire a debounced live-search on the masked text so the spectator sees
+                // Instagram-style results building up as the username is "typed".
+                // 500 ms debounce avoids a request on every single keystroke.
+                searchDebounceTask?.cancel()
+                let query = masked
+                isSearching = true
+                searchDebounceTask = Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    guard !Task.isCancelled else { return }
+                    performSearch(query: query)
+                }
             }
-            // Secret input active + no space: do nothing, wait for SPACE
 
         } else if newValue.count < expectedLength {
             // User deleted character(s)
@@ -499,9 +633,22 @@ struct ExploreView: View {
             searchText = masked
             isUpdatingMask = false
 
-            // Never search when deleting — avoid spurious API calls
+            // Cancel any pending search when deleting
+            searchDebounceTask?.cancel()
+            searchTask?.cancel()
             if searchText.isEmpty {
-                searchTask?.cancel()
+                searchResults = []
+                isSearching = false
+            } else if masked.count >= 3 {
+                // Re-search with the shorter masked text so results stay consistent
+                let query = masked
+                isSearching = true
+                searchDebounceTask = Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    guard !Task.isCancelled else { return }
+                    performSearch(query: query)
+                }
+            } else {
                 searchResults = []
                 isSearching = false
             }
@@ -648,7 +795,11 @@ struct ExploreView: View {
         
         var successCount = 0
         var failCount = 0
-        
+        // Track every mediaId revealed in this word so we can mark them as
+        // post-reveal protected at the end (anti-bot: prevents the same media
+        // from being archived again within the protection window).
+        var revealedMediaIds: [String] = []
+
         for (index, letter) in letters.enumerated() {
             // Check if task was cancelled
             if Task.isCancelled {
@@ -714,6 +865,7 @@ struct ExploreView: View {
                         )
                     }
                     successCount += 1
+                    revealedMediaIds.append(mediaId)
                     print("✅ [SECRET] [\(index + 1)/\(letters.count)] Letter '\(letter)' REVEALED OK")
                     LogManager.shared.success("Revealed '\(letter)' (mediaId: \(mediaId))", category: .general)
                 } else {
@@ -737,20 +889,34 @@ struct ExploreView: View {
         print("🎩 [SECRET] ═══════════════════════════════════════")
         print("🎩 [SECRET] REVEAL COMPLETE: \(successCount) ok, \(failCount) failed, total \(letters.count)")
         LogManager.shared.info("Word reveal '\(word)': \(successCount) ok, \(failCount) failed", category: .general)
-        
-        // Haptic feedback to magician when reveal finishes (spectator can't see anything)
+
+        // ANTI-BOT: Protect the just-revealed media from being archived again
+        // for the protection window. Same hold mechanism Performance already
+        // uses for its reveals — prevents the toxic reveal→archive→reveal
+        // pattern that strongly signals automation.
+        if !revealedMediaIds.isEmpty {
+            InstagramSafetyGate.shared.markPostReveal(mediaIds: revealedMediaIds)
+        }
+
         await MainActor.run {
-            if failCount == 0 {
-                // Success: double light tap
-                let generator = UIImpactFeedbackGenerator(style: .light)
-                generator.impactOccurred()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    generator.impactOccurred()
+            if successCount > 0 {
+                // Notify PerformanceView so it can insert photos, show the ring, and fire CDN refresh.
+                // Carries the revealed media IDs so PerformanceView can look up local images.
+                NotificationCenter.default.post(
+                    name: .exploreWordRevealComplete,
+                    object: nil,
+                    userInfo: ["mediaIds": revealedMediaIds]
+                )
+
+                // Two full-power system vibrations (same as OCR/API reveal path in PerformanceView)
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+                Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    await MainActor.run { AudioServicesPlaySystemSound(kSystemSoundID_Vibrate) }
                 }
             } else {
-                // Some failures: error vibration
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.warning)
+                // All failed: error notification vibration
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
     }
@@ -799,14 +965,13 @@ struct ExploreGridView: View {
 
 struct SearchResultRow: View {
     let result: UserSearchResult
+    let isLoading: Bool
     let onTap: () -> Void
     @State private var profileImage: UIImage?
-    @State private var isLoading = false
 
     var body: some View {
         Button(action: {
             guard !isLoading else { return }
-            isLoading = true
             onTap()
         }) {
             HStack(spacing: 12) {
@@ -863,7 +1028,6 @@ struct SearchResultRow: View {
         }
         .buttonStyle(PlainButtonStyle())
         .onAppear {
-            isLoading = false
             loadProfileImage()
         }
     }
@@ -890,23 +1054,20 @@ struct ExploreMediaCell: View {
     let cachedImage: UIImage?
     
     var body: some View {
-        // 4:5 portrait container — image fills via scaledToFill, no distortion
+        // 4:5 portrait container — image fills via scaledToFill, no distortion.
+        // LazyVGrid renders only the ~6-9 visible cells at a time, so having
+        // an AVPlayer per visible video cell is safe (same as real Instagram).
+        // Cells that scroll off screen are destroyed and their players released.
         Color.clear
             .aspectRatio(4/5, contentMode: .fit)
             .overlay(
                 ZStack(alignment: .topTrailing) {
-                    if media.mediaType == .video, let videoURL = media.videoURL {
-                        ZStack {
-                            if let image = cachedImage {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                            } else {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.3))
-                            }
-                            GridVideoPlayer(videoURL: videoURL)
-                        }
+                    if media.mediaType == .video, let videoURL = media.videoURL, !videoURL.isEmpty {
+                        GridVideoPlayer(
+                            videoURL: videoURL,
+                            muted: true,
+                            posterImage: cachedImage
+                        )
                     } else if let image = cachedImage {
                         Image(uiImage: image)
                             .resizable()
@@ -920,8 +1081,10 @@ struct ExploreMediaCell: View {
                             )
                     }
 
-                    // Reel / video indicator (bottom-left, like real Instagram)
-                    if media.mediaType == .video {
+                    // Video badge only when there's no videoURL (thumbnail-only
+                    // fallback) — if it's playing inline no badge is needed.
+                    if media.mediaType == .video,
+                       (media.videoURL == nil || media.videoURL?.isEmpty == true) {
                         VStack {
                             Spacer()
                             HStack {
@@ -949,4 +1112,12 @@ struct ExploreMediaCell: View {
             )
             .clipped()
     }
+}
+
+// MARK: - Notification name
+
+extension Notification.Name {
+    /// Posted by ExploreView when a secret-input word reveal finishes successfully.
+    /// userInfo["mediaIds"] → [String]  (the unarchived media IDs)
+    static let exploreWordRevealComplete = Notification.Name("com.vault.exploreWordRevealComplete")
 }

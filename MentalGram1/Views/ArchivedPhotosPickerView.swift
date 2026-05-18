@@ -51,6 +51,7 @@ struct ArchivedPhotosPickerView: View {
     @State private var selectedPhoto: ArchivedPhoto? = nil
     @State private var downloadedImages: [String: UIImage] = [:]
     @State private var isForcingRefresh = false
+    @State private var scanWarning: String? = nil
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -114,6 +115,22 @@ struct ArchivedPhotosPickerView: View {
                     .padding()
                 } else {
                     ScrollView {
+                        if let warning = scanWarning {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text(warning)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Color.orange.opacity(0.08))
+                            .cornerRadius(10)
+                            .padding(.horizontal)
+                            .padding(.top)
+                        }
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(archivedPhotos) { photo in
                                 ArchivedPhotoCell(
@@ -185,6 +202,7 @@ struct ArchivedPhotosPickerView: View {
         isLoading = true
         isForcingRefresh = forceRefresh
         errorMessage = nil
+        scanWarning = nil
 
         if forceRefresh {
             ArchivedPhotosCache.shared.invalidate()
@@ -198,16 +216,25 @@ struct ArchivedPhotosPickerView: View {
                 var photos = raw.map {
                     ArchivedPhoto(mediaId: $0.mediaId, imageURL: $0.imageURL, timestamp: $0.timestamp)
                 }
+                let scanCompleted = instagram.lastArchiveScanCompleted
+                let stopReason = instagram.lastArchiveScanStopReason
 
                 await MainActor.run {
                     archivedPhotos = photos
+                    if !scanCompleted {
+                        scanWarning = "Archive scan stopped early (\(stopReason ?? "safety limit")). Older photos may not appear yet. Wait a few minutes or tap refresh again later."
+                    }
                     isLoading = false
                     isForcingRefresh = false
                 }
 
                 // Download thumbnails and store them back into cache objects
                 await downloadThumbnails(into: &photos)
-                ArchivedPhotosCache.shared.store(photos)
+                if scanCompleted {
+                    ArchivedPhotosCache.shared.store(photos)
+                } else {
+                    print("📦 [ARCHIVE PICKER] Partial scan not cached — \(photos.count) photos")
+                }
 
             } catch {
                 await MainActor.run {

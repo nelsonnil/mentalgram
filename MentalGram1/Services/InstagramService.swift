@@ -27,9 +27,38 @@ class InstagramService: ObservableObject {
     /// Precautionary lockdown fires at 5 consecutive bot-signal fails.
     private var consecutiveBotSignalErrors: Int = 0
 
-    // Session expiry — set true when any API call returns 403/401
-    // Cleared automatically on successful login
+    // MARK: - Session expiry context
+    /// Why the session expired — drives the message shown in MagicianSessionPanel.
+    enum SessionExpiredContext: Int {
+        case unknown        = 0  // default; not enough info to determine cause
+        case normal         = 1  // password change, inactivity, generic 403
+        case restriction    = 2  // Instagram imposed a temporary account restriction
+        case challenge      = 3  // challenge_required streak on POST
+    }
+
+    // Session expiry — set true when any API call returns 403/401.
+    // Persisted to UserDefaults so the overlay reappears after an app restart.
     @Published var isSessionExpired: Bool = false
+    @Published var sessionExpiredContext: SessionExpiredContext = .unknown
+
+    /// Sets session as expired with context and persists across app restarts.
+    @MainActor
+    func markSessionExpired(context: SessionExpiredContext) {
+        isSessionExpired = true
+        sessionExpiredContext = context
+        UserDefaults.standard.set(true, forKey: "instagram_session_expired")
+        UserDefaults.standard.set(context.rawValue, forKey: "instagram_session_expired_ctx")
+        LogManager.shared.warning("Session expired — context: \(context)", category: .auth)
+    }
+
+    /// Clears session expired state and persistence.
+    @MainActor
+    func clearSessionExpired() {
+        isSessionExpired = false
+        sessionExpiredContext = .unknown
+        UserDefaults.standard.removeObject(forKey: "instagram_session_expired")
+        UserDefaults.standard.removeObject(forKey: "instagram_session_expired_ctx")
+    }
 
     /// True while a reveal (unarchive) or re-archive operation is running.
     /// Blocks pull-to-refresh in PerformanceView to avoid extra API calls mid-operation.
@@ -44,7 +73,12 @@ class InstagramService: ObservableObject {
     /// True for ~5 minutes after any challenge_required is detected (GET or POST).
     /// Views use this to skip non-essential API calls and avoid cascading bot signals.
     @Published var isSessionChallenged: Bool = false
-    
+    /// True whenever there is at least one unresolved network/API error. Views use
+    /// this to skip optimistic background refreshes that would fire into a broken
+    /// session (e.g. the cold-start deferred refresh that was triggering
+    /// challenge_required on /feed/user/ immediately after a /current_user/ timeout).
+    @Published var hasRecentApiError: Bool = false
+
     // Network change tracking (anti-bot protection)
     private var lastConnectionType: String = "unknown"
     private var lastNetworkChangeTime: Date?
@@ -97,6 +131,13 @@ class InstagramService: ObservableObject {
     // MARK: - Rate Limiting (anti-bot: max 60 actions/hour)
     private var actionTimestamps: [Date] = []
     private let maxActionsPerHour: Int = 55 // Safe margin below 60
+
+    /// ANTI-BOT: In-memory cache of recent state-check results.
+    /// Avoids hammering /media/{pk}/info/ when the user re-syncs the same set
+    /// within minutes. Key = mediaId pk, Value = (isArchived, capturedAt).
+    /// TTL controlled by `stateCheckCacheTTL`.
+    private var stateCheckCache: [String: (isArchived: Bool, at: Date)] = [:]
+    private let stateCheckCacheTTL: TimeInterval = 300 // 5 minutes
     /// Stop paginated archive scans when actionsThisHour reaches this threshold
     private let archiveScanRateLimitThreshold: Int = 45
     @Published var actionsThisHour: Int = 0
@@ -112,11 +153,16 @@ class InstagramService: ObservableObject {
     private var archivedPhotoCache: [(mediaId: String, imageURL: String, timestamp: Date?)]? = nil
     private var archivedPhotoCacheDate: Date? = nil
     private let archivedPhotoCacheTTL: TimeInterval = 600 // 10 minutes
+    private(set) var lastArchiveScanCompleted: Bool = true
+    private(set) var lastArchiveScanStopReason: String? = nil
 
     /// Invalidate the archive scan cache (call after any archive/unarchive action).
     func invalidateArchiveCache() {
         archivedPhotoCache = nil
         archivedPhotoCacheDate = nil
+        lastArchiveScanCompleted = true
+        lastArchiveScanStopReason = nil
+        ArchivedPhotosCache.shared.invalidate()
         print("♻️ [ARCHIVE CACHE] Invalidated")
     }
     
@@ -168,8 +214,21 @@ class InstagramService: ObservableObject {
             self.isLoggedIn = true
             self.sessionRestoredAt = Date()  // Mark cold-start time for warm-up delay
             print("✅ Session restored for @\(saved.username)")
+
+            // Restore persisted session-expired state so overlay appears immediately
+            // after an app restart without needing a new API call.
+            if UserDefaults.standard.bool(forKey: "instagram_session_expired") {
+                self.isSessionExpired = true
+                let ctxRaw = UserDefaults.standard.integer(forKey: "instagram_session_expired_ctx")
+                self.sessionExpiredContext = SessionExpiredContext(rawValue: ctxRaw) ?? .unknown
+                print("⚠️ [SESSION] Restored expired state from UserDefaults (context: \(self.sessionExpiredContext))")
+            }
         }
         
+        // ANTI-BOT: Restore the trailing window of recent action timestamps so
+        // the burst guard works across quick relaunches.
+        restoreRecentActionTimestamps()
+
         // Start network monitoring
         startNetworkMonitoring()
     }
@@ -259,12 +318,12 @@ class InstagramService: ObservableObject {
         if json["challenge"] != nil || messageLower.contains("challenge_required") {
             print("🚨 BOT DETECTED: Challenge required")
             LogManager.shared.bot("Challenge required - Instagram wants verification")
-            await markSessionChallenged(duration: 120)
             // Both GET and POST trigger a visible lockdown so the magician always knows
             // to open the Instagram app and complete any pending verification prompt.
             // POST operations get a longer lockdown (3 min); GET gets a shorter one (2 min)
             // since GET challenges are often transient soft-checks that self-clear.
             let lockDuration: TimeInterval = isWriteOperation ? 180 : 120
+            await markSessionChallenged(duration: lockDuration)
             await triggerLockdown(
                 reason: "Instagram ha pedido verificación. Abre la app de Instagram — si ves un aviso de verificación, complétalo. Si no aparece nada, la sesión se reanudará automáticamente en 2 minutos.",
                 duration: lockDuration
@@ -319,6 +378,7 @@ class InstagramService: ObservableObject {
                 || messageLower.contains("offline")
             await MainActor.run {
                 consecutiveErrors += 1
+                hasRecentApiError = true
                 if !isNetworkRelated { consecutiveBotSignalErrors += 1 }
             }
             
@@ -369,6 +429,7 @@ class InstagramService: ObservableObject {
     /// that the user feels the app is broken. POST operations (archive/unarchive)
     /// check this flag and abort to avoid triggering a full lockdown.
     private func markSessionChallenged(duration: TimeInterval = 60) async {
+        InstagramSafetyGate.shared.markChallenge(duration: duration)
         await MainActor.run { isSessionChallenged = true }
         print("⚠️ [SESSION] Marked as challenged — background API calls paused for \(Int(duration))s")
         Task {
@@ -387,6 +448,8 @@ class InstagramService: ObservableObject {
         lockUntil = nil
         consecutiveErrors = 0
         consecutiveBotSignalErrors = 0
+        hasRecentApiError = false
+        InstagramSafetyGate.shared.clearChallenge()
         print("🔓 [LOCKDOWN] Deactivated")
     }
 
@@ -396,6 +459,7 @@ class InstagramService: ObservableObject {
     func resetBackoff() {
         consecutiveErrors = 0
         consecutiveBotSignalErrors = 0
+        hasRecentApiError = false
     }
 
     /// Lightweight session probe: makes a single minimal GET request to Instagram.
@@ -406,6 +470,11 @@ class InstagramService: ObservableObject {
     /// app, this probe will succeed and the lockdown is cleared automatically.
     func probeSession() async -> Bool {
         guard isLoggedIn, !session.sessionId.isEmpty else { return false }
+        let probeDecision = InstagramSafetyGate.shared.canProbeSession()
+        guard probeDecision.allowed else {
+            LogManager.shared.warning("CHALLENGE CIRCUIT — probe blocked for \(probeDecision.waitSeconds)s", category: .api)
+            return false
+        }
         do {
             // Use the accounts/current_user endpoint — minimal payload, no side effects.
             let url = URL(string: "https://i.instagram.com/api/v1/accounts/current_user/?edit=true")!
@@ -420,12 +489,15 @@ class InstagramService: ObservableObject {
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                json["user"] != nil {
                 print("✅ [PROBE] Session valid — challenge was resolved")
+                InstagramSafetyGate.shared.recordProbeResult(success: true)
                 return true
             }
             print("⚠️ [PROBE] Session probe failed — status \(http.statusCode)")
+            InstagramSafetyGate.shared.recordProbeResult(success: false)
             return false
         } catch {
             print("⚠️ [PROBE] Session probe error: \(error.localizedDescription)")
+            InstagramSafetyGate.shared.recordProbeResult(success: false)
             return false
         }
     }
@@ -434,14 +506,14 @@ class InstagramService: ObservableObject {
     /// Dismiss the session-expired overlay without logging out.
     /// Use this to let the magician navigate to Settings and re-login manually.
     func dismissSessionExpiredOverlay() {
-        isSessionExpired = false
+        clearSessionExpired()
     }
 
     func emergencyLogout() {
         // Clear session state
         session = .empty
         isLoggedIn = false
-        isSessionExpired = false   // ← dismiss the SessionGuardView overlay
+        Task { @MainActor in clearSessionExpired() }
         KeychainService.shared.deleteSession()
         KeychainService.shared.clearCredentials()
 
@@ -491,25 +563,65 @@ class InstagramService: ObservableObject {
         guard isLoggedIn else { return .expired }
         guard isConnected else { return .networkError }
 
+        // Track whether the session was ALREADY expired before this call (persisted
+        // across a restart). If so, and the call confirms the session is still dead,
+        // we auto-logout so the app goes straight to LoginView instead of showing
+        // the confusing overlay with multiple buttons.
+        let wasAlreadyExpired = isSessionExpired
+
         print("🔍 [SESSION] Validating session...")
         do {
-            let data = try await apiRequest(method: "GET", path: "/accounts/current_user/?edit=true")
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               json["user"] != nil {
-                await MainActor.run {
-                    isSessionExpired = false
-                    resetUploadPhaseAfterRelogin()
+            // Try without ?edit=true first — that parameter can cause different/missing
+            // response structures on some account types (e.g. Korean/regional accounts).
+            let data = try await apiRequest(method: "GET", path: "/accounts/current_user/")
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                // Valid if: "user" key present, OR status=="ok", OR no explicit error message.
+                // This is intentionally lenient because 200 without "user" can be a format
+                // variation, not a genuine expiry — as evidenced by other endpoints working fine.
+                let hasUser = json["user"] != nil
+                let statusOk = (json["status"] as? String) == "ok"
+                let hasErrorMsg = json["message"] != nil && (json["status"] as? String) == "fail"
+                let loggedOut = (json["login_required"] as? Bool) == true
+
+                let snippet = String(describing: json.keys.prefix(6))
+                print("🔍 [SESSION] current_user response keys: \(snippet)")
+                LogManager.shared.debug("validateSession keys: \(snippet)", category: .api)
+
+                if !hasErrorMsg && !loggedOut && (hasUser || statusOk || !json.isEmpty) {
+                    await MainActor.run {
+                        clearSessionExpired()
+                        resetUploadPhaseAfterRelogin()
+                    }
+                    print("✅ [SESSION] Session is valid (hasUser:\(hasUser) statusOk:\(statusOk))")
+                    return .valid
                 }
-                print("✅ [SESSION] Session is valid")
-                return .valid
+
+                // 200 but response explicitly signals logged-out state
+                print("⚠️ [SESSION] 200 but response indicates logged-out (keys:\(snippet))")
+                LogManager.shared.warning("validateSession 200 but logged-out indicator (keys:\(snippet))", category: .auth)
+                await markSessionExpired(context: .normal)
+                if wasAlreadyExpired {
+                    print("🔑 [SESSION] Pre-expired + confirmed dead (200 but logged-out) → auto-logout")
+                    LogManager.shared.warning("Auto-logout: pre-expired session confirmed dead via 200/logged-out", category: .auth)
+                    await MainActor.run { logout() }
+                }
+                return .expired
             }
-            // Response was 200 but no "user" key — treat as expired
-            await MainActor.run { isSessionExpired = true }
-            print("⚠️ [SESSION] Unexpected response structure — marking as expired")
-            return .expired
+            // JSON parse failed entirely — treat as network/format error, not expiry
+            print("⚠️ [SESSION] Could not parse response — treating as network error")
+            return .networkError
         } catch InstagramError.sessionExpired {
-            await MainActor.run { isSessionExpired = true }
+            // Context already set by apiRequest — only set if not already marked
+            if !isSessionExpired { await markSessionExpired(context: .normal) }
             print("❌ [SESSION] Session expired (401/403)")
+            // Auto-logout: if the session was ALREADY marked expired before this call
+            // (i.e. persisted from a previous session) and is still dead, go straight
+            // to LoginView instead of leaving the user with a confusing overlay.
+            if wasAlreadyExpired && isConnected {
+                print("🔑 [SESSION] Pre-expired + confirmed dead (403) → auto-logout to LoginView")
+                LogManager.shared.warning("Auto-logout: pre-expired session confirmed dead via 403", category: .auth)
+                await MainActor.run { logout() }
+            }
             return .expired
         } catch InstagramError.challengeRequired {
             print("⚠️ [SESSION] Challenge required during validation")
@@ -547,6 +659,31 @@ class InstagramService: ObservableObject {
                 print("✅ [NETWORK] Network stable, proceeding...")
             }
         }
+    }
+
+    /// Extra safety used only before media uploads. It does not change the
+    /// normal upload/archive cooldown; it only avoids starting a POST while the
+    /// app is in cold-start or the network just switched.
+    func waitForUploadSafetyWindow(label: String = "upload") async throws {
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            print("⏳ [UPLOAD] \(label) waiting for cold-start window — \(remaining)s")
+            LogManager.shared.info("[COLD-START] Upload delayed — \(remaining)s", category: .upload)
+            try await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 3...6)) * 1_000_000_000)
+        }
+
+        if let changeTime = lastNetworkChangeTime {
+            let secondsSinceChange = Date().timeIntervalSince(changeTime)
+            let uploadNetworkDelay: TimeInterval = 15
+            if secondsSinceChange < uploadNetworkDelay {
+                let wait = uploadNetworkDelay - secondsSinceChange
+                print("⏳ [UPLOAD] \(label) waiting \(String(format: "%.1f", wait))s after network change")
+                LogManager.shared.info("Upload delayed after network change: \(Int(ceil(wait)))s", category: .upload)
+                try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            }
+        }
+
+        try await waitForNetworkStability()
     }
 
     /// Waits until at least `sessionWarmupDelay` seconds have elapsed since the app
@@ -612,18 +749,20 @@ class InstagramService: ObservableObject {
                 await MainActor.run {
                     self.session.username = username
                     self.isLoggedIn = true
-                    self.isSessionExpired = false   // clear on successful login
+                    self.clearSessionExpired()
                     KeychainService.shared.saveSession(self.session)
                     print("✅ Logged in as @\(username)")
                     self.resetUploadPhaseAfterRelogin()
                 }
+                InstagramSafetyGate.shared.resetPerformanceThrottle()
             } else {
                 await MainActor.run {
                     self.isLoggedIn = true
-                    self.isSessionExpired = false   // clear on successful login
+                    self.clearSessionExpired()
                     KeychainService.shared.saveSession(self.session)
                     self.resetUploadPhaseAfterRelogin()
                 }
+                InstagramSafetyGate.shared.resetPerformanceThrottle()
             }
         }
     }
@@ -911,15 +1050,44 @@ class InstagramService: ObservableObject {
         // Remove timestamps older than 1 hour
         actionTimestamps = actionTimestamps.filter { now.timeIntervalSince($0) < 3600 }
         actionTimestamps.append(now)
-        
+        // ANTI-BOT: Persist the last 20 timestamps so the burst guard survives
+        // a quick force-quit/relaunch cycle (e.g. user closes the app and
+        // re-opens it within seconds — without persistence the in-memory array
+        // is empty and the guard would let the first call through).
+        persistRecentActionTimestamps()
+
         DispatchQueue.main.async {
             self.actionsThisHour = self.actionTimestamps.count
             self.isRateLimited = self.actionTimestamps.count >= self.maxActionsPerHour
         }
-        
+
         if actionTimestamps.count >= maxActionsPerHour {
             print("⚠️ [RATE LIMIT] \(actionTimestamps.count)/\(maxActionsPerHour) actions this hour - LIMIT REACHED")
             LogManager.shared.warning("Rate limit approaching: \(actionTimestamps.count)/\(maxActionsPerHour) actions/hour", category: .api)
+        }
+    }
+
+    /// Persist the full rolling hour of `actionTimestamps` to UserDefaults so both
+    /// the burst guard and the hard rate-limit check survive app restarts or crashes.
+    /// Entries older than 1 hour are dropped here (they'd be filtered on restore anyway).
+    private func persistRecentActionTimestamps() {
+        let now = Date()
+        let withinHour = actionTimestamps
+            .filter { now.timeIntervalSince($0) < 3600 }
+            .map { $0.timeIntervalSince1970 }
+        UserDefaults.standard.set(withinHour, forKey: "instagram_recent_actions")
+    }
+
+    /// Restore action timestamps from UserDefaults on launch.
+    /// Filters out any entry older than 1 hour to keep the rolling rate-limit window honest.
+    private func restoreRecentActionTimestamps() {
+        guard let raw = UserDefaults.standard.array(forKey: "instagram_recent_actions") as? [Double] else { return }
+        let now = Date()
+        let restored = raw.map { Date(timeIntervalSince1970: $0) }
+            .filter { now.timeIntervalSince($0) < 3600 }
+        if !restored.isEmpty {
+            actionTimestamps = restored
+            print("🛡️ [BURST-GUARD] Restored \(restored.count) recent action timestamps from previous session")
         }
     }
     
@@ -929,6 +1097,26 @@ class InstagramService: ObservableObject {
         let recentActions = actionTimestamps.filter { now.timeIntervalSince($0) < 3600 }
         let remaining = max(0, maxActionsPerHour - recentActions.count)
         return (recentActions.count >= maxActionsPerHour, recentActions.count, remaining)
+    }
+
+    /// Returns true while any "heavy" foreground operation is in flight. Used by
+    /// secondary surfaces (Explore mask refresh, Home follower probe, Date Force
+    /// auto-load, second web_profile_info reconciliation) to defer their own API
+    /// calls and prevent compound bot-like bursts.
+    var isHeavyOperationActive: Bool {
+        return UploadManager.shared.isActive
+            || UploadManager.shared.isSyncArchiveActive
+            || isRevealOperationActive
+            || isUploadingProfilePic
+    }
+
+    /// Returns true if there have been `threshold` or more API requests within
+    /// the last `seconds` seconds. Used by low-priority callers to skip themselves
+    /// when many endpoints are already being hit (anti-burst).
+    func hasRecentApiBurst(threshold: Int = 2, seconds: TimeInterval = 10) -> Bool {
+        let now = Date()
+        let recent = actionTimestamps.filter { now.timeIntervalSince($0) < seconds }.count
+        return recent >= threshold
     }
 
     // MARK: - Media Status Pre-Check (ANTI-BOT: verify state before acting)
@@ -941,8 +1129,56 @@ class InstagramService: ObservableObject {
             print("⚠️ [STATE-CHECK] Skipped (id: \(mediaId)) — not logged in or locked")
             return nil
         }
+        // ANTI-BOT: If the session is already flagged as expired (carried over
+        // from a previous run via UserDefaults, typical after a `restriction`
+        // bot detection), refuse to fire. Otherwise every retry of S&A would
+        // emit a fresh 403 storm against a token Instagram already invalidated.
+        if isSessionExpired {
+            print("⚠️ [STATE-CHECK] Skipped (id: \(mediaId)) — session is already expired")
+            LogManager.shared.warning("[STATE-CHECK] Skipped — session already expired (re-login required)", category: .auth)
+            throw InstagramError.sessionExpired
+        }
+        // ANTI-BOT: Cold-start and warm-resume windows block this GET. The sync
+        // flow (which is the main caller) checks the window itself before
+        // starting a batch, but defense in depth: if anything else triggers a
+        // state-check inside the window, drop it silently.
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            print("⏳ [STATE-CHECK] Skipped — cold-start active (\(remaining)s remaining)")
+            LogManager.shared.warning("[STATE-CHECK] Skipped — cold-start active (\(remaining)s)", category: .general)
+            return nil
+        }
 
         let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+
+        // ANTI-BOT: Post-reveal protection — if this media was just revealed by
+        // the magician we keep it "read-locked" so the app does not produce a
+        // suspicious reveal → check → archive ping-pong on the same mediaId.
+        // The caller is expected to treat `nil` as "leave local state as-is".
+        if InstagramSafetyGate.shared.isMediaPostRevealProtected(mediaId: mediaId) {
+            let wait = InstagramSafetyGate.shared.postRevealSecondsRemaining
+            print("🛡️ [STATE-CHECK] Skipped (pk: \(pk)) — post-reveal protected (\(wait)s left)")
+            LogManager.shared.info("State check skipped: \(pk) post-reveal protected (\(wait)s)", category: .api)
+            return nil
+        }
+
+        // ANTI-BOT: 5-min cache for state-checks. Two consecutive syncs on the
+        // same set within the TTL hit the cache instead of the network, which
+        // is the exact pattern Instagram flags as scripted polling.
+        let now = Date()
+        if let cached = stateCheckCache[pk],
+           now.timeIntervalSince(cached.at) < stateCheckCacheTTL {
+            let age = Int(now.timeIntervalSince(cached.at))
+            print("💾 [STATE-CHECK] Cache hit (pk: \(pk), age \(age)s) → is_archived=\(cached.isArchived)")
+            LogManager.shared.info("State check cache hit: pk \(pk) is_archived=\(cached.isArchived) (age \(age)s)", category: .api)
+            return cached.isArchived
+        }
+
+        // ANTI-BOT: Count state-checks in the rolling-hour rate limit so the
+        // SafetyGate sees the real activity (otherwise sync bursts are invisible
+        // to the limiter and can stack with archives / refreshes).
+        trackAction()
+
         print("🔍 [STATE-CHECK] Checking media (pk: \(pk))...")
         guard let url = URL(string: "\(baseURL)/media/\(pk)/info/") else { return nil }
 
@@ -962,7 +1198,7 @@ class InstagramService: ObservableObject {
                 print("⚠️ [STATE-CHECK] HTTP error \(statusCode) for pk: \(pk)")
                 LogManager.shared.warning("State check HTTP \(statusCode) for media \(pk)", category: .api)
                 if statusCode == 403 || statusCode == 401 {
-                    await MainActor.run { self.isSessionExpired = true }
+                    await markSessionExpired(context: challengeRequiredStreak > 0 ? .challenge : .restriction)
                     throw InstagramError.sessionExpired
                 }
                 // Detect challenge_required in error body (GET → no lockdown, just mark challenged)
@@ -1010,6 +1246,7 @@ class InstagramService: ObservableObject {
             if let isArchived = first["is_archived"] as? Bool {
                 print("✅ [STATE-CHECK] pk \(pk) → is_archived=\(isArchived)")
                 LogManager.shared.info("State check result: pk \(pk) is_archived=\(isArchived)", category: .api)
+                stateCheckCache[pk] = (isArchived, Date())
                 return isArchived
             }
 
@@ -1018,6 +1255,7 @@ class InstagramService: ObservableObject {
                 let archived = audience == 1
                 print("✅ [STATE-CHECK] pk \(pk) → audience_setting=\(audience) → archived=\(archived)")
                 LogManager.shared.info("State check result via audience_setting: pk \(pk) archived=\(archived)", category: .api)
+                stateCheckCache[pk] = (archived, Date())
                 return archived
             }
 
@@ -1026,6 +1264,7 @@ class InstagramService: ObservableObject {
                 let archived = visibility == "private" || visibility == "only_me"
                 print("✅ [STATE-CHECK] pk \(pk) → visibility=\(visibility) → archived=\(archived)")
                 LogManager.shared.info("State check result via visibility: pk \(pk) visibility=\(visibility)", category: .api)
+                stateCheckCache[pk] = (archived, Date())
                 return archived
             }
 
@@ -1034,6 +1273,7 @@ class InstagramService: ObservableObject {
             // Treat absence of archive indicator as: not archived (visible).
             print("✅ [STATE-CHECK] pk \(pk) → no archive field = public/visible (not archived)")
             LogManager.shared.info("State check result: pk \(pk) has no archive field → treated as visible", category: .api)
+            stateCheckCache[pk] = (false, Date())
             return false
 
         } catch {
@@ -1189,6 +1429,10 @@ class InstagramService: ObservableObject {
             throw InstagramError.sessionExpired
         }
 
+        // Persistent safety gate: blocks/retries patterns that look like testing
+        // bursts (rapid refreshes, post-reveal re-archives, pending challenges).
+        try await InstagramSafetyGate.shared.waitForApiSlot(method: method, path: path)
+
         // ANTI-BOT: Check rate limit (max 55 actions/hour)
         let rateCheck = checkRateLimit()
         if rateCheck.limited {
@@ -1236,6 +1480,7 @@ class InstagramService: ObservableObject {
         
         // Track this action for rate limiting
         trackAction()
+        InstagramSafetyGate.shared.recordApiRequest(method: method, path: path)
 
         // Log the request with timing info
         let now = Date()
@@ -1267,6 +1512,9 @@ class InstagramService: ObservableObject {
             let duration = String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - requestStart) * 1000)
             print("🌐 [NETWORK] URLError: \(error.localizedDescription)")
             LogManager.shared.error("\(method) \(shortPath) NETWORK ERROR [\(duration)]: \(error.localizedDescription)", category: .api)
+            // Mark API error so background tasks (e.g. cold-start deferred refresh)
+            // can skip firing into a broken/unstable session.
+            await MainActor.run { hasRecentApiError = true }
             throw InstagramError.networkError(error.localizedDescription)
         }
         
@@ -1287,8 +1535,10 @@ class InstagramService: ObservableObject {
             consecutiveErrors = 0
             consecutiveBotSignalErrors = 0
             challengeRequiredStreak = 0
+            hasRecentApiError = false
         } else {
             consecutiveErrors += 1
+            hasRecentApiError = true
             LogManager.shared.warning("\(method) \(shortPath) HTTP \(httpResponse.statusCode) [\(duration)] [consecutiveErrors:\(consecutiveErrors)]", category: .api)
         }
         
@@ -1301,7 +1551,10 @@ class InstagramService: ObservableObject {
         
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
             LogManager.shared.bot("\(method) \(shortPath) → HTTP \(httpResponse.statusCode) Session expired [\(duration)]")
-            await MainActor.run { self.isSessionExpired = true }
+            // Infer context: if no challenge history this is likely an account restriction;
+            // otherwise attribute to the ongoing challenge streak.
+            let expiredCtx: SessionExpiredContext = challengeRequiredStreak > 0 ? .challenge : .restriction
+            await markSessionExpired(context: expiredCtx)
             throw InstagramError.sessionExpired
         }
         
@@ -1330,7 +1583,7 @@ class InstagramService: ObservableObject {
                     // After 3+ consecutive challenges, escalate to session expired so
                     // SessionGuardView appears and prompts the magician to re-login.
                     if challengeRequiredStreak >= 3 {
-                        await MainActor.run { isSessionExpired = true }
+                        await markSessionExpired(context: .challenge)
                         print("🔴 [SESSION] challengeRequiredStreak=\(challengeRequiredStreak) — escalating to isSessionExpired")
                     }
                     // Always notify the magician regardless of GET/POST, so they can
@@ -1341,14 +1594,35 @@ class InstagramService: ObservableObject {
                     if method == "GET" {
                         consecutiveErrors = max(0, consecutiveErrors - 1)
                     }
-                    let lockDuration: TimeInterval = (method == "GET") ? 120 : 180
-                    print("🚨 [API] challenge_required (\(method)) — streak \(challengeRequiredStreak) — triggering \(Int(lockDuration))s lockdown")
-                    LogManager.shared.warning("challenge_required (\(method)) streak:\(challengeRequiredStreak) — lockdown \(Int(lockDuration))s", category: .api)
+                    // POST challenges (configure, archive, etc.) need a much longer lockdown
+                    // so the user has time to open Instagram and complete verification before
+                    // the timer expires. 3 minutes was too short — users resumed before verifying.
+                    // GET challenges remain short (2 min) since they are usually transient.
+                    let lockDuration: TimeInterval
+                    if method == "GET" {
+                        lockDuration = 120
+                    } else if challengeRequiredStreak >= 2 {
+                        lockDuration = 1800  // 30 min: repeated challenge = stronger block
+                    } else {
+                        lockDuration = 900   // 15 min: first POST challenge
+                    }
+                    let lockMinutes = Int(lockDuration) / 60
+                    let lockReason: String
+                    if method == "GET" {
+                        lockReason = "Instagram ha pedido verificación. Abre la app de Instagram — si ves un aviso de verificación, complétalo. Si no aparece nada, la sesión se reanudará automáticamente en 2 minutos."
+                    } else if challengeRequiredStreak >= 2 {
+                        lockReason = "Instagram sigue pidiendo verificación (\(challengeRequiredStreak)ª vez). Ve a la app de Instagram o instagram.com, completa la verificación de email/teléfono, espera \(lockMinutes) minutos y luego reanuda manualmente."
+                    } else {
+                        lockReason = "Instagram ha pedido verificación. Abre la app de Instagram, completa la verificación si aparece un aviso, espera \(lockMinutes) minutos y reanuda manualmente."
+                    }
+                    print("🚨 [API] challenge_required (\(method)) — streak \(challengeRequiredStreak) — triggering \(lockMinutes)min lockdown")
+                    LogManager.shared.warning("challenge_required (\(method)) streak:\(challengeRequiredStreak) — lockdown \(lockMinutes)min", category: .api)
                     await markSessionChallenged(duration: lockDuration)
-                    await triggerLockdown(
-                        reason: "Instagram ha pedido verificación. Abre la app de Instagram — si ves un aviso de verificación, complétalo. Si no aparece nada, la sesión se reanudará automáticamente en 2 minutos.",
-                        duration: lockDuration
-                    )
+                    await triggerLockdown(reason: lockReason, duration: lockDuration)
+                    // Signal upload manager to require manual resume (not auto-resume)
+                    if method != "GET" {
+                        await MainActor.run { UploadManager.shared.requiresManualResumeAfterChallenge = true }
+                    }
                     throw InstagramError.challengeRequired
                 }
                 
@@ -1505,6 +1779,17 @@ class InstagramService: ObservableObject {
             throw InstagramError.challengeRequired
         }
 
+        let mediaSafety = InstagramSafetyGate.shared.canArchive(mediaId: mediaId)
+        guard mediaSafety.allowed else {
+            LogManager.shared.warning("SAFETY BLOCK — archive \(mediaId): \(mediaSafety.reason)", category: .api)
+            throw InstagramError.apiError("Safety pause: \(mediaSafety.reason). Wait \(mediaSafety.waitSeconds)s.")
+        }
+        let archiveSafety = InstagramSafetyGate.shared.decision(for: .archive)
+        guard archiveSafety.allowed else {
+            LogManager.shared.warning("SAFETY BLOCK — archive budget: \(archiveSafety.reason)", category: .api)
+            throw InstagramError.apiError("Safety pause: \(archiveSafety.reason). Wait \(archiveSafety.waitSeconds)s.")
+        }
+
         // PRE-CHECK: only run when the caller hasn't already verified state.
         // Skipping prevents duplicate GETs when called right after syncThenArchiveAll.
         if !skipPreCheck {
@@ -1548,6 +1833,10 @@ class InstagramService: ObservableObject {
                 print("✅ [ARCHIVE] Photo archived successfully")
                 LogManager.shared.success("Photo archived (ID: \(mediaId))", category: .api)
                 invalidateArchiveCache()
+                // ANTI-BOT: drop any cached state-check for this media — a sync
+                // happening right after must not return the stale "visible" entry.
+                let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+                stateCheckCache.removeValue(forKey: pk)
 
                 // When called from S&A (skipPreCheck=true), S&A manages its own
                 // inter-archive timing — don't impose an upload cooldown here.
@@ -1588,6 +1877,12 @@ class InstagramService: ObservableObject {
         if isSessionChallenged {
             print("🚨 [UNARCHIVE] Session challenged - ABORT (would trigger lockdown)")
             throw InstagramError.challengeRequired
+        }
+
+        let unarchiveSafety = InstagramSafetyGate.shared.decision(for: .unarchive)
+        guard unarchiveSafety.allowed else {
+            LogManager.shared.warning("SAFETY BLOCK — unarchive budget: \(unarchiveSafety.reason)", category: .api)
+            throw InstagramError.apiError("Safety pause: \(unarchiveSafety.reason). Wait \(unarchiveSafety.waitSeconds)s.")
         }
 
         // PRE-CHECK: verify Instagram's real state before unarchiving.
@@ -1816,7 +2111,36 @@ class InstagramService: ObservableObject {
             print("🚨 [FOLLOWER] Lockdown active - ABORT")
             throw InstagramError.botDetected("Lockdown active. Cannot fetch followers.")
         }
-        
+        // Cold-start guard: ExploreView.updateMaskTextCache() calls this when
+        // its onAppear fires. If the mask is configured for "latestFollower"
+        // and Explore happens to be touched within the first 45s of launch,
+        // this would become the 3rd endpoint of the warmup pattern.
+        // Degrade silently (return nil) so the caller does not surface a
+        // network/connection error to the user during cold-start.
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            print("⏳ [COLD-START] getLatestFollower blocked — \(remaining)s remaining")
+            LogManager.shared.warning("[COLD-START] getLatestFollower blocked — \(remaining)s", category: .general)
+            return nil
+        }
+        // ANTI-BOT: Burst guard — if 2+ API calls were made in the last 10 seconds
+        // (e.g. Performance entry fired current_user + feed/user, then user tapped
+        // Explore which triggered topical_explore AND this followers call simultaneously),
+        // skip this low-priority call to avoid having 4 different endpoints hit in ~5s.
+        if hasRecentApiBurst(threshold: 2, seconds: 10) {
+            print("⏳ [FOLLOWER] Burst guard active — getLatestFollower skipped")
+            LogManager.shared.warning("[FOLLOWER] Burst guard — skipped", category: .general)
+            return nil
+        }
+        // ANTI-BOT: Heavy operation guard — don't fire a low-priority follower
+        // fetch while uploads/sync/reveals are in flight. The mask falls back
+        // to a generic value (no UX impact for the magician).
+        if isHeavyOperationActive {
+            print("⏳ [FOLLOWER] Heavy op active — getLatestFollower skipped")
+            LogManager.shared.warning("[FOLLOWER] Heavy op active — skipped", category: .general)
+            return nil
+        }
+
         let data = try await apiRequest(
             method: "GET",
             path: "/friendships/\(session.userId)/followers/?count=1"
@@ -2074,6 +2398,18 @@ class InstagramService: ObservableObject {
             return nil
         }
     }
+
+    private func shouldPreferWebCount(api: Int, web: Int) -> Bool {
+        guard web > 0 else { return false }
+        if api <= 0 { return true }
+
+        let diff = abs(api - web)
+        if diff >= 1_000 { return true }
+
+        let larger = max(api, web)
+        guard larger > 0 else { return false }
+        return Double(diff) / Double(larger) >= 0.05
+    }
     
     func getProfileInfo(
         userId: String? = nil,
@@ -2174,38 +2510,71 @@ class InstagramService: ObservableObject {
         var followedBy: [InstagramFollower] = []
         var mediaURLs: [String] = []
         var reelURLs: [String] = []
+        var reelItems: [InstagramMediaItem] = []
         var taggedURLs: [String] = []
         var initialMediaItems: [InstagramMediaItem] = []
         var highlights: [InstagramHighlight] = []
+        var initialNextMaxId: String? = nil   // cursor saved so the first pagination skips page 1
 
         if shouldFetchProtectedData {
             print("✅ [PROFILE] Fetching followers, media, reels, tagged & highlights (profile is accessible)")
             LogManager.shared.info("Profile protected data fetch allowed", category: .profile)
 
-            // Fetch all in parallel
-            async let followersTask   = getFollowedByUsers(userId: uid, count: 6)
-            async let mediaTask       = getUserMediaItems(userId: uid, amount: 18)
-            async let reelsTask       = getUserReels(userId: uid, amount: 18)
-            async let taggedTask      = getUserTagged(userId: uid, amount: 18)
-            async let highlightsTask  = getUserHighlights(userId: uid)
+            if isOwnProfile {
+                // Own profile refresh is heavy and anti-bot sensitive: fetch everything,
+                // but paced so one pull-to-refresh cannot create a burst.
+                followedBy = try await getFollowedByUsers(userId: uid, count: 6)
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
 
-            followedBy = try await followersTask
-            let (mediaItems, _) = try await mediaTask
-            mediaURLs = mediaItems.map { $0.imageURL }
-            initialMediaItems = mediaItems
+                let (mediaItems, ownNextId) = try await getUserMediaItems(userId: uid, amount: 18)
+                mediaURLs = mediaItems.map { $0.imageURL }
+                initialMediaItems = mediaItems
+                initialNextMaxId = ownNextId
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
 
-            // Non-critical — silent failures
-            do { reelURLs   = try await reelsTask.map { $0.imageURL } }
-            catch { print("⚠️ [PROFILE] Reels fetch failed (non-critical): \(error)") }
+                do {
+                    let reels = try await getUserReels(userId: uid, amount: 18)
+                    reelURLs = reels.map { $0.imageURL }
+                    reelItems = reels
+                }
+                catch { print("⚠️ [PROFILE] Reels fetch failed (non-critical): \(error)") }
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
 
-            do { taggedURLs = try await taggedTask.map { $0.imageURL } }
-            catch { print("⚠️ [PROFILE] Tagged fetch failed (non-critical): \(error)") }
+                do {
+                    let tagged = try await getUserTagged(userId: uid, amount: 18)
+                    taggedURLs = tagged.map { $0.imageURL }
+                }
+                catch { print("⚠️ [PROFILE] Tagged fetch failed (non-critical): \(error)") }
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
 
-            do { highlights = try await highlightsTask }
-            catch { print("⚠️ [PROFILE] Highlights fetch failed (non-critical): \(error)") }
+                do { highlights = try await getUserHighlights(userId: uid) }
+                catch { print("⚠️ [PROFILE] Highlights fetch failed (non-critical): \(error)") }
+            } else {
+                // Searched profiles must open like Instagram: header + posts first.
+                // Reels/tagged/highlights are not fetched before presentation.
+                //
+                // ANTI-BOT: add human-like pacing between the sequential API calls
+                // within this profile load. Without it, the burst pattern
+                //   users/info → friendships/show → feed/user (0.3-0.4s apart)
+                // is flagged as automated. A 0.9-1.3s pause mimics the natural
+                // delay between a user seeing the header and their feed scrolling in.
+                try? await Task.sleep(nanoseconds: UInt64.random(in: 900_000_000...1_300_000_000))
+
+                let (mediaItems, visitedNextId) = try await getUserMediaItems(userId: uid, amount: 21)
+                mediaURLs = mediaItems.map { $0.imageURL }
+                initialMediaItems = mediaItems
+                initialNextMaxId = visitedNextId
+
+                // Second pause between media fetch and followers fetch.
+                try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_200_000_000))
+
+                do { followedBy = try await getFollowedByUsers(userId: uid, count: 6) }
+                catch { print("⚠️ [PROFILE] Followed-by fetch failed (non-critical): \(error)") }
+            }
 
             print("📊 [PROFILE] Posts: \(mediaURLs.count), Reels: \(reelURLs.count), Tagged: \(taggedURLs.count), Highlights: \(highlights.count)")
-            LogManager.shared.info("Profile media loaded — posts:\(mediaURLs.count) reels:\(reelURLs.count) tagged:\(taggedURLs.count) highlights:\(highlights.count)", category: .profile)
+            let cursorStatus = initialNextMaxId != nil ? "saved" : "none"
+            LogManager.shared.info("Profile media loaded — posts:\(mediaURLs.count) reels:\(reelURLs.count) tagged:\(taggedURLs.count) highlights:\(highlights.count) cursor:\(cursorStatus)", category: .profile)
         } else {
             print("⚠️ [PROFILE] Skipping data fetch (private profile, not following)")
             LogManager.shared.warning("Profile protected data skipped — private:\(isPrivate) following:\(isFollowing) requested:\(isFollowRequested)", category: .profile)
@@ -2317,6 +2686,46 @@ class InstagramService: ObservableObject {
             }
         }
 
+        if let username = fallbackUsername,
+           !username.isEmpty,
+           (user["follower_count"] != nil || user["following_count"] != nil) {
+            let apiFollowers = Self.robustInt(user["follower_count"])
+            let apiFollowing = Self.robustInt(user["following_count"])
+
+            // ANTI-BOT: Skip the secondary web_profile_info reconciliation when
+            // the API counts already look plausible (both non-zero) and there is
+            // a burst or heavy operation in flight. Each call adds an extra HTTP
+            // request to the public web endpoint that compounds with the API
+            // burst Instagram fingerprints.
+            let countsPlausible = apiFollowers > 0 && apiFollowing > 0
+            let shouldSkipReconciliation = countsPlausible &&
+                (isHeavyOperationActive || hasRecentApiBurst(threshold: 3, seconds: 8))
+
+            if shouldSkipReconciliation {
+                LogManager.shared.info(
+                    "Profile count reconciliation skipped @\(username) — counts plausible, heavy op or burst active",
+                    category: .profile
+                )
+            } else if let webUser = await fetchWebProfileInfoFallback(username: username) {
+                let webFollowers = Self.robustInt(webUser["follower_count"])
+                let webFollowing = Self.robustInt(webUser["following_count"])
+
+                LogManager.shared.info(
+                    "Profile count sources @\(username) — users/info followers:\(apiFollowers) following:\(apiFollowing) | web followers:\(webFollowers) following:\(webFollowing)",
+                    category: .profile
+                )
+
+                if shouldPreferWebCount(api: apiFollowers, web: webFollowers) {
+                    user["follower_count"] = webFollowers
+                    LogManager.shared.warning("Profile follower count corrected from web_profile_info for @\(username): \(apiFollowers) → \(webFollowers)", category: .profile)
+                }
+                if shouldPreferWebCount(api: apiFollowing, web: webFollowing) {
+                    user["following_count"] = webFollowing
+                    LogManager.shared.warning("Profile following count corrected from web_profile_info for @\(username): \(apiFollowing) → \(webFollowing)", category: .profile)
+                }
+            }
+        }
+
         // Robust profile pic: try HD version first, then standard field
         let profilePicURL: String = {
             if let hdInfo = user["hd_profile_pic_url_info"] as? [String: Any],
@@ -2357,7 +2766,9 @@ class InstagramService: ObservableObject {
             cachedMediaURLs: mediaURLs,
             cachedReelURLs: reelURLs,
             cachedTaggedURLs: taggedURLs,
-            cachedHighlights: highlights
+            cachedHighlights: highlights,
+            cachedReelItems: reelItems,
+            cachedNextMaxId: initialNextMaxId
         )
         profile.cachedMediaItems = initialMediaItems
 
@@ -2371,7 +2782,18 @@ class InstagramService: ObservableObject {
     
     func getFollowedByUsers(userId: String, count: Int) async throws -> [InstagramFollower] {
         print("👥 [FOLLOWERS] Fetching \(count) followers for user ID: \(userId)")
-        
+        // Cold-start safety net: even if some unknown code path tries to fetch
+        // followers automatically during the first 45s of the app, skip here.
+        // This prevents the 3rd endpoint of the warmup pattern from firing.
+        // Degrade silently (return empty array) so callers like getProfileInfo
+        // can finish without surfacing a connection error to the user.
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            print("⏳ [COLD-START] getFollowedByUsers blocked — \(remaining)s remaining")
+            LogManager.shared.warning("[COLD-START] getFollowedByUsers blocked for user \(userId) — \(remaining)s", category: .general)
+            return []
+        }
+
         let data = try await apiRequest(
             method: "GET",
             path: "/friendships/\(userId)/followers/?count=\(count)"
@@ -3054,6 +3476,8 @@ class InstagramService: ObservableObject {
             let photoInfo = photoIndex != nil ? " (Photo #\(photoIndex! + 1))" : ""
             throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before uploading another photo.\(photoInfo)")
         }
+
+        try await waitForUploadSafetyWindow(label: photoDesc)
         
         // NOTE: Image is already aspect-adjusted and compressed when loaded from gallery
         print("✅ [UPLOAD] Using pre-processed image")
@@ -3081,9 +3505,6 @@ class InstagramService: ObservableObject {
         } else {
             print("✅ [UPLOAD] Duplicates allowed with unique bytes for this set type (Word/Number Reveal)")
         }
-        
-        // ANTI-BOT: Wait if network changed recently
-        try await waitForNetworkStability()
         
         print("   Image hash: \(String(finalHash.prefix(16)))...")
         
@@ -3457,7 +3878,9 @@ class InstagramService: ObservableObject {
             cachedReelURLs: profile.cachedReelURLs,
             cachedTaggedURLs: profile.cachedTaggedURLs,
             cachedHighlights: profile.cachedHighlights,
-            cachedMediaItems: profile.cachedMediaItems
+            cachedMediaItems: profile.cachedMediaItems,
+            cachedReelItems: profile.cachedReelItems,
+            cachedNextMaxId: profile.cachedNextMaxId
         )
 
         LogManager.shared.success("Search profile rebuilt — @\(rebuilt.username) id:\(rebuilt.userId) followers:\(rebuilt.followerCount) following:\(rebuilt.followingCount) pic:\(rebuilt.profilePicURL.isEmpty ? "EMPTY" : "OK")", category: .profile)
@@ -3515,6 +3938,8 @@ class InstagramService: ObservableObject {
         req.setValue("0",                         forHTTPHeaderField: "Offset")
         req.httpBody = imageData
 
+        try await InstagramSafetyGate.shared.waitForApiSlot(method: "POST", path: "/rupload_igphoto/")
+        InstagramSafetyGate.shared.recordApiRequest(method: "POST", path: "/rupload_igphoto/")
         let (data, response) = try await postSession.data(for: req)
         if let http = response as? HTTPURLResponse {
             print("   [AMNESIA] Upload HTTP \(http.statusCode) for \(label)")
@@ -3622,12 +4047,17 @@ class InstagramService: ObservableObject {
             warmReq.timeoutInterval = 10
             let warmHeaders = buildHeaders()
             for (k, v) in warmHeaders { warmReq.setValue(v, forHTTPHeaderField: k) }
-            if let (_, warmResp) = try? await getSession.data(for: warmReq),
-               let warmHttp = warmResp as? HTTPURLResponse,
-               let hdrs = warmHttp.allHeaderFields as? [String: String],
-               let claim = hdrs.first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
-                await MainActor.run { self.wwwClaim = claim }
-                print("📋 [AMNESIA] Fresh wwwClaim captured from warm-up GET")
+            do {
+                try await InstagramSafetyGate.shared.waitForApiSlot(method: "GET", path: "/accounts/current_user/")
+                if let (_, warmResp) = try? await getSession.data(for: warmReq),
+                   let warmHttp = warmResp as? HTTPURLResponse,
+                   let hdrs = warmHttp.allHeaderFields as? [String: String],
+                   let claim = hdrs.first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
+                    await MainActor.run { self.wwwClaim = claim }
+                    print("📋 [AMNESIA] Fresh wwwClaim captured from warm-up GET")
+                }
+            } catch {
+                LogManager.shared.warning("SAFETY BLOCK — configure_sidecar warm-up skipped: \(error.localizedDescription)", category: .api)
             }
         }
 
@@ -3646,6 +4076,8 @@ class InstagramService: ObservableObject {
                 configReq.httpBody = rawBodyString.data(using: .utf8)
                 configReq.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
                 print("📋 [AMNESIA] POSTing signed configure_sidecar to i.instagram.com (attempt \(attempt))…")
+                try await InstagramSafetyGate.shared.waitForApiSlot(method: "POST", path: "/media/configure_sidecar/")
+                InstagramSafetyGate.shared.recordApiRequest(method: "POST", path: "/media/configure_sidecar/")
                 let (rawData, rawResp) = try await postSession.data(for: configReq)
                 let httpResp = rawResp as? HTTPURLResponse
                 let statusCode = httpResp?.statusCode ?? 0
@@ -3925,6 +4357,12 @@ class InstagramService: ObservableObject {
            lastNote == text {
             throw InstagramError.apiError("You already sent this note. Instagram may flag duplicate notes as spam.\n\nPlease write something different.")
         }
+
+        let noteSafety = InstagramSafetyGate.shared.decision(for: .note)
+        guard noteSafety.allowed else {
+            LogManager.shared.warning("SAFETY BLOCK — note: \(noteSafety.reason)", category: .api)
+            throw InstagramError.apiError("Safety pause: \(noteSafety.reason). Wait \(noteSafety.waitSeconds)s.")
+        }
         
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
@@ -3985,6 +4423,7 @@ class InstagramService: ObservableObject {
         components.queryItems = body.map { URLQueryItem(name: $0.key, value: $0.value) }
         noteRequest.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         trackAction()
+        InstagramSafetyGate.shared.record(.note)
         let (data, noteResponse) = try await postSession.data(for: noteRequest)
         if let http = noteResponse as? HTTPURLResponse {
             print("   [NOTE] HTTP \(http.statusCode)")
@@ -4095,6 +4534,12 @@ class InstagramService: ObservableObject {
             throw InstagramError.apiError("Please wait \(remaining)s before editing biography again.")
         }
 
+        let bioSafety = InstagramSafetyGate.shared.decision(for: .biography)
+        guard bioSafety.allowed else {
+            LogManager.shared.warning("SAFETY BLOCK — biography: \(bioSafety.reason)", category: .api)
+            throw InstagramError.apiError("Safety pause: \(bioSafety.reason). Wait \(bioSafety.waitSeconds)s.")
+        }
+
         try await waitForNetworkStability()
 
         // ANTI-BOT: Human delay (1–2 s)
@@ -4187,7 +4632,9 @@ class InstagramService: ObservableObject {
                         isFollowing: cached.isFollowing, isFollowRequested: cached.isFollowRequested,
                         cachedAt: cached.cachedAt, cachedMediaURLs: cached.cachedMediaURLs,
                         cachedReelURLs: cached.cachedReelURLs, cachedTaggedURLs: cached.cachedTaggedURLs,
-                        cachedHighlights: cached.cachedHighlights
+                        cachedHighlights: cached.cachedHighlights,
+                        cachedReelItems: cached.cachedReelItems,
+                        cachedNextMaxId: cached.cachedNextMaxId
                     )
                     ProfileCacheService.shared.saveProfile(updated)
                 }
@@ -4932,12 +5379,28 @@ class InstagramService: ObservableObject {
     ///
     /// - Parameter forceRefresh: When true, bypass the cache and do a fresh network scan.
     func getAllArchivedPhotos(forceRefresh: Bool = false) async throws -> [(mediaId: String, imageURL: String, timestamp: Date?)] {
+        // ANTI-BOT: Do not start a full archive scan while a Sync & Archive or
+        // upload operation is active. Running /feed/only_me_feed/ in parallel
+        // with POST /media/.../only_me/ requests from the same session doubles
+        // the API footprint and has been observed to cause Instagram 403s. If
+        // the caller needs fresh data, they must wait until the heavy op ends.
+        if isHeavyOperationActive {
+            print("⏳ [ARCHIVE SCAN] Skipped — heavy operation active (S&A or upload)")
+            LogManager.shared.info("Archive scan deferred: heavy operation active", category: .api)
+            // Return cached data if available so the UI isn't left empty.
+            if let cached = archivedPhotoCache {
+                return cached
+            }
+            return []
+        }
         // Cache hit — return immediately without any network calls
         if !forceRefresh,
            let cached = archivedPhotoCache,
            let cacheDate = archivedPhotoCacheDate,
            Date().timeIntervalSince(cacheDate) < archivedPhotoCacheTTL {
             let age = Int(Date().timeIntervalSince(cacheDate))
+            lastArchiveScanCompleted = true
+            lastArchiveScanStopReason = nil
             print("📦 [ARCHIVE CACHE] Hit — \(cached.count) photos, age \(age)s")
             LogManager.shared.info("Archive cache hit: \(cached.count) photos (\(age)s old)", category: .api)
             return cached
@@ -4947,8 +5410,14 @@ class InstagramService: ObservableObject {
         var nextMaxId: String? = nil
         let maxPages = 50  // ≈1000 photos max — increased to reach older archives
         var scanWasAborted = false  // Track if scan ended early (rate limit / session)
+        var stopReason: String? = nil
+        var reachedMaxPagesWithMoreAvailable = false
+        var seenMediaIds = Set<String>()
+        var seenCursors = Set<String>()
 
         print("📦 [ARCHIVE] Starting fresh scan (forceRefresh=\(forceRefresh))...")
+        lastArchiveScanCompleted = false
+        lastArchiveScanStopReason = nil
 
         for page in 0..<maxPages {
             // Hard stop: session expired or lockdown activated between pages
@@ -4956,12 +5425,14 @@ class InstagramService: ObservableObject {
                 print("🔴 [ARCHIVE] Scan aborted — session expired")
                 LogManager.shared.warning("Archive scan aborted: session expired", category: .api)
                 scanWasAborted = true
+                stopReason = "session expired"
                 break
             }
             guard !isLocked else {
                 print("🚨 [ARCHIVE] Scan aborted — lockdown active")
                 LogManager.shared.warning("Archive scan aborted: lockdown active", category: .api)
                 scanWasAborted = true
+                stopReason = "lockdown active"
                 break
             }
 
@@ -4971,6 +5442,7 @@ class InstagramService: ObservableObject {
                 print("⚠️ [ARCHIVE] Scan stopped early — rate limit threshold (\(rateInfo.actionsUsed)/\(maxActionsPerHour)). Got \(allPhotos.count) photos so far.")
                 LogManager.shared.warning("Archive scan paused at \(rateInfo.actionsUsed)/\(maxActionsPerHour) — too close to rate limit", category: .api)
                 scanWasAborted = true
+                stopReason = "rate limit threshold \(rateInfo.actionsUsed)/\(maxActionsPerHour)"
                 break
             }
 
@@ -4980,10 +5452,13 @@ class InstagramService: ObservableObject {
                 try await Task.sleep(nanoseconds: delay)
             }
 
-            var path = "/feed/only_me_feed/"
+            var components = URLComponents()
+            components.queryItems = [URLQueryItem(name: "count", value: "18")]
             if let cursor = nextMaxId {
-                path += "?max_id=\(cursor)"
+                components.queryItems?.append(URLQueryItem(name: "max_id", value: cursor))
             }
+            let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+            let path = "/feed/only_me_feed/\(query)"
 
             print("📦 [ARCHIVE] Fetching page \(page + 1)/\(maxPages) from \(path)")
             let data = try await apiRequest(method: "GET", path: path)
@@ -5012,6 +5487,8 @@ class InstagramService: ObservableObject {
                     print("⚠️ [ARCHIVE] Skipping item — could not parse pk/id: \(mediaItem.keys.sorted())")
                     continue
                 }
+                guard !seenMediaIds.contains(mediaId) else { continue }
+                seenMediaIds.insert(mediaId)
 
                 // Image URL: try direct, then carousel first child
                 var imageURL = ""
@@ -5040,24 +5517,55 @@ class InstagramService: ObservableObject {
             print("📦 [ARCHIVE] Page \(page + 1): \(items.count) items (total: \(allPhotos.count))")
 
             // Check pagination — next_max_id can be String or large NSNumber
-            let moreAvailable = json["more_available"] as? Bool ?? false
+            let topLevelMoreAvailable = json["more_available"] as? Bool
+            let pagingInfo = json["paging_info"] as? [String: Any]
+            let pagingMoreAvailable = pagingInfo?["more_available"] as? Bool
+            let moreAvailable = topLevelMoreAvailable ?? pagingMoreAvailable ?? false
             if let cursor = json["next_max_id"] as? String, !cursor.isEmpty {
                 nextMaxId = cursor
             } else if let cursor = json["next_max_id"] as? NSNumber {
                 nextMaxId = cursor.stringValue
+            } else if let cursor = pagingInfo?["max_id"] as? String,
+                      !cursor.isEmpty {
+                nextMaxId = cursor
+            } else if let cursor = pagingInfo?["next_max_id"] as? String,
+                      !cursor.isEmpty {
+                nextMaxId = cursor
             } else {
                 nextMaxId = nil
             }
 
             print("📦 [ARCHIVE] more_available=\(moreAvailable) nextMaxId=\(nextMaxId ?? "nil")")
+            if let cursor = nextMaxId {
+                guard !seenCursors.contains(cursor) else {
+                    print("⚠️ [ARCHIVE] Repeated cursor detected — stopping to avoid loop")
+                    LogManager.shared.warning("Archive scan stopped: repeated cursor after \(allPhotos.count) photos", category: .api)
+                    nextMaxId = nil
+                    break
+                }
+                seenCursors.insert(cursor)
+            }
+            if page == maxPages - 1 && moreAvailable && nextMaxId != nil {
+                reachedMaxPagesWithMoreAvailable = true
+            }
             if !moreAvailable || nextMaxId == nil { break }
+        }
+
+        if reachedMaxPagesWithMoreAvailable {
+            scanWasAborted = true
+            stopReason = "max page limit \(maxPages) reached"
+            LogManager.shared.warning("Archive scan reached maxPages=\(maxPages) with more pages available", category: .api)
         }
 
         // Only cache if the scan completed normally (not aborted by rate limit/session).
         // Aborted scans return partial results without caching so the next call retries fully.
         if scanWasAborted {
-            LogManager.shared.warning("Archive scan incomplete (\(allPhotos.count) photos) — NOT cached, will retry next time", category: .api)
+            lastArchiveScanCompleted = false
+            lastArchiveScanStopReason = stopReason ?? "scan aborted"
+            LogManager.shared.warning("Archive scan incomplete (\(allPhotos.count) photos) — \(lastArchiveScanStopReason ?? "unknown"). NOT cached, will retry next time", category: .api)
         } else {
+            lastArchiveScanCompleted = true
+            lastArchiveScanStopReason = nil
             archivedPhotoCache = allPhotos
             archivedPhotoCacheDate = Date()
             LogManager.shared.info("Archive scan complete: \(allPhotos.count) photos (cached for \(Int(archivedPhotoCacheTTL/60)) min)", category: .api)
@@ -5103,5 +5611,558 @@ enum InstagramError: LocalizedError {
     var isBotDetection: Bool {
         if case .botDetected = self { return true }
         return false
+    }
+}
+
+// MARK: - Instagram Safety Gate
+
+final class InstagramSafetyGate {
+    static let shared = InstagramSafetyGate()
+
+    enum Action: String {
+        case performanceEntry
+        case pullRefresh
+        case entryRefresh
+        case silentGridRefresh
+        case biography
+        case note
+        case noteDelete
+        case archive
+        case unarchive
+        case reveal
+        case upload
+        case ownProfilePagination
+        case exploreRefresh
+        case explorePagination
+        case searchUsers
+        case visitedProfileOpen
+        case visitedProfilePagination
+        case visitedProfileRefresh
+        case apiRead
+        case apiWrite
+        case probe
+    }
+
+    struct Decision {
+        let allowed: Bool
+        let waitSeconds: Int
+        let reason: String
+
+        static let allowed = Decision(allowed: true, waitSeconds: 0, reason: "")
+    }
+
+    struct PerformanceEntryDecision {
+        let allowRemoteCalls: Bool
+        let waitSeconds: Int
+        let reason: String
+    }
+
+    private let defaults = UserDefaults.standard
+    private let lock = NSLock()
+    private let prefix = "instagram_safety_gate_"
+
+    // MARK: - Cold-Start Guard
+    /// Marked when the app launches. During the cold-start window we block every
+    /// automatic API call that is not strictly required, to break the 3-endpoint
+    /// warmup pattern Instagram fingerprints as a bot.
+    private var appLaunchTime: Date? = nil
+    /// Seconds after app launch during which silent / auto API calls are blocked.
+    /// Tuned to be longer than the typical "Performance entry" burst observed
+    /// in logs (≈15s) so the pattern is fully broken.
+    private let coldStartWindow: TimeInterval = 45
+    private var coldStartCloseLogged: Bool = false
+
+    // MARK: - Warm-Resume Guard
+    /// Shorter cold-start used when the app comes back to foreground after a long
+    /// pause in background. Same idea as cold-start, but with a smaller window
+    /// because the process did not restart — only the user-facing scene.
+    private var warmResumeTime: Date? = nil
+    private let warmResumeWindow: TimeInterval = 25
+    private var warmResumeCloseLogged: Bool = false
+
+    private init() {}
+
+    /// Called once on app launch to start the cold-start window.
+    /// Safe to call multiple times; only the first call is honored.
+    /// IMPORTANT: do not call LogManager from here — this is invoked during
+    /// LogManager's own init, which would deadlock the singleton.
+    func markAppLaunch() {
+        lock.lock()
+        defer { lock.unlock() }
+        if appLaunchTime == nil {
+            appLaunchTime = Date()
+            print("⏳ [COLD-START] Window opened — \(Int(coldStartWindow))s of automatic-call lockdown")
+        }
+    }
+
+    /// Called when the app returns to foreground after being in background for a
+    /// long time (>5 min). Opens a shorter "warm resume" lockdown window so the
+    /// app doesn't immediately fire its automatic-call pattern as if it had just
+    /// been launched fresh.
+    func markWarmResume() {
+        lock.lock()
+        defer { lock.unlock() }
+        warmResumeTime = Date()
+        warmResumeCloseLogged = false
+        print("⏳ [WARM-RESUME] Window opened — \(Int(warmResumeWindow))s of automatic-call lockdown")
+        LogManager.shared.info("[WARM-RESUME] Window opened — automatic IG calls blocked for ~\(Int(warmResumeWindow))s", category: .general)
+    }
+
+    /// True if we are still inside the cold-start OR warm-resume window.
+    var isInColdStartWindow: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date()
+        let coldActive: Bool = {
+            guard let t = appLaunchTime else { return false }
+            return now.timeIntervalSince(t) < coldStartWindow
+        }()
+        let warmActive: Bool = {
+            guard let t = warmResumeTime else { return false }
+            return now.timeIntervalSince(t) < warmResumeWindow
+        }()
+        // First query after each window closes logs a notice so it's visible
+        // in TestFlight logs that the lockdown ended.
+        if !coldActive && appLaunchTime != nil && !coldStartCloseLogged {
+            coldStartCloseLogged = true
+            LogManager.shared.info("[COLD-START] Window closed — automatic IG calls re-enabled", category: .general)
+        }
+        if !warmActive && warmResumeTime != nil && !warmResumeCloseLogged {
+            warmResumeCloseLogged = true
+            LogManager.shared.info("[WARM-RESUME] Window closed — automatic IG calls re-enabled", category: .general)
+        }
+        return coldActive || warmActive
+    }
+
+    /// Seconds remaining in whichever window is active (0 if none).
+    var coldStartSecondsRemaining: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date()
+        var remaining = 0
+        if let t = appLaunchTime {
+            remaining = max(remaining, Int(coldStartWindow - now.timeIntervalSince(t)))
+        }
+        if let t = warmResumeTime {
+            remaining = max(remaining, Int(warmResumeWindow - now.timeIntervalSince(t)))
+        }
+        return max(0, remaining)
+    }
+
+    /// Blocks a specific auto-call kind during the cold-start window.
+    /// Returns true when the caller should proceed, false when it must skip.
+    func allowAutoCall(_ label: String) -> Bool {
+        let inWindow = isInColdStartWindow
+        if inWindow {
+            let remaining = coldStartSecondsRemaining
+            LogManager.shared.warning("[COLD-START] \(label) blocked — \(remaining)s remaining", category: .general)
+            return false
+        }
+        return true
+    }
+
+    // MARK: - Performance entry
+
+    /// Wipes all performance-entry throttle state from UserDefaults.
+    /// Call on login so stale counters from a previous session (which can survive
+    /// iCloud-restore or incomplete uninstall) don't block the new session.
+    func resetPerformanceThrottle() {
+        lock.lock()
+        defer { lock.unlock() }
+        defaults.removeObject(forKey: key("performance_pause_until"))
+        defaults.removeObject(forKey: key("timestamps_\(Action.performanceEntry.rawValue)"))
+        print("🔓 [SAFETY-GATE] Performance throttle reset on login")
+    }
+
+    func recordPerformanceEntry() -> PerformanceEntryDecision {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let now = Date().timeIntervalSince1970
+        if let circuit = activeChallengeCircuit(now: now) {
+            logBlock("performance entry blocked — challenge circuit active (\(circuit.waitSeconds)s)")
+            return PerformanceEntryDecision(
+                allowRemoteCalls: false,
+                waitSeconds: circuit.waitSeconds,
+                reason: "challenge circuit active"
+            )
+        }
+
+        // Check existing pause BEFORE recording a new entry — otherwise a user
+        // repeatedly tapping Performance during a pause keeps inflating the counter,
+        // which cascades into progressively longer blocks.
+        if let pauseUntil = defaults.object(forKey: key("performance_pause_until")) as? Double,
+           pauseUntil > now {
+            let wait = Int(pauseUntil - now)
+            logBlock("performance pause active — cache-only \(wait)s")
+            return PerformanceEntryDecision(
+                allowRemoteCalls: false,
+                waitSeconds: wait,
+                reason: "Performance safety pause"
+            )
+        }
+
+        var entries = timestamps(for: .performanceEntry)
+            .filter { now - $0 < 300 }
+        entries.append(now)
+        setTimestamps(entries, for: .performanceEntry)
+
+        // Re-entry penalties: throttle truly rapid re-opens only.
+        if entries.count >= 5 {
+            let pauseUntil = now + 120
+            defaults.set(pauseUntil, forKey: key("performance_pause_until"))
+            logBlock("performance re-entry \(entries.count)/5min — cache-only for 120s")
+            return PerformanceEntryDecision(
+                allowRemoteCalls: false,
+                waitSeconds: 120,
+                reason: "too many Performance entries"
+            )
+        }
+
+        if entries.count >= 2, let previous = entries.dropLast().last, now - previous < 30 {
+            let wait = max(1, Int(30 - (now - previous)))
+            logBlock("performance re-entry too soon — cache-only \(wait)s")
+            return PerformanceEntryDecision(
+                allowRemoteCalls: false,
+                waitSeconds: wait,
+                reason: "recent Performance entry"
+            )
+        }
+
+        return PerformanceEntryDecision(allowRemoteCalls: true, waitSeconds: 0, reason: "")
+    }
+
+    // MARK: - Request budgets
+
+    func decision(for action: Action) -> Decision {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let now = Date().timeIntervalSince1970
+        if let circuit = activeChallengeCircuit(now: now) {
+            return circuit
+        }
+
+        if action == .archive, isPostRevealProtected(now: now) {
+            return Decision(
+                allowed: false,
+                waitSeconds: postRevealRemaining(now: now),
+                reason: "recent reveal protection"
+            )
+        }
+
+        switch action {
+        case .biography:
+            return minGapDecision(action: action, now: now, minGap: 180)
+        case .note:
+            return minGapDecision(action: action, now: now, minGap: 150)
+        case .reveal:
+            return minGapDecision(action: action, now: now, minGap: 150)
+        case .pullRefresh:
+            return minGapDecision(action: action, now: now, minGap: 600)
+        case .entryRefresh:
+            return minGapDecision(action: action, now: now, minGap: 90)
+        case .silentGridRefresh:
+            if let recentPagination = recentActionDecision(
+                actions: [.ownProfilePagination, .visitedProfilePagination],
+                now: now,
+                minGap: 20,
+                reason: "recent feed pagination"
+            ) {
+                return recentPagination
+            }
+            return minGapDecision(action: action, now: now, minGap: 30)
+        case .ownProfilePagination:
+            if let recentRefresh = recentActionDecision(
+                actions: [.silentGridRefresh, .entryRefresh, .pullRefresh],
+                now: now,
+                // 6s gap: enough to separate the entry burst from the first user-triggered
+                // pagination, but short enough that scrolling down immediately after
+                // the grid appears doesn't stall. Pagination is a GET to the same
+                // endpoint that already ran during the refresh, so the pattern looks
+                // like organic browsing (not a warmup burst) at this spacing.
+                minGap: 6,
+                reason: "recent feed refresh"
+            ) {
+                return recentRefresh
+            }
+            return pacedWindowDecision(action: action, now: now, minGap: 4, maxCount: 10, window: 600)
+        case .exploreRefresh:
+            return minGapDecision(action: action, now: now, minGap: 900)
+        case .explorePagination:
+            return pacedWindowDecision(action: action, now: now, minGap: 15, maxCount: 8, window: 600)
+        case .searchUsers:
+            return minGapDecision(action: action, now: now, minGap: 20)
+        case .visitedProfileOpen:
+            return minGapDecision(action: action, now: now, minGap: 3)
+        case .visitedProfilePagination:
+            if let recentRefresh = recentActionDecision(
+                actions: [.silentGridRefresh, .entryRefresh, .pullRefresh],
+                now: now,
+                minGap: 6,
+                reason: "recent feed refresh"
+            ) {
+                return recentRefresh
+            }
+            return pacedWindowDecision(action: action, now: now, minGap: 3, maxCount: 10, window: 600)
+        case .visitedProfileRefresh:
+            return minGapDecision(action: action, now: now, minGap: 900)
+        case .archive:
+            return windowDecision(action: action, now: now, maxCount: 8, window: 600)
+        case .unarchive:
+            return windowDecision(action: action, now: now, maxCount: 15, window: 600)
+        case .upload, .apiWrite:
+            return windowDecision(action: action, now: now, maxCount: 18, window: 600)
+        case .noteDelete, .probe:
+            return minGapDecision(action: action, now: now, minGap: 60)
+        case .performanceEntry, .apiRead:
+            return .allowed
+        }
+    }
+
+    func record(_ action: Action) {
+        lock.lock()
+        defer { lock.unlock() }
+        recordLocked(action, at: Date().timeIntervalSince1970)
+    }
+
+    func waitForApiSlot(method: String, path: String) async throws {
+        let action = actionFor(method: method, path: path)
+        let decision = self.decision(for: action)
+        guard decision.allowed else {
+            logBlock("\(method) \(short(path)) blocked — \(decision.reason) (\(decision.waitSeconds)s)")
+            throw InstagramError.apiError("Safety pause: \(decision.reason). Wait \(decision.waitSeconds)s.")
+        }
+
+        let minGap: TimeInterval = method == "GET" ? 0.35 : 1.25
+        let wait = reserveApiGap(minGap: minGap)
+        if wait > 0 {
+            try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        }
+    }
+
+    func recordApiRequest(method: String, path: String) {
+        record(actionFor(method: method, path: path))
+    }
+
+    // MARK: - Challenge circuit
+
+    func markChallenge(duration: TimeInterval) {
+        lock.lock()
+        defer { lock.unlock() }
+        let until = Date().timeIntervalSince1970 + duration
+        defaults.set(until, forKey: key("challenge_until"))
+        logBlock("challenge circuit active for \(Int(duration))s")
+    }
+
+    func clearChallenge() {
+        lock.lock()
+        defer { lock.unlock() }
+        defaults.removeObject(forKey: key("challenge_until"))
+        defaults.removeObject(forKey: key("probe_fail_count"))
+    }
+
+    func canProbeSession() -> Decision {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        let lastProbe = defaults.double(forKey: key("last_probe"))
+        let minGap = min(300.0, 60.0 * pow(2.0, Double(defaults.integer(forKey: key("probe_fail_count")))))
+        if lastProbe > 0, now - lastProbe < minGap {
+            let wait = Int(minGap - (now - lastProbe))
+            return Decision(allowed: false, waitSeconds: wait, reason: "probe cooldown")
+        }
+        defaults.set(now, forKey: key("last_probe"))
+        return .allowed
+    }
+
+    func recordProbeResult(success: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        if success {
+            defaults.removeObject(forKey: key("probe_fail_count"))
+            defaults.removeObject(forKey: key("challenge_until"))
+        } else {
+            defaults.set(defaults.integer(forKey: key("probe_fail_count")) + 1, forKey: key("probe_fail_count"))
+        }
+    }
+
+    // MARK: - Post reveal protection
+
+    func markPostReveal(mediaIds: [String], holdSeconds: TimeInterval = 300) {
+        guard !mediaIds.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        defaults.set(now + holdSeconds, forKey: key("post_reveal_protected_until"))
+        defaults.set(Array(Set(mediaIds)), forKey: key("post_reveal_media_ids"))
+        LogManager.shared.info("SAFETY: post-reveal protection active for \(mediaIds.count) media item(s)", category: .api)
+    }
+
+    func canArchive(mediaId: String) -> Decision {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        if let protected = defaults.stringArray(forKey: key("post_reveal_media_ids")),
+           protected.contains(mediaId),
+           isPostRevealProtected(now: now) {
+            return Decision(
+                allowed: false,
+                waitSeconds: postRevealRemaining(now: now),
+                reason: "recently revealed media"
+            )
+        }
+        return .allowed
+    }
+
+    /// Public, read-only check used by state-sync (`getMediaIsArchived`) to skip
+    /// /media/{pk}/info/ for media that are within the post-reveal hold window.
+    /// Returns true only if BOTH the global hold is active AND the mediaId was
+    /// in the most recent reveal batch.
+    func isMediaPostRevealProtected(mediaId: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        guard isPostRevealProtected(now: now) else { return false }
+        guard let protected = defaults.stringArray(forKey: key("post_reveal_media_ids")) else { return false }
+        return protected.contains(mediaId)
+    }
+
+    /// Seconds left on the global post-reveal hold (0 if not active).
+    /// Used by the Sync & Archive UI to render a countdown that explains *why*
+    /// the button is gated, so the magician doesn't reach for a "bypass".
+    var postRevealSecondsRemaining: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        return postRevealRemaining(now: now)
+    }
+
+    // MARK: - Per-set Sync cooldown
+    /// Minimum spacing between two full state-syncs of the same Set. Prevents
+    /// the magician from pressing "Sync & Archive" repeatedly on the same 10
+    /// photos within minutes — the exact double-sync pattern that surfaced as
+    /// HTTP 403 in the May 15 bot detection log.
+    private let setSyncMinGap: TimeInterval = 300 // 5 minutes
+
+    func canSyncSet(setId: String) -> Decision {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        let key = self.key("set_sync_at_\(setId)")
+        let last = defaults.double(forKey: key)
+        guard last > 0 else { return .allowed }
+        let elapsed = now - last
+        guard elapsed < setSyncMinGap else { return .allowed }
+        let wait = max(1, Int(setSyncMinGap - elapsed))
+        return Decision(allowed: false, waitSeconds: wait, reason: "same set synced recently")
+    }
+
+    func markSetSyncStarted(setId: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        defaults.set(Date().timeIntervalSince1970, forKey: key("set_sync_at_\(setId)"))
+    }
+
+    // MARK: - Private helpers
+
+    private func minGapDecision(action: Action, now: Double, minGap: TimeInterval) -> Decision {
+        guard let last = timestamps(for: action).last else { return .allowed }
+        let elapsed = now - last
+        guard elapsed < minGap else { return .allowed }
+        return Decision(allowed: false, waitSeconds: Int(minGap - elapsed), reason: "\(action.rawValue) too soon")
+    }
+
+    private func windowDecision(action: Action, now: Double, maxCount: Int, window: TimeInterval) -> Decision {
+        let recent = timestamps(for: action).filter { now - $0 < window }
+        guard recent.count >= maxCount else { return .allowed }
+        let oldest = recent.first ?? now
+        let wait = max(1, Int(window - (now - oldest)))
+        return Decision(allowed: false, waitSeconds: wait, reason: "\(action.rawValue) budget exceeded")
+    }
+
+    private func pacedWindowDecision(action: Action, now: Double, minGap: TimeInterval, maxCount: Int, window: TimeInterval) -> Decision {
+        let gap = minGapDecision(action: action, now: now, minGap: minGap)
+        guard gap.allowed else { return gap }
+        return windowDecision(action: action, now: now, maxCount: maxCount, window: window)
+    }
+
+    private func recentActionDecision(actions: [Action], now: Double, minGap: TimeInterval, reason: String) -> Decision? {
+        let last = actions
+            .compactMap { timestamps(for: $0).last }
+            .max()
+        guard let last else { return nil }
+        let elapsed = now - last
+        guard elapsed < minGap else { return nil }
+        return Decision(allowed: false, waitSeconds: Int(minGap - elapsed), reason: reason)
+    }
+
+    private func activeChallengeCircuit(now: Double) -> Decision? {
+        guard let until = defaults.object(forKey: key("challenge_until")) as? Double,
+              until > now else { return nil }
+        return Decision(allowed: false, waitSeconds: Int(until - now), reason: "Instagram verification pending")
+    }
+
+    private func isPostRevealProtected(now: Double) -> Bool {
+        guard let until = defaults.object(forKey: key("post_reveal_protected_until")) as? Double else { return false }
+        if until <= now {
+            defaults.removeObject(forKey: key("post_reveal_protected_until"))
+            defaults.removeObject(forKey: key("post_reveal_media_ids"))
+            return false
+        }
+        return true
+    }
+
+    private func postRevealRemaining(now: Double) -> Int {
+        guard let until = defaults.object(forKey: key("post_reveal_protected_until")) as? Double else { return 0 }
+        return max(0, Int(until - now))
+    }
+
+    private func reserveApiGap(minGap: TimeInterval) -> TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        let reservedAt = defaults.double(forKey: key("last_api_slot"))
+        let earliest = reservedAt + minGap
+        let wait = max(0, earliest - now)
+        defaults.set(now + wait, forKey: key("last_api_slot"))
+        return wait
+    }
+
+    private func actionFor(method: String, path: String) -> Action {
+        guard method != "GET" else { return .apiRead }
+        if path.contains("/accounts/edit_profile/") { return .biography }
+        if path.contains("/notes/create_note/") { return .note }
+        if path.contains("/notes/delete_note/") { return .noteDelete }
+        if path.contains("/undo_only_me/") { return .unarchive }
+        if path.contains("/only_me/") { return .archive }
+        if path.contains("upload") || path.contains("configure") || path.contains("sidecar") { return .upload }
+        return .apiWrite
+    }
+
+    private func recordLocked(_ action: Action, at now: Double) {
+        var values = timestamps(for: action).filter { now - $0 < 3600 }
+        values.append(now)
+        setTimestamps(values, for: action)
+    }
+
+    private func timestamps(for action: Action) -> [Double] {
+        defaults.array(forKey: key("timestamps_\(action.rawValue)")) as? [Double] ?? []
+    }
+
+    private func setTimestamps(_ timestamps: [Double], for action: Action) {
+        defaults.set(timestamps, forKey: key("timestamps_\(action.rawValue)"))
+    }
+
+    private func key(_ name: String) -> String {
+        "\(prefix)\(name)"
+    }
+
+    private func short(_ path: String) -> String {
+        path.components(separatedBy: "?").first ?? path
+    }
+
+    private func logBlock(_ message: String) {
+        LogManager.shared.warning("SAFETY BLOCK — \(message)", category: .api)
     }
 }

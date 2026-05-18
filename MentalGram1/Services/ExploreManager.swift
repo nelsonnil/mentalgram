@@ -92,6 +92,12 @@ class ExploreManager: ObservableObject {
             print("🚫 [EXPLORE] Background refresh throttled — last refresh \(waited)m ago (min 30m)")
             return
         }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .exploreRefresh)
+        guard safetyDecision.allowed else {
+            print("🛡️ [EXPLORE] Background refresh skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — Explore background refresh: \(safetyDecision.reason)", category: .general)
+            return
+        }
 
         isBackgroundRefreshing = true
         print("🔄 [EXPLORE] Background refresh queued (12s startup delay)...")
@@ -108,6 +114,7 @@ class ExploreManager: ObservableObject {
             }
 
             await MainActor.run { self.lastBackgroundRefresh = Date() }
+            InstagramSafetyGate.shared.record(.exploreRefresh)
             print("🔄 [EXPLORE] Background refresh started (keeping cached content visible)...")
             await loadExploreInternal()
             await MainActor.run {
@@ -125,6 +132,13 @@ class ExploreManager: ObservableObject {
             print("🚫 [EXPLORE] Refresh skipped — session in challenged state")
             return
         }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .exploreRefresh)
+        guard safetyDecision.allowed else {
+            print("🛡️ [EXPLORE] Refresh is cache-only — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — Explore refresh: \(safetyDecision.reason)", category: .general)
+            return
+        }
+        InstagramSafetyGate.shared.record(.exploreRefresh)
         await MainActor.run { isLoading = true }
         await loadExploreInternal()
         await MainActor.run { isLoading = false }
@@ -352,6 +366,35 @@ class ExploreManager: ObservableObject {
             return
         }
 
+        // Detect stale cache: items marked as video but missing videoURL.
+        let staleVideos = loadedItems.contains { $0.mediaType == .video && ($0.videoURL?.isEmpty ?? true) }
+        if staleVideos {
+            print("⚠️ [EXPLORE] Cache contains video items without videoURL — discarding to force refresh")
+            return
+        }
+
+        // Detect expired CDN URLs. Instagram CDN URLs contain an `oe=` hex
+        // Unix timestamp parameter (expiry). If any video URL has already
+        // expired, AVPlayer will fail silently and nothing will play.
+        // Discard the whole cache so loadExplore() fetches fresh URLs.
+        let now = Date().timeIntervalSince1970
+        let hasExpiredVideoURL = loadedItems.contains { item in
+            guard item.mediaType == .video, let vURL = item.videoURL, !vURL.isEmpty else { return false }
+            // Extract oe=XXXXXXXX (8 hex digits)
+            if let range = vURL.range(of: "oe=", options: .caseInsensitive) {
+                let hexStart = vURL[range.upperBound...]
+                let hex = String(hexStart.prefix(8))
+                if let expiry = UInt64(hex, radix: 16) {
+                    return Double(expiry) < now
+                }
+            }
+            return false
+        }
+        if hasExpiredVideoURL {
+            print("⚠️ [EXPLORE] Cache contains expired video CDN URLs — discarding to force refresh")
+            return
+        }
+
         self.exploreMedia = loadedItems
 
         // Restore scroll cursor so infinite scroll works immediately on re-launch
@@ -388,10 +431,11 @@ class ExploreManager: ObservableObject {
         // Don't load if already loading or no more pages
         guard !isLoading, !isLoadingMore, hasMorePages else { return }
         
-        // Check if we're near the end (80% threshold)
+        // Check if we're near the end (90% threshold). This keeps scroll infinite,
+        // but avoids preloading too early when the spectator scrolls very fast.
         guard let currentIndex = exploreMedia.firstIndex(where: { $0.id == currentItem.id }) else { return }
         
-        let thresholdIndex = exploreMedia.count - (exploreMedia.count / 5) // 80%
+        let thresholdIndex = exploreMedia.count - max(3, exploreMedia.count / 10)
         
         if currentIndex >= thresholdIndex {
             print("📜 [EXPLORE] User reached 80% - loading more...")
@@ -408,6 +452,13 @@ class ExploreManager: ObservableObject {
             print("🚫 [EXPLORE] Load more skipped — locked or challenged")
             return
         }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .explorePagination)
+        guard safetyDecision.allowed else {
+            print("🛡️ [EXPLORE] Pagination skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — Explore pagination: \(safetyDecision.reason)", category: .general)
+            return
+        }
+        InstagramSafetyGate.shared.record(.explorePagination)
         
         isLoadingMore = true
         

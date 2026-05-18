@@ -24,6 +24,11 @@ struct MentalGram1App: App {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showRestoreBanner = false
+    /// Timestamp when the app last entered background. Used to decide whether
+    /// to open a warm-resume lockdown window on the next .active transition.
+    @State private var lastBackgroundedAt: Date? = nil
+    /// Background time threshold (seconds) above which a warm-resume window is opened.
+    private let warmResumeThreshold: TimeInterval = 300 // 5 minutes
 
     init() {
         requestNotificationPermission()
@@ -64,17 +69,8 @@ struct MentalGram1App: App {
                 .onAppear {
                     UIApplication.shared.isIdleTimerDisabled = true
                     handleFirstLaunch()
-                    // Ensure the Vault folder exists in iCloud Drive immediately (creates marker file).
-                    // Then do a full photo sync in the background with retry logic.
-                    iCloudDriveSync.shared.ensureCloudFolderExists()
-                    iCloudDriveSync.shared.syncAllPhotosToCloud { uploaded, skipped, error in
-                        if let error = error {
-                            LogManager.shared.warning("iCloud Drive sync issue: \(error.localizedDescription)", category: .general)
-                        } else {
-                            let total = iCloudDriveSync.shared.cloudFileCount
-                            print("☁️ [DRIVE] Launch sync: \(uploaded) uploaded, \(skipped) already synced, \(total) total in cloud")
-                        }
-                    }
+                    // Backups are manual-only. Do not upload local state/photos on launch,
+                    // because a bad local state could overwrite the user's good backup.
                 }
         }
         .onChange(of: scenePhase) { phase in
@@ -83,13 +79,30 @@ struct MentalGram1App: App {
             case .background:
                 UIApplication.shared.isIdleTimerDisabled = false
                 um.beginBackgroundWork()
-                // Immediate backup on every app background — guarantees the backup
-                // is always up to date when the user switches apps or force-quits.
-                DataManager.shared.forceImmediateBackup()
+                lastBackgroundedAt = Date()
+                // Backups are manual-only. Never overwrite cloud backup on background.
             case .active:
                 UIApplication.shared.isIdleTimerDisabled = true
                 um.endBackgroundWork()
                 um.restoreTimersIfNeeded()
+                // ANTI-BOT: If the app was in background for a long time, open a
+                // short warm-resume lockdown window so the first automatic-call
+                // pattern after foregrounding does not look like a fresh bot
+                // login burst to Instagram.
+                if let bgAt = lastBackgroundedAt {
+                    let bgDuration = Date().timeIntervalSince(bgAt)
+                    if bgDuration >= warmResumeThreshold {
+                        InstagramSafetyGate.shared.markWarmResume()
+                    }
+                }
+                lastBackgroundedAt = nil
+                // ANTI-BOT: Clear any "network changed during upload" flag that
+                // may have been set during the background period when no upload
+                // was actually running. Stops stale flags from leaking into the
+                // next upload session.
+                if !um.isUploading && !um.isPaused {
+                    InstagramService.shared.networkChangedDuringUpload = false
+                }
                 // Resume any interrupted auto re-archive (accounts for time elapsed while killed)
                 ForceNumberRevealSettings.shared.restoreIfNeeded()
             default:
@@ -139,23 +152,27 @@ struct LockdownView: View {
     @State private var showDetails = false
     @State private var timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var timeRemaining: String = ""
-    
+    /// True once the lockdown timer has expired — requires manual confirmation when streak >= 2.
+    @State private var lockExpiredPendingConfirm: Bool = false
+
+    private var isChallenge: Bool { instagram.challengeRequiredStreak >= 1 }
+
     var body: some View {
         ZStack {
             Color(.systemBackground)
                 .ignoresSafeArea()
-            
-            VStack(spacing: 30) {
+
+            VStack(spacing: 24) {
                 Spacer()
-                
+
                 Image(systemName: "wifi.slash")
                     .font(.system(size: 70))
                     .foregroundColor(.gray)
-                
+
                 Text("No Internet Connection")
                     .font(.title2.weight(.semibold))
                     .foregroundColor(.primary)
-                
+
                 Text(instagram.challengeRequiredStreak >= 2
                     ? "This keeps happening. Try logging out and back in."
                     : "Check your connection and try again.")
@@ -163,11 +180,37 @@ struct LockdownView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
-                
-                if instagram.challengeRequiredStreak >= 2 {
-                    Button(action: {
-                        instagram.emergencyLogout()
-                    }) {
+
+                // Countdown visible directly in the main view (not just in the detail sheet)
+                if !timeRemaining.isEmpty && !lockExpiredPendingConfirm {
+                    Text(timeRemaining)
+                        .font(.system(size: 36, weight: .bold, design: .monospaced))
+                        .foregroundColor(isChallenge ? .orange : .secondary)
+                        .padding(.vertical, 4)
+                }
+
+                if lockExpiredPendingConfirm && isChallenge {
+                    // Challenge lockdown finished — ask user to confirm they verified
+                    VStack(spacing: 10) {
+                        Text("Verify first, then tap Resume")
+                            .font(.footnote)
+                            .foregroundColor(.orange)
+                        Button(action: {
+                            instagram.unlock()
+                            instagram.isSessionChallenged = false
+                            lockExpiredPendingConfirm = false
+                        }) {
+                            Text("Resume")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(width: 200, height: 44)
+                                .background(Color.orange)
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding(.top, 4)
+                } else if instagram.challengeRequiredStreak >= 2 {
+                    Button(action: { instagram.emergencyLogout() }) {
                         Text("Log Out & Retry")
                             .font(.headline)
                             .foregroundColor(.white)
@@ -175,7 +218,7 @@ struct LockdownView: View {
                             .background(Color.orange)
                             .cornerRadius(10)
                     }
-                    .padding(.top, 10)
+                    .padding(.top, 4)
                 } else {
                     Button(action: {}) {
                         Text("Try Again")
@@ -185,42 +228,50 @@ struct LockdownView: View {
                             .background(Color.blue)
                             .cornerRadius(10)
                     }
-                    .padding(.top, 10)
+                    .padding(.top, 4)
                 }
-                
+
                 Spacer()
-                
+
                 HStack {
                     Spacer()
                     Button(action: { showDetails = true }) {
                         Image(systemName: "info.circle")
-                            .font(.caption)
-                            .foregroundColor(.gray.opacity(0.4))
+                            .font(.system(size: 24))
+                            .foregroundColor(.gray.opacity(0.45))
                     }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 20)
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 24)
                 }
             }
         }
+        .preferredColorScheme(.light)
         .sheet(isPresented: $showDetails) {
             LockdownDetailsSheet()
         }
         .onReceive(timer) { _ in
             updateTimeRemaining()
-            if let lockUntil = instagram.lockUntil, Date() >= lockUntil {
+            guard let lockUntil = instagram.lockUntil, Date() >= lockUntil else { return }
+            // When challenge streak >= 1, require manual "Resume" tap to confirm the user
+            // verified in Instagram before unlocking. For safety-only lockdowns, auto-unlock.
+            if isChallenge && !lockExpiredPendingConfirm {
+                lockExpiredPendingConfirm = true
+                timeRemaining = ""
+            } else if !isChallenge {
                 instagram.unlock()
             }
         }
     }
-    
+
     private func updateTimeRemaining() {
+        guard !lockExpiredPendingConfirm else { return }
         guard let lockUntil = instagram.lockUntil else {
-            timeRemaining = "Unknown"
+            timeRemaining = ""
             return
         }
         let remaining = lockUntil.timeIntervalSinceNow
         if remaining <= 0 {
-            timeRemaining = "Unlocking..."
+            timeRemaining = ""
         } else {
             let minutes = Int(remaining) / 60
             let seconds = Int(remaining) % 60

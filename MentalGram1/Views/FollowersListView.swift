@@ -31,8 +31,17 @@ struct FollowersListView: View {
     @State private var loadingProfileUserId: String? = nil
     @State private var openedProfile: InstagramProfile? = nil
     @State private var showingProfile = false
+    /// Profile IDs that returned a non-retryable error (e.g. HTTP 400 — private
+    /// or deleted account). Skip these to avoid wasting API calls on re-taps.
+    @State private var failedProfileIds: Set<String> = []
+    /// Timestamp of the last profile open, used to enforce a short cooldown
+    /// between consecutive profile opens from the followers list.
+    @State private var lastProfileOpenAt: Date = .distantPast
+    /// Active profile-load task, kept so we can cancel it if the user
+    /// navigates away before the profile finishes loading.
+    @State private var profileLoadTask: Task<Void, Never>? = nil
 
-    private var instagram: InstagramService { InstagramService.shared }
+    @ObservedObject private var instagram = InstagramService.shared
 
     init(username: String,
          followerCount: Int,
@@ -105,6 +114,15 @@ struct FollowersListView: View {
         }
         .preferredColorScheme(.light)
         .task { await loadUsers() }
+        .onDisappear {
+            // Cancel any in-flight profile load when the view is dismissed.
+            // Without this, a profile that started loading right before the user
+            // navigated away would continue running in the background and fire
+            // concurrent API calls (e.g. /friendships/{uid}/followers/) alongside
+            // the next operation (S&A), which is what triggered the May 17 403.
+            profileLoadTask?.cancel()
+            profileLoadTask = nil
+        }
         .onChange(of: selectedTab) { newTab in
             guard newTab == 0 || newTab == 1 else { return }
             let newMode: FollowersListMode = newTab == 0 ? .followers : .following
@@ -125,8 +143,51 @@ struct FollowersListView: View {
 
     private func openProfile(_ follower: InstagramFollower) {
         guard loadingProfileUserId == nil else { return }
+
+        // Skip profiles that already failed with a non-retryable error this session
+        // (e.g. HTTP 400 — private or deleted account). Fire a haptic so the user
+        // gets tactile feedback and understands the profile can't be opened.
+        guard !failedProfileIds.contains(follower.userId) else {
+            print("⏭️ [FOLLOWERS] Skipping @\(follower.username) — failed previously this session")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return
+        }
+
+        // Budget guard: block profile opens when only a few actions remain in the
+        // hourly budget. Cached profiles are always allowed (they make no API calls).
+        // Threshold: 8 remaining leaves enough headroom for S&A or other essentials.
+        let rateCheck = instagram.checkRateLimit()
+        if rateCheck.remaining < 8,
+           VisitedProfileCacheService.shared.loadProfile(userId: follower.userId) == nil {
+            print("⚠️ [FOLLOWERS] Profile open blocked — only \(rateCheck.remaining) actions remaining this hour")
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            return
+        }
+
+        // Cooldown: prevent rapid consecutive opens (e.g. accidental double-taps or
+        // quick browsing). Each new profile costs 3-4 API calls; 3 seconds between
+        // opens is imperceptible to the user but prevents burst patterns.
+        let sinceLastOpen = Date().timeIntervalSince(lastProfileOpenAt)
+        guard sinceLastOpen >= 3.0 else {
+            print("⏳ [FOLLOWERS] Profile open throttled — \(String(format: "%.1f", sinceLastOpen))s since last open (min 3s)")
+            return
+        }
+
+        // Check visited-profile cache first — avoids 3-4 API calls when the user
+        // opens the same follower repeatedly (e.g. during Counter Glitch rehearsal).
+        if let cached = VisitedProfileCacheService.shared.loadProfile(userId: follower.userId) {
+            print("📦 [FOLLOWERS] Opened @\(cached.username) from visited cache — no API call")
+            lastProfileOpenAt = Date()
+            openedProfile = cached
+            withAnimation(.easeInOut(duration: 0.22)) { showingProfile = true }
+            return
+        }
+
+        lastProfileOpenAt = Date()
         loadingProfileUserId = follower.userId
-        Task {
+        profileLoadTask?.cancel()
+        profileLoadTask = Task {
             do {
                 let profile = try await instagram.getProfileInfo(
                     userId: follower.userId,
@@ -134,6 +195,7 @@ struct FollowersListView: View {
                     fullNameHint: follower.fullName,
                     profilePicURLHint: follower.profilePicURL
                 )
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     loadingProfileUserId = nil
                     if let profile {
@@ -142,7 +204,20 @@ struct FollowersListView: View {
                     }
                 }
             } catch {
-                await MainActor.run { loadingProfileUserId = nil }
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    loadingProfileUserId = nil
+                    // Mark as failed so retaps don't waste more API calls.
+                    // Only cache the failure for non-network errors (HTTP 400 = account
+                    // not accessible); network timeouts should still be retryable.
+                    let desc = error.localizedDescription.lowercased()
+                    let isHardFailure = desc.contains("400") || desc.contains("not found") || desc.contains("forbidden")
+                    if isHardFailure {
+                        failedProfileIds.insert(follower.userId)
+                        print("❌ [FOLLOWERS] @\(follower.username) marked as failed (hard error) — won't retry")
+                        UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    }
+                }
             }
         }
     }
@@ -177,19 +252,38 @@ struct FollowersListView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.black)
                     Spacer()
-                    Image("instagram_add_follower")
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundColor(.black)
-                        .frame(width: 24, height: 24)
-                        .frame(width: 44, height: 44)
-                        .padding(.trailing, 4)
+                    ZStack(alignment: .topTrailing) {
+                        Image("instagram_add_follower")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundColor(.black)
+                            .frame(width: 24, height: 24)
+                        // Budget dot: only visible to magician, only when budget is low.
+                        // A spectator glancing at the header won't notice an 8px dot.
+                        budgetDot
+                    }
+                    .frame(width: 44, height: 44)
+                    .padding(.trailing, 4)
                 }
                 .frame(height: 44)
             }
         }
         .frame(height: statusBarHeight + 44)
+    }
+
+    /// Small red dot overlaid on the nav bar icon when fewer than 8 API actions
+    /// remain in the hourly budget. Invisible when budget is healthy.
+    @ViewBuilder
+    private var budgetDot: some View {
+        if instagram.checkRateLimit().remaining < 8 {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 9, height: 9)
+                .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                .offset(x: 3, y: -3)
+                .transition(.opacity)
+        }
     }
 
     // MARK: - Tab row
@@ -273,6 +367,7 @@ struct FollowersListView: View {
                         isDateForceSelected: orderIdx != nil,
                         dateForceEnabled: dateForce.isEnabled,
                         selectionOrder: orderIdx.map { $0 + 1 },
+                        isFailed: failedProfileIds.contains(follower.userId),
                         onAvatarTap: {
                             if dateForce.isEnabled {
                                 withAnimation(.easeInOut(duration: 0.15)) {
@@ -389,11 +484,14 @@ private struct FollowerRow: View {
     let dateForceEnabled: Bool
     /// Posición de selección (1-based) cuando está seleccionado, nil si no lo está
     let selectionOrder: Int?
+    /// True when the profile returned a hard error (e.g. HTTP 400 not authorized).
+    /// The row dims and shows a lock icon to signal the profile cannot be opened.
+    var isFailed: Bool = false
     let onAvatarTap: () -> Void
     let onRowTap: () -> Void
 
     private var showFollowBack: Bool {
-        mode == .followers && abs(follower.userId.hashValue) % 10 < 6
+        !isFailed && mode == .followers && abs(follower.userId.hashValue) % 10 < 6
     }
 
     var body: some View {
@@ -410,10 +508,14 @@ private struct FollowerRow: View {
                     HStack(spacing: 4) {
                         Text(follower.username)
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.black)
+                            .foregroundColor(isFailed ? Color(white: 0.65) : .black)
                             .lineLimit(1)
 
-                        if showFollowBack {
+                        if isFailed {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(white: 0.6))
+                        } else if showFollowBack {
                             Text("·")
                                 .font(.system(size: 12))
                                 .foregroundColor(Color(white: 0.5))
@@ -427,7 +529,7 @@ private struct FollowerRow: View {
                     if !follower.fullName.isEmpty {
                         Text(follower.fullName)
                             .font(.system(size: 13))
-                            .foregroundColor(Color(white: 0.45))
+                            .foregroundColor(isFailed ? Color(white: 0.65) : Color(white: 0.45))
                             .lineLimit(1)
                     }
                 }
@@ -435,7 +537,7 @@ private struct FollowerRow: View {
 
                 Text(String(localized: mode == .followers ? "followers.remove_btn" : "followers.following_btn"))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.black)
+                    .foregroundColor(isFailed ? Color(white: 0.65) : .black)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
                     .background(Color(white: 0.93))
@@ -447,6 +549,7 @@ private struct FollowerRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(Color.white)
+        .opacity(isFailed ? 0.55 : 1.0)
     }
 
     @ViewBuilder

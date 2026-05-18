@@ -38,6 +38,8 @@ struct PerformanceView: View {
     @State private var pendingSlotReveal: Int? = nil
     /// Set by URL scheme handler; observed by InstagramProfileView to trigger playing-card reveal.
     @State private var pendingCardReveal: String? = nil
+    /// Set by the fake lockscreen; observed by InstagramProfileView to route number/custom/card reveals.
+    @State private var pendingLockscreenDigits: [Int]? = nil
     /// True once OCR has recognised and routed a word in this session.
     /// Prevents a second OCR trigger in the same Performance session (one reveal per trick).
     @State private var ocrUsedInSession: Bool = false
@@ -48,6 +50,10 @@ struct PerformanceView: View {
     @State private var lastError: InstagramError?
     @State private var showingLockdownSheet = false   // For long-press lockdown details
     @State private var showDigitGridAlert = false
+    @State private var performanceRemoteCallsAllowed = true
+    @State private var performanceEntryRecorded = false
+    /// Seconds remaining in the safety-gate pause. Non-zero only when blocked with no cache.
+    @State private var safetyGateCountdown: Int = 0
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     
@@ -58,7 +64,14 @@ struct PerformanceView: View {
     @State private var nextMaxId: String? = nil
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
+    /// True while a DispatchQueue retry has already been scheduled.
+    /// Prevents the thundering-herd problem where 12 onAppear callbacks each
+    /// schedule their own retry when the SafetyGate is in cooldown.
+    @State private var paginationRetryScheduled = false
     private let maxPhotosOwnProfile = 100
+    // Lazy-tab loading: track whether each secondary tab has been loaded at least once.
+    @State private var reelsLoadedOnce  = false
+    @State private var taggedLoadedOnce = false
 
     // MARK: - Fake Home Screen illusion
     @AppStorage("fakeHomeScreenEnabled") private var fakeHomeScreenEnabled = false
@@ -86,10 +99,18 @@ struct PerformanceView: View {
     @State private var didAutoPauseUpload = false
     @ObservedObject private var uploadManager = UploadManager.shared
 
+    // MARK: - Anti-bot: probe dedup
+    // Prevents multiple session probes from firing simultaneously when the user
+    // rapidly minimizes/foregrounds the app during a lockdown.
+    @State private var probeInFlight = false
+
     // MARK: - Refresh throttle (prevent rapid consecutive API calls)
     /// Persisted across app restarts so throttle survives close/reopen cycles.
     @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
-    private let minRefreshInterval: TimeInterval = 60  // 60s minimum between full profile fetches
+    private let minRefreshInterval: TimeInterval = 600  // persistent cooldown between full profile fetches
+    @State private var isPullRefreshInFlight = false
+    @State private var isSilentGridRefreshing = false
+    private let fullRefreshAfterGridRefreshGap: TimeInterval = 90
 
     // MARK: - API Polling (continuous watch mode)
     /// Background task that polls the Inject/Custom API every 4–6 s while the view is visible.
@@ -129,15 +150,36 @@ struct PerformanceView: View {
     }
 
     @ViewBuilder private var profileContent: some View {
-            ZStack {
+        ZStack {
             Color.white.ignoresSafeArea()
-                if let profile = profile {
+            if let profile = profile {
                 instagramProfileView(profile: profile)
             } else {
                 InstagramProfileSkeleton(onPlusPress: { selectedTab = 1 })
             }
             if instagram.isLocked { performanceLockdownOverlay }
+            // Show countdown when safety gate has blocked all remote calls and there's
+            // no cached profile to display — otherwise the user sees a blank/frozen screen.
+            if !performanceRemoteCallsAllowed && profile == nil && safetyGateCountdown > 0 {
+                safetyGateWaitingOverlay
+            }
         }
+    }
+
+    private var safetyGateWaitingOverlay: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .scaleEffect(1.1)
+            Text(safetyGateCountdown > 0
+                 ? String(format: String(localized: "perf.safety_gate.wait"), safetyGateCountdown)
+                 : String(localized: "perf.safety_gate.retrying"))
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white.opacity(0.92))
     }
 
     @ViewBuilder private var spectatorOverlay: some View {
@@ -183,7 +225,7 @@ struct PerformanceView: View {
                     let capturedNumber = capturedDigits.reduce(0) { $0 * 10 + $1 }
 
                     if FollowingMagicSettings.shared.isEnabled && !capturedDigits.isEmpty {
-                        FollowingMagicSettings.shared.captureFromBuffer()
+                        FollowingMagicSettings.shared.captureFromBuffer(source: "grid")
                     }
                     if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel && capturedNumber > 0 {
                         ForceReelSettings.shared.pendingPosition = capturedNumber
@@ -207,7 +249,7 @@ struct PerformanceView: View {
             profile: profile,
             cachedImages: $cachedImages,
             onRefresh: loadProfileSync,
-            onAsyncRefresh: loadProfile,
+            onAsyncRefresh: handlePerformancePullToRefresh,
             onPlusPress: { selectedTab = 1 },
             mediaURLs: allMediaURLs,
             onMediaAppear: loadMoreIfNeeded,
@@ -217,6 +259,11 @@ struct PerformanceView: View {
                 print("⚡️ [PERF] \(photos.count) photo(s) pre-inserted instantly as contiguous block — API unarchive in progress")
             },
             onRevealComplete: { revealedPhotos in
+                let revealedIds = revealedPhotos.compactMap { item -> String? in
+                    guard item.pseudoURL.hasPrefix("reveal://") else { return nil }
+                    return String(item.pseudoURL.dropFirst("reveal://".count))
+                }
+                InstagramSafetyGate.shared.markPostReveal(mediaIds: revealedIds)
                 for item in revealedPhotos {
                     if let image = item.image { cachedImages[item.pseudoURL] = image }
                     insertRevealURL(item.pseudoURL)
@@ -264,8 +311,97 @@ struct PerformanceView: View {
             },
             pendingOCRWord: $pendingOCRWord,
             pendingSlotReveal: $pendingSlotReveal,
-            pendingCardReveal: $pendingCardReveal
+            pendingCardReveal: $pendingCardReveal,
+            pendingLockscreenDigits: $pendingLockscreenDigits,
+            onTabSelected: { tab in handleTabSelected(tab) }
         )
+    }
+
+    /// Called by InstagramProfileView whenever the Posts/Reels/Tagged tab changes.
+    /// Loads reels or tagged content on first tap, without blocking the UI.
+    private func handleTabSelected(_ tab: Int) {
+        guard let profile else { return }
+        switch tab {
+        case 1:
+            guard !reelsLoadedOnce else { return }
+            reelsLoadedOnce = true
+            Task { await fetchReelsIfNeeded(for: profile) }
+        case 2:
+            guard !taggedLoadedOnce else { return }
+            taggedLoadedOnce = true
+            Task { await fetchTaggedIfNeeded(for: profile) }
+        default:
+            break
+        }
+    }
+
+    /// Fetches reels for the own profile tab. Safe to call on-demand.
+    @MainActor
+    private func fetchReelsIfNeeded(for cached: InstagramProfile) async {
+        guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
+        guard !instagram.isUploadingProfilePic else { return }
+        // Re-fetch when either the URLs or the full items list is missing.
+        // Older caches (before cachedReelItems existed) may have URLs but no
+        // videoURLs, which prevents in-grid video playback.
+        let needsFetch = cached.cachedReelURLs.isEmpty || cached.cachedReelItems.isEmpty
+        guard needsFetch else {
+            print("🎬 [REELS] Already cached (\(cached.cachedReelURLs.count) URLs, \(cached.cachedReelItems.count) items) — skipping fetch")
+            return
+        }
+        print("🎬 [REELS] Lazy-loading reels for first tab visit…")
+        do {
+            // Random human-like delay before the new API call.
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
+            let items = try await instagram.getUserReels(userId: cached.userId, amount: 18)
+            let reelURLs = items.map { $0.imageURL }
+            var updated = cached
+            updated.cachedReelURLs = reelURLs
+            updated.cachedReelItems = items
+            profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+            // Download thumbnails
+            for url in reelURLs where cachedImages[url] == nil {
+                if let img = await downloadImage(from: url) {
+                    cachedImages[url] = img
+                    ProfileCacheService.shared.saveImage(img, forURL: url)
+                }
+            }
+            LogManager.shared.info("Reels lazy-loaded: \(reelURLs.count) items", category: .general)
+        } catch {
+            reelsLoadedOnce = false // allow retry on next tab visit
+            print("⚠️ [REELS] Lazy load failed (non-critical): \(error)")
+        }
+    }
+
+    /// Fetches tagged posts for the own profile tab. Safe to call on-demand.
+    @MainActor
+    private func fetchTaggedIfNeeded(for cached: InstagramProfile) async {
+        guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
+        guard !instagram.isUploadingProfilePic else { return }
+        guard cached.cachedTaggedURLs.isEmpty else {
+            print("🏷️ [TAGGED] Already cached (\(cached.cachedTaggedURLs.count)) — skipping fetch")
+            return
+        }
+        print("🏷️ [TAGGED] Lazy-loading tagged for first tab visit…")
+        do {
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
+            let items = try await instagram.getUserTagged(userId: cached.userId, amount: 18)
+            let taggedURLs = items.map { $0.imageURL }
+            var updated = cached
+            updated.cachedTaggedURLs = taggedURLs
+            profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+            for url in taggedURLs where cachedImages[url] == nil {
+                if let img = await downloadImage(from: url) {
+                    cachedImages[url] = img
+                    ProfileCacheService.shared.saveImage(img, forURL: url)
+                }
+            }
+            LogManager.shared.info("Tagged lazy-loaded: \(taggedURLs.count) items", category: .general)
+        } catch {
+            taggedLoadedOnce = false
+            print("⚠️ [TAGGED] Lazy load failed (non-critical): \(error)")
+        }
     }
 
     // MARK: - OCR modifiers (split out to reduce body complexity for the Swift type-checker)
@@ -386,8 +522,11 @@ struct PerformanceView: View {
                 .preferredColorScheme(.light)
             }
             .fullScreenCover(isPresented: $showingLockscreen) {
-                LockscreenInputView {
+                LockscreenInputView { digits in
                     showingLockscreen = false
+                    if !digits.isEmpty {
+                        pendingLockscreenDigits = digits
+                    }
                     // If fake home screen is also enabled, show it next
                     if fakeHomeScreenEnabled && illusionService.hasImage {
                         showingHomeScreenIllusion = true
@@ -509,21 +648,112 @@ struct PerformanceView: View {
                 VolumeButtonMonitor.shared.startMonitoring()
             }
 
-            // API polling: watch Inject/Custom API in background.
-            // Vibrates + updates bio/note the moment the spectator's selection arrives.
-            startApiPollingIfNeeded()
+            // API polling can trigger network calls; keep Performance cache-only
+            // while an upload is active/auto-paused to avoid POST+GET overlap.
+            if uploadManager.isActive || didAutoPauseUpload {
+                print("🛡️ [PERF] API polling skipped — upload active/paused")
+                LogManager.shared.warning("Performance API polling skipped: upload active", category: .general)
+            } else {
+                // API polling: watch Inject/Custom API in background.
+                // Vibrates + updates bio/note the moment the spectator's selection arrives.
+                startApiPollingIfNeeded()
+            }
+
+            let entryDecision: InstagramSafetyGate.PerformanceEntryDecision
+            if performanceEntryRecorded {
+                entryDecision = InstagramSafetyGate.PerformanceEntryDecision(
+                    allowRemoteCalls: performanceRemoteCallsAllowed,
+                    waitSeconds: 0,
+                    reason: performanceRemoteCallsAllowed ? "" : "existing cache-only safety entry"
+                )
+            } else {
+                entryDecision = InstagramSafetyGate.shared.recordPerformanceEntry()
+                performanceRemoteCallsAllowed = entryDecision.allowRemoteCalls
+                performanceEntryRecorded = true
+            }
 
             // PRE-FLIGHT: Validate session before any API call.
             // If the session is expired/challenged, isSessionExpired is set to true
             // by validateSession() → SessionGuardView overlay takes over automatically.
             // Network errors are treated as non-blocking (profile loads from cache).
             Task { @MainActor in
+                guard !uploadManager.isActive, !didAutoPauseUpload else {
+                    print("🛡️ [PERF] Entry remote calls skipped — upload active/paused")
+                    LogManager.shared.warning("CACHE ONLY — Performance entry skipped remote calls: upload active", category: .general)
+                    checkAndLoadProfile(allowRemote: false)
+                    return
+                }
+                guard entryDecision.allowRemoteCalls else {
+                    print("🛡️ [PERF] Cache-only entry — \(entryDecision.reason) (\(entryDecision.waitSeconds)s)")
+                    LogManager.shared.warning("CACHE ONLY — Performance entry blocked remote calls: \(entryDecision.reason)", category: .general)
+                    checkAndLoadProfile(allowRemote: false)
+                    // If there's no cached profile either, show a countdown + auto-retry
+                    // so the user doesn't see a frozen blank screen.
+                    if profile == nil && entryDecision.waitSeconds > 0 {
+                        safetyGateCountdown = entryDecision.waitSeconds
+                        Task { @MainActor in
+                            while safetyGateCountdown > 0 {
+                                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                                safetyGateCountdown = max(0, safetyGateCountdown - 1)
+                            }
+                            // Auto-retry once the pause expires
+                            guard profile == nil else { return }
+                            performanceEntryRecorded = false
+                            performanceRemoteCallsAllowed = true
+                        }
+                    }
+                    return
+                }
+
                 let sessionStatus = await instagram.validateSession()
                 guard sessionStatus == .valid || sessionStatus == .networkError else {
                     print("🚫 [PERF] Session invalid (\(sessionStatus)) — aborting onAppear actions")
                     return
                 }
-            checkAndLoadProfile()
+                checkAndLoadProfile(allowRemote: true)
+
+                // Cold-start guard: during the first ~45s of the app session we do NOT
+                // chain a silent grid refresh after validateSession. The 3-endpoint
+                // warmup (current_user + feed/user + friendships/followers) is exactly
+                // what Instagram fingerprints as automated. The cached grid is shown
+                // immediately, and a delayed refresh fires once the window expires.
+                if InstagramSafetyGate.shared.isInColdStartWindow {
+                    let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+                    print("⏳ [COLD-START] Skipping entry silent refresh — \(remaining)s remaining")
+                    LogManager.shared.info("[COLD-START] Entry silent refresh deferred — \(remaining)s", category: .general)
+                    // Schedule a single refresh just after the window closes, with a
+                    // small extra jitter to avoid landing exactly at t=45s.
+                    let delayNs = UInt64(remaining + Int.random(in: 5...10)) * 1_000_000_000
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: delayNs)
+                        // Re-check all guards at fire-time, not just at schedule-time.
+                        // Critical: if a network timeout or challenge occurred while we
+                        // were sleeping (e.g. the /accounts/current_user/ probe timed
+                        // out at t+30s), skip the refresh — it would fire into a broken
+                        // session and trigger challenge_required on /feed/user/.
+                        guard !instagram.isLocked,
+                              !instagram.isSessionChallenged,
+                              !instagram.isSessionExpired,
+                              !instagram.hasRecentApiError,
+                              !uploadManager.isActive else {
+                            print("⏭️ [COLD-START] Deferred refresh cancelled — session or error state changed while sleeping")
+                            LogManager.shared.info("[COLD-START] Deferred refresh cancelled: session/error guard failed at fire-time", category: .general)
+                            return
+                        }
+                        // Also skip if the performance safety gate blocked the most
+                        // recent entry into cache-only mode — the grid content was
+                        // already served from cache, a network call would just add
+                        // risk on top of a potentially rate-limited session.
+                        guard performanceRemoteCallsAllowed else {
+                            print("⏭️ [COLD-START] Deferred refresh cancelled — performance entry still in cache-only mode")
+                            LogManager.shared.info("[COLD-START] Deferred refresh cancelled: performance entry cache-only", category: .general)
+                            return
+                        }
+                        lastAutoRefreshTimestamp = Date().timeIntervalSince1970
+                        await refreshMediaGridSilently()
+                    }
+                    return
+                }
 
                 // AUTO-REFRESH: silently update the grid if the profile data is stale
                 // (older than 5 minutes) so new posts uploaded in real Instagram appear
@@ -555,16 +785,35 @@ struct PerformanceView: View {
             // Running them in parallel creates concurrent API calls from the
             // same session → strong bot signal (especially POST+GET combos).
             Task { @MainActor in
+                guard !uploadManager.isActive, !didAutoPauseUpload else {
+                    print("🛡️ [PERF] Auto-actions skipped — upload active/paused")
+                    LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped: upload active", category: .general)
+                    return
+                }
                 // Abort auto-actions if session is expired (validateSession above already
                 // set isSessionExpired = true and the overlay is showing).
+                guard performanceRemoteCallsAllowed else {
+                    print("🛡️ [PERF] Auto-actions skipped — cache-only safety entry")
+                    LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped in cache-only mode", category: .general)
+                    return
+                }
                 guard !instagram.isSessionExpired else {
                     print("🚫 [PERF] Auto-actions skipped — session expired")
                     return
                 }
                 // 1. Auto profile pic (POST) — wait for loadProfile to finish first
                 if autoProfilePicOnPerformance {
-                    // Brief pause so loadProfile's GET finishes or at least starts
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    // Cold-start guard: defer the POST until the window closes so it
+                    // doesn't stack on top of the entry GETs (POST+GET combos are a
+                    // strong bot signal).
+                    if InstagramSafetyGate.shared.isInColdStartWindow {
+                        let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+                        print("⏳ [COLD-START] Auto profile pic deferred — \(remaining)s remaining")
+                        LogManager.shared.info("[COLD-START] Auto profile pic deferred — \(remaining)s", category: .general)
+                        try? await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 4...8)) * 1_000_000_000)
+                    } else {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    }
                     guard !instagram.isLocked, !instagram.isSessionChallenged else {
                         print("📷 [AUTO PIC] Skipped in serial queue — locked or challenged")
                         return
@@ -608,7 +857,15 @@ struct PerformanceView: View {
             // the real Instagram app, the probe succeeds → unlock immediately.
             // If the session is truly expired → trigger the re-login sheet.
             guard phase == .active, instagram.isLocked else { return }
+            // ANTI-BOT: Deduplicate probes. Rapid minimize/foreground cycles
+            // would otherwise queue multiple probe Tasks running concurrently.
+            guard !probeInFlight else {
+                print("ℹ️ [RECOVERY] Probe already in flight — skipping duplicate")
+                return
+            }
+            probeInFlight = true
             Task { @MainActor in
+                defer { probeInFlight = false }
                 // Brief wait so the app fully re-enters foreground
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 guard instagram.isLocked else { return } // already cleared by timer
@@ -647,9 +904,49 @@ struct PerformanceView: View {
                 }
             }
         }
+        // ── ExploreView secret-input word reveal completed ───────────────────
+        // ExploreView posts this when a latest-follower / search-bar reveal finishes.
+        // We insert the photos into the fake grid (smooth, no full reload), show the
+        // profile ring, fire double strong vibration, and schedule a silent CDN refresh.
+        .onReceive(NotificationCenter.default.publisher(for: .exploreWordRevealComplete)) { note in
+            guard let mediaIds = note.userInfo?["mediaIds"] as? [String], !mediaIds.isEmpty else { return }
+
+            // Build (pseudoURL, localImage) pairs from DataManager local storage
+            let allSetPhotos = DataManager.shared.sets.flatMap { $0.photos }
+            let photoItems: [(pseudoURL: String, image: UIImage?)] = mediaIds.compactMap { mediaId in
+                guard allSetPhotos.contains(where: { $0.mediaId == mediaId }) else { return nil }
+                let photo = allSetPhotos.first(where: { $0.mediaId == mediaId })
+                let image = photo?.imageData.flatMap { UIImage(data: $0) }
+                return (pseudoURL: "reveal://\(mediaId)", image: image)
+            }
+
+            // Insert photos as a contiguous block — same path as OCR/API reveals
+            if !photoItems.isEmpty {
+                batchInsertRevealURLs(photoItems)
+                print("⚡️ [PERF] Explore reveal: \(photoItems.count) photo(s) inserted into grid from ExploreView")
+            }
+
+            // Profile ring
+            postPredRevealRingActive = true
+
+            // Double full-power vibration (same pattern as OCR/API reveal)
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await MainActor.run { AudioServicesPlaySystemSound(kSystemSoundID_Vibrate) }
+            }
+
+            // Silent CDN refresh after a delay so real Instagram CDN URLs replace placeholders
+            Task {
+                try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 s — let Instagram process
+                await refreshMediaGridSilently()
+                print("🔄 [PERF] Silent CDN refresh after Explore word reveal")
+            }
+        }
         .onDisappear {
             // Reset one-shot flags so they fire again on the next entry into Performance
             lockscreenWasShown = false
+            performanceEntryRecorded = false
 
             // Stop volume monitoring and OCR when leaving Performance
             VolumeButtonMonitor.shared.stopMonitoring()
@@ -761,13 +1058,41 @@ struct PerformanceView: View {
 
     // MARK: - Template Helper
 
-    /// Replaces `{word}` in `template` with the detected/fetched word.
-    /// Returns `word` unchanged when the template is empty or contains no token,
-    /// so existing behaviour is fully preserved for users without a template set.
+    /// Normalises any supported line-break representation into a real `\n` character.
+    ///
+    /// Supported inputs (in order of precedence):
+    ///   `{newline}`  — named token (easiest to type in URL fields)
+    ///   `{br}`       — short alias
+    ///   `<br>` / `<br/>` / `<br />` — HTML tags (some automation tools emit these)
+    ///   `%0A` / `%0a` — raw un-decoded percent sequence (defensive fallback)
+    ///   `\r\n`       — Windows CRLF (from tools that send %0D%0A)
+    ///   `\r`         — standalone carriage return
+    ///   `\n` (literal backslash-n) — the in-app template escape
+    private func expandEscapes(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "{newline}", with: "\n")
+            .replacingOccurrences(of: "{br}",      with: "\n")
+            .replacingOccurrences(of: "<br />", with: "\n", options: .caseInsensitive)
+            .replacingOccurrences(of: "<br/>",  with: "\n", options: .caseInsensitive)
+            .replacingOccurrences(of: "<br>",   with: "\n", options: .caseInsensitive)
+            // Defensive: raw %0A in case URLComponents did not percent-decode the value
+            .replacingOccurrences(of: "%0A", with: "\n", options: .caseInsensitive)
+            // Normalise Windows-style CRLF and standalone CR before the \n pass
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r",   with: "\n")
+            // Literal backslash-n (the in-app template escape, must be last)
+            .replacingOccurrences(of: "\\n",  with: "\n")
+    }
+
+    /// Replaces `{word}` in `template` with the detected/fetched word, then expands
+    /// `\n` / `{newline}` escapes into real line-breaks so multi-line bios/notes work.
+    /// Returns `word` (with escapes expanded) when the template is empty or has no token.
     private func applyTemplate(_ word: String, template: String) -> String {
         let t = template.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty, t.contains("{word}") else { return word }
-        return t.replacingOccurrences(of: "{word}", with: word)
+        if t.isEmpty || !t.contains("{word}") {
+            return expandEscapes(word)
+        }
+        return expandEscapes(t.replacingOccurrences(of: "{word}", with: word))
     }
 
     // MARK: - URL Scheme Action
@@ -841,10 +1166,12 @@ struct PerformanceView: View {
         }
 
         do {
+            // Expand \n / {newline} escapes so line breaks work from URL schemes too
+            let expanded = expandEscapes(text)
             if mode == "note" {
-                let final = truncateAtWordBoundary(text, limit: 60)
-                if final.count < text.count {
-                    print("✂️ [URL] Note truncated: \(text.count)→\(final.count) chars")
+                let final = truncateAtWordBoundary(expanded, limit: 60)
+                if final.count < expanded.count {
+                    print("✂️ [URL] Note truncated: \(expanded.count)→\(final.count) chars")
                 }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
@@ -852,9 +1179,9 @@ struct PerformanceView: View {
                     LogManager.shared.success("Note sent via URL scheme (\(final.count) chars)", category: .general)
                 }
             } else if mode == "bio" {
-                let final = truncateAtWordBoundary(text, limit: 150)
-                if final.count < text.count {
-                    print("✂️ [URL] Bio truncated: \(text.count)→\(final.count) chars")
+                let final = truncateAtWordBoundary(expanded, limit: 150)
+                if final.count < expanded.count {
+                    print("✂️ [URL] Bio truncated: \(expanded.count)→\(final.count) chars")
                 }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
@@ -875,6 +1202,16 @@ struct PerformanceView: View {
         guard !instagram.isLocked else {
             print("🚫 [CLIPBOARD] Lockdown active — skipping clipboard auto-mode")
             return
+        }
+        // Cold-start guard: clipboard often contains stale text from before the
+        // app was opened. Defer until the window closes so a stale note/bio
+        // POST doesn't fire right on top of the entry GETs.
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            print("⏳ [COLD-START] Clipboard auto-mode deferred — \(remaining)s remaining")
+            LogManager.shared.info("[COLD-START] Clipboard auto-mode deferred — \(remaining)s", category: .general)
+            try? await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 3...6)) * 1_000_000_000)
+            guard !instagram.isLocked, !instagram.isSessionChallenged else { return }
         }
 
         // Read clipboard text
@@ -932,6 +1269,16 @@ struct PerformanceView: View {
         guard instagram.isLoggedIn, !instagram.isLocked else {
             print("🚫 [API AUTO] Lockdown active or not logged in — skipping")
             return
+        }
+        // Cold-start guard: if a fresh value arrives during the first 45s the
+        // POST (createNote / changeBiography) would stack on top of the entry
+        // GETs and trigger challenge_required. Wait until the window closes.
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            print("⏳ [COLD-START] API auto-mode (\(target)) deferred — \(remaining)s remaining")
+            LogManager.shared.info("[COLD-START] API auto-mode (\(target)) deferred — \(remaining)s", category: .general)
+            try? await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 3...6)) * 1_000_000_000)
+            guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         }
 
         let source = target == "note" ? integrations.noteApiSource : integrations.bioApiSource
@@ -1282,14 +1629,18 @@ struct PerformanceView: View {
         return truncated
     }
     
-    private func checkAndLoadProfile() {
+    private func checkAndLoadProfile(allowRemote: Bool) {
         // ALWAYS try to load from cache first (anti-bot: no automatic requests)
         if let cached = ProfileCacheService.shared.loadProfile() {
             print("📦 [CACHE] Loading profile from cache — \(cached.cachedMediaURLs.count) posts, \(cached.cachedMediaItems.count) items")
 
             self.profile = cached
             self.allMediaURLs = cached.cachedMediaURLs
-            self.hasMorePages = true  // let the API decide; deduplication handles the first page
+            // Keep infinite scroll available, but SafetyGate paces remote pages.
+            self.hasMorePages = cached.cachedMediaURLs.count < maxPhotosOwnProfile
+            // Pagination is gated by the global cold-start window — no extra
+            // local timer needed. Real user scrolls past the 90% threshold are
+            // what unblock the next page.
 
             // Build mediaItemsByURL in O(n) using a dictionary keyed by imageURL.
             // Previous code used first(where:) inside a loop → O(n²) with 100+ posts.
@@ -1299,13 +1650,17 @@ struct PerformanceView: View {
 
             // Some old cached profiles were stored with zeroed stats; refresh once on startup
             // so followers/following/posts are never blank on initial app launch.
-            if cached.followerCount == 0 && cached.followingCount == 0 && cached.mediaCount == 0 {
+            if allowRemote && cached.followerCount == 0 && cached.followingCount == 0 && cached.mediaCount == 0 {
                 print("📦 [CACHE] Cached profile has zero stats — triggering one background refresh")
-                loadProfileSync()
+                loadProfileSync(source: "entry")
             }
         } else {
             print("📦 [CACHE] No cached profile found, loading fresh")
-            loadProfileSync()
+            if allowRemote {
+                loadProfileSync(source: "entry")
+            } else {
+                LogManager.shared.warning("CACHE ONLY — no cached profile and remote load blocked by safety gate", category: .general)
+            }
         }
     }
     
@@ -1362,7 +1717,9 @@ struct PerformanceView: View {
                 cachedMediaURLs: cached.cachedMediaURLs,
                 cachedReelURLs: reelURLs,
                 cachedTaggedURLs: taggedURLs,
-                cachedHighlights: highlights
+                cachedHighlights: highlights,
+                cachedReelItems: reels,
+                cachedNextMaxId: cached.cachedNextMaxId
             )
 
             self.profile = updated
@@ -1384,7 +1741,69 @@ struct PerformanceView: View {
     
     @MainActor
     private func loadProfile() async {
+        await loadProfile(source: "manual")
+    }
+
+    @MainActor
+    private func handlePerformancePullToRefresh() async {
+        // Full refresh is allowed, but it is serialized and silent when blocked.
+        // A pull during an existing spinner/silent refresh must not start another API chain.
+        guard !isPullRefreshInFlight, !isLoading, !isSilentGridRefreshing else {
+            print("🚫 [PERF] Pull refresh skipped — refresh already in progress")
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            return
+        }
+        isPullRefreshInFlight = true
+        defer { isPullRefreshInFlight = false }
+
+        checkAndLoadProfile(allowRemote: false)
+
+        guard performanceRemoteCallsAllowed,
+              !uploadManager.isActive,
+              !instagram.isLocked,
+              !instagram.isSessionChallenged,
+              !instagram.isUploadingProfilePic else {
+            print("🛡️ [PERF] Pull refresh handled as cache-only")
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            return
+        }
+
+        let now = Date().timeIntervalSince1970
+        let timeSinceGridRefresh = now - lastAutoRefreshTimestamp
+        guard lastAutoRefreshTimestamp == 0 || timeSinceGridRefresh >= fullRefreshAfterGridRefreshGap else {
+            print("🛡️ [PERF] Pull refresh cache-only — grid refreshed \(Int(timeSinceGridRefresh))s ago")
+            LogManager.shared.warning("SAFETY BLOCK — full refresh skipped after recent grid refresh", category: .general)
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            return
+        }
+
+        let timeSinceLastRefresh = now - lastRefreshTimestamp
+        guard lastRefreshTimestamp == 0 || timeSinceLastRefresh >= minRefreshInterval else {
+            print("🚫 [PERF] Pull refresh cache-only — \(Int(timeSinceLastRefresh))s since last refresh")
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            return
+        }
+
+        await loadProfile(source: "manual")
+    }
+
+    @MainActor
+    private func loadProfile(source: String) async {
         guard instagram.isLoggedIn else { return }
+
+        let safetyAction: InstagramSafetyGate.Action = source == "entry" ? .entryRefresh : .pullRefresh
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: safetyAction)
+        guard safetyDecision.allowed else {
+            print("🛡️ [PERF] loadProfile blocked — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — loadProfile \(source): \(safetyDecision.reason)", category: .general)
+            if source == "manual" {
+                // Pull-to-refresh is audience-facing. Safety blocks must be silent,
+                // otherwise they look like network/bot errors on the fake Instagram.
+                try? await Task.sleep(nanoseconds: 450_000_000)
+            }
+            return
+        }
+        InstagramSafetyGate.shared.record(safetyAction)
 
         // Prevent concurrent loads (double swipe-to-refresh)
         guard !isLoading else {
@@ -1436,11 +1855,24 @@ struct PerformanceView: View {
                 
                         self.profile = fetchedProfile
                 self.allMediaURLs = fetchedProfile.cachedMediaURLs
-                self.hasMorePages = true  // let the API decide; deduplication handles the first page
+                // Seed the pagination cursor so the first scroll-triggered call
+                // fetches page 2 directly instead of re-loading page 1.
+                if self.nextMaxId == nil {
+                    self.nextMaxId = fetchedProfile.cachedNextMaxId
+                }
+                self.hasMorePages = true
                 // Populate post viewer data (likes/comments already in items, 0 extra API calls)
                 for item in fetchedProfile.cachedMediaItems {
                     mediaItemsByURL[item.imageURL] = item
                 }
+                // If the full refresh already brought reels/tagged, mark them as loaded
+                // so the lazy-tab loader doesn't make redundant API calls.
+                // For reels we also require the full items (with videoURL); without
+                // them the grid would show static thumbnails instead of video.
+                if !fetchedProfile.cachedReelURLs.isEmpty && !fetchedProfile.cachedReelItems.isEmpty {
+                    reelsLoadedOnce = true
+                }
+                if !fetchedProfile.cachedTaggedURLs.isEmpty { taggedLoadedOnce = true }
                         ProfileCacheService.shared.saveProfile(fetchedProfile)
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
                 ProfileCacheService.shared.pendingProfilePic = nil
@@ -1474,7 +1906,11 @@ struct PerformanceView: View {
     
     // Sync wrapper for non-async call sites (onRefresh button, header "@" button)
     private func loadProfileSync() {
-        Task { await loadProfile() }
+        loadProfileSync(source: "manual")
+    }
+
+    private func loadProfileSync(source: String) {
+        Task { await loadProfile(source: source) }
     }
     
     private func loadCachedImages() {
@@ -1641,19 +2077,92 @@ struct PerformanceView: View {
             print("📜 [PROFILE] Cannot load more - loading: \(isLoadingMore), hasMore: \(hasMorePages), count: \(allMediaURLs.count)")
             return
         }
+        guard performanceRemoteCallsAllowed else {
+            print("🛡️ [PROFILE] Pagination skipped — Performance cache-only mode")
+            LogManager.shared.warning("SAFETY BLOCK — Performance pagination skipped in cache-only mode", category: .general)
+            return
+        }
+        guard !uploadManager.isActive else {
+            print("🛡️ [PROFILE] Pagination skipped — upload active/paused")
+            LogManager.shared.warning("SAFETY BLOCK — Performance pagination skipped: upload active", category: .general)
+            return
+        }
+        // ANTI-BOT: Also block pagination while Sync & Archive is running.
+        // S&A calls ProfileCacheService.removeMediaItem() for each archive, which
+        // changes cachedMediaURLs → onChange fires → grid cells render → loadMoreIfNeeded
+        // triggers a GET /feed/user/ while we're still inside the archive loop.
+        // That exact POST → POST → GET sequence triggered the May 16 challenge_required.
+        guard !uploadManager.isSyncArchiveActive else {
+            print("🛡️ [PROFILE] Pagination skipped — Sync & Archive active")
+            LogManager.shared.warning("SAFETY BLOCK — Performance pagination skipped: S&A active", category: .general)
+            return
+        }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+        guard safetyDecision.allowed else {
+            print("🛡️ [PROFILE] Pagination skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — Performance pagination: \(safetyDecision.reason)", category: .general)
+            return
+        }
+        InstagramSafetyGate.shared.record(.ownProfilePagination)
         
         isLoadingMore = true
-        print("📜 [PROFILE] Loading more media (current count: \(allMediaURLs.count))...")
+        let paginationCursorInfo = nextMaxId != nil ? "cursor=\(nextMaxId!.prefix(12))…" : "cursor=nil(p1)"
+        print("📜 [PROFILE] Loading more media (count:\(allMediaURLs.count) \(paginationCursorInfo))...")
+        LogManager.shared.debug("Own pagination start — count:\(allMediaURLs.count) \(paginationCursorInfo)", category: .profile)
+
+        let existingURLsBeforeRequest = Set(allMediaURLs)
+        let existingMediaIdsBeforeRequest = Set(mediaItemsByURL.values.map { $0.mediaId })
         
         Task {
             do {
                 // Fetch next batch
-                let (mediaItems, newMaxId) = try await instagram.getUserMediaItems(userId: profile?.userId, amount: 21, maxId: nextMaxId)
+                let requestedMaxId = nextMaxId
+                var (mediaItems, newMaxId) = try await instagram.getUserMediaItems(userId: profile?.userId, amount: 21, maxId: requestedMaxId)
+
+                // If the first pagination call rediscovers the already-cached first
+                // page, use the returned cursor for the real next page. CDN URLs rotate,
+                // so compare by mediaId first.
+                // CRITICAL: this internal 2nd call must respect the SafetyGate and use
+                // a human-like delay, otherwise we'd emit 2 GETs to /feed/user/ within
+                // ~1s — Instagram bot fingerprint.
+                if requestedMaxId == nil, let discoveredMaxId = newMaxId {
+                    let hasFreshItem = mediaItems.contains { item in
+                        if !item.mediaId.isEmpty, existingMediaIdsBeforeRequest.contains(item.mediaId) { return false }
+                        return !existingURLsBeforeRequest.contains(item.imageURL)
+                    }
+                    if !hasFreshItem {
+                        let nextPageDecision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+                        if nextPageDecision.allowed {
+                            print("📜 [PROFILE] First pagination returned cached first page — fetching next cursor after pause")
+                            // Human-like 1.5–2.5s pause before the internal second call.
+                            // Shorter than the old 3.5–4.5s since cachedNextMaxId now
+                            // prevents this path for most users; the delay only fires for
+                            // accounts with fewer posts than the initial fetch batch.
+                            let pauseNs = UInt64.random(in: 1_500_000_000...2_500_000_000)
+                            try? await Task.sleep(nanoseconds: pauseNs)
+                            InstagramSafetyGate.shared.record(.ownProfilePagination)
+                            let nextPage = try await instagram.getUserMediaItems(userId: profile?.userId, amount: 21, maxId: discoveredMaxId)
+                            mediaItems = nextPage.0
+                            newMaxId = nextPage.1
+                        } else {
+                            print("🛡️ [PROFILE] Skipping internal nextPage — SafetyGate (\(nextPageDecision.reason), wait \(nextPageDecision.waitSeconds)s)")
+                            LogManager.shared.warning("SAFETY BLOCK — internal nextPage skipped: \(nextPageDecision.reason)", category: .general)
+                        }
+                    }
+                }
                 
                 await MainActor.run {
-                    // Deduplicate: skip URLs already shown (handles first page re-fetch when nextMaxId starts nil)
-                    let existingSet = Set(allMediaURLs)
-                    let freshItems = mediaItems.filter { !existingSet.contains($0.imageURL) }
+                    // Deduplicate by stable mediaId first. CDN URLs rotate and can make
+                    // the same post look new if compared by URL only.
+                    let existingURLs = Set(allMediaURLs)
+                    let existingMediaIds = Set(mediaItemsByURL.values.map { $0.mediaId })
+                    var seenIncomingIds = Set<String>()
+                    let freshItems = mediaItems.filter { item in
+                        let key = item.mediaId.isEmpty ? item.imageURL : item.mediaId
+                        guard seenIncomingIds.insert(key).inserted else { return false }
+                        if !item.mediaId.isEmpty, existingMediaIds.contains(item.mediaId) { return false }
+                        return !existingURLs.contains(item.imageURL)
+                    }
 
                     // Store items for post viewer (likes/comments already included)
                     for item in freshItems { mediaItemsByURL[item.imageURL] = item }
@@ -1669,8 +2178,16 @@ struct PerformanceView: View {
 
                     allMediaURLs.append(contentsOf: urlsToDisplay)
                     nextMaxId = newMaxId
-                    hasMorePages = (newMaxId != nil) && (allMediaURLs.count < maxPhotosOwnProfile)
+                    hasMorePages = (newMaxId != nil) && (newMaxId != requestedMaxId) && (allMediaURLs.count < maxPhotosOwnProfile)
                     isLoadingMore = false
+
+                    if var updatedProfile = profile {
+                        updatedProfile.cachedMediaURLs = allMediaURLs
+                        updatedProfile.cachedMediaItems = allMediaURLs.compactMap { mediaItemsByURL[$0] }
+                        updatedProfile.cachedAt = Date()
+                        profile = updatedProfile
+                        ProfileCacheService.shared.saveProfile(updatedProfile)
+                    }
 
                     print("📜 [PROFILE] Loaded \(urlsToDisplay.count) new (skipped \(mediaItems.count - freshItems.count) dupes), total: \(allMediaURLs.count), hasMore: \(hasMorePages)")
 
@@ -1687,13 +2204,44 @@ struct PerformanceView: View {
     }
     
     private func loadMoreIfNeeded(currentURL: String) {
-        // Trigger load when user reaches 80% of loaded items
+        // Cold-start guard: pagination triggered by SwiftUI mounting cells
+        // during the first 45s would add a 3rd /feed/user/ call right after
+        // the entry burst. The user can still scroll — when they cross the
+        // 90% threshold after the window closes, pagination resumes.
+        if InstagramSafetyGate.shared.isInColdStartWindow { return }
+
+        // Skip while another page load or silent refresh is already running.
+        guard !isLoadingMore, !isSilentGridRefreshing else { return }
+
         guard let index = allMediaURLs.firstIndex(of: currentURL) else { return }
-        let threshold = max(1, Int(Double(allMediaURLs.count) * 0.8))
-        
+        // 55% threshold: fires earlier so the next page arrives before the user
+        // reaches the last cell. With 12 initial posts this fires at post 7.
+        let threshold = max(1, Int(Double(allMediaURLs.count) * 0.55))
+
         if index >= threshold {
-            print("📜 [PROFILE] User reached 80% (\(index)/\(allMediaURLs.count)) - loading more...")
-            loadMoreMedia()
+            print("📜 [PROFILE] User reached 55% (\(index)/\(allMediaURLs.count)) — loading more…")
+            // If pagination is still in the SafetyGate cooldown (e.g. 6s after
+            // silent refresh), schedule a SINGLE automatic retry so the user
+            // never sees a blank grid — no manual action needed.
+            // paginationRetryScheduled prevents the thundering-herd problem where
+            // 12 onAppear callbacks each schedule their own retry.
+            if performanceRemoteCallsAllowed {
+                let decision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+                if decision.allowed {
+                    loadMoreMedia()
+                } else if !paginationRetryScheduled {
+                    paginationRetryScheduled = true
+                    let wait = max(1, decision.waitSeconds)
+                    print("⏳ [PROFILE] Pagination gated (\(decision.reason), \(wait)s) — will retry")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(wait) + 0.3) {
+                        paginationRetryScheduled = false
+                        guard !isLoadingMore, hasMorePages else { return }
+                        loadMoreMedia()
+                    }
+                }
+            } else {
+                loadMoreMedia()  // cache-only guard handled inside loadMoreMedia itself
+            }
         }
     }
     
@@ -1826,7 +2374,7 @@ struct PerformanceView: View {
         let allSetPhotos = DataManager.shared.sets.flatMap { $0.photos }
         for item in photos {
             let mediaId = String(item.pseudoURL.dropFirst("reveal://".count))
-            if let d = allSetPhotos.first(where: { $0.mediaId == mediaId })?.uploadDate {
+            if let d = revealUploadDate(for: mediaId) ?? allSetPhotos.first(where: { $0.mediaId == mediaId })?.uploadDate {
                 revealDates[item.pseudoURL] = d
             }
         }
@@ -1893,10 +2441,7 @@ struct PerformanceView: View {
 
         // Look up the upload date from DataManager — equals the taken_at sent to Instagram
         // (or the actual upload time for older sets uploaded before the grid-anchor feature).
-        let uploadDate: Date? = DataManager.shared.sets
-            .flatMap { $0.photos }
-            .first(where: { $0.mediaId == mediaId })
-            .flatMap { $0.uploadDate }
+        let uploadDate = revealUploadDate(for: mediaId)
 
         guard let revealDate = uploadDate else {
             allMediaURLs.insert(pseudoURL, at: 0)
@@ -1962,9 +2507,54 @@ struct PerformanceView: View {
         print("⚡️ [REVEAL] \(mediaId) (taken_at≈\(revealDate)) → appended at end")
     }
 
+    /// Returns the date used to place a reveal:// item in the fake grid.
+    /// Older builds could accidentally overwrite `uploadDate` at reveal time when
+    /// `updatePhoto` received the same mediaId again. If that happened, the card
+    /// looked "new" and jumped to position 0. We repair that outlier from siblings
+    /// in the same completed set so existing decks recover automatically.
+    @MainActor
+    private func revealUploadDate(for mediaId: String) -> Date? {
+        for set in DataManager.shared.sets {
+            guard let photo = set.photos.first(where: { $0.mediaId == mediaId }) else { continue }
+            guard let rawDate = photo.uploadDate else { return nil }
+
+            guard let completedAt = set.completedAt,
+                  rawDate > completedAt.addingTimeInterval(300) else {
+                return rawDate
+            }
+
+            let validSiblingDates = set.photos.compactMap { sibling -> Date? in
+                guard sibling.mediaId != mediaId, let date = sibling.uploadDate else { return nil }
+                return date <= completedAt.addingTimeInterval(300) ? date : nil
+            }.sorted()
+
+            guard !validSiblingDates.isEmpty else { return rawDate }
+
+            let repairedDate = validSiblingDates[validSiblingDates.count / 2]
+            DataManager.shared.updatePhoto(photoId: photo.id, uploadDate: repairedDate)
+            print("🛠️ [REVEAL] Repaired uploadDate for \(mediaId): \(rawDate) → \(repairedDate)")
+            return repairedDate
+        }
+
+        return nil
+    }
+
     /// Does NOT touch profile stats, bio, follower count, etc. — zero visible disruption.
     @MainActor
     private func refreshMediaGridSilently() async {
+        guard !isLoading, !isPullRefreshInFlight, !isSilentGridRefreshing else {
+            print("⚠️ [PERF] Silent refresh skipped — another refresh is active")
+            return
+        }
+        // Cold-start guard: never run an automatic silent refresh during the
+        // first ~45s of the app session — this is the API burst Instagram
+        // fingerprints as bot behaviour.
+        guard InstagramSafetyGate.shared.allowAutoCall("silent grid refresh") else {
+            return
+        }
+        isSilentGridRefreshing = true
+        defer { isSilentGridRefreshing = false }
+
         guard !instagram.isLocked, let userId = profile?.userId else {
             print("⚠️ [PERF] Silent refresh skipped — locked or no profile")
             return
@@ -1981,6 +2571,25 @@ struct PerformanceView: View {
             LogManager.shared.warning("Silent refresh skipped: session recently challenged", category: .general)
             return
         }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .silentGridRefresh)
+        guard safetyDecision.allowed else {
+            print("🛡️ [PERF] Silent refresh skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — silent grid refresh: \(safetyDecision.reason)", category: .general)
+            return
+        }
+        InstagramSafetyGate.shared.record(.silentGridRefresh)
+
+        // ANTI-BOT: Staged loading. If another API request was made in the last
+        // 2 seconds (e.g. validateSession on Performance entry, post-reveal API,
+        // or a cold-start window that just closed and drained queued tasks all
+        // at once), wait a jittered 1.2–2.5s so we don't stack endpoint-after-
+        // endpoint. This is invisible to the magician: the grid already shows
+        // local images, this GET just upgrades pseudo-URLs to CDN URLs.
+        if instagram.hasRecentApiBurst(threshold: 1, seconds: 2) {
+            let waitNs = UInt64.random(in: 1_200_000_000...2_500_000_000)
+            print("⏳ [PERF] Silent refresh: staging delay \(Double(waitNs)/1_000_000_000)s to avoid burst")
+            try? await Task.sleep(nanoseconds: waitNs)
+        }
 
         // No delay needed: the grid already shows local images via pseudo-URLs.
         // This GET only replaces pseudo-URLs with real CDN URLs in the background.
@@ -1988,7 +2597,7 @@ struct PerformanceView: View {
         LogManager.shared.info("Silent media refresh triggered after reveal", category: .general)
 
         do {
-            let (items, _) = try await instagram.getUserMediaItems(userId: userId, amount: 21, maxId: nil)
+            let (items, refreshedMaxId) = try await instagram.getUserMediaItems(userId: userId, amount: 21, maxId: nil)
             let newURLs = items.map { $0.imageURL }
             guard !newURLs.isEmpty else {
                 print("⚠️ [PERF] Silent refresh: empty response from Instagram")
@@ -2112,6 +2721,11 @@ struct PerformanceView: View {
             // ─────────────────────────────────────────────────────────────────
 
             allMediaURLs = merged
+            nextMaxId = refreshedMaxId
+            hasMorePages = refreshedMaxId != nil && merged.count < maxPhotosOwnProfile
+            // No local pagination suppression needed — `isLoadingMore` and the
+            // SafetyGate cross-action pause already prevent another /feed/user/
+            // call from firing right after a silent refresh.
 
             // Clear cached reveal dates only for placeholders that WERE replaced by real CDN URLs.
             // Preserved reveal:// URLs (still in merged) keep their cached date for future refreshes.
@@ -2230,6 +2844,15 @@ struct PerformanceView: View {
                 ProfileCacheService.shared.saveImage(uiImage, forURL: picURL)
 
                 print("📷 [AUTO PIC] ✅ Profile picture updated successfully")
+                // If the silent refresh was skipped during upload (anti-bot guard),
+                // nextMaxId may still be nil. Schedule a deferred silent refresh
+                // so the first pagination doesn't waste a request re-fetching page 1.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    if self.nextMaxId == nil {
+                        print("📷 [AUTO PIC] Silent refresh deferred — triggering to capture nextMaxId")
+                        Task { await self.refreshMediaGridSilently() }
+                    }
+                }
             }
         } catch {
             print("📷 [AUTO PIC] Upload skipped: \(error.localizedDescription)")
@@ -2288,6 +2911,15 @@ struct PerformanceView: View {
     @MainActor
     private func loadAutoFollowers() {
         guard !dateForce.isAutoLoading else { return }
+        // ANTI-BOT: Don't fire a multi-profile fetch on top of an active upload,
+        // sync/archive, or reveal. The auto-load typically hits 5-10 profiles
+        // back-to-back, which during heavy operations becomes a textbook burst.
+        // We defer by simply returning — the magician can tap again later.
+        if instagram.isHeavyOperationActive {
+            print("🛡️ [AUTO] Date Force load skipped — heavy operation active")
+            LogManager.shared.warning("Date Force auto-load deferred — heavy op active", category: .general)
+            return
+        }
         dateForce.isAutoLoading = true
 
         Task {
@@ -2469,10 +3101,37 @@ struct InstagramProfileView: View {
     @Binding var pendingSlotReveal: Int?
     /// Set by PerformanceView URL-scheme handler; triggers a playing-card reveal.
     @Binding var pendingCardReveal: String?
+    /// Set by PerformanceView after the fake lockscreen commits hidden digits.
+    @Binding var pendingLockscreenDigits: [Int]?
+    /// Called whenever the Posts/Reels/Tagged tab changes so PerformanceView can
+    /// trigger lazy loading of secondary tabs on first visit.
+    var onTabSelected: ((Int) -> Void)? = nil
 
-    // Post viewer state
-    @State private var showingPostViewer = false
-    @State private var selectedPostIndex = 0
+    // Single fullScreenCover for posts/reels/tagged — avoids SwiftUI bugs when
+    // multiple .fullScreenCover modifiers are stacked on the same view.
+    enum ViewerSheet: Identifiable {
+        case posts(index: Int)
+        case reels(index: Int)
+        case tagged(index: Int)
+        var id: String {
+            switch self { case .posts(let i): return "posts-\(i)"
+                          case .reels(let i): return "reels-\(i)"
+                          case .tagged(let i): return "tagged-\(i)" }
+        }
+    }
+    @State private var activeViewer: ViewerSheet? = nil
+    /// Captures the last-opened posts index so the Amnesia onDismiss handler
+    /// can read it after activeViewer has already been cleared to nil.
+    @State private var lastPostViewerIndex: Int = 0
+    /// Set to true just before presenting a .posts viewer so onDismiss can
+    /// distinguish a posts-dismiss from a reels/tagged-dismiss.
+    @State private var lastDismissedViewerWasPosts = false
+
+    // Convenience computed properties kept so downstream code compiles unchanged
+    private var showingPostViewer: Bool { if case .posts = activeViewer { return true }; return false }
+    private var selectedPostIndex: Int { if case .posts(let i) = activeViewer { return i }; return 0 }
+    private var selectedReelIndex: Int { if case .reels(let i) = activeViewer { return i }; return 0 }
+    private var selectedTaggedIndex: Int { if case .tagged(let i) = activeViewer { return i }; return 0 }
 
     // Followers list
     @State private var showFollowersList = false
@@ -2506,6 +3165,13 @@ struct InstagramProfileView: View {
         if let o = followingOverride { return o }
         return nil
     }
+
+    private func logVisibleCountState(reason: String) {
+        LogManager.shared.info(
+            "Visible counts (\(reason)) @\(profile.username) real followers:\(profile.followerCount) following:\(profile.followingCount) followerOverride:\(followerOverride ?? "nil") followingOverride:\(followingOverride ?? "nil") transferOffset:\(followingMagic.transferOffset) transferCounting:\(followingMagic.isTransferCounting)",
+            category: .profile
+        )
+    }
     
     var body: some View {
         ScrollView {
@@ -2525,6 +3191,19 @@ struct InstagramProfileView: View {
                 // fully above the fixed bottom bar (which overlaps ~54 pts from the bottom).
                 Color.clear.frame(height: 60)
             }
+        }
+        .onAppear {
+            applyPendingTransferDeflation()
+            logVisibleCountState(reason: "profile appear")
+        }
+        .onChange(of: followingMagic.transferOffset) { _ in
+            applyPendingTransferDeflation()
+        }
+        .onChange(of: followerOverride) { _ in
+            logVisibleCountState(reason: "follower override changed")
+        }
+        .onChange(of: followingOverride) { _ in
+            logVisibleCountState(reason: "following override changed")
         }
         // Pull-to-refresh: runs load in an unstructured Task so SwiftUI
             // cancellation doesn't abort the URLSession requests inside loadProfile.
@@ -2678,11 +3357,70 @@ struct InstagramProfileView: View {
             showOCRPeek(label: symbol)
             Task { await revealByCardSlot(symbol: symbol, fromSet: activeSet) }
         }
+        // ── Fake lockscreen: Number / Custom / Playing Card reveal ──────────────
+        .onChange(of: pendingLockscreenDigits) { digits in
+            guard let digits = digits, !digits.isEmpty else { return }
+            pendingLockscreenDigits = nil
+            routeDigitsFromLockscreen(digits)
+        }
+        // ── Notify PerformanceView when the tab changes (for lazy loading) ──────
+        .onChange(of: selectedTab) { tab in
+            onTabSelected?(tab)
+        }
         .alert(revealErrorTitle, isPresented: $showRevealError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(revealErrorMessage)
         }
+    }
+
+    // MARK: - Lockscreen Reveal Routing
+
+    private func routeDigitsFromLockscreen(_ digits: [Int]) {
+        let input = digits.map(String.init).joined()
+        print("🔒 [LOCKSCREEN] Routing committed digits: \(input)")
+        LogManager.shared.info("Lockscreen input committed: \(input)", category: .general)
+
+        secretManager.reset()
+        followingOverride = nil
+        followerOverride = nil
+
+        guard !UploadManager.shared.isActive else {
+            print("⚠️ [LOCKSCREEN] Reveal blocked: upload is active")
+            LogManager.shared.warning("Lockscreen reveal blocked: upload in progress", category: .general)
+            onUploadConflict?()
+            return
+        }
+
+        // Cards are checked first because inputs like 061 are intentionally a card code
+        // (0 + value + suit), while number/custom reveals remain available as fallback.
+        if let activeId = ActiveSetSettings.shared.activeCardSetId,
+           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
+           let (value, suit) = decodeCardInput(digits) {
+            let symbol = cardSymbol(value: value, suit: suit)
+            showOCRPeek(label: symbol)
+            Task { await revealByCardSlot(symbol: symbol, fromSet: activeSet) }
+            return
+        }
+
+        let slot = digits.reduce(0) { $0 * 10 + $1 }
+        if slot >= 1,
+           let activeId = ActiveSetSettings.shared.activeCustomSetId,
+           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
+            showOCRPeek(label: "#\(slot)")
+            Task { await revealByCustomSlot(slot, fromSet: activeSet) }
+            return
+        }
+
+        if let activeId = ActiveSetSettings.shared.activeNumberSetId,
+           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
+            showOCRPeek(number: input)
+            Task { await revealByDigits(digits, fromSet: activeSet) }
+            return
+        }
+
+        print("⚠️ [LOCKSCREEN] No active number/custom/card set for input \(input)")
+        LogManager.shared.warning("Lockscreen input \(input) ignored: no active reveal set", category: .general)
     }
 
     // MARK: - OCR Peek
@@ -2723,46 +3461,51 @@ struct InstagramProfileView: View {
 
                         ZStack(alignment: .bottomTrailing) {
                         let picSize: CGFloat = seAdapt(77, 86)
-                            // Outer gradient ring — visible only after a PP reveal succeeds
-                            if postPredRevealRingActive {
-                                Circle()
-                                    .stroke(
-                                        AngularGradient(
-                                            colors: [
-                                                Color(red: 0.99, green: 0.78, blue: 0.12),
-                                                Color(red: 0.99, green: 0.42, blue: 0.13),
-                                                Color(red: 0.90, green: 0.14, blue: 0.49),
-                                                Color(red: 0.52, green: 0.17, blue: 0.83),
-                                                Color(red: 0.99, green: 0.78, blue: 0.12)
-                                            ],
-                                            center: .center
-                                        ),
-                                        lineWidth: 3
-                                    )
-                                    .frame(width: picSize + 8, height: picSize + 8)
+                            // Inner centered ZStack: ring + white gap + photo are all
+                            // centred relative to each other so the ring wraps evenly.
+                            ZStack {
+                                // Outer gradient ring — visible only after a PP reveal succeeds
+                                if postPredRevealRingActive {
+                                    Circle()
+                                        .stroke(
+                                            AngularGradient(
+                                                colors: [
+                                                    Color(red: 0.99, green: 0.78, blue: 0.12),
+                                                    Color(red: 0.99, green: 0.42, blue: 0.13),
+                                                    Color(red: 0.90, green: 0.14, blue: 0.49),
+                                                    Color(red: 0.52, green: 0.17, blue: 0.83),
+                                                    Color(red: 0.99, green: 0.78, blue: 0.12)
+                                                ],
+                                                center: .center
+                                            ),
+                                            lineWidth: 3
+                                        )
+                                        .frame(width: picSize + 8, height: picSize + 8)
                                     // White gap between gradient ring and photo
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: picSize + 4, height: picSize + 4)
+                                    Circle()
+                                        .fill(Color.white)
+                                        .frame(width: picSize + 4, height: picSize + 4)
+                                }
+                                if let image = cachedImages[profile.profilePicURL] {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: picSize, height: picSize)
+                                        .clipShape(Circle())
+                                        .onAppear { print("✅ [UI] Profile pic image displayed") }
+                                } else {
+                                    Circle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: picSize, height: picSize)
+                                        .overlay(ProgressView().scaleEffect(0.8))
+                                        .onAppear {
+                                            print("⚠️ [UI] Profile pic not in cache")
+                                            print("⚠️ [UI] Looking for URL: \(String(profile.profilePicURL.prefix(80)))")
+                                            print("⚠️ [UI] Available cached URLs: \(cachedImages.keys.map { String($0.prefix(40)) }.joined(separator: ", "))")
+                                        }
+                                }
                             }
-                            if let image = cachedImages[profile.profilePicURL] {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                .frame(width: picSize, height: picSize)
-                                    .clipShape(Circle())
-                                .onAppear { print("✅ [UI] Profile pic image displayed") }
-                            } else {
-                                Circle()
-                                .fill(Color.gray.opacity(0.2))
-                                .frame(width: picSize, height: picSize)
-                                .overlay(ProgressView().scaleEffect(0.8))
-                                    .onAppear {
-                                        print("⚠️ [UI] Profile pic not in cache")
-                                        print("⚠️ [UI] Looking for URL: \(String(profile.profilePicURL.prefix(80)))")
-                                        print("⚠️ [UI] Available cached URLs: \(cachedImages.keys.map { String($0.prefix(40)) }.joined(separator: ", "))")
-                                    }
-                            }
+                            // Blue ➕ button stays anchored to the bottom-right of the outer ZStack
                             Circle()
                                 .fill(Color.blue)
                                 .frame(width: 24, height: 24)
@@ -2808,14 +3551,24 @@ struct InstagramProfileView: View {
                         StatView(number: profile.mediaCount, label: String(localized: "ig.stat.posts"))
                             .frame(maxWidth: .infinity)
 
-                        Button { showFollowersList = true } label: {
+                        Button {
+                            if FollowingMagicSettings.shared.isEnabled && SecretNumberManager.shared.hasDigits {
+                                FollowingMagicSettings.shared.captureFromBuffer(source: "followers-list")
+                            }
+                            showFollowersList = true
+                        } label: {
                             StatView(number: profile.followerCount, label: String(localized: "ig.stat.followers"),
                                      overrideText: effectiveFollowerOverride)
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
 
-                        Button { showFollowingList = true } label: {
+                        Button {
+                            if FollowingMagicSettings.shared.isEnabled && SecretNumberManager.shared.hasDigits {
+                                FollowingMagicSettings.shared.captureFromBuffer(source: "following-list")
+                            }
+                            showFollowingList = true
+                        } label: {
                             StatView(number: profile.followingCount, label: String(localized: "ig.stat.following"),
                                      overrideText: postsOCRNumberOverride ?? effectiveFollowingOverride,
                                      overrideLabel: postsOCRLabelOverride)
@@ -3010,54 +3763,93 @@ struct InstagramProfileView: View {
                     cachedImages: cachedImages,
                     onMediaAppear: onMediaAppear,
                     onTapIndex: { index in
-                        selectedPostIndex = index
-                        showingPostViewer = true
+                        lastPostViewerIndex = index
+                        lastDismissedViewerWasPosts = true
+                        activeViewer = .posts(index: index)
                     }
                 )
             case 1:
-                ReelsGridView(reelURLs: profile.cachedReelURLs, cachedImages: cachedImages)
+                ReelsGridView(
+                    reelURLs: profile.cachedReelURLs,
+                    cachedImages: cachedImages,
+                    reelItems: profile.cachedReelItems,
+                    onTapIndex: { index in
+                        activeViewer = .reels(index: index)
+                    }
+                )
             case 2:
                 if profile.cachedTaggedURLs.isEmpty {
                     TaggedEmptyStateView()
                 } else {
-                    PhotosGridView(mediaURLs: profile.cachedTaggedURLs, cachedImages: cachedImages)
+                    PhotosGridView(
+                        mediaURLs: profile.cachedTaggedURLs,
+                        cachedImages: cachedImages,
+                        onTapIndex: { index in
+                            activeViewer = .tagged(index: index)
+                        }
+                    )
                 }
             default:
                 EmptyView()
             }
         }
         .simultaneousGesture(
-            DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            DragGesture(minimumDistance: 30, coordinateSpace: .local)
                 .onEnded { value in handleGridSwipe(value) }
         )
-        .fullScreenCover(isPresented: $showingPostViewer, onDismiss: {
-            // Amnesia Carousel trigger: when the magician closes the post viewer,
-            // check if the post that was just viewed is the short carousel (A).
-            // If Amnesia is enabled and not yet revealed, fire the swap.
+        .fullScreenCover(item: $activeViewer, onDismiss: {
+            // Amnesia Carousel trigger fires only when a POSTS viewer is dismissed.
+            // activeViewer is already nil here so we use lastPostViewerIndex.
+            guard lastDismissedViewerWasPosts else { return }
+            lastDismissedViewerWasPosts = false
             let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
             if amnesiaSettings.isEnabled,
                amnesiaSettings.isReady,
                !amnesiaSettings.isRevealed,
                let shortId = amnesiaSettings.shortCarouselMediaId,
-               selectedPostIndex < urlsToShow.count
+               lastPostViewerIndex < urlsToShow.count
             {
-                let viewedURL  = urlsToShow[selectedPostIndex]
+                let viewedURL  = urlsToShow[lastPostViewerIndex]
                 let viewedItem = mediaItemsByURL[viewedURL]
                 if viewedItem?.mediaId == shortId || viewedURL.contains(shortId) {
                     triggerAmnesiaSwap()
                 }
             }
-        }) {
-            let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
-            PostScrollView(
-                mediaURLs: urlsToShow,
-                mediaItemsByURL: mediaItemsByURL,
-                cachedImages: cachedImages,
-                initialIndex: selectedPostIndex,
-                username: profile.username,
-                profileImage: cachedImages[profile.profilePicURL],
-                userId: profile.userId
-            )
+        }) { sheet in
+            switch sheet {
+            case .posts(let index):
+                let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+                PostScrollView(
+                    mediaURLs: urlsToShow,
+                    mediaItemsByURL: mediaItemsByURL,
+                    cachedImages: cachedImages,
+                    initialIndex: index,
+                    username: profile.username,
+                    profileImage: cachedImages[profile.profilePicURL],
+                    userId: profile.userId
+                )
+            case .reels(let index):
+                let reelMap = Dictionary(uniqueKeysWithValues: profile.cachedReelItems.map { ($0.imageURL, $0) })
+                PostScrollView(
+                    mediaURLs: profile.cachedReelURLs,
+                    mediaItemsByURL: reelMap,
+                    cachedImages: cachedImages,
+                    initialIndex: index,
+                    username: profile.username,
+                    profileImage: cachedImages[profile.profilePicURL],
+                    userId: profile.userId
+                )
+            case .tagged(let index):
+                PostScrollView(
+                    mediaURLs: profile.cachedTaggedURLs,
+                    mediaItemsByURL: mediaItemsByURL,
+                    cachedImages: cachedImages,
+                    initialIndex: index,
+                    username: profile.username,
+                    profileImage: cachedImages[profile.profilePicURL],
+                    userId: profile.userId
+                )
+            }
         }
         .fullScreenCover(isPresented: $showFollowersList, onDismiss: {
             onFollowersListDismiss?()
@@ -3093,7 +3885,11 @@ struct InstagramProfileView: View {
         let absDx = abs(dx)
         let absDy = abs(dy)
 
-        let isHorizontal = absDx > absDy && absDx > 30
+        // Require a clearly horizontal gesture: horizontal travel must be
+        // at least 2.5× the vertical drift AND at least 60 pt in total.
+        // This prevents accidental tab switches during vertical scrolling where
+        // the finger drifts slightly sideways (e.g. dx=35/dy=25 no longer qualifies).
+        let isHorizontal = absDx > absDy * 2.5 && absDx > 60
         let isVertical   = absDy > absDx && absDy > 40
 
         guard isHorizontal else { return }
@@ -3136,57 +3932,93 @@ struct InstagramProfileView: View {
         }
     }
 
-    /// Inflates own following/followers from the real count up to realCount + transferOffset.
-    /// The profile stays untouched until the magician presses volume for phase 2.
+    private func applyPendingTransferDeflation() {
+        guard followingMagic.transferEnabled,
+              followingMagic.transferOffset > 0,
+              !followingMagic.isTransferCounting else { return }
+
+        let offset = followingMagic.transferOffset
+        let useFollowers = followingMagic.targetFollowers
+        let realCount = useFollowers ? profile.followerCount : profile.followingCount
+        let offsetMode = followingMagic.offsetMode(for: realCount)
+        let startCount = max(0, realCount - offset)
+        let text = formatMagicCount(startCount)
+
+        if useFollowers {
+            followerOverride = text
+            followingOverride = nil
+        } else {
+            followingOverride = text
+            followerOverride = nil
+        }
+
+        LogManager.shared.info(
+            "Counter own-inflate prepared @\(profile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) effectiveOffset:\(offset) mode:\(offsetMode) start:\(startCount) end:\(realCount)",
+            category: .profile
+        )
+    }
+
+    /// Inflates own following/followers from realCount - transferOffset up to the real count.
+    /// This makes phase 2 end on the verifiable real Instagram value.
     private func startTransferInflation() {
         let offset     = followingMagic.transferOffset
-        let realCount  = followingMagic.targetFollowers
+        let useFollowers = followingMagic.targetFollowers
+        let realCount  = useFollowers
             ? profile.followerCount
             : profile.followingCount
-        let stepSize   = realCount >= 10_000 ? 1_000 : 1
-        let visibleSteps = offset / max(1, stepSize)
+        let offsetMode = followingMagic.offsetMode(for: realCount)
+        let startCount = max(0, realCount - offset)
+        // Step size scales with the animation range so it always finishes in countdownDuration.
+        // K-mode minimum is 100 (= 0.1 K per visual update).
+        let range = max(1, realCount - startCount)
+        let minStep = realCount >= 10_000 ? 100 : 1
+        let stepSize = max(minStep, range / 200)
+        let visibleSteps = max(1, range / stepSize)
         let totalMs    = followingMagic.countdownDuration * 1000
         let intervalMs = max(16, totalMs / max(1, visibleSteps))
 
         followingMagic.isTransferCounting = true
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
-        var current = realCount
+        var current = startCount
+        LogManager.shared.info(
+            "Counter own-inflate started @\(profile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) effectiveOffset:\(offset) mode:\(offsetMode) start:\(startCount) end:\(realCount)",
+            category: .profile
+        )
 
         transferCountdownTimer = Timer.scheduledTimer(
             withTimeInterval: Double(intervalMs) / 1000.0,
             repeats: true
         ) { timer in
             current += stepSize
-            let text = self.formatMagicCount(current)
-            if self.followingMagic.targetFollowers {
+            let displayCurrent = min(current, realCount)
+            let text = self.formatMagicCount(displayCurrent)
+            if useFollowers {
                 self.followerOverride  = text
                 self.followingOverride = nil
             } else {
                 self.followingOverride = text
                 self.followerOverride  = nil
             }
-            if current >= realCount + offset {
+            if displayCurrent >= realCount {
                 timer.invalidate()
                 self.transferCountdownTimer = nil
-                let finalText = self.formatMagicCount(realCount + offset)
-                if self.followingMagic.targetFollowers {
-                    self.followerOverride  = finalText
-                    self.followingOverride = nil
-                } else {
-                    self.followingOverride = finalText
-                    self.followerOverride  = nil
-                }
+                self.followerOverride  = nil
+                self.followingOverride = nil
                 self.followingMagic.isTransferCounting = false
                 self.followingMagic.transferOffset = 0
                 VolumeButtonMonitor.shared.stopMonitoring()
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                print("🎩 [TRANSFER] Inflation complete — showing transferred count: \(finalText)")
+                LogManager.shared.info(
+                    "Counter own-inflate completed @\(self.profile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) effectiveOffset:\(offset) mode:\(offsetMode)",
+                    category: .profile
+                )
+                print("🎩 [TRANSFER] Inflation complete — back to real: \(self.formatMagicCount(realCount))")
             }
         }
     }
 
-    /// Formats a count for magic counter display, preserving K/M notation for large numbers.
+    /// Formats a count for magic counter display, matching StatView for 4-digit values.
     private func formatMagicCount(_ count: Int) -> String {
         if count >= 1_000_000 {
             let value = Double(count) / 1_000_000
@@ -3195,7 +4027,10 @@ struct InstagramProfileView: View {
             let value = Double(count) / 1_000
             return value == value.rounded() ? String(format: "%.0fK", value) : String(format: "%.1fK", value)
         }
-        return "\(count)"
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = Locale(identifier: "en_US")
+        return formatter.string(from: NSNumber(value: count)) ?? "\(count)"
     }
 
     // MARK: - Force Number Reveal
@@ -3210,6 +4045,17 @@ struct InstagramProfileView: View {
         // Signal operation start — blocks pull-to-refresh while running
         await MainActor.run { instagram.isRevealOperationActive = true }
         defer { Task { await MainActor.run { instagram.isRevealOperationActive = false } } }
+
+        // BACKGROUND PROTECTION: request extra execution time from iOS so the
+        // full reveal completes even if the user minimises the app mid-reveal.
+        // iOS grants ~30s for a background task; reveals take ~5-25s for most
+        // sets (anti-bot delays + API calls), so this is sufficient.
+        let bgTask = await MainActor.run {
+            UIApplication.shared.beginBackgroundTask(withName: "RevealDigits") { }
+        }
+        defer {
+            Task { await MainActor.run { UIApplication.shared.endBackgroundTask(bgTask) } }
+        }
 
         // Secondary guard: block if upload became active between button tap and Task execution
         if UploadManager.shared.isActive {
@@ -3282,7 +4128,8 @@ struct InstagramProfileView: View {
                 let unarchived = try await instagram.unarchivePhoto(mediaId: mediaId, skipPreCheck: true)
                 if unarchived {
                     dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId,
-                                            isArchived: false, uploadStatus: .completed, errorMessage: nil)
+                                            isArchived: false, uploadStatus: .completed, errorMessage: nil,
+                                            uploadDate: photo.uploadDate)
                     print("✅ [FORCE#] Digit \(digit) bank \(i + 1): unarchived (ID: \(mediaId))")
                     LogManager.shared.success("Force reveal digit \(digit) bank \(i + 1) (ID: \(mediaId))", category: .general)
                     revealedIds.append(mediaId)
@@ -3338,6 +4185,13 @@ struct InstagramProfileView: View {
         await MainActor.run { instagram.isRevealOperationActive = true }
         defer { Task { await MainActor.run { instagram.isRevealOperationActive = false } } }
 
+        let bgTask = await MainActor.run {
+            UIApplication.shared.beginBackgroundTask(withName: "RevealCustom") { }
+        }
+        defer {
+            Task { await MainActor.run { UIApplication.shared.endBackgroundTask(bgTask) } }
+        }
+
         if UploadManager.shared.isActive {
             print("⚠️ [CUSTOM] Reveal aborted: upload became active")
             return
@@ -3384,7 +4238,8 @@ struct InstagramProfileView: View {
             let unarchived = try await instagram.unarchivePhoto(mediaId: mediaId, skipPreCheck: true)
             if unarchived {
                 dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId,
-                                        isArchived: false, uploadStatus: .completed, errorMessage: nil)
+                                        isArchived: false, uploadStatus: .completed, errorMessage: nil,
+                                        uploadDate: photo.uploadDate)
                 print("✅ [CUSTOM] Slot \(slot) unarchived (ID: \(mediaId))")
                 LogManager.shared.success("Custom reveal slot \(slot) ok (ID: \(mediaId))", category: .general)
 
@@ -3416,6 +4271,7 @@ struct InstagramProfileView: View {
     /// Decode a 2- or 3-digit buffer into a card value (1–13) and suit (1–4).
     ///
     /// - 2 digits [v, s]      → value = v  (1=A … 9=9),   suit = s
+    /// - 3 digits [0, v, s]   → value = v  (leading-zero alias, e.g. 061 = 6♠)
     /// - 3 digits [t, u, s]   → value = t×10+u (10, 11=J, 12=Q, 13=K), suit = s
     ///
     /// Returns `nil` for invalid input (wrong digit count, out-of-range value/suit).
@@ -3426,8 +4282,10 @@ struct InstagramProfileView: View {
             guard (1...9).contains(value), (1...4).contains(suit) else { return nil }
             return (value, suit)
         case 3:
-            let value = digits[0] * 10 + digits[1], suit = digits[2]
-            guard (10...13).contains(value), (1...4).contains(suit) else { return nil }
+            let value = digits[0] == 0 ? digits[1] : digits[0] * 10 + digits[1]
+            let suit = digits[2]
+            let validValue = digits[0] == 0 ? (1...9).contains(value) : (10...13).contains(value)
+            guard validValue, (1...4).contains(suit) else { return nil }
             return (value, suit)
         default:
             return nil
@@ -3459,6 +4317,13 @@ struct InstagramProfileView: View {
 
         await MainActor.run { instagram.isRevealOperationActive = true }
         defer { Task { await MainActor.run { instagram.isRevealOperationActive = false } } }
+
+        let bgTask = await MainActor.run {
+            UIApplication.shared.beginBackgroundTask(withName: "RevealCard") { }
+        }
+        defer {
+            Task { await MainActor.run { UIApplication.shared.endBackgroundTask(bgTask) } }
+        }
 
         if UploadManager.shared.isActive {
             print("⚠️ [CARD] Reveal aborted: upload became active")
@@ -3504,7 +4369,8 @@ struct InstagramProfileView: View {
             let unarchived = try await instagram.unarchivePhoto(mediaId: mediaId, skipPreCheck: true)
             if unarchived {
                 dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId,
-                                        isArchived: false, uploadStatus: .completed, errorMessage: nil)
+                                        isArchived: false, uploadStatus: .completed, errorMessage: nil,
+                                        uploadDate: photo.uploadDate)
                 print("✅ [CARD] \(symbol) unarchived (ID: \(mediaId))")
                 LogManager.shared.success("Card reveal \(symbol) ok (ID: \(mediaId))", category: .general)
 
@@ -3548,6 +4414,15 @@ struct InstagramProfileView: View {
 
         await MainActor.run { instagram.isRevealOperationActive = true }
         defer { Task { await MainActor.run { instagram.isRevealOperationActive = false } } }
+
+        // BACKGROUND PROTECTION: ensure all API calls complete even if the
+        // user minimises mid-reveal (e.g. a 10-letter word can take 20-30s).
+        let bgTask = await MainActor.run {
+            UIApplication.shared.beginBackgroundTask(withName: "RevealLetters") { }
+        }
+        defer {
+            Task { await MainActor.run { UIApplication.shared.endBackgroundTask(bgTask) } }
+        }
 
         print("📷 [OCR-PP] ═══ Revealing '\(word)' (\(letters.count) letters) from '\(set.name)'")
         print("📷 [OCR-PP] Banks: \(sortedBanks.map { "pos\($0.position)=\($0.name)" })")
@@ -3672,6 +4547,7 @@ struct InstagramProfileView: View {
         if !revealedIds.isEmpty {
             UserDefaults.standard.set(set.id.uuidString, forKey: "perf_lastRevealedSetId")
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "perf_lastRevealedSetTimestamp")
+            InstagramSafetyGate.shared.markPostReveal(mediaIds: revealedIds)
             // Activate orange ring on the profile avatar — persists until next Performance session
             await MainActor.run { postPredRevealRingActive = true }
         }
@@ -3732,13 +4608,21 @@ struct InstagramProfileView: View {
 
 }
 
-// MARK: - Reels Grid View (4:5 aspect with play icon overlay)
+// MARK: - Reels Grid View (4:5 aspect with play icon overlay — thumbnails only)
 
 struct ReelsGridView: View {
     let reelURLs: [String]
     let cachedImages: [String: UIImage]
+    /// Full reel items kept so we know the videoURL when the viewer opens.
+    /// Grid cells themselves never play video — Instagram shows only thumbnails
+    /// on the profile grid, and playing 12+ AVPlayers at once saturates iOS
+    /// AVFoundation resources (causes black detail views and degraded
+    /// performance everywhere else).
+    var reelItems: [InstagramMediaItem] = []
     /// 12 cells = 4 rows, so digit 0 (row 4+) is reachable
     var minCells: Int = 12
+    /// Called when the magician taps a reel thumbnail. Returns the tapped index.
+    var onTapIndex: ((Int) -> Void)? = nil
 
     let columns = [
         GridItem(.flexible(), spacing: 1),
@@ -3749,7 +4633,7 @@ struct ReelsGridView: View {
     var body: some View {
         let placeholderCount = max(0, minCells - reelURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
-            ForEach(reelURLs, id: \.self) { url in
+            ForEach(Array(reelURLs.enumerated()), id: \.offset) { index, url in
                 Color.clear
                     .aspectRatio(1, contentMode: .fit)
                     .overlay(
@@ -3767,6 +4651,7 @@ struct ReelsGridView: View {
                         }
                     )
                     .clipped()
+                    .onTapGesture { onTapIndex?(index) }
             }
             // Placeholder cells
             if placeholderCount > 0 {
@@ -4302,16 +5187,28 @@ struct PostScrollView: View {
     let profileImage: UIImage?
     let userId: String
     var forcePostURL: String? = nil
+    var forcePostMediaId: String? = nil
     var forcedThumbnail: UIImage? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var resolvedItems: [String: InstagramMediaItem] = [:]
     @State private var hasForceActivated: Bool = false
 
-    private var isForceActive: Bool { forcePostURL != nil }
-    private var forcedPostIndex: Int {
-        guard let url = forcePostURL else { return 0 }
-        return mediaURLs.firstIndex(of: url) ?? 0
+    private var forcedPostIndex: Int? {
+        mediaURLs.firstIndex(where: isForcedPostURL)
+    }
+
+    private var isForceActive: Bool {
+        forcedPostIndex != nil
+    }
+
+    private func isForcedPostURL(_ url: String) -> Bool {
+        if let mediaId = forcePostMediaId, !mediaId.isEmpty {
+            if mediaItemsByURL[url]?.mediaId == mediaId { return true }
+            if url.contains(mediaId) { return true }
+        }
+        if let forcePostURL, url == forcePostURL { return true }
+        return false
     }
 
     private func postID(_ index: Int) -> String { "post_\(index)" }
@@ -4321,9 +5218,11 @@ struct PostScrollView: View {
             ScrollViewReader { proxy in
                 ZStack {
                     ScrollView(.vertical, showsIndicators: false) {
-                        // VStack (not Lazy) ensures all cards are in the view hierarchy
-                        // so the forced card's exact frame is always measurable.
-                        VStack(spacing: 0) {
+                        // LazyVStack so video cells (AVPlayer-backed) only mount when
+                        // they are about to appear on screen. The Force Post interceptor
+                        // already has a fallback (forcedIndex × avg row height) for the
+                        // case where the forced card hasn't been materialised yet.
+                        LazyVStack(spacing: 0) {
                             ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
                                 PostCardView(
                                     url: url,
@@ -4333,13 +5232,13 @@ struct PostScrollView: View {
                                     profileImage: profileImage
                                 )
                                 .id(postID(index))
-                                .accessibilityIdentifier(url == forcePostURL ? "forced_post_card" : "")
+                                .accessibilityIdentifier(isForcedPostURL(url) ? "forced_post_card" : "")
                                 Divider().background(Color(white: 0.9))
                             }
                         }
                     }
 
-                    if isForceActive {
+                    if isForceActive, let forcedPostIndex {
                         ScrollViewInterceptor(
                             forcedIndex: forcedPostIndex,
                             totalPostCount: mediaURLs.count,
@@ -4517,6 +5416,26 @@ private struct PostCardView: View {
                     .tabViewStyle(.page(indexDisplayMode: .never))
                 )
                 .clipped()
+        } else if let item = item,
+                  item.mediaType == .video,
+                  let videoURL = item.videoURL,
+                  !videoURL.isEmpty {
+            // Inline video playback for feed-style posts/reels. The poster is
+            // the cached thumbnail so we never see a black flash while AVPlayer
+            // loads its first frame. Plays with sound like the real Instagram
+            // feed; LazyVStack ensures the player is destroyed once the cell
+            // scrolls off screen.
+            Color.clear
+                .aspectRatio(4.0/5.0, contentMode: .fit)
+                .overlay(
+                    GridVideoPlayer(
+                        videoURL: videoURL,
+                        muted: false,
+                        posterImage: cachedImages[url]
+                    )
+                )
+                .clipped()
+                .frame(maxWidth: .infinity)
         } else if let image = cachedImages[url] {
             Image(uiImage: image)
                 .resizable()
@@ -4606,6 +5525,10 @@ struct InstagramBottomBar: View {
     /// visual confirmation that Post Prediction revealed a photo on Instagram.
     var showRevealRing: Bool = false
 
+    /// Reactive budget observer — drives the red-dot visibility on the paper plane.
+    /// Shared singleton so the dot updates in real time in both Performance and Explore.
+    @ObservedObject private var instagram = InstagramService.shared
+
     /// Instagram-style orange gradient used for the "story ring" effect.
     private var storyRingGradient: AngularGradient {
         AngularGradient(
@@ -4644,10 +5567,15 @@ struct InstagramBottomBar: View {
                 Button(action: onMessagesPress) {
                     ZStack(alignment: .topTrailing) {
                         IGIcon(asset: "instagram_share", fallback: "paperplane", size: 24)
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 7, height: 7)
-                            .offset(x: 6, y: -3)
+                        // Red dot: only visible when API budget is critically low (<8 remaining).
+                        // Signals to the magician that a new profile visit would be blocked.
+                        if instagram.checkRateLimit().remaining < 8 {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 7, height: 7)
+                                .overlay(Circle().stroke(Color.black, lineWidth: 1))
+                                .offset(x: 6, y: -3)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                 }

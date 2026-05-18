@@ -13,6 +13,10 @@ struct HomeView: View {
     @State private var showingExplore = false
     @State private var showingChallengeAlert = false
     @AppStorage("launchDirectlyToPerformance") private var launchDirectlyToPerformance = false
+    /// Set to true once the user has read (and acknowledged) the Limits & Safety guide.
+    /// Existing users with a cached profile are auto-unlocked on first launch after this update.
+    @AppStorage("limitsGuideRead") private var limitsGuideRead: Bool = false
+    @State private var showLimitsGate = false
 
     // Pre-performance visible photos check
     @State private var showVisiblePhotosAlert = false
@@ -28,6 +32,11 @@ struct HomeView: View {
             get: { selectedTab },
             set: { newValue in
                 if newValue == 0 && instagram.isLoggedIn {
+                    // Gate: require Limits & Safety to be read before first Performance entry
+                    if !limitsGuideRead {
+                        showLimitsGate = true
+                        return  // block the tab switch until guide is acknowledged
+                    }
                     let visible = visiblePhotosInActiveSets()
                     if !visible.isEmpty {
                         visiblePhotosToArchive = visible
@@ -40,7 +49,7 @@ struct HomeView: View {
             }
         )
     }
-
+    
     var body: some View {
         TabView(selection: tabBinding) {
             // Performance Tab - MUST stay light (Instagram replica)
@@ -107,32 +116,77 @@ struct HomeView: View {
             updateTabBarAppearance(forTab: 0)
         }
         .onAppear {
+            // Auto-unlock the Limits gate for users who already have a cached profile
+            // (i.e. experienced users who had the app before this feature was added).
+            if !limitsGuideRead && instagram.isLoggedIn
+                && ProfileCacheService.shared.loadProfile() != nil {
+                limitsGuideRead = true
+            }
+
             if launchDirectlyToPerformance && instagram.isLoggedIn {
-                let visible = visiblePhotosInActiveSets()
-                if !visible.isEmpty {
-                    visiblePhotosToArchive = visible
-                    showVisiblePhotosAlert = true
+                if !limitsGuideRead {
+                    showLimitsGate = true
                 } else {
-                    selectedTab = 0
+                    let visible = visiblePhotosInActiveSets()
+                    if !visible.isEmpty {
+                        visiblePhotosToArchive = visible
+                        showVisiblePhotosAlert = true
+                    } else {
+                        selectedTab = 0
+                    }
                 }
             }
             updateTabBarAppearance(forTab: selectedTab)
             // Clean up any stuck upload state (e.g. deleted active set from infinite-loop bug)
             UploadManager.shared.clearStuckState()
         }
+        .fullScreenCover(isPresented: $showLimitsGate) {
+            LimitsHelpView(
+                showContinueButton: true,
+                onContinue: {
+                    limitsGuideRead = true
+                    showLimitsGate = false
+                    // After acknowledging, proceed to Performance (checking visible photos first)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        let visible = visiblePhotosInActiveSets()
+                        if !visible.isEmpty {
+                            visiblePhotosToArchive = visible
+                            showVisiblePhotosAlert = true
+                        } else {
+                            selectedTab = 0
+                            updateTabBarAppearance(forTab: 0)
+                        }
+                    }
+                }
+            )
+        }
         .alert("Visible Photos Detected", isPresented: $showVisiblePhotosAlert) {
             Button("Continue Anyway") {
                 selectedTab = 0
                 updateTabBarAppearance(forTab: 0)
             }
-            Button("Verify & Archive") {
-                showArchiveProgressSheet = true
-                Task { await archiveVisiblePhotosAndEnter() }
+            // Disable "Verify & Archive" while post-reveal protection is active —
+            // the photos were just revealed for a trick and archiving them now
+            // would fire during the SafetyGate's hold window, which gets ignored
+            // by archivePhoto() and would silently leave photos public.
+            if InstagramSafetyGate.shared.postRevealSecondsRemaining == 0 {
+                Button("Verify & Archive") {
+                    showArchiveProgressSheet = true
+                    Task { await archiveVisiblePhotosAndEnter() }
+                }
             }
             Button("Cancel", role: .cancel) { }
         } message: {
             let sets = activeSetNames()
-            Text("\(visiblePhotosToArchive.count) photo(s) from your active sets are still visible on Instagram.\n\nActive sets: \(sets)\n\nArchive them before performing?")
+            let protectedSecs = InstagramSafetyGate.shared.postRevealSecondsRemaining
+            if protectedSecs > 0 {
+                let m = protectedSecs / 60
+                let s = protectedSecs % 60
+                let countdown = m > 0 ? "\(m)m \(s)s" : "\(s)s"
+                Text("\(visiblePhotosToArchive.count) photo(s) from your active sets are still visible — they were just revealed.\n\nPost-reveal protection active: \(countdown) remaining before archiving is safe.\n\nYou can continue to Performance now and archive later from Sets.")
+            } else {
+                Text("\(visiblePhotosToArchive.count) photo(s) from your active sets are still visible on Instagram.\n\nActive sets: \(sets)\n\nArchive them before performing?")
+            }
         }
         .sheet(isPresented: $showArchiveProgressSheet) {
             archiveProgressView
@@ -196,6 +250,15 @@ struct HomeView: View {
 
         for (i, photo) in photos.enumerated() {
             guard let mediaId = photo.mediaId else { continue }
+
+            // Skip photos still under post-reveal protection — archiving them now
+            // would be inside the SafetyGate hold window and would risk a bot signal.
+            if InstagramSafetyGate.shared.isMediaPostRevealProtected(mediaId: mediaId) {
+                print("⏭️ [PRE-PERF] Skipping \(mediaId) — post-reveal protected")
+                archiveProgress = (i + 1, photos.count)
+                continue
+            }
+
             do {
                 let archived = try await InstagramService.shared.archivePhoto(mediaId: mediaId, skipPreCheck: false)
                 if archived {
@@ -359,18 +422,18 @@ struct SetsListView: View {
                     if hasPendingPrePerformanceActions {
                         pendingArchiveBanner
                             .padding(.horizontal, VaultTheme.Spacing.lg)
-                    }
-
-                    if dataManager.sets.isEmpty {
-                        EmptyStateView(
-                            icon: "square.stack.3d.up.slash.fill",
-                            title: "No Sets Yet",
-                            message: "Create your first photo set to get started with magic performances",
-                            actionTitle: "Create Set",
-                            action: { showingCreateSet = true }
-                        )
+            }
+            
+            if dataManager.sets.isEmpty {
+                EmptyStateView(
+                    icon: "square.stack.3d.up.slash.fill",
+                    title: "No Sets Yet",
+                    message: "Create your first photo set to get started with magic performances",
+                    actionTitle: "Create Set",
+                    action: { showingCreateSet = true }
+                )
                         .padding(.top, 40)
-                    } else {
+            } else {
                         ForEach(dataManager.sets) { set in
                             NavigationLink(destination: SetDetailView(set: set)) {
                                 SetRowView(
@@ -389,9 +452,9 @@ struct SetsListView: View {
                             }
                             .buttonStyle(.plain)
                             .padding(.horizontal, VaultTheme.Spacing.lg)
-                        }
+                                    }
                         .padding(.bottom, VaultTheme.Spacing.lg)
-                    }
+                                }
                 }
             }
         }
@@ -493,7 +556,7 @@ struct SetsListView: View {
                 .stroke(Color.orange.opacity(0.35), lineWidth: 1)
         )
     }
-
+    
     private func deleteSets(at offsets: IndexSet) {
         for index in offsets {
             let set = dataManager.sets[index]
@@ -510,7 +573,7 @@ struct SetRowView: View {
     var onRename: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
-
+    
     // Per-type accent colors
     private var typeAccent: Color {
         switch set.type {
@@ -520,7 +583,7 @@ struct SetRowView: View {
         case .card:   return Color(hex: "16A34A")  // green
         }
     }
-
+    
     private var typeGradient: [Color] {
         switch set.type {
         case .word:   return [Color(hex: "7C3AED"), Color(hex: "6D28D9")]
@@ -548,7 +611,7 @@ struct SetRowView: View {
         case .error:     return .error
         }
     }
-
+    
     var body: some View {
         let isActive = activeSetSettings.isActive(set.id, type: set.type)
 
@@ -562,20 +625,20 @@ struct SetRowView: View {
                     .padding(.vertical, 10)
             }
 
-            VaultCard {
+        VaultCard {
                 VStack(spacing: 0) {
-                    HStack(spacing: VaultTheme.Spacing.md) {
+            HStack(spacing: VaultTheme.Spacing.md) {
                         // Type icon
                         IconBadge(icon: typeIcon, colors: typeGradient, size: 52)
 
                         VStack(alignment: .leading, spacing: 5) {
                             // Name row
                             HStack(alignment: .center, spacing: 6) {
-                                Text(set.name)
-                                    .font(VaultTheme.Typography.title())
-                                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                                    .lineLimit(1)
-
+                        Text(set.name)
+                            .font(VaultTheme.Typography.title())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                            .lineLimit(1)
+                        
                                 if isActive {
                                     Text("ACTIVE")
                                         .font(.system(size: 9, weight: .black))
@@ -586,9 +649,9 @@ struct SetRowView: View {
                                         .cornerRadius(4)
                                 }
 
-                                Spacer()
-
-                                if isLoggedIn {
+                        Spacer()
+                        
+                        if isLoggedIn {
                                     StatusBadge(text: set.status.label, style: statusBadgeStyle)
                                 }
 
@@ -603,7 +666,7 @@ struct SetRowView: View {
                                 } label: {
                                     Image(systemName: "ellipsis")
                                         .font(.system(size: 15, weight: .semibold))
-                                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
                                         .frame(width: 30, height: 30)
                                         .contentShape(Rectangle())
                                 }
@@ -619,17 +682,17 @@ struct SetRowView: View {
                                 Text("·").foregroundColor(VaultTheme.Colors.textTertiary)
                                 Label("\(set.totalPhotos) photos",
                                       systemImage: "photo.stack.fill")
-                            }
-                            .font(VaultTheme.Typography.captionSmall())
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-
+                        }
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        
                             // Completed date
                             if isLoggedIn && set.status == .completed,
                                let completedDate = set.completedAt {
                                 Label(completedDate.formatted(date: .abbreviated, time: .omitted),
                                       systemImage: "calendar")
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
                                     .padding(.top, 1)
                             }
                         }
@@ -642,7 +705,7 @@ struct SetRowView: View {
                                 progress: set.totalPhotos > 0
                                     ? Double(set.uploadedPhotos) / Double(set.totalPhotos) : 0,
                                 height: 5,
-                                gradient: set.status == .paused
+                                gradient: set.status == .paused 
                                     ? LinearGradient(colors: [VaultTheme.Colors.textSecondary],
                                                      startPoint: .leading, endPoint: .trailing)
                                     : VaultTheme.Colors.gradientWarning
@@ -656,8 +719,8 @@ struct SetRowView: View {
                                     .foregroundColor(set.status == .paused
                                         ? VaultTheme.Colors.textSecondary : VaultTheme.Colors.warning)
                             }
-                            .font(VaultTheme.Typography.captionSmall())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
                         .padding(.top, 10)
                     }
@@ -791,7 +854,7 @@ struct SettingsView: View {
     // Hidden Login (easter egg)
     @State private var showingLogin = false
     @State private var developerMode = false
-
+    
     // Other Settings — Fake Home Screen & launch behavior
     @AppStorage("launchDirectlyToPerformance") private var launchDirectlyToPerformance = false
     @ObservedObject private var illusionService = HomeScreenIllusionService.shared
@@ -899,15 +962,15 @@ struct SettingsView: View {
                         .foregroundColor(.orange)
                     Text("Archive pending items before performance")
                         .font(VaultTheme.Typography.bodyBold())
-                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
                 }
                 Text("Detected \(visibleSetPhotosCount) visible photo(s) in \(setsWithVisiblePhotosCount) set(s). Re-verify and archive in Sets before opening Performance.")
-                    .font(VaultTheme.Typography.caption())
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if hasAmnesiaPendingReset {
                     Text("Amnesia Carousel is revealed. Open Amnesia Carousel and press Reset before the next show.")
-                        .font(VaultTheme.Typography.caption())
+                                        .font(VaultTheme.Typography.caption())
                         .foregroundColor(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -932,6 +995,10 @@ struct SettingsView: View {
                 Text("Version 1.0.0")
                     .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .onTapGesture {
+                        withAnimation { developerMode = true }
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    }
                     .onLongPressGesture(minimumDuration: 2.0) {
                         withAnimation { developerMode = true }
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -975,17 +1042,17 @@ struct SettingsView: View {
                             if !fullName.isEmpty {
                                 Text(fullName)
                                     .font(VaultTheme.Typography.bodyBold())
-                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
                                 Text("@\(instagram.session.username)")
                                     .font(VaultTheme.Typography.caption())
                                     .foregroundColor(VaultTheme.Colors.textSecondary)
-                            } else {
+                                    } else {
                                 Text("@\(instagram.session.username)")
                                     .font(VaultTheme.Typography.bodyBold())
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                             }
                             Text("Instagram account connected")
-                                .font(VaultTheme.Typography.caption())
+                                            .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
                         Spacer()
@@ -1071,7 +1138,7 @@ struct SettingsView: View {
                         modernRow(icon: "bolt.horizontal.fill", iconColor: Self.colorIntegration,
                                   title: "Magic API",
                                   trailing: Text("Inject & Custom APIs")
-                                      .font(VaultTheme.Typography.caption())
+                                    .font(VaultTheme.Typography.caption())
                                       .foregroundColor(VaultTheme.Colors.textSecondary))
                     }
                     .buttonStyle(.plain)
@@ -1108,14 +1175,14 @@ struct SettingsView: View {
             BackupCard(backup: backup)
             modernCard {
                 VStack(spacing: 0) {
-                    HStack {
+                            HStack {
                         Text("Version")
-                            .font(VaultTheme.Typography.body())
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
-                        Spacer()
+                                    .font(VaultTheme.Typography.body())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Spacer()
                         Text("1.0.0 (1)")
-                            .font(VaultTheme.Typography.body())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    .font(VaultTheme.Typography.body())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
                             .onLongPressGesture(minimumDuration: 2.0) {
                                 withAnimation { developerMode = true }
                                 UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -1146,9 +1213,9 @@ struct SettingsView: View {
                             .frame(width: 80, height: 80).clipShape(Circle())
                             .overlay(Circle().stroke(VaultTheme.Colors.primary, lineWidth: 2))
                         Text("Ready to upload").font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
-                    }
-                    Spacer()
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                }
+                                Spacer()
                 }
             }
             if selectedImageData != nil {
@@ -1347,10 +1414,10 @@ struct SettingsView: View {
             // Expandable content
             if isExpanded.wrappedValue {
                 Divider().background(Color(hex: "#2C2C2E"))
-                VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
                     content()
                 }
-                .padding(VaultTheme.Spacing.md)
+                                        .padding(VaultTheme.Spacing.md)
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .move(edge: .top)),
                     removal: .opacity.combined(with: .move(edge: .top))
@@ -1365,7 +1432,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func modernCardHeader(icon: String, iconColor: Color, title: LocalizedStringKey) -> some View {
-        HStack(spacing: VaultTheme.Spacing.sm) {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7).fill(iconColor.opacity(0.15)).frame(width: 30, height: 30)
                 Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundColor(iconColor)
@@ -1380,7 +1447,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func modernToggleRow(icon: String, iconColor: Color, title: LocalizedStringKey, detail: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: VaultTheme.Spacing.sm) {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6).fill(iconColor.opacity(0.15)).frame(width: 28, height: 28)
                 Image(systemName: icon).font(.system(size: 13)).foregroundColor(iconColor)
@@ -1396,7 +1463,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func modernRow<T: View>(icon: String, iconColor: Color, title: LocalizedStringKey, trailing: T) -> some View {
-        HStack(spacing: VaultTheme.Spacing.sm) {
+                                    HStack(spacing: VaultTheme.Spacing.sm) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6).fill(iconColor.opacity(0.15)).frame(width: 28, height: 28)
                 Image(systemName: icon).font(.system(size: 13)).foregroundColor(iconColor)
@@ -1431,7 +1498,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func modernStatusRow(_ message: String, color: Color, icon: String) -> some View {
-        HStack(spacing: VaultTheme.Spacing.sm) {
+                            HStack(spacing: VaultTheme.Spacing.sm) {
             Image(systemName: icon).foregroundColor(color)
             Text(message).font(VaultTheme.Typography.caption()).foregroundColor(color)
         }
@@ -1448,13 +1515,13 @@ struct SettingsView: View {
     ) -> some View {
         let currentMode = AutoInputMode(rawValue: topMode.wrappedValue) ?? .off
 
-        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                            VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
             Text("Auto Input")
-                .font(VaultTheme.Typography.bodyBold())
-                .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
             Text("Polls every 2 s while Performance is active. Updates automatically when a new value arrives — no need to reopen the app.")
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textSecondary)
+                                                    .font(VaultTheme.Typography.caption())
+                                                    .foregroundColor(VaultTheme.Colors.textSecondary)
 
             // ── Pill row ────────────────────────────────────────────
             HStack(spacing: 8) {
@@ -1534,7 +1601,7 @@ struct SettingsView: View {
                             .frame(width: 20)
                         Text("Language")
                             .font(VaultTheme.Typography.body())
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                                            .foregroundColor(VaultTheme.Colors.textPrimary)
                         Spacer()
                         Menu {
                             ForEach(OCRConfiguration.supportedLanguages, id: \.code) { lang in
@@ -1564,20 +1631,20 @@ struct SettingsView: View {
                     Divider().background(Color(hex: "#3A3A3C"))
 
                     // Camera picker
-                    HStack {
+                                HStack {
                         Image(systemName: ocrCamera == 0 ? "camera.fill" : "camera.rotate.fill")
                             .font(.system(size: 13))
                             .foregroundColor(Self.colorProfile)
                             .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Camera")
-                                .font(VaultTheme.Typography.body())
-                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                                        .font(VaultTheme.Typography.body())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
                             Text(ocrCamera == 0 ? "Rear camera" as LocalizedStringKey : "Front camera")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                         }
-                        Spacer()
+                                    Spacer()
                         HStack(spacing: 6) {
                             ForEach([(0, "Rear"), (1, "Front")], id: \.0) { val, label in
                                 let sel = ocrCamera == val
@@ -1601,7 +1668,7 @@ struct SettingsView: View {
                             .font(.system(size: 12))
                             .foregroundColor(VaultTheme.Colors.textSecondary)
                         Text("Camera activates silently in background when Performance opens. Vibrates once on recognition.")
-                            .font(VaultTheme.Typography.caption())
+                                            .font(VaultTheme.Typography.caption())
                             .foregroundColor(VaultTheme.Colors.textSecondary)
                     }
                     .padding(8)
@@ -1665,21 +1732,29 @@ struct SettingsView: View {
             }
         }
     }
-
+    
     private func fetchLatestFollower() {
+        // ANTI-BOT: Defer this manual fetch when any heavy operation is in
+        // flight (upload, sync/archive, reveal). Surfacing it as part of a
+        // burst is exactly what got us a 401 last time. The user sees a brief
+        // alert instead of failing silently.
+        if instagram.isHeavyOperationActive {
+            uploadMessage = "An upload or sync is in progress. Try again in a moment."
+            showingUploadAlert = true
+            LogManager.shared.warning("Fetch latest follower deferred — heavy op active", category: .general)
+            return
+        }
         isLoadingFollower = true
-        
+
         Task {
             do {
-                // Step 1: Get latest follower
                 let follower = try await instagram.getLatestFollower()
-                
-                // Step 2: Get full info if we have a follower
+
                 var fullInfo: [String: Any]?
                 if let follower = follower {
                     fullInfo = try await instagram.getUserFullInfo(userId: follower.userId)
                 }
-                
+
                 await MainActor.run {
                     latestFollower = follower
                     followerFullInfo = fullInfo
@@ -1804,7 +1879,7 @@ struct SettingsView: View {
                 .cornerRadius(VaultTheme.CornerRadius.sm)
         }
     }
-
+    
     // MARK: - Profile Picture Upload Helpers
     
     private func canUpload() -> Bool {
@@ -1904,7 +1979,7 @@ struct SettingsView: View {
             }
         }
     }
-
+    
     // MARK: - Profile Picture Upload
     
     private func uploadProfilePicture() {
@@ -2000,7 +2075,7 @@ private struct AutoInputTemplateFieldView: View {
                 }
             }
 
-            // Input row: text field + insert-token button
+            // Input row: text field + insert-token buttons
             HStack(spacing: 8) {
                 TextField("e.g. My prediction is {word}", text: $template)
                     .font(VaultTheme.Typography.body())
@@ -2013,6 +2088,7 @@ private struct AutoInputTemplateFieldView: View {
                         if val.count > limit { template = String(val.prefix(limit)) }
                     }
 
+                // Insert {word} token
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                         template += "{word}"
@@ -2028,6 +2104,20 @@ private struct AutoInputTemplateFieldView: View {
                     .background(accentColor)
                     .cornerRadius(8)
                 }
+
+                // Insert \n line-break escape
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        template += "\\n"
+                    }
+                } label: {
+                    Image(systemName: "return")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color(hex: "#3A3A3C"))
+                        .cornerRadius(8)
+                }
             }
 
             // Live preview / warning
@@ -2036,10 +2126,11 @@ private struct AutoInputTemplateFieldView: View {
                     Image(systemName: "eye.fill")
                         .font(.system(size: 10))
                         .foregroundColor(VaultTheme.Colors.textSecondary)
-                    Text(previewText)
+                    // Replace \n escapes with real newlines in the preview
+                    Text(previewText.replacingOccurrences(of: "\\n", with: "\n"))
                         .font(.system(size: 12))
                         .foregroundColor(VaultTheme.Colors.textSecondary)
-                        .lineLimit(2)
+                        .lineLimit(4)
                     Spacer()
                     Text("\(template.count)/\(limit)")
                         .font(.system(size: 10))
@@ -2118,9 +2209,9 @@ struct FollowerDataSheet: View {
                             let followers = InstagramService.robustInt(info["follower_count"])
                             let following = InstagramService.robustInt(info["following_count"])
                             HStack(spacing: 20) {
-                                StatBadge(label: "Posts", value: "\(posts)")
-                                StatBadge(label: "Followers", value: formatCount(followers))
-                                StatBadge(label: "Following", value: formatCount(following))
+                                    StatBadge(label: "Posts", value: "\(posts)")
+                                    StatBadge(label: "Followers", value: formatCount(followers))
+                                    StatBadge(label: "Following", value: formatCount(following))
                             }
                             .padding(.horizontal)
                         }
@@ -2393,17 +2484,17 @@ struct ForcePostSettingsCard: View {
             HStack {
                 Text("Enabled")
                     .font(VaultTheme.Typography.body())
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                Spacer()
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
-            }
+                }
 
             Text("Pre-select a post from any profile. When visiting that profile in Performance, the scroll always stops on the forced image. Add multiple profiles to force different posts per profile.")
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
 
-            if settings.isEnabled {
-                Divider()
+                if settings.isEnabled {
+                    Divider()
 
                 // List of existing entries
                 ForEach(settings.entries) { entry in
@@ -2438,17 +2529,17 @@ struct ForcePostSettingsCard: View {
 
     @ViewBuilder
     private func entryRow(entry: ForcedPostEntry) -> some View {
-        HStack(spacing: VaultTheme.Spacing.md) {
+                        HStack(spacing: VaultTheme.Spacing.md) {
             // Thumbnail
             if let img = settings.thumbnail(forUserId: entry.userId) {
-                Image(uiImage: img)
-                    .resizable()
+                                    Image(uiImage: img)
+                                        .resizable()
                     .aspectRatio(1, contentMode: .fill)
                     .frame(width: 54, height: 54)
-                    .clipped()
-                    .cornerRadius(8)
-            } else {
-                RoundedRectangle(cornerRadius: 8)
+                                        .clipped()
+                                        .cornerRadius(8)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8)
                     .fill(Color.gray.opacity(0.2))
                     .frame(width: 54, height: 54)
                     .overlay(ProgressView().scaleEffect(0.6))
@@ -2456,14 +2547,14 @@ struct ForcePostSettingsCard: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("@\(entry.username)")
-                    .font(VaultTheme.Typography.bodyBold())
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
                 Text("ID: \(String(entry.mediaId.prefix(14)))…")
-                    .font(.system(size: 10).monospaced())
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-            }
+                                    .font(.system(size: 10).monospaced())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
 
-            Spacer()
+                            Spacer()
 
             VStack(spacing: 6) {
                 Button(action: {
@@ -2472,16 +2563,16 @@ struct ForcePostSettingsCard: View {
                 }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 14))
-                }
-                .buttonStyle(.bordered)
+                            }
+                            .buttonStyle(.bordered)
 
                 Button(role: .destructive, action: { settings.clearEntry(userId: entry.userId) }) {
                     Image(systemName: "trash")
                         .font(.system(size: 14))
-                }
-                .buttonStyle(.bordered)
-                .tint(.red)
-            }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.red)
+                        }
         }
     }
 }
@@ -2522,18 +2613,18 @@ struct ForceReelSettingsCard: View {
 
                 if let slot = settings.slots.first(where: \.hasReel) {
                     slotPreview(slot: slot)
-                } else {
+                    } else {
                     Button(action: {
                         editingSlotIndex = 0
                         showingPicker = true
                     }) {
                         Label(String(localized: "force_reel.select_reel"),
                               systemImage: "play.rectangle.on.rectangle.fill")
-                            .font(VaultTheme.Typography.body())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, VaultTheme.Spacing.sm)
-                    }
-                    .buttonStyle(.borderedProminent)
+                                .font(VaultTheme.Typography.body())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, VaultTheme.Spacing.sm)
+                        }
+                        .buttonStyle(.borderedProminent)
                 }
             }
         }
@@ -2578,6 +2669,17 @@ struct ForceReelSettingsCard: View {
                         Text("force_reel.downloading")
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
+                    }
+                } else if settings.videoReady[slot.id] != true {
+                    // Download never completed — CDN URL may have expired.
+                    // Warn the magician to re-select the reel before the show.
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
+                        Text(String(localized: "force_reel.video_missing"))
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
                     }
                 }
             }
@@ -2666,16 +2768,16 @@ struct ForceNumberRevealSettingsCard: View {
             HStack {
                 Text("Enabled")
                     .font(VaultTheme.Typography.body())
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                Spacer()
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
-            }
+                }
             Text("Unarchive photos from the active set to reveal a word or number. Choose one or more input methods below.")
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
 
-            if settings.isEnabled {
-                Divider()
+                if settings.isEnabled {
+                    Divider()
 
                 // ── Active set info ──────────────────────────────────
                 PostPredictionActiveSetView(
@@ -2921,31 +3023,31 @@ private struct PostPredictionActiveSetView: View {
 
     var body: some View {
         VStack(spacing: VaultTheme.Spacing.sm) {
-            if let set = activeNumberSet {
-                HStack(spacing: VaultTheme.Spacing.sm) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(VaultTheme.Colors.success)
-                    VStack(alignment: .leading, spacing: 2) {
+                    if let set = activeNumberSet {
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(VaultTheme.Colors.success)
+                            VStack(alignment: .leading, spacing: 2) {
                         Text("Active number set: \(set.name)")
-                            .font(VaultTheme.Typography.bodyBold())
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
-                        Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
-                            .font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+                    } else {
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(VaultTheme.Colors.warning)
+                            Text("No active number set selected. Go to your sets and mark one as active.")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
                     }
-                    Spacer()
-                }
-            } else {
-                HStack(spacing: VaultTheme.Spacing.sm) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(VaultTheme.Colors.warning)
-                    Text("No active number set selected. Go to your sets and mark one as active.")
-                        .font(VaultTheme.Typography.caption())
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
-                }
-            }
             if let set = activeWordSet {
-                HStack(spacing: VaultTheme.Spacing.sm) {
+                    HStack(spacing: VaultTheme.Spacing.sm) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(VaultTheme.Colors.success)
                     VStack(alignment: .leading, spacing: 2) {
@@ -2956,7 +3058,7 @@ private struct PostPredictionActiveSetView: View {
                             .font(VaultTheme.Typography.caption())
                             .foregroundColor(VaultTheme.Colors.textSecondary)
                     }
-                    Spacer()
+                        Spacer()
                 }
             }
         }
@@ -2977,11 +3079,11 @@ private struct PostPredictionCoverTypingView: View {
                 Toggle("", isOn: $secretSettings.isEnabled).labelsHidden()
             }
             Text("Masks what you type in Explore so spectators see a different word. Pressing SPACE triggers the word reveal.")
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
 
             if secretSettings.isEnabled {
-                VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
                     Text("Mask Mode")
                         .font(VaultTheme.Typography.bodyBold())
                         .foregroundColor(VaultTheme.Colors.textPrimary)
@@ -3018,17 +3120,17 @@ private struct PostPredictionCoverTypingView: View {
                     }
                     HStack(spacing: 4) {
                         Text("Preview:")
-                            .font(VaultTheme.Typography.captionSmall())
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
                         Text("\"coche\" → \"\(coverTypingPreview)\"")
                             .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(VaultTheme.Colors.primary)
                     }
-                }
-            }
-        }
-    }
-}
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
 
 private struct PostPredictionURLSchemeView: View {
@@ -3046,17 +3148,17 @@ private struct PostPredictionURLSchemeView: View {
                         .foregroundColor(VaultTheme.Colors.textPrimary)
                     Text("Open this URL to trigger a reveal directly when Performance opens")
                         .font(VaultTheme.Typography.caption())
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
                 }
-                Spacer()
+                                Spacer()
                 Button {
                     UIPasteboard.general.string = templateURL
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "link")
                         Text("Copy")
-                    }
-                    .font(VaultTheme.Typography.captionSmall())
+                                }
+                                .font(VaultTheme.Typography.captionSmall())
                     .foregroundColor(.white)
                     .padding(.horizontal, VaultTheme.Spacing.sm)
                     .padding(.vertical, 6)
@@ -3100,15 +3202,15 @@ struct FollowingMagicSettingsCard: View {
             HStack {
                 Text("Enabled")
                     .font(VaultTheme.Typography.body())
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                Spacer()
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
-            }
+                }
             Text("Swipe the grid to secretly build a number (1–100), then open Explore. When you visit an audience member's profile the selected counter appears inflated. Press a volume button to start the countdown back to the real number.\n\nProfiles with 10K+ followers: each unit counts as 1K automatically (e.g. input 6 on a 200K profile → shows 206K → counts down to 200K).")
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
 
-            if settings.isEnabled {
+                if settings.isEnabled {
                     Divider()
 
                     // ── Target stat ───────────────────────────────────────
@@ -3221,11 +3323,11 @@ struct DateForceSettingsCard: View {
             subtitle: "Force followers/following to reveal today's date",
             isExpanded: $isExpanded,
             trailing: {
-                Button(action: { showingHelp = true }) {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 18))
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                }
+                    Button(action: { showingHelp = true }) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 18))
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                    }
                 .buttonStyle(.plain)
                 .padding(.trailing, 4)
             }
@@ -3238,10 +3340,10 @@ struct DateForceSettingsCard: View {
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
             }
             Text("Open any spectator's profile in Explore — it registers automatically when you close it. Open any Explore post to reveal today's date and time.")
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
 
-            if settings.isEnabled {
+                if settings.isEnabled {
                     Divider()
 
                     // Date format + time offset
@@ -3329,8 +3431,8 @@ struct DateForceSettingsCard: View {
                         Text(settings.mode == .dual
                              ? "Visit each spectator manually in Explore. First half → 📅 date (their followers). Second half → 🕐 time (their following)."
                              : "App captures your latest followers automatically. Tap 'Followed by' in Performance to start.")
-                            .font(VaultTheme.Typography.caption())
-                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -3378,8 +3480,8 @@ struct DateForceSettingsCard: View {
                         Divider()
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Automatic split")
-                                .font(VaultTheme.Typography.captionSmall())
-                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textTertiary)
                             Text("Register an even number of spectators. The app splits them in half automatically: first half → 📅 date (their followers), second half → 🕐 time (their following).")
                                 .font(VaultTheme.Typography.caption())
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
@@ -3428,7 +3530,7 @@ struct DateForceSettingsCard: View {
                                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                             }
-                            .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity)
                         }
                         .padding(.vertical, 10)
                         .background(VaultTheme.Colors.backgroundSecondary)
@@ -3617,7 +3719,7 @@ private struct BackupCard: View {
                     )
                 }
 
-                Button(action: { backup.syncToCloud() }) {
+                Button(action: { performManualBackup() }) {
                     HStack {
                         if backup.isSyncing {
                             ProgressView()
@@ -3736,11 +3838,11 @@ private struct BackupCard: View {
                 .frame(width: 16)
                 .padding(.top, 1)
             Text(text)
-                .font(VaultTheme.Typography.caption())
-                .foregroundColor(VaultTheme.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-    }
 
     private func warningBanner(icon: String, message: String, color: Color) -> some View {
         HStack(alignment: .top, spacing: 8) {
@@ -3758,6 +3860,17 @@ private struct BackupCard: View {
         .background(color.opacity(0.08))
         .cornerRadius(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(color.opacity(0.25), lineWidth: 1))
+    }
+
+    private func performManualBackup() {
+        backup.syncToCloud()
+        drive.syncAllPhotosToCloud { uploaded, skipped, error in
+            if let error = error {
+                LogManager.shared.warning("Manual iCloud Drive backup issue: \(error.localizedDescription)", category: .general)
+            } else {
+                print("☁️ [DRIVE] Manual backup: \(uploaded) uploaded, \(skipped) already synced")
+            }
+        }
     }
 
     private func performRestore() {

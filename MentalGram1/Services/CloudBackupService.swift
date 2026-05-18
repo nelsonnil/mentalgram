@@ -24,9 +24,9 @@ class CloudBackupService: ObservableObject {
     private let backupDateKey = "backup_lastSyncDate"
     private let setsKVKey = "backup_com.vault.sets"
 
-    // MARK: - Debounce (auto-sync called from DataManager.saveSets)
-    // 60-second window protects against accidental deletes being immediately backed up.
-    // Manual "Back up now" and app-backgrounding bypass this via syncToCloud(immediate:true).
+    // MARK: - Debounce
+    // Backups are manual-only. These properties remain for backward compatibility with
+    // older call sites, but scheduleDebouncedSync() intentionally does not upload.
     private var debounceTimer: Timer?
     private let debouncedDelay: TimeInterval = 60
 
@@ -74,22 +74,16 @@ class CloudBackupService: ObservableObject {
         iCloudAvailable && kv.object(forKey: backupDateKey) != nil
     }
 
-    /// Called automatically from DataManager.saveSets().
-    /// Schedules a debounced backup (60 s delay) so that accidental deletes/crashes
-    /// within that window do NOT immediately overwrite the existing iCloud backup.
+    /// Backups are manual-only. Local saves must not overwrite the user's cloud backup.
     func scheduleDebouncedSync() {
         DispatchQueue.main.async {
             self.debounceTimer?.invalidate()
-            self.debounceTimer = Timer.scheduledTimer(withTimeInterval: self.debouncedDelay, repeats: false) { [weak self] _ in
-                print("☁️ [BACKUP] Debounce elapsed — running auto-sync")
-                self?.syncToCloud(immediate: false)
-            }
+            print("☁️ [BACKUP] Auto backup skipped — manual backup only")
         }
     }
 
     /// Copies all local settings + sets JSON → iCloud KV store.
-    /// - `immediate: true`  — used for manual "Back up now" button and app backgrounding.
-    /// - `immediate: false` — called internally after debounce; same logic, just labelled.
+    /// Use only from explicit user actions, e.g. the "Back up now" button.
     func syncToCloud(immediate: Bool = true) {
         guard iCloudAvailable else {
             print("☁️ [BACKUP] iCloud not available — skipping sync")

@@ -20,11 +20,12 @@
 "ig.searching" = "検索中...";
 "ig.follow_requested" = "リクエスト済み";
 "explore.no_results" = "結果が見つかりません";
+"explore.search_blocked_upload" = "アップロード中は検索できません。\n完了後にもう一度お試しください。";
 "backup.never" = "なし";
 "backup.just_now" = "たった今";
 "backup.min_ago" = "%d分前";
 "backup.h_ago" = "%d時間前";
-"backup.info.auto" = "バックアップはアプリがバックグラウンドに移行するたびに自動で実行されます。「今すぐバックアップ」で手動実行することもできます。";
+"backup.info.auto" = "バックアップは「今すぐバックアップ」をタップしたときだけ実行されます。iCloud を自動で上書きすることはありません。";
 "backup.info.what" = "バックアップ対象：すべての設定、Date Force、Force Reel、アクティブなセットとそのメタデータ。";
 "backup.info.photos" = "セットの写真はiCloud Driveに同期されます。ファイルアプリ → iCloud Drive → Vault → Photos で確認できます。";
 "backup.info.excluded" = "バックアップ対象外：Instagramセッション、デバイスIDとクールダウンタイマー（デバイス固有の情報）。";
@@ -481,6 +482,7 @@
 "force_reel.remove_all" = "すべて削除";
 "force_reel.slot_n" = "スロット %d";
 "force_reel.downloading" = "ダウンロード中…";
+"force_reel.video_missing" = "動画が未ダウンロード — ショー前にこのリールを再選択してください";
 "force_reel.picker.placeholder" = "ユーザー名（例：beyonce）";
 "force_reel.picker.empty_state" = "プロフィールを検索してリールを表示";
 "force_reel.picker.no_reels" = "@%@ のリールが見つかりません";
@@ -619,6 +621,19 @@
 "ig.set_not_uploaded_title" = "セット未アップロード";
 "ig.set_not_uploaded_body" = "セット\"%@\"はまだInstagramにアップロードされていません。Setsに移動して先にアップロードしてください。";
 "session.reason.challenge" = "Instagramが繰り返しセキュリティ確認を要求しました（%lld回）。セッションを回復するには再ログインしてください。";
+"session.reason.normal" = "Instagramセッションの有効期限が切れました。パスワードの変更、長期間の非アクティブ、またはセキュリティイベント後によく発生します。「再ログイン」をタップして復元してください。";
+"session.reason.restriction" = "Instagramがこのアカウントに一時的な制限を適用しました。\n\n主な原因：\n• 公式InstagramアプリとこのアプリがInstagramが同時に開いていた\n• アカウントが新しく、活動履歴がまだ十分でない\n• Instagramが通常と異なる自動化された活動を検出した\n\n新しいアカウントはリスクが高くなります。事前に投稿、フォロワー、インタラクションを積み上げておくとリスクを大幅に下げられます。\n\nInstagramアプリを開き、該当する手順に従ってください：\n\n• 「閉じる」ボタンのみ表示 → 閉じるをタップし、すぐにここに戻って再ログインしてください。待つ必要はありません。\n• 具体的な終了日が表示されている → その日まで待ってから再ログインしてください。\n• 電話番号またはメールでコードが要求される → まずInstagramアプリで認証を完了してから、こちらに戻ってください。";
+"session.panel.title.normal" = "セッション期限切れ";
+"session.panel.title.restriction" = "一時的な制限";
+"session.panel.title.challenge" = "確認が必要";
+"session.panel.nav_title" = "セッション情報";
+"session.panel.close" = "閉じる";
+"session.panel.relogin" = "再度ログイン";
+"session.panel.relogin.restriction_hint" = "Instagramアプリの手順（閉じる・認証・日付待ち）を完了したら、こちらをタップしてセッションを復元してください。";
+"session.panel.credentials_saved" = "保存された認証情報が自動入力されます。";
+"session.panel.credentials_missing" = "保存された認証情報がありません。手動で入力する必要があります。";
+"session.panel.emergency_logout" = "緊急ログアウト";
+"session.panel.emergency_logout.hint" = "セッションを完全に削除します。最初からログインし直す必要があります。";
 "Sets" = "セット";
 "Your photos" = "あなたの写真";
 "Log out and log in again to continue uploading." = "アップロードを続けるにはログアウトして再ログインしてください。";
@@ -1184,6 +1199,22 @@
 "limits.help.calm.body" = "Instagramは本人確認のための短い通知を時々表示します。これはプラットフォームに接続されたあらゆるアプリで通常起こることで、アカウント停止とは一切関係ありません。Vaultは実際のアプリと同じアンチボット対策を備えており、そのすべてが十分にテストされています。";
 "limits.help.calm.infobox" = "開発中に私自身、この種の通知を100回以上発生させてきましたが、アカウントが停止されたことは一度もありません。同じ手法の他のアプリも問題なく動作しています — もし本当にリスクがあれば、Vaultは公開されていません。";
 
+"limits.help.budget.title" = "1時間のAPI予算を消費するもの";
+"limits.help.budget.intro" = "Instagramはセッションあたり1時間に約55回のAPIアクションを許可しています。アプリが自動的に追跡します。何がカウントされて、何がカウントされないかを確認してください：";
+"limits.help.budget.free" = "無料";
+"limits.help.budget.free.items" = "グリッドのスクロール · 音量ボタンのアニメーション · 秘密の数字を入力 · 既に開いたプロフィールを表示（キャッシュ） · 設定やガイドを閲覧";
+"limits.help.budget.low" = "低コスト";
+"limits.help.budget.low.items" = "アプリを開く（1） · フォロワーリストを読み込む（1） · 文字/写真を公開（各1） · カウンターグリッチ — 新しいプロフィールの初回表示（4） · プロフィール検索（2）";
+"limits.help.budget.high" = "高コスト";
+"limits.help.budget.high.items" = "Sync & Archive — 写真1枚あたり2回 · 写真のアップロード — 写真1枚あたり1回 · 5つの異なるフォロワープロフィールを開く — 約20回";
+"limits.help.budget.reset" = "予算は60分ごとにリセットされます。アプリが自動的に一時停止した場合、1時間の上限に達したことを意味します — 待つだけで自動的に再開します。";
+"limits.help.rehearsal.title" = "安全なリハーサル — 黄金のルール";
+"limits.help.rehearsal.body" = "ボット検出のほとんどはテスト中に発生し、ショー中には発生しません。いくつかの簡単な習慣でリスクの90%を排除できます：";
+"limits.help.rehearsal.tip1" = "同じフォロワーのプロフィールを1回開く → 数日間キャッシュされます。同じ人で何度でもカウンターグリッチを練習できます — コストゼロ。";
+"limits.help.rehearsal.tip2" = "Sync & Archiveと写真のアップロードは異なる時間帯に分散させましょう — ショー直前にまとめて行わないでください。";
+"limits.help.rehearsal.avoid1" = "リハーサル中に4〜5つの異なるフォロワープロフィールを続けて開かないでください。新しいプロフィールを開くたびに約4回のAPIコールがかかります。";
+"limits.help.rehearsal.avoid2" = "テスト中にアプリを繰り返し再起動しないでください — 再起動のたびにセッション確認が発生します。";
+"limits.help.rehearsal.tip" = "最も安全なリハーサル：使用するフォロワーを1回開き、エフェクトを1回行い、戻る。同じ手順を繰り返す → 2回目以降は完全に無料です。";
 "limits.help.warning.title" = "「通常と異なるアクティビティ」の通知が出たとき";
 "limits.help.warning.intro" = "心配いりません — これはアカウント停止ではありません。Instagramがあなた本人であることを確認しているだけです。次の手順に従ってください：";
 "limits.help.warning.step1" = "公式のInstagramアプリを開き、通知の「Dismiss」をタップします。";
@@ -1201,6 +1232,59 @@
 "limits.help.best.item2" = "セット（Sync & Archive）は前夜、または少なくともショーの1時間前に準備してください。リハーサル直後は避けてください。";
 "limits.help.best.item3" = "頻繁に演じる場合は、メインアカウントとは別の専用Instagramアカウントを使用してください。";
 "limits.help.best.item4" = "Vaultがすべての待機時間を自動で管理します — あなたは何も考える必要はありません。";
+
+"limits.help.testing.title" = "Instagramがセキュリティ確認を求める理由は？";
+"limits.help.testing.body" = "アプリのテスト中、Instagramが異常なアクティビティを検出するのは通常のことです。テスト時には、バイオの変更・メモ・写真のリベールなど多くの操作が短時間に連続して行われ、新しいアカウントで実施されることが多いため、Instagramのセキュリティシステムには自動化された行動のように見えることがあります。\n\n実際のパフォーマンスではこのようなことは起こりません。演技の自然なテンポによって操作が適切に間隔をおいて行われるため、通常の人間的な使用と変わりなく見えます。";
+"limits.help.testing.fix" = "Instagramがメールアドレスや電話番号の確認を求めた場合、それは一時的なセキュリティチェックに過ぎません。ブラウザでinstagram.comから完了させてください。完了後、アカウントは通常通りに機能します。";
+
+"limits.help.session.title" = "「インターネットなし」画面が表示された場合";
+"limits.help.session.body" = "Instagramが一時的にセッションを無効にすることがあります — その場合、観客に技術的な情報を見せないよう、アプリは「接続なし」の汎用画面を表示します。これはBanではありません。\n\n本当の説明と解決方法を確認するには、その画面の右下にある ⓘ ボタンをタップしてください。";
+"limits.help.session.case1.label" = "「閉じる」ボタンのみ表示される";
+"limits.help.session.case1.action" = "Instagramアプリで「閉じる」をタップし、すぐにここに戻って再ログインしてください。待つ必要はありません — すぐに入れます。";
+"limits.help.session.case2.label" = "具体的な終了日が表示されている";
+"limits.help.session.case2.action" = "その日まで待ってから再ログインしてください。Instagramが短い待機期間を設けています — アカウントは問題ありません。";
+"limits.help.session.case3.label" = "電話番号またはメールでコードが要求される";
+"limits.help.session.case3.action" = "まずInstagramアプリで認証を完了させてください。完了後、ここに戻って「再ログイン」をタップしてください。";
+"limits.help.session.new_account" = "活動履歴が少ない新しいアカウントはこれに遭遇しやすいです。投稿、フォロワー、インタラクションを徐々に積み上げましょう — Instagramは実績のあるアカウントをずっと信頼します。";
+"limits.help.session.contact" = "ボット検出が続く場合は、開発者に連絡してログを共有してください（設定 → ログをエクスポート）。これにより問題を分析し、全員の保護を改善できます。";
+
+"limits.help.gauge.title" = "1時間あたり55アクションの予算";
+"limits.help.gauge.body" = "Instagramは接続されたアプリを1時間あたり55アクションに制限しています。予算は60分のローリングウィンドウとして機能します — 各アクションは実行から正確に60分後に失効するため、強制リセットなしにカウンターが自動的に下がります。";
+"limits.help.gauge.cache" = "PerformanceやフォロワーのプロフィールをはじめてInstagramにアクセスすると（予算を使用）、以降の訪問はキャッシュから瞬時に無料で読み込まれます。";
+"limits.help.gauge.hardstop" = "55のリミットに達すると、アプリは自動的にInstagramへのすべてのリクエストを停止します。何も送信されず、何も実行されません — 予算が更新されるまで静かに待機します。何もする必要はありません。";
+"limits.help.gauge.zone.safe" = "安全 (>20)";
+"limits.help.gauge.zone.low" = "低 (8–20)";
+"limits.help.gauge.zone.critical" = "危険 (<8)";
+
+"limits.help.table.title" = "機能別消費アクション数";
+"limits.help.table.subtitle" = "初回使用時のコストとキャッシュ済みの場合のコストの比較。";
+"limits.help.table.col.action" = "機能";
+"limits.help.table.col.first" = "初回";
+"limits.help.table.col.again" = "再利用";
+"limits.help.table.row.performance" = "Performanceを開く";
+"limits.help.table.row.followers" = "フォロワーリスト";
+"limits.help.table.row.profile.new" = "新規フォロワープロフィール";
+"limits.help.table.row.sa" = "Sync & Archive（写真1枚）";
+"limits.help.table.row.upload" = "アップロード（写真1枚）";
+"limits.help.table.row.reveal" = "リビール（文字/写真1つ）";
+"limits.help.table.row.notebio" = "ノートまたはbio変更";
+"limits.help.table.row.explore" = "探索 / 検索";
+"limits.help.sa.auto" = "リビールとプロフィール訪問を含む完全なパフォーマンスの後、アプリはSync & Archiveの前に自動的に短い待機時間を追加します。これは正常です — セッションを保護します。";
+
+"limits.help.profiles.title" = "プロフィール訪問 — 最もコストの高いアクション";
+"limits.help.profiles.body" = "新しいフォロワープロフィールを開くと毎回4〜5アクションかかります。同じプロフィールの2回目の訪問はキャッシュから読み込まれるため無料です。3〜4種類のプロフィールを素早く開くと予算が枯渇し、ボット検出が発動する場合があります。";
+"limits.help.profiles.max" = "推奨：1セッションにつき新規プロフィールは最大2つまで。Sync & Archiveの直前に新規プロフィールを訪問することを避けてください。";
+"limits.help.reddot.title" = "赤いドット";
+"limits.help.reddot.body" = "残りアクションが8未満になると、フォロワーリストのヘッダーアイコンに小さな赤いドットが表示されます。あなただけが見えます — パフォーマンス中は表示されません。";
+"limits.help.reddot.block" = "予算が危険域のときに新しいプロフィールを開こうとすると、アプリは強い振動でアクションを停止します。APIコールは実行されず、セッションは安全に保たれます。";
+"limits.help.reddot.location.followers" = "フォロワーリスト";
+"limits.help.reddot.location.performance" = "紙飛行機アイコン（Performance）";
+
+"limits.help.noban.title" = "あなたのアカウントが永久BANされることは絶対にありません。";
+"limits.help.noban.body" = "Instagramが身元確認を求めることがあります — それだけです。BANではなく、警告でもなく、アカウントへのリスクもありません。Vaultは数百の実際のInstagramアカウントでテストされており、BANや恒久的な制限を受けたアカウントは一つもありません。メッセージが表示された場合は、上記の手順に従えば1分以内に復帰できます。";
+
+"perf.safety_gate.wait" = "急速な読み込みが多すぎます。\n%lld秒お待ちください…";
+"perf.safety_gate.retrying" = "再試行中…";
 
 // ── Guide: Camouflage section ──
 "guide.section.camouflage" = "カモフラージュ";

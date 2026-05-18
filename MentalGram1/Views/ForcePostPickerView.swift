@@ -28,6 +28,8 @@ struct ForcePostPickerView: View {
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1)
     ]
+    private let pageSize = 36
+    private let initialPrefetchTarget = 144
 
     var body: some View {
         NavigationView {
@@ -187,8 +189,8 @@ struct ForcePostPickerView: View {
         guard !username.isEmpty else { return }
 
         let now = Date()
-        if now.timeIntervalSince(lastSearchTime) < 8 {
-            let remaining = Int(8 - now.timeIntervalSince(lastSearchTime)) + 1
+        if now.timeIntervalSince(lastSearchTime) < 2 {
+            let remaining = Int(2 - now.timeIntervalSince(lastSearchTime)) + 1
             errorMessage = "Wait \(remaining)s before searching again"
             return
         }
@@ -229,10 +231,10 @@ struct ForcePostPickerView: View {
                 let userId = match.userId
                 await MainActor.run { searchedUserId = userId }
 
-                let pause = UInt64.random(in: 1_000_000_000...2_000_000_000)
+                let pause = UInt64.random(in: 450_000_000...900_000_000)
                 try await Task.sleep(nanoseconds: pause)
 
-                let (fetched, nextId) = try await instagram.getUserMediaItems(userId: userId, amount: 18)
+                let (fetched, nextId) = try await instagram.getUserMediaItems(userId: userId, amount: pageSize)
                 let uniqueFetched = uniquePosts(fetched)
                 await MainActor.run {
                     posts = uniqueFetched
@@ -242,6 +244,7 @@ struct ForcePostPickerView: View {
                 }
 
                 await downloadThumbnails(for: uniqueFetched)
+                await prefetchInitialPagesIfNeeded()
 
             } catch {
                 let msg = "\(error)"
@@ -269,12 +272,10 @@ struct ForcePostPickerView: View {
 
         Task {
             do {
-                let pause = UInt64.random(in: 800_000_000...1_500_000_000)
+                let pause = UInt64.random(in: 450_000_000...900_000_000)
                 try await Task.sleep(nanoseconds: pause)
 
-                let (fetched, nextId) = try await instagram.getUserMediaItems(
-                    userId: searchedUserId, amount: 18, maxId: maxId
-                )
+                let (fetched, nextId) = try await instagram.getUserMediaItems(userId: searchedUserId, amount: pageSize, maxId: maxId)
                 let existingKeys = await MainActor.run {
                     Set(posts.map { $0.mediaId.isEmpty ? $0.imageURL : $0.mediaId })
                 }
@@ -303,9 +304,47 @@ struct ForcePostPickerView: View {
         guard let index = posts.firstIndex(where: {
             ($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId) == currentKey
         }) else { return }
-        let threshold = max(1, Int(Double(posts.count) * 0.75))
+        let threshold = max(1, Int(Double(posts.count) * 0.5))
         if index >= threshold {
             loadMorePosts()
+        }
+    }
+
+    private func prefetchInitialPagesIfNeeded() async {
+        while true {
+            let shouldContinue = await MainActor.run {
+                hasMorePages && !isLoadingMore && !searchedUserId.isEmpty && posts.count < initialPrefetchTarget
+            }
+            guard shouldContinue else { return }
+
+            await MainActor.run { isLoadingMore = true }
+            do {
+                try await Task.sleep(nanoseconds: 700_000_000)
+                guard let cursor = await MainActor.run(body: { nextMaxId }) else {
+                    await MainActor.run { isLoadingMore = false }
+                    return
+                }
+
+                let (fetched, nextId) = try await instagram.getUserMediaItems(userId: searchedUserId, amount: pageSize, maxId: cursor)
+                let existingKeys = await MainActor.run {
+                    Set(posts.map { $0.mediaId.isEmpty ? $0.imageURL : $0.mediaId })
+                }
+                let uniqueFresh = uniquePosts(fetched.filter {
+                    !existingKeys.contains($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId)
+                })
+
+                await MainActor.run {
+                    posts.append(contentsOf: uniqueFresh)
+                    nextMaxId = nextId
+                    hasMorePages = nextId != nil && nextId != cursor
+                    isLoadingMore = false
+                }
+                await downloadThumbnails(for: uniqueFresh)
+            } catch {
+                await MainActor.run { isLoadingMore = false }
+                print("⚠️ [FORCE POST] Initial prefetch error: \(error)")
+                return
+            }
         }
     }
 

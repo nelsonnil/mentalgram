@@ -20,11 +20,12 @@
 "ig.searching" = "Zoeken...";
 "ig.follow_requested" = "Aangevraagd";
 "explore.no_results" = "Geen resultaten gevonden";
+"explore.search_blocked_upload" = "Zoeken niet beschikbaar tijdens uploaden.\nProbeer opnieuw na het uploaden.";
 "backup.never" = "Nooit";
 "backup.just_now" = "Zojuist";
 "backup.min_ago" = "%d min geleden";
 "backup.h_ago" = "%d u geleden";
-"backup.info.auto" = "De back-up wordt automatisch uitgevoerd wanneer de app naar de achtergrond gaat. Je kunt hem ook handmatig starten via 'Nu back-uppen'.";
+"backup.info.auto" = "De back-up wordt alleen uitgevoerd wanneer je op 'Nu back-uppen' tikt. iCloud wordt nooit automatisch overschreven.";
 "backup.info.what" = "Wat wordt opgeslagen: alle instellingen, Date Force, Force Reel, actieve sets en set-metadata.";
 "backup.info.photos" = "Setfoto's worden gesynchroniseerd met iCloud Drive. Bekijk ze via de Bestanden-app → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Niet opgeslagen: Instagram-sessie, apparaat-ID en cooldown-timers (apparaatspecifiek).";
@@ -481,6 +482,7 @@
 "force_reel.remove_all" = "Alles verwijderen";
 "force_reel.slot_n" = "Slot %d";
 "force_reel.downloading" = "Downloaden…";
+"force_reel.video_missing" = "Video niet gedownload — herselecteer deze reel vóór de show";
 "force_reel.picker.placeholder" = "Gebruikersnaam (bijv. beyonce)";
 "force_reel.picker.empty_state" = "Zoek een profiel om reels te zien";
 "force_reel.picker.no_reels" = "Geen reels gevonden voor @%@";
@@ -619,6 +621,19 @@
 "ig.set_not_uploaded_title" = "Set niet geüpload";
 "ig.set_not_uploaded_body" = "De set \"%@\" is nog niet geüpload naar Instagram. Ga naar Sets en upload het eerst.";
 "session.reason.challenge" = "Instagram heeft herhaaldelijk om beveiligingsverificatie gevraagd (%lld keer). Log opnieuw in om de sessie te herstellen.";
+"session.reason.normal" = "De Instagram-sessie is verlopen. Dit gebeurt meestal na een wachtwoordwijziging, langdurige inactiviteit of een beveiligingsgebeurtenis. Tik op Opnieuw inloggen om de sessie te herstellen.";
+"session.reason.restriction" = "Instagram heeft een tijdelijke beperking op dit account toegepast.\n\nVeelvoorkomende oorzaken:\n• De officiële Instagram-app stond tegelijk met deze app open\n• Het account is nieuw en heeft nog geen gevestigde activiteitsgeschiedenis\n• Instagram heeft ongebruikelijke of geautomatiseerde activiteit gedetecteerd\n\nNieuwe accounts zijn gevoeliger: vooraf posts, volgers en interacties opbouwen vermindert dit risico aanzienlijk.\n\nOpen de Instagram-app en volg de stap die van toepassing is:\n\n• Alleen een knop Sluiten → tik op Sluiten en kom hier direct terug om opnieuw in te loggen. Wachten is niet nodig.\n• Er wordt een specifieke einddatum getoond → wacht tot die datum en log dan opnieuw in.\n• Er wordt een code via telefoon of e-mail gevraagd → voltooi de verificatie eerst in de Instagram-app en kom dan hier terug.";
+"session.panel.title.normal" = "Sessie verlopen";
+"session.panel.title.restriction" = "Tijdelijke beperking";
+"session.panel.title.challenge" = "Verificatie vereist";
+"session.panel.nav_title" = "Sessie-info";
+"session.panel.close" = "Sluiten";
+"session.panel.relogin" = "Opnieuw inloggen";
+"session.panel.relogin.restriction_hint" = "Nadat je de stappen in de Instagram-app hebt gevolgd (sluiten, verifiëren of op einddatum wachten), tik hier om de sessie te herstellen.";
+"session.panel.credentials_saved" = "Opgeslagen inloggegevens worden automatisch ingevuld.";
+"session.panel.credentials_missing" = "Geen opgeslagen inloggegevens. U moet ze handmatig invoeren.";
+"session.panel.emergency_logout" = "Noodafmelding";
+"session.panel.emergency_logout.hint" = "Wist de sessie volledig. U moet opnieuw volledig inloggen.";
 "Your photos" = "Uw foto's";
 "Log out and log in again to continue uploading." = "Log uit en log opnieuw in om door te gaan met uploaden.";
 "Remove this photo from all banks? This cannot be undone." = "Verwijder deze foto uit alle banks? Dit kan niet ongedaan worden gemaakt.";
@@ -1183,6 +1198,22 @@
 "limits.help.calm.body" = "Instagram toont af en toe een korte melding om te bevestigen dat jij het bent. Dit is volledig normaal voor elke app die verbonden is met het platform en heeft niets te maken met een ban. Vault is ontworpen met dezelfde anti-bot-beveiligingen die echte apps gebruiken, en elk ervan is uitgebreid getest.";
 "limits.help.calm.infobox" = "Ik heb persoonlijk dit soort melding meer dan 100 keer veroorzaakt tijdens de ontwikkeling en mijn account is nooit gebanned. Andere apps met dezelfde aanpak werken zonder problemen — als er echt risico zou zijn, zou Vault niet gepubliceerd zijn.";
 
+"limits.help.budget.title" = "Wat je uurbudget verbruikt";
+"limits.help.budget.intro" = "Instagram staat ongeveer 55 API-acties per uur per sessie toe. De app houdt dit automatisch bij. Dit is wat telt — en wat niet:";
+"limits.help.budget.free" = "GRATIS";
+"limits.help.budget.free.items" = "Door het raster scrollen · Volume-knop animatie · Geheime nummers typen · Al geopende profielen bekijken (cache) · Door Instellingen of Gids bladeren";
+"limits.help.budget.low" = "LAAG";
+"limits.help.budget.low.items" = "App openen (1) · Volgerslijst laden (1) · Een letter/foto onthullen (elk 1) · Counter Glitch — eerste opening van een nieuw profiel (4) · Een profiel zoeken (2)";
+"limits.help.budget.high" = "HOOG";
+"limits.help.budget.high.items" = "Sync & Archive — 2 aanroepen per foto · Foto's uploaden — 1 aanroep per foto · 5 verschillende volgersprofielen openen — ~20 aanroepen";
+"limits.help.budget.reset" = "Het budget wordt elke 60 minuten gereset. Als de app automatisch pauzeert, heb je het uurlimiet bereikt — wacht gewoon en het gaat vanzelf verder.";
+"limits.help.rehearsal.title" = "Veilig oefenen — de gouden regels";
+"limits.help.rehearsal.body" = "De meeste botdetecties gebeuren tijdens tests, niet tijdens optredens. Een paar eenvoudige gewoonten elimineren 90% van het risico:";
+"limits.help.rehearsal.tip1" = "Open het profiel van dezelfde volger één keer → het blijft dagenlang in de cache. Oefen de Counter Glitch zo vaak als je wilt met dezelfde persoon, zonder kosten.";
+"limits.help.rehearsal.tip2" = "Spreid Sync & Archive en uploads over verschillende uren — stapel ze niet vlak voor een optreden.";
+"limits.help.rehearsal.avoid1" = "Open tijdens het oefenen niet 4–5 verschillende volgersprofielen achter elkaar. Elk nieuw profiel kost ~4 API-aanroepen.";
+"limits.help.rehearsal.avoid2" = "Start de app niet herhaaldelijk opnieuw op tijdens het testen — elke herstart activeert een sessiecontrole.";
+"limits.help.rehearsal.tip" = "De veiligste oefening: open precies de volger die je gaat gebruiken, doe het effect één keer, ga terug. Herhaal die volgorde → het is volledig gratis vanaf de tweede keer.";
 "limits.help.warning.title" = "Als er een \"Ongebruikelijke activiteit\"-melding verschijnt";
 "limits.help.warning.intro" = "Maak je geen zorgen — dit is geen ban. Het is gewoon Instagram die bevestigt dat jij het écht bent. Volg deze stappen:";
 "limits.help.warning.step1" = "Open de officiële Instagram-app en tik op \"Dismiss\" op de melding.";
@@ -1200,6 +1231,59 @@
 "limits.help.best.item2" = "Bereid je sets (Sync & Archive) de avond van tevoren voor of minstens een uur voor de show, niet direct na het oefenen.";
 "limits.help.best.item3" = "Als je vaak optreedt, gebruik dan een apart Instagram-account, gescheiden van je hoofdaccount.";
 "limits.help.best.item4" = "Vault beheert alle wachttijden automatisch — je hoeft er niet aan te denken.";
+
+"limits.help.testing.title" = "Waarom kan Instagram om een beveiligingscontrole vragen?";
+"limits.help.testing.body" = "Tijdens het testen van de app is het normaal dat Instagram ongewone activiteit detecteert. Bij het testen worden veel acties achter elkaar uitgevoerd — bio-wijzigingen, notities, foto-onthullingen — in korte tijd en op nieuwe accounts, wat voor de beveiligingssystemen van Instagram op geautomatiseerd gedrag kan lijken.\n\nBij een echte voorstelling gebeurt dit nooit: de acties worden van nature gescheiden door het ritme van de act, waardoor alles eruitziet als normaal menselijk gebruik.";
+"limits.help.testing.fix" = "Als Instagram vraagt om het e-mailadres of telefoonnummer te verifiëren, is dit slechts een eenmalige beveiligingscontrole. Voltooi dit via de browser op instagram.com en het account werkt daarna weer normaal.";
+
+"limits.help.session.title" = "Als de app een \"Geen internet\"-scherm toont";
+"limits.help.session.body" = "Soms trekt Instagram de sessie tijdelijk in — de app toont dan een generiek \"Geen verbinding\"-scherm zodat toeschouwers niets technisch zien. Dit is geen ban.\n\nTik op de ⓘ-knop rechtsonder op dat scherm om de echte uitleg te zien en het op te lossen.";
+"limits.help.session.case1.label" = "Alleen een knop Sluiten verschijnt";
+"limits.help.session.case1.action" = "Tik op Sluiten in de Instagram-app en kom hier direct terug om opnieuw in te loggen. Wachten is niet nodig — je bent meteen binnen.";
+"limits.help.session.case2.label" = "Er wordt een specifieke einddatum getoond";
+"limits.help.session.case2.action" = "Wacht tot die datum en log dan opnieuw in. Instagram legt een korte pauze op — je account is in orde.";
+"limits.help.session.case3.label" = "Er wordt een code via telefoon of e-mail gevraagd";
+"limits.help.session.case3.action" = "Voltooi eerst de verificatie in de Instagram-app. Kom daarna hier terug en tik op Opnieuw inloggen.";
+"limits.help.session.new_account" = "Nieuwe accounts met weinig activiteitsgeschiedenis lopen hier vaker tegenaan. Bouw geleidelijk posts, volgers en interacties op — Instagram vertrouwt accounts met een gevestigde geschiedenis veel meer.";
+"limits.help.session.contact" = "Als botdetectie blijft optreden, neem dan contact op met de ontwikkelaar en deel je logboeken (Instellingen → Logboeken exporteren). Dit helpt het probleem te analyseren en de bescherming voor iedereen te verbeteren.";
+
+"limits.help.gauge.title" = "Je uurlijks budget van 55 acties";
+"limits.help.gauge.body" = "Instagram beperkt elke verbonden app tot 55 acties per uur. Het budget werkt als een rollend venster van 60 minuten — elke actie verloopt precies 60 minuten nadat die werd uitgevoerd, zodat de teller automatisch daalt zonder een harde reset.";
+"limits.help.gauge.cache" = "De eerste keer dat je Performance of een volgersprofiel opent, neemt de app contact op met Instagram (verbruikt budget). Elke volgende keer laadt het direct uit de cache — gratis.";
+"limits.help.gauge.hardstop" = "Wanneer de limiet van 55 is bereikt, stopt de app automatisch alle verdere Instagram-verzoeken. Er wordt niets verzonden, niets geactiveerd — ze wacht stil totdat het budget vernieuwd wordt. Je hoeft niets te doen.";
+"limits.help.gauge.zone.safe" = "Veilig (>20)";
+"limits.help.gauge.zone.low" = "Laag (8–20)";
+"limits.help.gauge.zone.critical" = "Kritiek (<8)";
+
+"limits.help.table.title" = "Verbruikte acties per functie";
+"limits.help.table.subtitle" = "Kosten bij eerste gebruik vs. wanneer het resultaat al gecached is.";
+"limits.help.table.col.action" = "Functie";
+"limits.help.table.col.first" = "1e keer";
+"limits.help.table.col.again" = "Herhalen";
+"limits.help.table.row.performance" = "Performance openen";
+"limits.help.table.row.followers" = "Volgerslijst";
+"limits.help.table.row.profile.new" = "Nieuw volgersprofiel";
+"limits.help.table.row.sa" = "Sync & Archive (per foto)";
+"limits.help.table.row.upload" = "Upload (per foto)";
+"limits.help.table.row.reveal" = "Onthullen (per letter/foto)";
+"limits.help.table.row.notebio" = "Notitie of bio wijzigen";
+"limits.help.table.row.explore" = "Verkennen / Zoeken";
+"limits.help.sa.auto" = "Na een volledige performance met onthullingen en profielbezoeken voegt de app automatisch een korte wachttijd toe vóór Sync & Archive. Dit is normaal — het beschermt je sessie.";
+
+"limits.help.profiles.title" = "Profielen bezoeken — de duurste actie";
+"limits.help.profiles.body" = "Een nieuw volgersprofiel openen kost elke keer 4–5 acties. Het tweede bezoek aan hetzelfde profiel is gratis (geladen uit cache). Daarom kan het snel openen van 3–4 verschillende profielen het budget uitputten en botdetectie activeren.";
+"limits.help.profiles.max" = "Aanbeveling: open maximaal 2 nieuwe profielen per sessie. Vermijd het bezoeken van nieuwe profielen vlak voor een Sync & Archive.";
+"limits.help.reddot.title" = "De rode stip";
+"limits.help.reddot.body" = "Wanneer er minder dan 8 acties overblijven, verschijnt een kleine rode stip op het pictogram in de koptekst van de volgerslijst. Alleen jij ziet het — het is niet zichtbaar tijdens de performance.";
+"limits.help.reddot.block" = "Als je een nieuw profiel probeert te openen wanneer het budget kritiek is, stopt de app de actie met een sterke trilling. Er wordt geen API-aanroep gedaan — je sessie blijft veilig.";
+"limits.help.reddot.location.followers" = "Volgerslijst";
+"limits.help.reddot.location.performance" = "Papieren vliegtuig (Performance)";
+
+"limits.help.noban.title" = "Je account wordt nooit verbannen.";
+"limits.help.noban.body" = "Instagram vraagt soms om je identiteit te bevestigen — dat is alles. Het is geen ban, geen waarschuwing en vormt geen risico voor je account. Vault is getest met honderden echte Instagram-accounts en geen enkel account is ooit verbannen of permanent beperkt. Als er een bericht verschijnt, volg dan de bovenstaande stappen en je bent binnen een minuut terug.";
+
+"perf.safety_gate.wait" = "Te veel snelle laadpogingen gedetecteerd.\nWacht %lld seconden…";
+"perf.safety_gate.retrying" = "Opnieuw proberen…";
 
 // ── Guide: Camouflage section ──
 "guide.section.camouflage" = "CAMOUFLAGE";

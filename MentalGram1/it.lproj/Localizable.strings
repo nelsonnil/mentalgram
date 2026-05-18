@@ -283,12 +283,13 @@
 "THE FREE CHOICE" = "LA LIBERA SCELTA";
 "THE REVELATION" = "LA RIVELAZIONE";
 "explore.no_results" = "Nessun risultato trovato";
+"explore.search_blocked_upload" = "Ricerca non disponibile durante il caricamento.\nRiprova al termine.";
 "No results found" = "Nessun risultato trovato";
 "backup.never" = "Mai";
 "backup.just_now" = "Adesso";
 "backup.min_ago" = "%d min fa";
 "backup.h_ago" = "%d h fa";
-"backup.info.auto" = "Il backup viene eseguito automaticamente ogni volta che l'app va in background. Puoi avviarlo manualmente con \"Esegui backup ora\".";
+"backup.info.auto" = "Il backup viene eseguito solo quando tocchi \"Esegui backup ora\". Non sovrascrive mai iCloud automaticamente.";
 "backup.info.what" = "Cosa viene salvato: tutte le impostazioni, Date Force, Force Reel, set attivi e metadati dei set.";
 "backup.info.photos" = "Le foto dei set vengono sincronizzate con iCloud Drive. Puoi vederle nell'app File → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Non salvato: sessione Instagram, ID dispositivo e timer di cooldown (specifici del dispositivo).";
@@ -694,6 +695,7 @@
 "force_reel.remove_all" = "Rimuovi tutti";
 "force_reel.slot_n" = "Slot %d";
 "force_reel.downloading" = "Scaricamento…";
+"force_reel.video_missing" = "Video non scaricato — riseleziona questo reel prima dello show";
 "force_reel.picker.placeholder" = "Nome utente (es. beyonce)";
 "force_reel.picker.empty_state" = "Cerca un profilo per vedere i suoi reel";
 "force_reel.picker.no_reels" = "Nessun reel trovato per @%@";
@@ -821,6 +823,19 @@
 "ig.set_not_uploaded_title" = "Set non caricato";
 "ig.set_not_uploaded_body" = "Il set \"%@\" non è ancora stato caricato su Instagram. Vai in Sets e caricalo prima.";
 "session.reason.challenge" = "Instagram ha richiesto ripetute verifiche di sicurezza (%lld volte). Accedi di nuovo per ripristinare la sessione.";
+"session.reason.normal" = "La sessione Instagram è scaduta. Questo accade di solito dopo un cambio di password, inattività prolungata o un evento di sicurezza. Tocca Accedi di nuovo per ripristinarla.";
+"session.reason.restriction" = "Instagram ha applicato una restrizione temporanea a questo account.\n\nMotivi più comuni:\n• L'app ufficiale di Instagram era aperta contemporaneamente a questa app\n• L'account è nuovo e non ha ancora uno storico di attività consolidato\n• Instagram ha rilevato attività insolita o automatizzata\n\nGli account nuovi sono più vulnerabili: avere post, follower e interazioni in anticipo riduce notevolmente questo rischio.\n\nApri l'app di Instagram e segui il passaggio corrispondente:\n\n• Compare solo un pulsante Ignora → tocca Ignora e torna subito qui per accedere di nuovo. Non è necessario aspettare.\n• Viene mostrata una data di fine precisa → aspetta fino a quella data, poi accedi di nuovo.\n• Viene richiesto un codice via telefono o e-mail → completa la verifica nell'app di Instagram prima, poi torna qui.";
+"session.panel.title.normal" = "Sessione scaduta";
+"session.panel.title.restriction" = "Restrizione temporanea";
+"session.panel.title.challenge" = "Verifica richiesta";
+"session.panel.nav_title" = "Info sessione";
+"session.panel.close" = "Chiudi";
+"session.panel.relogin" = "Accedi di nuovo";
+"session.panel.relogin.restriction_hint" = "Dopo aver seguito i passaggi nell'app Instagram (ignora, verifica o attendi la data), tocca qui per ripristinare la sessione.";
+"session.panel.credentials_saved" = "Le credenziali salvate verranno compilate automaticamente.";
+"session.panel.credentials_missing" = "Nessuna credenziale salvata. Dovrai inserirle manualmente.";
+"session.panel.emergency_logout" = "Disconnessione di emergenza";
+"session.panel.emergency_logout.hint" = "Cancella completamente la sessione. Dovrai accedere di nuovo da zero.";
 "Sets" = "Set";
 "Your photos" = "Le tue foto";
 "Wait a few minutes before syncing. Instagram limits API calls per hour." = "Attendi qualche minuto prima di sincronizzare. Instagram limita le chiamate API per ora.";
@@ -1366,6 +1381,22 @@
 "limits.help.calm.body" = "Instagram mostra ogni tanto un breve avviso chiedendo di confermare che sei tu. È del tutto normale per qualsiasi app connessa alla piattaforma e non ha nulla a che fare con un ban. Vault è progettata con le stesse protezioni anti-bot usate dalle app reali, e ognuna è stata testata a fondo.";
 "limits.help.calm.infobox" = "Personalmente ho attivato questo tipo di avviso più di 100 volte durante lo sviluppo e il mio account non è mai stato bannato. Altre app con lo stesso approccio funzionano senza problemi — se ci fosse un rischio reale, Vault non sarebbe pubblicata.";
 
+"limits.help.budget.title" = "Cosa consuma il tuo budget orario";
+"limits.help.budget.intro" = "Instagram permette circa 55 azioni API all'ora per sessione. L'app le monitora automaticamente. Ecco cosa conta — e cosa no:";
+"limits.help.budget.free" = "GRATIS";
+"limits.help.budget.free.items" = "Scorrere la griglia · Animazione tasto volume · Digitare numeri segreti · Vedere profili già aperti (cache) · Navigare in Impostazioni o Guida";
+"limits.help.budget.low" = "BASSO";
+"limits.help.budget.low.items" = "Aprire l'app (1) · Caricare la lista follower (1) · Rivelare una lettera/foto (1 ciascuna) · Counter Glitch — prima apertura di un nuovo profilo (4) · Cercare un profilo (2)";
+"limits.help.budget.high" = "ALTO";
+"limits.help.budget.high.items" = "Sync & Archive — 2 chiamate per foto · Caricare foto — 1 chiamata per foto · Aprire 5 profili diversi di follower — ~20 chiamate";
+"limits.help.budget.reset" = "Il budget si azzera ogni 60 minuti. Se l'app si mette in pausa da sola, significa che hai esaurito il limite orario — aspetta e riprende automaticamente.";
+"limits.help.rehearsal.title" = "Prova sicura — le regole d'oro";
+"limits.help.rehearsal.body" = "La maggior parte delle rilevazioni bot avviene durante i test, non durante gli spettacoli. Poche semplici abitudini eliminano il 90% del rischio:";
+"limits.help.rehearsal.tip1" = "Apri il profilo dello stesso follower una volta → rimane in cache per giorni. Esercita il Counter Glitch tutte le volte che vuoi con la stessa persona, a costo zero.";
+"limits.help.rehearsal.tip2" = "Distribuisci Sync & Archive e i caricamenti in ore diverse — non accumularli poco prima di uno spettacolo.";
+"limits.help.rehearsal.avoid1" = "Non aprire 4–5 profili diversi di follower di seguito durante le prove. Ogni nuovo profilo costa ~4 chiamate API.";
+"limits.help.rehearsal.avoid2" = "Non riavviare l'app ripetutamente durante i test — ogni riavvio attiva una verifica della sessione.";
+"limits.help.rehearsal.tip" = "La prova più sicura: apri esattamente il follower che userai, esegui l'effetto una volta, torna indietro. Ripeti questa sequenza → è completamente gratuita dalla seconda volta in poi.";
 "limits.help.warning.title" = "Se compare un avviso di \"Attività insolita\"";
 "limits.help.warning.intro" = "Nessun problema — non è un ban. È solo Instagram che conferma che sei davvero tu. Segui questi passaggi:";
 "limits.help.warning.step1" = "Apri l'app ufficiale di Instagram e tocca \"Dismiss\" sull'avviso.";
@@ -1383,6 +1414,59 @@
 "limits.help.best.item2" = "Prepara i tuoi set (Sync & Archive) la sera prima o almeno un'ora prima dello spettacolo, non subito dopo aver provato.";
 "limits.help.best.item3" = "Se ti esibisci spesso, usa un account Instagram dedicato, separato da quello principale.";
 "limits.help.best.item4" = "Vault gestisce automaticamente tutti i tempi di attesa — non devi pensarci.";
+
+"limits.help.testing.title" = "Perché Instagram potrebbe richiedere una verifica di sicurezza?";
+"limits.help.testing.body" = "Durante i test dell'app è normale che Instagram rilevi attività insolita. Quando si testa, vengono eseguite molte azioni di seguito — modifiche alla bio, note, rivelazioni di foto — in poco tempo e con account nuovi, il che può sembrare un comportamento automatizzato per i sistemi di sicurezza di Instagram.\n\nDurante un'esibizione reale questo non succede mai: le azioni sono naturalmente separate dal ritmo dello spettacolo, il che le fa sembrare un uso umano normale.";
+"limits.help.testing.fix" = "Se Instagram chiede di verificare l'email o il numero di telefono, si tratta solo di un controllo di sicurezza occasionale. Completalo dal browser su instagram.com e l'account tornerà a funzionare normalmente.";
+
+"limits.help.session.title" = "Se l'app mostra una schermata \"Nessun internet\"";
+"limits.help.session.body" = "A volte Instagram revoca temporaneamente la sessione — l'app mostra allora una schermata generica \"Nessuna connessione\" affinché gli spettatori non vedano nulla di tecnico. Non è un ban.\n\nPer vedere la spiegazione reale e risolvere il problema, tocca il pulsante ⓘ nell'angolo in basso a destra di quella schermata.";
+"limits.help.session.case1.label" = "Compare solo un pulsante Ignora";
+"limits.help.session.case1.action" = "Tocca Ignora nell'app Instagram e torna direttamente qui per accedere di nuovo. Non è necessario aspettare — sarai dentro immediatamente.";
+"limits.help.session.case2.label" = "Viene mostrata una data di fine precisa";
+"limits.help.session.case2.action" = "Aspetta fino a quella data, poi accedi di nuovo. Instagram impone una breve pausa — il tuo account sta bene.";
+"limits.help.session.case3.label" = "Viene richiesto un codice via telefono o e-mail";
+"limits.help.session.case3.action" = "Completa prima la verifica nell'app Instagram. Una volta fatto, torna qui e tocca Accedi di nuovo.";
+"limits.help.session.new_account" = "Gli account nuovi con poca storia di attività incappano in questo più spesso. Costruisci progressivamente post, follower e interazioni — Instagram si fida molto di più degli account con una storia consolidata.";
+"limits.help.session.contact" = "Se il rilevamento bot continua a verificarsi, contatta lo sviluppatore e condividi i tuoi registri (Impostazioni → Esporta registri). Questo aiuta ad analizzare il problema e migliorare la protezione per tutti.";
+
+"limits.help.gauge.title" = "Il tuo budget orario di 55 azioni";
+"limits.help.gauge.body" = "Instagram limita ogni app connessa a 55 azioni all'ora. Il budget funziona come una finestra scorrevole di 60 minuti — ogni azione scade esattamente 60 minuti dopo essere stata eseguita, quindi il contatore scende automaticamente senza bisogno di un reset forzato.";
+"limits.help.gauge.cache" = "La prima volta che apri Performance o il profilo di un follower, l'app contatta Instagram (usa budget). Ogni visita successiva si carica istantaneamente dalla cache, senza alcun costo.";
+"limits.help.gauge.hardstop" = "Quando viene raggiunto il limite di 55, l'app smette automaticamente di inviare qualsiasi richiesta a Instagram. Non viene inviato nulla né eseguita nessuna azione — aspetta in silenzio finché il budget si rinnova. Non devi fare nulla.";
+"limits.help.gauge.zone.safe" = "Sicuro (>20)";
+"limits.help.gauge.zone.low" = "Basso (8–20)";
+"limits.help.gauge.zone.critical" = "Critico (<8)";
+
+"limits.help.table.title" = "Azioni consumate per funzionalità";
+"limits.help.table.subtitle" = "Costo al primo utilizzo rispetto a quando il risultato è già in cache.";
+"limits.help.table.col.action" = "Funzionalità";
+"limits.help.table.col.first" = "1ª volta";
+"limits.help.table.col.again" = "Di nuovo";
+"limits.help.table.row.performance" = "Apri Performance";
+"limits.help.table.row.followers" = "Lista follower";
+"limits.help.table.row.profile.new" = "Nuovo profilo follower";
+"limits.help.table.row.sa" = "Sync & Archive (per foto)";
+"limits.help.table.row.upload" = "Caricamento (per foto)";
+"limits.help.table.row.reveal" = "Rivela (per lettera/foto)";
+"limits.help.table.row.notebio" = "Cambia nota o bio";
+"limits.help.table.row.explore" = "Esplora / Cerca";
+"limits.help.sa.auto" = "Dopo una performance completa con rivelazioni e visite ai profili, l'app aggiunge automaticamente una breve pausa prima di Sync & Archive. È normale — protegge la tua sessione.";
+
+"limits.help.profiles.title" = "Visitare profili — l'azione più costosa";
+"limits.help.profiles.body" = "Aprire un nuovo profilo follower costa 4–5 azioni ogni volta. La seconda visita allo stesso profilo è gratuita (caricata dalla cache). Ecco perché aprire 3–4 profili diversi in rapida successione può esaurire il budget e attivare il rilevamento bot.";
+"limits.help.profiles.max" = "Raccomandazione: apri al massimo 2 nuovi profili per sessione. Evita di visitare nuovi profili subito prima di un Sync & Archive.";
+"limits.help.reddot.title" = "Il punto rosso";
+"limits.help.reddot.body" = "Quando rimangono meno di 8 azioni, appare un piccolo punto rosso sull'icona nell'intestazione della lista follower. Solo tu lo vedi — non è visibile durante la performance.";
+"limits.help.reddot.block" = "Se provi ad aprire un nuovo profilo quando il budget è critico, l'app blocca l'azione con una forte vibrazione. Nessuna chiamata API viene effettuata — la tua sessione rimane al sicuro.";
+"limits.help.reddot.location.followers" = "Lista follower";
+"limits.help.reddot.location.performance" = "Icona aeroplanino di carta (Performance)";
+
+"limits.help.noban.title" = "Il tuo account non verrà mai bannato.";
+"limits.help.noban.body" = "Instagram a volte chiede di confermare la tua identità — è tutto qui. Non è un ban, non è un avviso e non rappresenta alcun rischio per il tuo account. Vault è stato testato con centinaia di account Instagram reali e nessuno è mai stato bannato o limitato permanentemente. Se appare un messaggio, segui i passaggi sopra e tornerai operativo in meno di un minuto.";
+
+"perf.safety_gate.wait" = "Troppi caricamenti rapidi rilevati.\nAttendi %lld secondi…";
+"perf.safety_gate.retrying" = "Nuovo tentativo…";
 
 // ── Guide: Camouflage section ──
 "guide.section.camouflage" = "MIMETISMO";
