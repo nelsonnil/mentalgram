@@ -132,9 +132,19 @@ struct MagicianSessionPanel: View {
     let dismissPanel: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var showAdvancedOptions = false
+    @State private var showRestartAlert = false
 
     /// True when re-login has been attempted and failed ≥ 2 times — guides user to emergency logout.
     private var isStuckInLoop: Bool { instagram.reloginFailCount >= 2 }
+
+    private var emergencySteps: [(number: String, text: String)] {
+        [
+            ("1", String(localized: "session.panel.emergency_step.1")),
+            ("2", String(localized: "session.panel.emergency_step.2")),
+            ("3", String(localized: "session.panel.emergency_step.3")),
+            ("4", String(localized: "session.panel.emergency_step.4"))
+        ]
+    }
 
     private var context: InstagramService.SessionExpiredContext {
         // Treat challenge streak >= 1 as .challenge even if stored context differs
@@ -320,20 +330,15 @@ struct MagicianSessionPanel: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundColor(.primary.opacity(0.8))
 
-                                ForEach([
-                                    ("1", String(localized: "session.panel.emergency_step.1")),
-                                    ("2", String(localized: "session.panel.emergency_step.2")),
-                                    ("3", String(localized: "session.panel.emergency_step.3")),
-                                    ("4", String(localized: "session.panel.emergency_step.4")),
-                                ], id: \.0) { number, text in
+                                ForEach(emergencySteps, id: \.number) { step in
                                     HStack(alignment: .top, spacing: 8) {
-                                        Text(number)
+                                        Text(step.number)
                                             .font(.caption.weight(.bold))
                                             .foregroundColor(.white)
                                             .frame(width: 18, height: 18)
                                             .background(Color.red.opacity(0.75))
                                             .clipShape(Circle())
-                                        Text(text)
+                                        Text(step.text)
                                             .font(.caption)
                                             .foregroundColor(.primary.opacity(0.75))
                                             .fixedSize(horizontal: false, vertical: true)
