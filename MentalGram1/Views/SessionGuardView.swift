@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Full-screen overlay shown whenever `InstagramService.isSessionExpired` is true.
 ///
@@ -12,6 +13,7 @@ struct SessionGuardView: View {
     @State private var showMagicianPanel = false
     @State private var showRelogin = false
     @State private var isRetrying = false
+    @State private var showRestartAlert = false
     /// Shown briefly after a failed "Try Again" so the user knows what to do next.
     @State private var retryFailed = false
 
@@ -129,6 +131,10 @@ struct MagicianSessionPanel: View {
     @Binding var showRelogin: Bool
     let dismissPanel: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showAdvancedOptions = false
+
+    /// True when re-login has been attempted and failed ≥ 2 times — guides user to emergency logout.
+    private var isStuckInLoop: Bool { instagram.reloginFailCount >= 2 }
 
     private var context: InstagramService.SessionExpiredContext {
         // Treat challenge streak >= 1 as .challenge even if stored context differs
@@ -201,17 +207,41 @@ struct MagicianSessionPanel: View {
                         .cornerRadius(12)
                         .padding(.horizontal)
 
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(String(localized: "session.panel.instagram_first.title"), systemImage: "1.circle.fill")
+                            .font(.headline)
+                        Text(String(localized: "session.panel.instagram_first.body"))
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color.blue.opacity(0.08))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+
                     Divider()
 
                     // Primary action: log in again
                     VStack(spacing: 10) {
+                        Button(action: openInstagramApp) {
+                            Label(String(localized: "session.panel.open_instagram"), systemImage: "camera.fill")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color.black)
+                                .cornerRadius(12)
+                        }
+
                         Button(action: {
                             dismissPanel()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                                 showRelogin = true
                             }
                         }) {
-                            Label(String(localized: "session.panel.relogin"), systemImage: "arrow.triangle.2.circlepath")
+                            Label(String(localized: "session.panel.relogin_after_instagram"), systemImage: "arrow.triangle.2.circlepath")
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -239,28 +269,102 @@ struct MagicianSessionPanel: View {
 
                     Divider()
 
-                    // Secondary: clear all data and log out (last resort)
-                    VStack(spacing: 6) {
-                        Button(action: {
-                            instagram.emergencyLogout()
-                            dismiss()
-                        }) {
-                            Label(String(localized: "session.panel.emergency_logout"), systemImage: "trash")
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.red.opacity(0.07))
-                                .cornerRadius(12)
+                    // ── Stuck-loop warning ─────────────────────────────────
+                    // Shown when re-login has been attempted ≥ 2 times without success.
+                    if isStuckInLoop {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.system(size: 18))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(String(localized: "session.panel.stuck.title"))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(.orange)
+                                Text(String(localized: "session.panel.stuck.message"))
+                                    .font(.caption)
+                                    .foregroundColor(.primary.opacity(0.75))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
-
-                        Text(String(localized: "session.panel.emergency_logout.hint"))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+                        .padding(14)
+                        .background(Color.orange.opacity(0.1))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
+
+                    Button(action: { withAnimation { showAdvancedOptions.toggle() } }) {
+                        HStack {
+                            Text(String(localized: "session.panel.advanced_options"))
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Image(systemName: showAdvancedOptions ? "chevron.up" : "chevron.down")
+                                .font(.caption.weight(.bold))
+                        }
+                        .foregroundColor(isStuckInLoop ? .orange : .secondary)
+                        .padding(.horizontal)
+                    }
+
+                    if showAdvancedOptions {
+                        VStack(alignment: .leading, spacing: 14) {
+
+                            // ── What this does ────────────────────────────
+                            Text(String(localized: "session.panel.emergency_logout.hint"))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            // ── Step-by-step instructions ─────────────────
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(String(localized: "session.panel.emergency_steps.intro"))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(.primary.opacity(0.8))
+
+                                ForEach([
+                                    ("1", String(localized: "session.panel.emergency_step.1")),
+                                    ("2", String(localized: "session.panel.emergency_step.2")),
+                                    ("3", String(localized: "session.panel.emergency_step.3")),
+                                    ("4", String(localized: "session.panel.emergency_step.4")),
+                                ], id: \.0) { number, text in
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Text(number)
+                                            .font(.caption.weight(.bold))
+                                            .foregroundColor(.white)
+                                            .frame(width: 18, height: 18)
+                                            .background(Color.red.opacity(0.75))
+                                            .clipShape(Circle())
+                                        Text(text)
+                                            .font(.caption)
+                                            .foregroundColor(.primary.opacity(0.75))
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            }
+                            .padding(12)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+
+                            // ── Button ────────────────────────────────────
+                            Button(action: {
+                                instagram.emergencyLogout()
+                                showRestartAlert = true
+                            }) {
+                                Label(String(localized: "session.panel.emergency_logout"), systemImage: "trash")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                                    .background(Color.red)
+                                    .cornerRadius(12)
+                            }
+                            .alert(String(localized: "session.panel.restart.title"), isPresented: $showRestartAlert) {
+                                Button(String(localized: "common.ok"), role: .cancel) { dismiss() }
+                            } message: {
+                                Text(String(localized: "session.panel.restart.message"))
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
 
                     Spacer(minLength: 24)
                 }
@@ -272,6 +376,20 @@ struct MagicianSessionPanel: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(String(localized: "session.panel.close")) { dismiss() }
                 }
+            }
+            .onAppear {
+                if isStuckInLoop {
+                    showAdvancedOptions = true
+                }
+            }
+        }
+    }
+
+    private func openInstagramApp() {
+        guard let appURL = URL(string: "instagram://app") else { return }
+        UIApplication.shared.open(appURL) { success in
+            if !success, let webURL = URL(string: "https://www.instagram.com/") {
+                UIApplication.shared.open(webURL)
             }
         }
     }

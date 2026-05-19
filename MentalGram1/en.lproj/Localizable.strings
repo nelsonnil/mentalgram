@@ -111,8 +111,8 @@
 "settings.digit_grid_warn" = "You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid.";
 "settings.ocr" = "OCR";
 "settings.camera" = "Camera";
-"settings.camera_desc" = "Camera activates silently in background when Performance opens. Vibrates once on recognition.";
-"settings.camera_desc_full" = "Camera starts silently when Performance opens. Recognized text auto-reveals: letters → word set, digits → number set.";
+"settings.camera_desc" = "Press volume up to activate the camera silently. Vibrates once on recognition.";
+"settings.camera_desc_full" = "Press volume up to start the camera silently. Point at any written word — recognised text auto-reveals: letters → word set, digits → number set. Press again to stop.";
 "settings.auto_input" = "Auto Input";
 "settings.auto_input_desc" = "Fetch text from Inject or Custom API when Performance opens";
 "settings.api_source" = "API Source";
@@ -251,7 +251,7 @@
 "postpred.help.input.grid.step3" = "Tap the Posts icon to confirm and trigger the reveal.";
 "postpred.help.input.ocr.label" = "OCR — CAMERA";
 "postpred.help.input.ocr.step1" = "Enable **OCR** in Post Prediction settings.";
-"postpred.help.input.ocr.step2" = "Point the camera at any handwritten or printed word. The app reads it automatically and triggers the matching reveal.";
+"postpred.help.input.ocr.step2" = "Press the volume up button to start the camera silently. Point at any handwritten or printed word — the app reads it and triggers the matching reveal automatically.";
 "postpred.help.input.covert.label" = "COVERT TYPING";
 "postpred.help.input.covert.step1" = "Enable **Covert Typing** in Post Prediction settings and define a cover word — what the spectator will see.";
 "postpred.help.input.covert.step2" = "Type the spectator's word in the Explore search field. The spectator sees the cover word; the app silently records the real one.";
@@ -704,7 +704,7 @@
 "The app posts a note on your Instagram account that matches what the spectator said or wrote." = "The app posts a note on your Instagram account that matches what the spectator said or wrote.";
 "The note appears above your profile picture in the Instagram Stories bar — only your followers can see it." = "The note appears above your profile picture in the Instagram Stories bar — only your followers can see it.";
 "The app calls the Instagram API directly to post the note. Set up an API source in \"Auto Input\" to pull the text from an external service (e.g. a personal webhook or Make/Zapier automation)." = "The app calls the Instagram API directly to post the note. Set up an API source in \"Auto Input\" to pull the text from an external service (e.g. a personal webhook or Make/Zapier automation).";
-"Point the camera at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note, no typing required." = "Point the camera at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note, no typing required.";
+"Point the camera at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note, no typing required." = "Press volume up to start the camera silently, then point it at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note.";
 "Ask the spectator to think of or write a short word (max 60 characters)." = "Ask the spectator to think of or write a short word (max 60 characters).";
 "Use OCR to read it covertly, or enter it manually before the performance." = "Use OCR to read it covertly, or enter it manually before the performance.";
 "Open Performance — the note posts automatically (with API or URL Scheme) or tap \"Send Note\". It appears in the fake profile instantly." = "Open Performance — the note posts automatically (with API or URL Scheme) or tap \"Send Note\". It appears in the fake profile instantly.";
@@ -1008,3 +1008,61 @@
 "settings.lockscreen.warning_no_wallpaper" = "Select a wallpaper to activate";
 "action.change" = "Change";
 "action.remove" = "Remove";
+"perf.first_time_banner" = "First time loading — your profile is being cached. This will only happen once.";
+
+// MARK: - API Budget Widget & Warning Sheet
+"budget.title" = "API Budget";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "%d remaining";
+"budget.renewal_at" = "Full budget at %@";
+"budget.status.full" = "Budget is full";
+"budget.status.full_used" = "Budget fully used — wait for renewal";
+"budget.warning.title" = "Low API Budget";
+"budget.warning.renewal" = "Full budget at %@";
+"budget.warning.advice" = "Avoid entering Performance until the budget renews to prevent interruptions during a show.";
+"action.understood" = "Got it";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "Preparing Performance";
+"initial_load.phase.validating" = "Verifying your session…";
+"initial_load.phase.loading_profile" = "Loading your Instagram profile…";
+"initial_load.phase.paginating" = "Loading posts — page %d…";
+"initial_load.phase.loading_reels" = "Loading reels…";
+"initial_load.phase.loading_tagged" = "Loading tagged posts…";
+"initial_load.reels_count" = "%d reels";
+"initial_load.tagged_count" = "%d tagged";
+"initial_load.photos_count_one" = "%d post loaded";
+"initial_load.photos_count" = "%d posts loaded";
+"initial_load.estimated_time" = "This may take several minutes";
+"initial_load.one_time_promise" = "Only this one time — next time you will enter instantly.";
+"initial_load.footer" = "If you upload new photos to Instagram later, refresh Performance manually to update the cache.";
+"initial_load.error.session" = "Session expired. Please log in again to continue.";
+"initial_load.error.load_failed" = "Could not load your profile. Check your connection and try again.";
+
+"fullload.warming_up" = "Getting ready… %d s";
+"fullload.grid" = "Caching posts — %d loaded";
+"fullload.reels" = "Caching reels…";
+"fullload.tagged" = "Caching tagged posts…";
+"fullload.done" = "Profile ready!";
+"fullload.skip" = "Skip and use anyway";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "Session Expired";
+"performance.gate.session.message" = "Your session has ended. Open Instagram to refresh it, then tap Re-login.";
+"performance.gate.wait.title" = "Please wait — %@ remaining";
+"performance.gate.post_archive.message" = "Archive operation complete. A brief cooldown is active to protect your account.";
+"performance.gate.safety.message" = "A safety pause is active to protect your account from API limits.";
+"performance.gate.auto_enter" = "Auto-entering in %@…";
+"session.panel.open_instagram" = "Open Instagram";
+"session.panel.relogin_after_instagram" = "Re-login after Instagram";
+"common.cancel" = "Cancel";
+"session.panel.restart.title" = "Restart Required";
+"session.panel.restart.message" = "Device fingerprint cleared. Force-quit the app and reopen it to complete the reset, then log in again.";
+"common.ok" = "OK";
+"session.panel.stuck.title" = "Re-login is not working";
+"session.panel.stuck.message" = "Your session cannot be restored with re-login. This usually means Instagram has flagged this device. Use Emergency Logout below to generate a new device identity, then force-quit and reopen the app.";
+"session.panel.emergency_steps.intro" = "Steps to follow:";
+"session.panel.emergency_step.1" = "Tap \"Emergency Logout\" below";
+"session.panel.emergency_step.2" = "Force-quit the app — swipe up from the bottom and swipe the app away";
+"session.panel.emergency_step.3" = "Reopen the app — a new device identity will be created automatically";
+"session.panel.emergency_step.4" = "Log in again";

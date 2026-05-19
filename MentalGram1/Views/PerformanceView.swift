@@ -8,6 +8,7 @@ import AudioToolbox
 struct PerformanceView: View {
     @ObservedObject var instagram = InstagramService.shared
     @ObservedObject private var dateForce = DateForceSettings.shared
+    @ObservedObject private var fullLoader = ProfileFullLoaderService.shared
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var profileCache = ProfileCacheService.shared
     @AppStorage("autoProfilePicOnPerformance") private var autoProfilePicOnPerformance = false
@@ -54,6 +55,9 @@ struct PerformanceView: View {
     @State private var performanceEntryRecorded = false
     /// Seconds remaining in the safety-gate pause. Non-zero only when blocked with no cache.
     @State private var safetyGateCountdown: Int = 0
+    /// Shown the very first time Performance loads (no cache yet). Stored so it never appears again.
+    @AppStorage("perf.hasSeenFirstTimeBanner") private var hasSeenFirstTimeBanner: Bool = false
+    @State private var showFirstTimeBanner: Bool = false
     @Binding var selectedTab: Int
     @Binding var showingExplore: Bool
     
@@ -142,9 +146,13 @@ struct PerformanceView: View {
 
     private var performanceRoot: some View {
         ZStack(alignment: .bottom) {
+            // Full-screen white base (status bar + home indicator area)
             Color.white.ignoresSafeArea()
+            // profileContent fills the entire screen — the scroll view's internal
+            // bottom spacer (94 pt) ensures the last grid row scrolls above the pill.
+            // No external bottom padding here so the grid extends all the way down
+            // and the glass pill floats over real content, not an empty white gap.
             profileContent
-                .padding(.bottom, 54)
             bottomBar
         }
     }
@@ -163,6 +171,28 @@ struct PerformanceView: View {
             if !performanceRemoteCallsAllowed && profile == nil && safetyGateCountdown > 0 {
                 safetyGateWaitingOverlay
             }
+            if showFirstTimeBanner { firstTimeBannerOverlay }
+        }
+    }
+
+    private var firstTimeBannerOverlay: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 10) {
+                Image(systemName: "info.circle.fill")
+                    .foregroundColor(.white)
+                Text(String(localized: "perf.first_time_banner"))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.black.opacity(0.82))
+            .cornerRadius(12)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 90)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -180,6 +210,16 @@ struct PerformanceView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white.opacity(0.92))
+    }
+
+    @MainActor private func triggerFirstTimeBannerIfNeeded() {
+        guard !hasSeenFirstTimeBanner, profile == nil else { return }
+        hasSeenFirstTimeBanner = true
+        withAnimation(.easeIn(duration: 0.3)) { showFirstTimeBanner = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            withAnimation(.easeOut(duration: 0.4)) { showFirstTimeBanner = false }
+        }
     }
 
     @ViewBuilder private var spectatorOverlay: some View {
@@ -215,7 +255,7 @@ struct PerformanceView: View {
             InstagramBottomBar(
                 profileImageURL: profile?.profilePicURL,
                 cachedImage: profile?.profilePicURL != nil ? cachedImages[profile!.profilePicURL] : nil,
-                isHome: true, isSearch: false,
+                isHome: !showingExplore, isSearch: showingExplore,
                 onHomePress: {},
                 onSearchPress: {
                     // Capture buffer ONCE before any consumer resets it.
@@ -340,10 +380,19 @@ struct PerformanceView: View {
     private func fetchReelsIfNeeded(for cached: InstagramProfile) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
-        // Re-fetch when either the URLs or the full items list is missing.
-        // Older caches (before cachedReelItems existed) may have URLs but no
-        // videoURLs, which prevents in-grid video playback.
-        let needsFetch = cached.cachedReelURLs.isEmpty || cached.cachedReelItems.isEmpty
+        // Re-fetch when:
+        //  a) No cache at all (first load)
+        //  b) URLs exist but items list is missing (old cache before cachedReelItems was added)
+        //  c) Exactly 10 items cached — that was the hard server cap before pagination was added.
+        //     After a successful paginated fetch the count will be ≥10 items from 2+ pages
+        //     (or still 10 if the account genuinely has only 10 reels, but we mark it done
+        //     via UserDefaults so we don't re-fetch every session).
+        let reelsPaginationKey = "reels_paginated_\(cached.userId)"
+        let alreadyPaginated = UserDefaults.standard.bool(forKey: reelsPaginationKey)
+        let looksLikeOldSinglePage = cached.cachedReelItems.count == 10 && !alreadyPaginated
+        let needsFetch = cached.cachedReelURLs.isEmpty
+                      || cached.cachedReelItems.isEmpty
+                      || looksLikeOldSinglePage
         guard needsFetch else {
             print("🎬 [REELS] Already cached (\(cached.cachedReelURLs.count) URLs, \(cached.cachedReelItems.count) items) — skipping fetch")
             return
@@ -352,13 +401,15 @@ struct PerformanceView: View {
         do {
             // Random human-like delay before the new API call.
             try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
-            let items = try await instagram.getUserReels(userId: cached.userId, amount: 18)
+            let items = try await instagram.getUserReels(userId: cached.userId, amount: 50)
             let reelURLs = items.map { $0.imageURL }
             var updated = cached
             updated.cachedReelURLs = reelURLs
             updated.cachedReelItems = items
             profile = updated
             ProfileCacheService.shared.saveProfile(updated)
+            // Mark paginated fetch done so we never re-fetch just because count==10
+            UserDefaults.standard.set(true, forKey: "reels_paginated_\(cached.userId)")
             // Download thumbnails
             for url in reelURLs where cachedImages[url] == nil {
                 if let img = await downloadImage(from: url) {
@@ -378,19 +429,23 @@ struct PerformanceView: View {
     private func fetchTaggedIfNeeded(for cached: InstagramProfile) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
-        guard cached.cachedTaggedURLs.isEmpty else {
+        let taggedPaginationKey = "tagged_paginated_\(cached.userId)"
+        let taggedAlreadyPaginated = UserDefaults.standard.bool(forKey: taggedPaginationKey)
+        let taggedLooksOld = cached.cachedTaggedURLs.count == 18 && !taggedAlreadyPaginated
+        guard cached.cachedTaggedURLs.isEmpty || taggedLooksOld else {
             print("🏷️ [TAGGED] Already cached (\(cached.cachedTaggedURLs.count)) — skipping fetch")
             return
         }
         print("🏷️ [TAGGED] Lazy-loading tagged for first tab visit…")
         do {
             try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
-            let items = try await instagram.getUserTagged(userId: cached.userId, amount: 18)
+            let items = try await instagram.getUserTagged(userId: cached.userId, amount: 50)
             let taggedURLs = items.map { $0.imageURL }
             var updated = cached
             updated.cachedTaggedURLs = taggedURLs
             profile = updated
             ProfileCacheService.shared.saveProfile(updated)
+            UserDefaults.standard.set(true, forKey: "tagged_paginated_\(cached.userId)")
             for url in taggedURLs where cachedImages[url] == nil {
                 if let img = await downloadImage(from: url) {
                     cachedImages[url] = img
@@ -492,7 +547,15 @@ struct PerformanceView: View {
     }
 
     var body: some View {
-        ocrModifiers
+        ZStack {
+            ocrModifiers
+
+            // Block performance until the full profile has been pre-loaded.
+            if fullLoader.isBlockingPerformance {
+                FullLoadOverlayView(loader: fullLoader)
+                    .transition(.opacity)
+            }
+        }
             .background(Color.white.ignoresSafeArea())
             .toolbar(.hidden, for: .tabBar)
         .edgesIgnoringSafeArea(.bottom)
@@ -600,6 +663,22 @@ struct PerformanceView: View {
             let added   = newSet.subtracting(currentSet).count
             print("🔄 [PERF] onChange cachedMediaURLs: \(allMediaURLs.count)→\(newURLs.count) (-\(removed) +\(added))")
             allMediaURLs = newURLs
+            // Keep mediaItemsByURL in sync with the new URL set:
+            //   1) Bring in metadata for any newly-arrived URLs from the cached profile.
+            //   2) Drop entries whose URLs no longer appear in the grid (avoids leaking
+            //      stale CDN URLs that rotated, which left orphan items in the dict).
+            //   3) Always preserve reveal:// metadata since those are local-only entries
+            //      injected by performance actions, not present in the profile cache.
+            if let cachedItems = profileCache.cachedProfile?.cachedMediaItems {
+                for item in cachedItems where newSet.contains(item.imageURL) {
+                    mediaItemsByURL[item.imageURL] = item
+                }
+            }
+            let urlsToKeep = newSet
+            mediaItemsByURL = mediaItemsByURL.filter { key, _ in
+                urlsToKeep.contains(key) || key.hasPrefix("reveal://")
+            }
+            revealDates = revealDates.filter { key, _ in urlsToKeep.contains(key) }
             // Download thumbnails for any new URLs not yet cached
             let missing = newURLs.filter { cachedImages[$0] == nil }
             if !missing.isEmpty { downloadImagesForURLs(missing) }
@@ -687,6 +766,7 @@ struct PerformanceView: View {
                     print("🛡️ [PERF] Cache-only entry — \(entryDecision.reason) (\(entryDecision.waitSeconds)s)")
                     LogManager.shared.warning("CACHE ONLY — Performance entry blocked remote calls: \(entryDecision.reason)", category: .general)
                     checkAndLoadProfile(allowRemote: false)
+                    triggerFirstTimeBannerIfNeeded()
                     // If there's no cached profile either, show a countdown + auto-retry
                     // so the user doesn't see a frozen blank screen.
                     if profile == nil && entryDecision.waitSeconds > 0 {
@@ -700,6 +780,15 @@ struct PerformanceView: View {
                             guard profile == nil else { return }
                             performanceEntryRecorded = false
                             performanceRemoteCallsAllowed = true
+                            // Re-validate session and attempt remote load now that the
+                            // safety gate has released. Without this the user would stay
+                            // on the skeleton forever until they manually leave and re-enter.
+                            let status = await instagram.validateSession()
+                            guard status == .valid || status == .networkError else {
+                                LogManager.shared.warning("Post-countdown remote retry aborted — session \(status)", category: .general)
+                                return
+                            }
+                            checkAndLoadProfile(allowRemote: true)
                         }
                     }
                     return
@@ -711,6 +800,7 @@ struct PerformanceView: View {
                     return
                 }
                 checkAndLoadProfile(allowRemote: true)
+                triggerFirstTimeBannerIfNeeded()
 
                 // Cold-start guard: during the first ~45s of the app session we do NOT
                 // chain a silent grid refresh after validateSession. The 3-endpoint
@@ -852,6 +942,15 @@ struct PerformanceView: View {
             }
         }
         .onChange(of: scenePhase) { phase in
+            // Pause / resume full-profile pre-loader with app lifecycle.
+            switch phase {
+            case .background, .inactive:
+                if fullLoader.isBlockingPerformance { fullLoader.pause() }
+            case .active:
+                if fullLoader.isBlockingPerformance { fullLoader.startOrResume() }
+            @unknown default: break
+            }
+
             // Auto-recovery: when the app returns from background while locked,
             // probe the Instagram session. If the user dismissed the challenge in
             // the real Instagram app, the probe succeeds → unlock immediately.
@@ -1644,6 +1743,16 @@ struct PerformanceView: View {
 
             // Build mediaItemsByURL in O(n) using a dictionary keyed by imageURL.
             // Previous code used first(where:) inside a loop → O(n²) with 100+ posts.
+            //
+            // Drop entries whose URLs are no longer in the grid before merging the new
+            // ones. Without this, stale CDN URLs from previous loads accumulate and can
+            // ghost-link to mismatched metadata. We preserve reveal:// keys because they
+            // are local-only placeholders inserted by performance actions and don't
+            // belong to the profile cache.
+            let activeURLs = Set(cached.cachedMediaURLs)
+            mediaItemsByURL = mediaItemsByURL.filter { key, _ in
+                activeURLs.contains(key) || key.hasPrefix("reveal://")
+            }
             for item in cached.cachedMediaItems { mediaItemsByURL[item.imageURL] = item }
 
             loadCachedImages()
@@ -1690,11 +1799,11 @@ struct PerformanceView: View {
 
         do {
             // Sequential instead of parallel — avoids 3 simultaneous API calls
-            let reels      = try await instagram.getUserReels(userId: cached.userId, amount: 18)
+            let reels      = try await instagram.getUserReels(userId: cached.userId, amount: 50)
             guard !instagram.isLocked else { return }
             try? await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
 
-            let tagged     = try await instagram.getUserTagged(userId: cached.userId, amount: 18)
+            let tagged     = try await instagram.getUserTagged(userId: cached.userId, amount: 50)
             guard !instagram.isLocked else { return }
             try? await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
 
@@ -1846,9 +1955,8 @@ struct PerformanceView: View {
                 let fetchedProfile = try await instagram.getProfileInfo()
                 
                     if let fetchedProfile = fetchedProfile {
-                // Clear old cache only after we have fresh data — prevents blank screen on error
-                print("🗑️ [CACHE] Clearing old cache (fresh data ready)")
-                ProfileCacheService.shared.clearAll()
+                // Keep the user-scoped image cache during refresh so existing thumbnails
+                // remain visible while fresh metadata is saved over the old profile.json.
                 mediaItemsByURL.removeAll()
                 revealDates.removeAll()
                 // Keep cachedImages so existing thumbnails stay visible during transition
@@ -2184,6 +2292,9 @@ struct PerformanceView: View {
                     if var updatedProfile = profile {
                         updatedProfile.cachedMediaURLs = allMediaURLs
                         updatedProfile.cachedMediaItems = allMediaURLs.compactMap { mediaItemsByURL[$0] }
+                        // Persist the latest cursor so the next app session starts from
+                        // page N+1 instead of re-fetching the already-cached first page.
+                        updatedProfile.cachedNextMaxId = newMaxId
                         updatedProfile.cachedAt = Date()
                         profile = updatedProfile
                         ProfileCacheService.shared.saveProfile(updatedProfile)
@@ -3188,8 +3299,8 @@ struct InstagramProfileView: View {
                 Divider()
                 tabContentSection
                 // Bottom spacer so the last row of the grid can always be scrolled
-                // fully above the fixed bottom bar (which overlaps ~54 pts from the bottom).
-                Color.clear.frame(height: 60)
+                // fully above the floating pill (~54 pt pill height + 8 pt bottom gap + 32 pt margin).
+                Color.clear.frame(height: 94)
             }
         }
         .onAppear {
@@ -4633,7 +4744,7 @@ struct ReelsGridView: View {
     var body: some View {
         let placeholderCount = max(0, minCells - reelURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
-            ForEach(Array(reelURLs.enumerated()), id: \.offset) { index, url in
+            ForEach(Array(reelURLs.enumerated()), id: \.element) { index, url in
                 Color.clear
                     .aspectRatio(1, contentMode: .fit)
                     .overlay(
@@ -4860,6 +4971,9 @@ struct AutoFollowedByView: View {
                 UserProfileView(profile: profile, onClose: {
                     withAnimation(.easeInOut(duration: 0.22)) { showingProfile = false }
                 })
+                // Force SwiftUI to discard @State and re-init when the profile changes;
+                // without this, switching from profile A to B can leave A's grid/state.
+                .id(profile.userId)
                 .transition(.move(edge: .trailing))
                 .zIndex(10)
                 .ignoresSafeArea()
@@ -5110,7 +5224,10 @@ struct PhotosGridView: View {
     var body: some View {
         let placeholderCount = max(0, minCells - mediaURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
-            ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
+            // Identify cells by URL (element) instead of position (offset). Otherwise
+            // reveal:// insertions and refreshes cause SwiftUI to reuse cells by index
+            // and show the wrong thumbnail in a slot.
+            ForEach(Array(mediaURLs.enumerated()), id: \.element) { index, url in
                 Color.clear
                     .aspectRatio(1, contentMode: .fit)
                     .overlay(
@@ -5509,6 +5626,45 @@ private struct PostCardView: View {
     }
 }
 
+// MARK: - Nav Button Style
+
+/// Minimal press feedback only — no permanent background on any icon.
+/// Active-tab indicator is handled separately inside InstagramBottomBar.
+private struct IGNavButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.5 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.84 : 1.0)
+            .animation(.easeInOut(duration: 0.11), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Glass Pill View Extension
+
+private extension View {
+    /// Applies the pill background.
+    /// iOS 26+: native .glassEffect(.clear) — real liquid glass, light bending,
+    ///          specular highlights, maximum transparency over photo content.
+    /// iOS 16–25: ultraThinMaterial + white tint fallback.
+    @ViewBuilder
+    func igGlassPill() -> some View {
+        if #available(iOS 26.0, *) {
+            // Tint at 0.82 neutralises dark grid photos so the pill looks
+            // the same light grey as it does over Explore's white background.
+            self.glassEffect(.regular.tint(.white.opacity(0.82)), in: .capsule)
+        } else {
+            self.background(
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(Capsule(style: .continuous).fill(Color.white.opacity(0.62)))
+                    .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(0.90), lineWidth: 0.7))
+                    .shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 6)
+                    .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
+            )
+        }
+    }
+}
+
 // MARK: - Instagram Bottom Bar
 
 struct InstagramBottomBar: View {
@@ -5544,60 +5700,82 @@ struct InstagramBottomBar: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Rectangle()
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.15), radius: 0, x: 0, y: -0.33)
-            
-            HStack(spacing: 0) {
-                Button(action: onHomePress) {
-                    IGIcon(asset: "instagram_home", fallback: "house", size: 24)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                Button(action: onReelsPress) {
-                    IGIcon(asset: "instagram_reels_tab", fallback: "play.rectangle", size: 24)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                Button(action: onMessagesPress) {
-                    ZStack(alignment: .topTrailing) {
-                        IGIcon(asset: "instagram_share", fallback: "paperplane", size: 24)
-                        // Red dot: only visible when API budget is critically low (<8 remaining).
-                        // Signals to the magician that a new profile visit would be blocked.
-                        if instagram.checkRateLimit().remaining < 8 {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 7, height: 7)
-                                .overlay(Circle().stroke(Color.black, lineWidth: 1))
-                                .offset(x: 6, y: -3)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                Button(action: onSearchPress) {
-                    IGIcon(asset: "instagram_search", fallback: "magnifyingglass", size: 24)
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, 44)
-                
-                Button(action: onProfilePress) {
-                    profileAvatarView
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 10)
-                .padding(.bottom, 44)
+        // Content area height is fixed at 46 pt; pill adds 10 pt padding each side
+        // → total pill height ≈ 66 pt → capsule cornerRadius ≈ 33 pt.
+        // The indicator uses cornerRadius 28 (= 33 − 5) for concentric curvature,
+        // and expands to fill almost the full pill height (4 pt margin top/bottom).
+        HStack(spacing: 0) {
+            Button(action: onHomePress) {
+                navItem(asset: "instagram_home", fallback: "house", isActive: isHome)
             }
+            .buttonStyle(IGNavButtonStyle())
+
+            Button(action: onReelsPress) {
+                navItem(asset: "instagram_reels_tab", fallback: "play.rectangle", isActive: false)
+            }
+            .buttonStyle(IGNavButtonStyle())
+
+            Button(action: onMessagesPress) {
+                navItem(
+                    asset: "instagram_share",
+                    fallback: "paperplane",
+                    isActive: false,
+                    showRedDot: instagram.checkRateLimit().remaining < 8
+                )
+            }
+            .buttonStyle(IGNavButtonStyle())
+
+            Button(action: onSearchPress) {
+                navItem(asset: "instagram_search", fallback: "magnifyingglass", isActive: isSearch)
+            }
+            .buttonStyle(IGNavButtonStyle())
+
+            Button(action: onProfilePress) {
+                profileAvatarView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .buttonStyle(IGNavButtonStyle())
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(height: 46)          // fixed content height → pill height = 66 pt
+        .padding(.vertical, 10)
+        .igGlassPill()
+        .padding(.horizontal, 26)
+        .padding(.bottom, 14)
+    }
+
+    /// Icon centred in an equal-width slot. The indicator background expands to
+    /// fill the full slot height (maxHeight: .infinity), leaving only 4 pt margin
+    /// top/bottom — it nearly touches the pill capsule edge, matching native iOS.
+    /// cornerRadius 28 is concentric with the pill's capsule (~33 pt radius).
+    @ViewBuilder
+    private func navItem(
+        asset: String,
+        fallback: String,
+        isActive: Bool,
+        showRedDot: Bool = false
+    ) -> some View {
+        ZStack {
+            // Dot is anchored relative to the 24 pt icon, not the full slot
+            IGIcon(asset: asset, fallback: fallback, size: 24)
+                .overlay(alignment: .bottomTrailing) {
+                    if showRedDot {
+                        Circle()
+                            // Explicit sRGB red so it stays vivid even over dark glass
+                            .fill(Color(red: 1.0, green: 0.18, blue: 0.18))
+                            .frame(width: 8, height: 8)
+                            // White ring separates the dot from any dark background
+                            .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                            .offset(x: 4, y: 4)
+                    }
+                }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.black.opacity(isActive ? 0.11 : 0))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+        )
     }
 
     @ViewBuilder
@@ -5726,6 +5904,7 @@ struct SpectatorProfileCover: View {
         Group {
             if let profile {
                 UserProfileView(profile: profile, onClose: onClose)
+                    .id(profile.userId)
             } else if isLoading {
                 Color.white.ignoresSafeArea()
                     .overlay(
@@ -5781,6 +5960,113 @@ struct SpectatorProfileCover: View {
                 }
                 print("❌ [SPECTATOR] Error: \(error)")
             }
+        }
+    }
+}
+
+// MARK: - Full Load Progress Overlay
+
+/// Full-screen overlay shown in PerformanceView while ProfileFullLoaderService
+/// is pre-caching the profile. Disappears automatically once loading completes.
+struct FullLoadOverlayView: View {
+    @ObservedObject var loader: ProfileFullLoaderService
+    /// After this many seconds the user can skip the wait.
+    private let skipAfterSeconds: Int = 120
+    @State private var elapsed: Int = 0
+    @State private var timerRef: Timer? = nil
+
+    var body: some View {
+        ZStack {
+            Color.white.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                // Instagram logo mark
+                if UIImage(named: "instagram_logo_icon") != nil {
+                    Image("instagram_logo_icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 52, height: 52)
+                        .padding(.bottom, 28)
+                }
+
+                // Phase spinner or countdown ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.black.opacity(0.08), lineWidth: 2.5)
+                        .frame(width: 72, height: 72)
+
+                    if loader.phase == .warmingUp && loader.warmupSecondsRemaining > 0 {
+                        Circle()
+                            .trim(from: 0, to: CGFloat(loader.warmupSecondsRemaining) / 90.0)
+                            .stroke(Color.black, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            .frame(width: 72, height: 72)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 1), value: loader.warmupSecondsRemaining)
+
+                        Text("\(loader.warmupSecondsRemaining)")
+                            .font(.system(size: 20, weight: .semibold, design: .rounded))
+                            .foregroundColor(.black)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                            .scaleEffect(1.4)
+                    }
+                }
+                .padding(.bottom, 28)
+
+                Text(loader.progressDescription)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.black)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                    .animation(.easeInOut, value: loader.phase)
+
+                if loader.phase == .grid && loader.gridItemsLoaded > 0 {
+                    Text("\(loader.gridItemsLoaded) posts")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color.black.opacity(0.45))
+                        .padding(.top, 6)
+                        .transition(.opacity)
+                }
+
+                Spacer()
+                Spacer()
+
+                if elapsed >= skipAfterSeconds {
+                    Button {
+                        loader.skipToCompleted()
+                    } label: {
+                        Text(NSLocalizedString("fullload.skip", comment: "Skip and use anyway"))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color.black.opacity(0.45))
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 24)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.black.opacity(0.18), lineWidth: 1)
+                            )
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    .padding(.bottom, 48)
+                } else {
+                    // Placeholder keeps layout stable while skip button isn't shown
+                    Color.clear
+                        .frame(height: 40)
+                        .padding(.bottom, 48)
+                }
+            }
+        }
+        .onAppear { startElapsedTimer() }
+        .onDisappear { timerRef?.invalidate(); timerRef = nil }
+    }
+
+    private func startElapsedTimer() {
+        elapsed = 0
+        timerRef?.invalidate()
+        timerRef = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            elapsed += 1
         }
     }
 }

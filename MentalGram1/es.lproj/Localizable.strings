@@ -111,8 +111,8 @@
 "settings.digit_grid_warn" = "Tienes un set de números activo pero la cuadrícula está desactivada. Actívala para desarchivar fotos deslizando.";
 "settings.ocr" = "OCR";
 "settings.camera" = "Cámara";
-"settings.camera_desc" = "La cámara se activa silenciosamente al abrir Actuación. Vibra al reconocer texto.";
-"settings.camera_desc_full" = "La cámara se inicia en silencio al abrir Actuación. El texto reconocido revela automáticamente: letras → set de palabras, dígitos → set de números.";
+"settings.camera_desc" = "Pulsa subir volumen para activar la cámara en silencio. Vibra al reconocer texto.";
+"settings.camera_desc_full" = "Pulsa subir volumen para iniciar la cámara en silencio. Apunta a cualquier palabra escrita — el texto reconocido se revela automáticamente: letras → set de palabras, dígitos → set de números. Pulsa de nuevo para detener.";
 "settings.auto_input" = "Entrada automática";
 "settings.auto_input_desc" = "Obtiene texto de Inject o API personalizada al abrir Actuación";
 "settings.api_source" = "API Source";
@@ -780,7 +780,7 @@
 "postpred.help.input.grid.step3" = "Pulsa el icono Posts para confirmar y activar la revelación.";
 "postpred.help.input.ocr.label" = "OCR — CÁMARA";
 "postpred.help.input.ocr.step1" = "Activa **OCR** en los ajustes de Post Prediction.";
-"postpred.help.input.ocr.step2" = "Apunta la camara a cualquier palabra escrita a mano o impresa. La app la lee automaticamente y activa la revelacion correspondiente.";
+"postpred.help.input.ocr.step2" = "Pulsa el botón de subir volumen para iniciar la cámara en silencio. Apunta a cualquier palabra escrita a mano o impresa — la app la lee y activa la revelación correspondiente automáticamente.";
 "postpred.help.input.covert.label" = "ESCRITURA ENCUBIERTA";
 "postpred.help.input.covert.step1" = "Activa **Escritura Encubierta** en los ajustes y define una palabra de cobertura — lo que el espectador verá en pantalla.";
 "postpred.help.input.covert.step2" = "Escribe la palabra del espectador en el campo de búsqueda de Explore. El espectador ve la palabra de cobertura; la app registra silenciosamente la real.";
@@ -1314,7 +1314,7 @@
 "Post a note on your Instagram profile that matches what the spectator predicted — visible above your profile picture for 24 hours." = "Publica una nota en tu perfil de Instagram que coincida con lo que predijo el espectador — visible sobre tu foto de perfil durante 24 horas.";
 "The note appears above your profile picture in the Instagram Stories bar — only your followers can see it." = "La nota aparece sobre tu foto de perfil en la barra de Stories de Instagram — solo tus seguidores pueden verla.";
 "The app calls the Instagram API directly to post the note. Set up an API source in \"Auto Input\" to pull the text from an external service (e.g. a personal webhook or Make/Zapier automation)." = "La app llama directamente a la API de Instagram para publicar la nota. Configura una fuente API en \"Auto Input\" para obtener el texto de un servicio externo (p.ej. un webhook personal o automatización Make/Zapier).";
-"Point the camera at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note, no typing required." = "Apunta la cámara hacia una palabra que el espectador escribió o una tarjeta que sostiene — la app lee el texto automáticamente y lo envía como tu nota, sin necesidad de escribir.";
+"Point the camera at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note, no typing required." = "Pulsa subir volumen para iniciar la cámara en silencio, luego apúntala a la palabra que el espectador escribió o a la tarjeta que sostiene — la app lee el texto automáticamente y lo envía como tu nota.";
 "Ask the spectator to think of or write a short word (max 60 characters)." = "Pide al espectador que piense o escriba una palabra corta (máx. 60 caracteres).";
 "Use OCR to read it covertly, or enter it manually before the performance." = "Usa el OCR para leerlo de forma encubierta, o introdúcelo manualmente antes de la actuación.";
 "Open Performance — the note posts automatically (with API or URL Scheme) or tap \"Send Note\". It appears in the fake profile instantly." = "Abre Performance — la nota se publica automáticamente (con API o URL Scheme) o toca \"Enviar nota\". Aparece en el perfil falso al instante.";
@@ -1612,3 +1612,61 @@
 "settings.lockscreen.warning_no_wallpaper" = "Selecciona un fondo para activar";
 "action.change" = "Cambiar";
 "action.remove" = "Eliminar";
+"perf.first_time_banner" = "Primera vez — se está descargando tu perfil. Esto solo ocurrirá una vez.";
+
+// MARK: - API Budget Widget & Warning Sheet
+"budget.title" = "Presupuesto API";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "%d restantes";
+"budget.renewal_at" = "Presupuesto completo a las %@";
+"budget.status.full" = "Presupuesto completo";
+"budget.status.full_used" = "Presupuesto agotado — espera la renovación";
+"budget.warning.title" = "Presupuesto bajo";
+"budget.warning.renewal" = "Presupuesto completo a las %@";
+"budget.warning.advice" = "Evita entrar en Performance hasta que se renueve el presupuesto para no interrumpir un pase.";
+"action.understood" = "Entendido";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "Preparando el Pase";
+"initial_load.phase.validating" = "Verificando tu sesión…";
+"initial_load.phase.loading_profile" = "Cargando tu perfil de Instagram…";
+"initial_load.phase.paginating" = "Cargando publicaciones — página %d…";
+"initial_load.phase.loading_reels" = "Cargando reels…";
+"initial_load.phase.loading_tagged" = "Cargando etiquetados…";
+"initial_load.reels_count" = "%d reels";
+"initial_load.tagged_count" = "%d etiquetados";
+"initial_load.photos_count_one" = "%d publicación cargada";
+"initial_load.photos_count" = "%d publicaciones cargadas";
+"initial_load.estimated_time" = "Puede tardar varios minutos";
+"initial_load.one_time_promise" = "Solo ocurre esta vez — la próxima vez entrarás directamente.";
+"initial_load.footer" = "Si subes nuevas fotos a Instagram más adelante, actualiza el Pase manualmente para refrescar la caché.";
+"initial_load.error.session" = "Sesión expirada. Inicia sesión de nuevo para continuar.";
+"initial_load.error.load_failed" = "No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.";
+
+"fullload.warming_up" = "Preparando… %d s";
+"fullload.grid" = "Cargando publicaciones — %d cargadas";
+"fullload.reels" = "Cargando reels…";
+"fullload.tagged" = "Cargando etiquetadas…";
+"fullload.done" = "¡Perfil listo!";
+"fullload.skip" = "Saltar y continuar igual";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "Sesión expirada";
+"performance.gate.session.message" = "Tu sesión ha caducado. Abre Instagram para actualizarla y luego pulsa Volver a iniciar sesión.";
+"performance.gate.wait.title" = "Por favor espera — %@ restante";
+"performance.gate.post_archive.message" = "Operación de archivo completada. Se aplica una breve pausa para proteger tu cuenta.";
+"performance.gate.safety.message" = "Se aplica una pausa de seguridad para proteger tu cuenta de los límites de la API.";
+"performance.gate.auto_enter" = "Entrando en %@…";
+"session.panel.open_instagram" = "Abrir Instagram";
+"session.panel.relogin_after_instagram" = "Volver a iniciar sesión";
+"common.cancel" = "Cancelar";
+"session.panel.restart.title" = "Reinicio necesario";
+"session.panel.restart.message" = "Huella del dispositivo eliminada. Cierra la app completamente y ábrela de nuevo para completar el reinicio y luego vuelve a iniciar sesión.";
+"common.ok" = "OK";
+"session.panel.stuck.title" = "El relogin no está funcionando";
+"session.panel.stuck.message" = "Tu sesión no puede restaurarse con el relogin. Normalmente significa que Instagram ha marcado este dispositivo. Usa el Logout de Emergencia a continuación para generar una nueva identidad de dispositivo y luego cierra y reabre la app.";
+"session.panel.emergency_steps.intro" = "Pasos a seguir:";
+"session.panel.emergency_step.1" = "Pulsa \"Logout de emergencia\" a continuación";
+"session.panel.emergency_step.2" = "Cierra la app completamente — desliza hacia arriba desde la parte inferior y elimínala del multitarea";
+"session.panel.emergency_step.3" = "Vuelve a abrir la app — se creará automáticamente una nueva identidad de dispositivo";
+"session.panel.emergency_step.4" = "Inicia sesión de nuevo";

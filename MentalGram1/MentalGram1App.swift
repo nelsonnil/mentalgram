@@ -287,6 +287,7 @@ struct LockdownDetailsSheet: View {
     @State private var timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var secondsRemaining: Int = 0
     @State private var isUnlocked = false
+    @State private var showRestartAlert = false
     @Environment(\.dismiss) var dismiss
 
     // challenge_required → el mago debe ir a Instagram a verificar
@@ -412,7 +413,7 @@ struct LockdownDetailsSheet: View {
 
                         Button {
                             instagram.emergencyLogout()
-                            dismiss()
+                            showRestartAlert = true
                         } label: {
                             Text(String(localized: "lockdown.btn.logout"))
                                 .font(.subheadline)
@@ -421,6 +422,11 @@ struct LockdownDetailsSheet: View {
                                 .padding(.vertical, 12)
                                 .background(Color.red.opacity(0.08))
                                 .cornerRadius(12)
+                        }
+                        .alert(String(localized: "session.panel.restart.title"), isPresented: $showRestartAlert) {
+                            Button(String(localized: "common.ok"), role: .cancel) { dismiss() }
+                        } message: {
+                            Text(String(localized: "session.panel.restart.message"))
                         }
 
                         Text(String(localized: "lockdown.btn.logout.note"))

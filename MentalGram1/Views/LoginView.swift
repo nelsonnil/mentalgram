@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import AVFoundation
 
 // MARK: - Login View
 
@@ -333,6 +334,14 @@ struct InstagramWebLoginView: UIViewRepresentable {
                     svc.setSessionFromCookies(cookies: instagramCookies)
                     self.parent.isPresented = false
                     print("✅ [LOGIN] Re-login successful — session restored")
+
+                    // Request camera permission upfront so OCR works without
+                    // interrupting the first Performance session.
+                    AVCaptureDevice.requestAccess(for: .video) { granted in
+                        print(granted
+                            ? "📸 [PERM] Camera access granted"
+                            : "⚠️ [PERM] Camera access denied")
+                    }
                 }
             }
         }

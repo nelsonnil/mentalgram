@@ -144,13 +144,13 @@ struct SetDetailView: View {
     }
 
     /// Effective slot labels used for grid display.
-    /// For custom sets, derives labels numerically from existing photos (or defaults to 10 slots).
+    /// For custom sets, derives labels numerically from existing photos (or defaults to 1 slot).
     /// For word/number sets, returns the model's fixed labels.
     private var effectiveSlotLabels: [String] {
         if currentSet.type == .custom {
             let numericSymbols = currentSet.photos.compactMap { Int($0.symbol) }
             let maxSlot = numericSymbols.max() ?? 0
-            let count = max(maxSlot, 10)
+            let count = max(maxSlot, 1)
             return (1...count).map { "\($0)" }
         }
         return currentSet.slotLabels
@@ -1712,6 +1712,8 @@ struct SetDetailView: View {
             // Wait can be up to ~10 min, but the loop polls the gate each
             // second so as soon as the oldest archive falls out of the window
             // we get a green light.
+            var budgetPauseInitialSeconds: Int?
+            var lastBudgetLogBucket: Int?
             while true {
                 let budget = InstagramSafetyGate.shared.decision(for: .archive)
                 if budget.allowed { break }
@@ -1728,8 +1730,19 @@ struct SetDetailView: View {
                 let snapshot = budget.waitSeconds
                 await MainActor.run { saCountdownSeconds = snapshot }
                 print("⏸️ [S&A] Budget pause — waiting \(snapshot)s before continuing (\(budget.reason))")
-                LogManager.shared.info("S&A: safe pause \(snapshot)s for archive budget (\(budget.reason))", category: .upload)
+                let bucket = snapshot / 30
+                if budgetPauseInitialSeconds == nil {
+                    budgetPauseInitialSeconds = snapshot
+                    lastBudgetLogBucket = bucket
+                    LogManager.shared.info("S&A: archive budget exceeded — pausing for \(snapshot)s (\(budget.reason))", category: .upload)
+                } else if bucket != lastBudgetLogBucket && snapshot % 30 == 0 {
+                    lastBudgetLogBucket = bucket
+                    LogManager.shared.info("S&A: still waiting — \(snapshot)s remaining", category: .upload)
+                }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            if let initial = budgetPauseInitialSeconds {
+                LogManager.shared.info("S&A: pause completed after \(initial)s", category: .upload)
             }
             // If the inner while bailed out (long cooldown), stop the loop too.
             if stoppedReason != nil { break }
@@ -1781,6 +1794,7 @@ struct SetDetailView: View {
 
         print("📦 [S&A] Done — \(archived)/\(confirmedToArchive.count) archived")
         LogManager.shared.info("Archive All complete: \(archived)/\(confirmedToArchive.count)", category: .general)
+        InstagramSafetyGate.shared.markHeavyArchiveCompleted(photoCount: archived)
 
         let finalStopReason = stoppedReason
         await MainActor.run {

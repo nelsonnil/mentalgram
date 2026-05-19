@@ -124,7 +124,7 @@
 "settings.ocr" = "OCR";
 "settings.camera" = "카메라";
 "settings.camera_desc" = "퍼포먼스가 열리면 카메라가 조용히 활성화됩니다. 인식 시 한 번 진동합니다.";
-"settings.camera_desc_full" = "퍼포먼스가 열리면 카메라가 조용히 시작됩니다. 인식된 텍스트가 자동으로 공개됩니다: 문자 → 단어 세트, 숫자 → 숫자 세트.";
+"settings.camera_desc_full" = "볼륨+를 눌러 카메라를 조용히 시작합니다. 쓰인 단어를 향하면 앱이 자동으로 읽고 카메라를 정지합니다. Performance 세션당 한 번만 인식합니다.";
 "settings.auto_input" = "자동 입력";
 "settings.auto_input_desc" = "퍼포먼스가 열릴 때 Inject 또는 커스텀 API에서 텍스트를 가져옵니다";
 "settings.api_source" = "API Source";
@@ -1383,4 +1383,61 @@
 "action.remove" = "제거";
 
 "guide.amnesia.script.climax.phase" = "클라이맥스";
+"perf.first_time_banner" = "첫 번째 로딩 — 프로필을 캐싱 중입니다. 이 작업은 한 번만 실행됩니다.";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "퍼포먼스 준비 중";
+"initial_load.phase.validating" = "세션 확인 중…";
+"initial_load.phase.loading_profile" = "Instagram 프로필 불러오는 중…";
+"initial_load.phase.paginating" = "게시물 불러오는 중 — %d페이지…";
+"initial_load.phase.loading_reels" = "릴 불러오는 중…";
+"initial_load.phase.loading_tagged" = "태그된 게시물 불러오는 중…";
+"initial_load.reels_count" = "%d 릴";
+"initial_load.tagged_count" = "%d 태그됨";
+"initial_load.photos_count_one" = "%d개 게시물 로드됨";
+"initial_load.photos_count" = "%d개 게시물 로드됨";
+"initial_load.estimated_time" = "몇 분 정도 걸릴 수 있습니다";
+"initial_load.one_time_promise" = "이번 한 번만 — 다음에는 바로 입장됩니다.";
+"initial_load.footer" = "나중에 Instagram에 새 사진을 업로드하면 캐시를 업데이트하기 위해 Performance를 수동으로 새로 고침하세요.";
+"initial_load.error.session" = "세션이 만료되었습니다. 계속하려면 다시 로그인하세요.";
+"initial_load.error.load_failed" = "프로필을 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요.";
 "guide.amnesia.script.climax.text" = "'Instagram을 다시 여세요. 같은 게시물을 찾으세요.'\n\n[관객이 5장을 봄]\n\n'몇 장이 보이나요?' — 5장.\n\n'날짜를 확인하세요. 아까와 같나요?' — 네.\n\n'Instagram은 거짓말하지 않습니다. 날짜를 수정할 수 없습니다. 이렇게 업로드되었습니다.'\n\n[잠시 멈춤]\n\n'일어난 일은 이미지를 잊은 것이 아닙니다. 당신의 마음이 보지 못하도록 안내되었습니다. 이제 그것이 가능하다는 것을 알게 되었습니다.'";
+
+"fullload.warming_up" = "준비 중… %d 초";
+"fullload.grid" = "게시물 캐싱 중 — %d개 로드됨";
+"fullload.reels" = "릴 캐싱 중…";
+"fullload.tagged" = "태그된 게시물 캐싱 중…";
+"fullload.done" = "프로필 준비 완료!";
+"fullload.skip" = "건너뛰고 계속";
+// MARK: - API Budget (appended)
+"budget.title" = "API 예산";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "%d 남음";
+"budget.renewal_at" = "%@에 예산 완전 회복";
+"budget.status.full" = "예산 충분";
+"budget.status.full_used" = "예산 소진 — 갱신을 기다리세요";
+"budget.warning.title" = "예산 부족";
+"budget.warning.renewal" = "%@에 예산 완전 회복";
+"budget.warning.advice" = "공연 중 중단을 방지하려면 예산 갱신 후 Performance에 입장하세요.";
+"action.understood" = "확인";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "세션 만료";
+"performance.gate.session.message" = "세션이 만료되었습니다. Instagram을 열어 새로 고침한 후 재로그인을 탭하세요.";
+"performance.gate.wait.title" = "잠시 기다려 주세요 — %@ 남음";
+"performance.gate.post_archive.message" = "보관 작업이 완료되었습니다. 계정 보호를 위해 잠시 대기 중입니다.";
+"performance.gate.safety.message" = "API 한도로부터 계정을 보호하기 위한 안전 일시 정지가 활성화되어 있습니다.";
+"performance.gate.auto_enter" = "%@ 후 자동 입장…";
+"session.panel.open_instagram" = "Instagram 열기";
+"session.panel.relogin_after_instagram" = "Instagram 후 재로그인";
+"common.cancel" = "취소";
+"session.panel.restart.title" = "재시작 필요";
+"session.panel.restart.message" = "기기 핑거프린트가 삭제되었습니다. 앱을 완전히 닫고 다시 열어 재설정을 완료한 후 다시 로그인하세요.";
+"common.ok" = "확인";
+"session.panel.stuck.title" = "재로그인이 작동하지 않습니다";
+"session.panel.stuck.message" = "재로그인으로 세션을 복구할 수 없습니다. 보통 Instagram이 이 기기를 표시한 것을 의미합니다. 아래 긴급 로그아웃을 사용하여 새 기기 ID를 생성하고 앱을 완전히 닫은 후 다시 여세요.";
+"session.panel.emergency_steps.intro" = "따라야 할 단계:";
+"session.panel.emergency_step.1" = "아래 \"긴급 로그아웃\" 탭하기";
+"session.panel.emergency_step.2" = "앱 완전히 종료 — 아래에서 위로 스와이프하여 앱을 화면 밖으로 밀어내기";
+"session.panel.emergency_step.3" = "앱 다시 열기 — 새 기기 ID가 자동으로 생성됩니다";
+"session.panel.emergency_step.4" = "다시 로그인";

@@ -128,7 +128,7 @@
 "settings.ocr" = "OCR";
 "settings.camera" = "相機";
 "settings.camera_desc" = "表演開始時相機靜默啟動。辨識到文字時振動一次。";
-"settings.camera_desc_full" = "表演開始時相機靜默啟動。辨識到的文字自動揭示：字母→單字集合，數字→數字集合。";
+"settings.camera_desc_full" = "按音量+鍵靜音啟動相機。對準任意文字 — 應用程式自動讀取後相機停止。每次演出僅識別一次。";
 "settings.auto_input" = "自動輸入";
 "settings.auto_input_desc" = "表演開始時從Inject或自訂API取得文字";
 "settings.api_source" = "API Source";
@@ -1038,4 +1038,61 @@
 "action.remove" = "移除";
 
 "guide.amnesia.script.climax.phase" = "高潮";
+"perf.first_time_banner" = "首次載入 — 正在快取您的個人資料。這只會發生一次。";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "正在準備演出";
+"initial_load.phase.validating" = "正在驗證工作階段…";
+"initial_load.phase.loading_profile" = "正在載入您的 Instagram 個人資料…";
+"initial_load.phase.paginating" = "正在載入貼文 — 第 %d 頁…";
+"initial_load.phase.loading_reels" = "正在載入 Reels…";
+"initial_load.phase.loading_tagged" = "正在載入標記貼文…";
+"initial_load.reels_count" = "%d 個 Reels";
+"initial_load.tagged_count" = "%d 個標記";
+"initial_load.photos_count_one" = "已載入 %d 篇貼文";
+"initial_load.photos_count" = "已載入 %d 篇貼文";
+"initial_load.estimated_time" = "這可能需要幾分鐘";
+"initial_load.one_time_promise" = "只有這一次 — 下次您將直接進入。";
+"initial_load.footer" = "如果您之後在 Instagram 上傳了新照片，請手動重新整理 Performance 以更新快取。";
+"initial_load.error.session" = "工作階段已過期。請重新登入以繼續。";
+"initial_load.error.load_failed" = "無法載入個人資料。請檢查網路連線後重試。";
 "guide.amnesia.script.climax.text" = "「再次打開Instagram。找到同一篇帖子。」\n\n[觀眾看到5張圖片]\n\n「你看到幾張？」——五張。\n\n「看一下日期。和之前一樣嗎？」——是的。\n\n「Instagram不會說謊。它無法修改日期。就是這樣上傳的。」\n\n[停頓]\n\n「發生的不是你忘記了一張圖片。你的大腦被引導著沒有看到它。現在你知道這是可能的了。」";
+
+"fullload.warming_up" = "準備中… %d 秒";
+"fullload.grid" = "快取貼文中 — 已載入 %d 則";
+"fullload.reels" = "快取 Reels 中…";
+"fullload.tagged" = "快取標記貼文中…";
+"fullload.done" = "個人資料已就緒！";
+"fullload.skip" = "略過並繼續使用";
+// MARK: - API Budget (appended)
+"budget.title" = "API 配額";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "剩餘 %d";
+"budget.renewal_at" = "配額在 %@ 完全恢復";
+"budget.status.full" = "配額充足";
+"budget.status.full_used" = "配額已用完 — 等待恢復";
+"budget.warning.title" = "配額不足";
+"budget.warning.renewal" = "配額在 %@ 完全恢復";
+"budget.warning.advice" = "為避免演出中斷，請等待配額恢復後再進入 Performance。";
+"action.understood" = "知道了";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "工作階段已過期";
+"performance.gate.session.message" = "您的工作階段已結束。請開啟 Instagram 更新後點選重新登入。";
+"performance.gate.wait.title" = "請稍候 — 剩餘 %@";
+"performance.gate.post_archive.message" = "封存作業已完成。為保護您的帳戶，短暫冷卻期已啟用。";
+"performance.gate.safety.message" = "為防止達到 API 限制，安全暫停已啟用。";
+"performance.gate.auto_enter" = "%@ 後自動進入…";
+"session.panel.open_instagram" = "開啟 Instagram";
+"session.panel.relogin_after_instagram" = "Instagram 後重新登入";
+"common.cancel" = "取消";
+"session.panel.restart.title" = "需要重新啟動";
+"session.panel.restart.message" = "裝置指紋已清除。請完全關閉應用程式並重新開啟以完成重置，然後重新登入。";
+"common.ok" = "好的";
+"session.panel.stuck.title" = "重新登入無效";
+"session.panel.stuck.message" = "您的工作階段無法透過重新登入恢復。這通常表示 Instagram 已標記此裝置。請使用下方的緊急登出以生成新的裝置身份，然後完全關閉並重新開啟應用程式。";
+"session.panel.emergency_steps.intro" = "請按照以下步驟操作：";
+"session.panel.emergency_step.1" = "點選下方「緊急登出」";
+"session.panel.emergency_step.2" = "完全關閉應用程式 — 從底部向上滑動並將應用程式滑走";
+"session.panel.emergency_step.3" = "重新開啟應用程式 — 將自動建立新的裝置身份";
+"session.panel.emergency_step.4" = "重新登入";

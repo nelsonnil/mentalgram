@@ -28,7 +28,8 @@ class ProfileCacheService: ObservableObject {
         // Create directory if needed
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
 
-        // Warm the in-memory copy from disk on launch
+        // Warm the in-memory copy from disk on launch. This uses the Keychain
+        // session if one exists; otherwise it returns nil without touching disk.
         cachedProfile = loadProfile()
     }
     
@@ -39,9 +40,11 @@ class ProfileCacheService: ObservableObject {
         encoder.dateEncodingStrategy = .iso8601
         
         if let data = try? encoder.encode(profile) {
-            let fileURL = cacheDirectory.appendingPathComponent("profile.json")
+            let directory = userCacheDirectory(for: profile.userId)
+            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let fileURL = directory.appendingPathComponent("profile.json")
             try? data.write(to: fileURL)
-            print("✅ Profile cached")
+            print("✅ Profile cached for userId=\(profile.userId)")
         }
         // Always update in-memory so observers react immediately
         DispatchQueue.main.async { self.cachedProfile = profile }
@@ -141,7 +144,19 @@ class ProfileCacheService: ObservableObject {
     }
     
     func loadProfile() -> InstagramProfile? {
-        let fileURL = cacheDirectory.appendingPathComponent("profile.json")
+        guard let userId = activeUserId() else {
+            return nil
+        }
+
+        if let cachedProfile, cachedProfile.userId == userId {
+            return cachedProfile
+        }
+        if let cachedProfile, cachedProfile.userId != userId {
+            print("🗂️ [CACHE] Ignoring in-memory cache for previous userId=\(cachedProfile.userId)")
+            DispatchQueue.main.async { self.cachedProfile = nil }
+        }
+
+        let fileURL = userCacheDirectory(for: userId).appendingPathComponent("profile.json")
         
         guard let data = try? Data(contentsOf: fileURL) else {
             return nil
@@ -151,7 +166,8 @@ class ProfileCacheService: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         
         if let profile = try? decoder.decode(InstagramProfile.self, from: data) {
-            print("✅ Profile loaded from cache")
+            print("✅ Profile loaded from cache for userId=\(profile.userId)")
+            DispatchQueue.main.async { self.cachedProfile = profile }
             return profile
         }
         
@@ -159,26 +175,31 @@ class ProfileCacheService: ObservableObject {
     }
     
     func clearProfile() {
-        let fileURL = cacheDirectory.appendingPathComponent("profile.json")
+        guard let userId = activeUserId() else { return }
+        let fileURL = userCacheDirectory(for: userId).appendingPathComponent("profile.json")
         try? fileManager.removeItem(at: fileURL)
         DispatchQueue.main.async { self.cachedProfile = nil }
-        print("🗑️ Profile cache cleared")
+        print("🗑️ Profile cache cleared for userId=\(userId)")
     }
     
     // MARK: - Image Cache
     
     func saveImage(_ image: UIImage, forURL urlString: String) {
         guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        guard let userId = activeUserId() else { return }
         
         let filename = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? UUID().uuidString
-        let fileURL = cacheDirectory.appendingPathComponent("\(filename).jpg")
+        let directory = userCacheDirectory(for: userId)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("\(filename).jpg")
         
         try? data.write(to: fileURL)
     }
     
     func loadImage(forURL urlString: String) -> UIImage? {
+        guard let userId = activeUserId() else { return nil }
         let filename = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
-        let fileURL = cacheDirectory.appendingPathComponent("\(filename).jpg")
+        let fileURL = userCacheDirectory(for: userId).appendingPathComponent("\(filename).jpg")
         
         guard let data = try? Data(contentsOf: fileURL) else {
             return nil
@@ -188,7 +209,9 @@ class ProfileCacheService: ObservableObject {
     }
     
     func clearAllImages() {
-        guard let files = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else {
+        guard let userId = activeUserId() else { return }
+        let directory = userCacheDirectory(for: userId)
+        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
             return
         }
         
@@ -196,13 +219,30 @@ class ProfileCacheService: ObservableObject {
             try? fileManager.removeItem(at: file)
         }
         
-        print("🗑️ All images cleared from cache")
+        print("🗑️ All images cleared from cache for userId=\(userId)")
     }
     
     // MARK: - Clear All Cache
     
     func clearAll() {
-        clearProfile()
-        clearAllImages()
+        try? fileManager.removeItem(at: cacheDirectory)
+        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        DispatchQueue.main.async { self.cachedProfile = nil }
+        print("🗑️ All profile caches cleared")
+    }
+
+    private func activeUserId() -> String? {
+        if let saved = KeychainService.shared.loadSession(), saved.isLoggedIn, !saved.userId.isEmpty {
+            return saved.userId
+        }
+        if let cachedProfile, !cachedProfile.userId.isEmpty {
+            return cachedProfile.userId
+        }
+        return nil
+    }
+
+    private func userCacheDirectory(for userId: String) -> URL {
+        let safeUserId = userId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? userId
+        return cacheDirectory.appendingPathComponent(safeUserId, isDirectory: true)
     }
 }

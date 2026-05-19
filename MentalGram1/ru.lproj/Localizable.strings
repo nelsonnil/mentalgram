@@ -128,7 +128,7 @@
 "settings.ocr" = "OCR";
 "settings.camera" = "Камера";
 "settings.camera_desc" = "Камера активируется в фоне при открытии выступления. Вибрирует при распознавании.";
-"settings.camera_desc_full" = "Камера запускается при открытии выступления. Распознанный текст раскрывается автоматически: буквы → словесный сет, цифры → числовой сет.";
+"settings.camera_desc_full" = "Нажмите громкость+, чтобы тихо запустить камеру. Наведите на написанное слово — приложение прочитает его автоматически и остановит камеру. Одно распознавание за сеанс Performance.";
 "settings.auto_input" = "Автоввод";
 "settings.auto_input_desc" = "Получает текст из Inject или пользовательского API при открытии выступления";
 "settings.api_source" = "API Source";
@@ -1037,4 +1037,61 @@
 "action.remove" = "Удалить";
 
 "guide.amnesia.script.climax.phase" = "КУЛЬМИНАЦИЯ";
+"perf.first_time_banner" = "Первая загрузка — профиль сохраняется в кэш. Это произойдёт только один раз.";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "Подготовка выступления";
+"initial_load.phase.validating" = "Проверка сессии…";
+"initial_load.phase.loading_profile" = "Загрузка профиля Instagram…";
+"initial_load.phase.paginating" = "Загрузка публикаций — страница %d…";
+"initial_load.phase.loading_reels" = "Загрузка Reels…";
+"initial_load.phase.loading_tagged" = "Загрузка отмеченных публикаций…";
+"initial_load.reels_count" = "%d Reels";
+"initial_load.tagged_count" = "%d отмечено";
+"initial_load.photos_count_one" = "%d публикация загружена";
+"initial_load.photos_count" = "%d публикаций загружено";
+"initial_load.estimated_time" = "Это может занять несколько минут";
+"initial_load.one_time_promise" = "Только один раз — в следующий раз вы войдёте мгновенно.";
+"initial_load.footer" = "Если вы загрузите новые фото в Instagram позже, обновите Performance вручную, чтобы обновить кэш.";
+"initial_load.error.session" = "Сессия истекла. Войдите снова, чтобы продолжить.";
+"initial_load.error.load_failed" = "Не удалось загрузить профиль. Проверьте соединение и попробуйте снова.";
 "guide.amnesia.script.climax.text" = "«Снова откройте Instagram. Найдите тот же пост.»\n\n[Зритель видит 5 изображений]\n\n«Сколько вы видите?» — Пять.\n\n«Посмотрите на дату. Она та же, что раньше?» — Да.\n\n«Instagram не лжёт. Он не может изменять даты. Это было загружено именно так.»\n\n[Пауза]\n\n«То, что произошло — это не то, что вы забыли одно изображение. Ваш разум был направлен так, чтобы не видеть его. И теперь вы знаете, что это возможно.»";
+
+"fullload.warming_up" = "Подготовка… %d с";
+"fullload.grid" = "Загрузка публикаций — %d загружено";
+"fullload.reels" = "Загрузка Reels…";
+"fullload.tagged" = "Загрузка отмеченных публикаций…";
+"fullload.done" = "Профиль готов!";
+"fullload.skip" = "Пропустить и продолжить";
+// MARK: - API Budget (appended)
+"budget.title" = "Бюджет API";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "осталось %d";
+"budget.renewal_at" = "Полный бюджет в %@";
+"budget.status.full" = "Бюджет полон";
+"budget.status.full_used" = "Бюджет исчерпан — ожидайте обновления";
+"budget.warning.title" = "Мало бюджета";
+"budget.warning.renewal" = "Полный бюджет в %@";
+"budget.warning.advice" = "Не входите в Performance до обновления бюджета, чтобы не прерывать выступление.";
+"action.understood" = "Понятно";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "Сессия истекла";
+"performance.gate.session.message" = "Ваша сессия завершилась. Откройте Instagram для обновления и нажмите Войти снова.";
+"performance.gate.wait.title" = "Подождите — осталось %@";
+"performance.gate.post_archive.message" = "Архивирование завершено. Активирована короткая пауза для защиты вашего аккаунта.";
+"performance.gate.safety.message" = "Активирована пауза безопасности для защиты аккаунта от лимитов API.";
+"performance.gate.auto_enter" = "Автовход через %@…";
+"session.panel.open_instagram" = "Открыть Instagram";
+"session.panel.relogin_after_instagram" = "Войти снова после Instagram";
+"common.cancel" = "Отмена";
+"session.panel.restart.title" = "Требуется перезапуск";
+"session.panel.restart.message" = "Отпечаток устройства очищен. Полностью закройте приложение и откройте снова для завершения сброса, затем войдите в систему.";
+"common.ok" = "ОК";
+"session.panel.stuck.title" = "Повторный вход не работает";
+"session.panel.stuck.message" = "Сессию не удаётся восстановить через повторный вход. Обычно это означает, что Instagram пометил это устройство. Используйте экстренный выход ниже для генерации нового ID устройства, затем полностью закройте и откройте приложение заново.";
+"session.panel.emergency_steps.intro" = "Шаги для выполнения:";
+"session.panel.emergency_step.1" = "Нажмите «Экстренный выход» ниже";
+"session.panel.emergency_step.2" = "Полностью закройте приложение — проведите пальцем снизу вверх и смахните приложение";
+"session.panel.emergency_step.3" = "Снова откройте приложение — новый идентификатор устройства будет создан автоматически";
+"session.panel.emergency_step.4" = "Войдите снова";

@@ -124,7 +124,7 @@
 "settings.ocr" = "OCR";
 "settings.camera" = "Camera";
 "settings.camera_desc" = "Camera activeert stil op de achtergrond wanneer Optreden wordt geopend. Trilt eenmaal bij herkenning.";
-"settings.camera_desc_full" = "Camera start stil wanneer Optreden wordt geopend. Herkende tekst wordt automatisch onthuld: letters →woordenset, cijfers → nummerset.";
+"settings.camera_desc_full" = "Druk op volume+ om de camera stil te starten. Richt op een geschreven woord — de app leest het automatisch en stopt de camera. Één herkenning per Performance-sessie.";
 "settings.auto_input" = "Automatische invoer";
 "settings.auto_input_desc" = "Haalt tekst op uit Inject of aangepaste API wanneer Optreden wordt geopend";
 "settings.api_source" = "API Source";
@@ -1378,4 +1378,61 @@
 "action.remove" = "Verwijderen";
 
 "guide.amnesia.script.climax.phase" = "CLIMAX";
+"perf.first_time_banner" = "Eerste keer laden — je profiel wordt gecached. Dit gebeurt maar één keer.";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "Performance voorbereiden";
+"initial_load.phase.validating" = "Sessie verifiëren…";
+"initial_load.phase.loading_profile" = "Je Instagram-profiel laden…";
+"initial_load.phase.paginating" = "Berichten laden — pagina %d…";
+"initial_load.phase.loading_reels" = "Reels laden…";
+"initial_load.phase.loading_tagged" = "Getagde berichten laden…";
+"initial_load.reels_count" = "%d reels";
+"initial_load.tagged_count" = "%d getagd";
+"initial_load.photos_count_one" = "%d bericht geladen";
+"initial_load.photos_count" = "%d berichten geladen";
+"initial_load.estimated_time" = "Dit kan enkele minuten duren";
+"initial_load.one_time_promise" = "Alleen deze ene keer — de volgende keer ga je er direct in.";
+"initial_load.footer" = "Als je later nieuwe foto's uploadt naar Instagram, ververs Performance handmatig om de cache bij te werken.";
+"initial_load.error.session" = "Sessie verlopen. Log opnieuw in om door te gaan.";
+"initial_load.error.load_failed" = "Profiel kon niet worden geladen. Controleer de verbinding en probeer het opnieuw.";
 "guide.amnesia.script.climax.text" = "'Open Instagram opnieuw. Zoek hetzelfde bericht.'\n\n[Toeschouwer ziet 5 afbeeldingen]\n\n'Hoeveel zie je?' — Vijf.\n\n'Kijk naar de datum. Is het dezelfde als eerder?' — Ja.\n\n'Instagram liegt niet. Het kan geen datums wijzigen. Zo is het geüpload.'\n\n[Pauze]\n\n'Wat er is gebeurd is niet dat je een afbeelding bent vergeten. Je geest werd geleid om hem niet te zien. En nu weet je dat dat mogelijk is.'";
+
+"fullload.warming_up" = "Voorbereiden… %d s";
+"fullload.grid" = "Posts laden — %d geladen";
+"fullload.reels" = "Reels laden…";
+"fullload.tagged" = "Getagde posts laden…";
+"fullload.done" = "Profiel klaar!";
+"fullload.skip" = "Overslaan en toch gebruiken";
+// MARK: - API Budget (appended)
+"budget.title" = "API-budget";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "%d resterend";
+"budget.renewal_at" = "Vol budget om %@";
+"budget.status.full" = "Budget vol";
+"budget.status.full_used" = "Budget op — wacht op vernieuwing";
+"budget.warning.title" = "Budget laag";
+"budget.warning.renewal" = "Vol budget om %@";
+"budget.warning.advice" = "Ga pas Performance in na budgetvernieuwing om onderbrekingen te voorkomen.";
+"action.understood" = "Begrepen";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "Sessie verlopen";
+"performance.gate.session.message" = "Je sessie is verlopen. Open Instagram om deze te vernieuwen, tik dan op Opnieuw aanmelden.";
+"performance.gate.wait.title" = "Even wachten — nog %@";
+"performance.gate.post_archive.message" = "Archiefoperatie voltooid. Een korte pauze is actief om je account te beschermen.";
+"performance.gate.safety.message" = "Een veiligheidspauze is actief om je account te beschermen tegen API-limieten.";
+"performance.gate.auto_enter" = "Automatisch invoeren over %@…";
+"session.panel.open_instagram" = "Instagram openen";
+"session.panel.relogin_after_instagram" = "Opnieuw aanmelden na Instagram";
+"common.cancel" = "Annuleren";
+"session.panel.restart.title" = "Herstart vereist";
+"session.panel.restart.message" = "Apparaatvingerafdruk gewist. Sluit de app volledig en open hem opnieuw om de reset te voltooien, log dan opnieuw in.";
+"common.ok" = "OK";
+"session.panel.stuck.title" = "Opnieuw aanmelden werkt niet";
+"session.panel.stuck.message" = "Je sessie kan niet worden hersteld via opnieuw aanmelden. Dit betekent doorgaans dat Instagram dit apparaat heeft gemarkeerd. Gebruik de noodafmelding hieronder om een nieuwe apparaatidentiteit te maken en sluit de app volledig en open hem opnieuw.";
+"session.panel.emergency_steps.intro" = "Te volgen stappen:";
+"session.panel.emergency_step.1" = "Tik op \"Noodafmelding\" hieronder";
+"session.panel.emergency_step.2" = "Sluit de app volledig — veeg omhoog vanaf de onderkant en veeg de app weg";
+"session.panel.emergency_step.3" = "Open de app opnieuw — er wordt automatisch een nieuwe apparaatidentiteit aangemaakt";
+"session.panel.emergency_step.4" = "Log opnieuw in";

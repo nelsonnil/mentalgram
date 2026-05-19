@@ -128,7 +128,7 @@
 "settings.ocr" = "OCR";
 "settings.camera" = "กล้อง";
 "settings.camera_desc" = "กล้องเปิดใช้งานอย่างเงียบเมื่อเปิดการแสดง สั่นหนึ่งครั้งเมื่อจดจำได้";
-"settings.camera_desc_full" = "กล้องเริ่มทำงานอย่างเงียบเมื่อเปิดการแสดง ข้อความที่จดจำได้จะเปิดเผยอัตโนมัติ: ตัวอักษร → เซ็ตคำ ตัวเลข → เซ็ตตัวเลข";
+"settings.camera_desc_full" = "กดเพิ่มเสียงเพื่อเปิดกล้องอย่างเงียบ ๆ ชี้ไปที่คำที่เขียน — แอปอ่านโดยอัตโนมัติและหยุดกล้อง ใช้ได้หนึ่งครั้งต่อเซสชัน Performance";
 "settings.auto_input" = "การป้อนข้อมูลอัตโนมัติ";
 "settings.auto_input_desc" = "ดึงข้อความจาก Inject หรือ API กำหนดเองเมื่อเปิดการแสดง";
 "settings.api_source" = "API Source";
@@ -1028,4 +1028,61 @@
 "action.remove" = "ลบ";
 
 "guide.amnesia.script.climax.phase" = "จุดสูงสุด";
+"perf.first_time_banner" = "กำลังโหลดครั้งแรก — กำลังแคชโปรไฟล์ของคุณ จะเกิดขึ้นเพียงครั้งเดียว";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "กำลังเตรียมการแสดง";
+"initial_load.phase.validating" = "กำลังตรวจสอบเซสชัน…";
+"initial_load.phase.loading_profile" = "กำลังโหลดโปรไฟล์ Instagram ของคุณ…";
+"initial_load.phase.paginating" = "กำลังโหลดโพสต์ — หน้า %d…";
+"initial_load.phase.loading_reels" = "กำลังโหลด Reels…";
+"initial_load.phase.loading_tagged" = "กำลังโหลดโพสต์ที่ถูกแท็ก…";
+"initial_load.reels_count" = "%d Reels";
+"initial_load.tagged_count" = "%d แท็ก";
+"initial_load.photos_count_one" = "โหลดแล้ว %d โพสต์";
+"initial_load.photos_count" = "โหลดแล้ว %d โพสต์";
+"initial_load.estimated_time" = "อาจใช้เวลาหลายนาที";
+"initial_load.one_time_promise" = "ครั้งนี้ครั้งเดียว — ครั้งหน้าคุณจะเข้าได้ทันที";
+"initial_load.footer" = "หากคุณอัปโหลดรูปใหม่ลง Instagram ในภายหลัง ให้รีเฟรช Performance ด้วยตนเองเพื่ออัปเดตแคช";
+"initial_load.error.session" = "เซสชันหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่เพื่อดำเนินการต่อ";
+"initial_load.error.load_failed" = "ไม่สามารถโหลดโปรไฟล์ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง";
 "guide.amnesia.script.climax.text" = "'เปิด Instagram อีกครั้ง หาโพสต์เดิม'\n\n[ผู้ชมเห็น 5 รูป]\n\n'เห็นกี่รูป?' — ห้ารูป\n\n'ดูวันที่ เหมือนกับก่อนหน้าไหม?' — ใช่\n\n'Instagram ไม่โกหก มันไม่สามารถแก้ไขวันที่ได้ มันถูกอัพโหลดแบบนี้'\n\n[หยุด]\n\n'สิ่งที่เกิดขึ้นไม่ใช่คุณลืมรูป จิตใจของคุณถูกนำทางให้ไม่มองเห็นมัน และตอนนี้คุณรู้แล้วว่าสิ่งนั้นเป็นไปได้'";
+
+"fullload.warming_up" = "กำลังเตรียม… %d วินาที";
+"fullload.grid" = "กำลังแคชโพสต์ — โหลดแล้ว %d รายการ";
+"fullload.reels" = "กำลังแคชรีลส์…";
+"fullload.tagged" = "กำลังแคชโพสต์ที่แท็ก…";
+"fullload.done" = "โปรไฟล์พร้อมแล้ว!";
+"fullload.skip" = "ข้ามและใช้งานต่อ";
+// MARK: - API Budget (appended)
+"budget.title" = "งบประมาณ API";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "เหลือ %d";
+"budget.renewal_at" = "งบครบที่ %@";
+"budget.status.full" = "งบประมาณเต็ม";
+"budget.status.full_used" = "งบหมดแล้ว — รอการต่ออายุ";
+"budget.warning.title" = "งบประมาณเหลือน้อย";
+"budget.warning.renewal" = "งบครบที่ %@";
+"budget.warning.advice" = "หลีกเลี่ยงการเข้า Performance จนกว่างบจะต่ออายุ เพื่อป้องกันการหยุดชะงักระหว่างการแสดง";
+"action.understood" = "รับทราบ";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "เซสชันหมดอายุ";
+"performance.gate.session.message" = "เซสชันของคุณสิ้นสุดแล้ว เปิด Instagram เพื่อรีเฟรช จากนั้นแตะเข้าสู่ระบบใหม่";
+"performance.gate.wait.title" = "กรุณารอ — %@ ที่เหลือ";
+"performance.gate.post_archive.message" = "การเก็บถาวรเสร็จสมบูรณ์ มีการหยุดชั่วคราวเพื่อปกป้องบัญชีของคุณ";
+"performance.gate.safety.message" = "มีการหยุดชั่วคราวเพื่อความปลอดภัยเพื่อปกป้องบัญชีของคุณจากขีดจำกัด API";
+"performance.gate.auto_enter" = "เข้าอัตโนมัติใน %@…";
+"session.panel.open_instagram" = "เปิด Instagram";
+"session.panel.relogin_after_instagram" = "เข้าสู่ระบบใหม่หลังจาก Instagram";
+"common.cancel" = "ยกเลิก";
+"session.panel.restart.title" = "ต้องรีสตาร์ท";
+"session.panel.restart.message" = "ลบลายนิ้วมือของอุปกรณ์แล้ว ปิดแอปทั้งหมดและเปิดใหม่เพื่อรีเซ็ตให้เสร็จสมบูรณ์ จากนั้นเข้าสู่ระบบอีกครั้ง";
+"common.ok" = "ตกลง";
+"session.panel.stuck.title" = "การเข้าสู่ระบบใหม่ไม่ทำงาน";
+"session.panel.stuck.message" = "เซสชันของคุณไม่สามารถกู้คืนด้วยการเข้าสู่ระบบใหม่ได้ มักหมายความว่า Instagram ได้ทำเครื่องหมายอุปกรณ์นี้ ใช้ออกจากระบบฉุกเฉินด้านล่างเพื่อสร้างข้อมูลระบุตัวตนอุปกรณ์ใหม่ จากนั้นปิดและเปิดแอปใหม่";
+"session.panel.emergency_steps.intro" = "ขั้นตอนที่ต้องทำ:";
+"session.panel.emergency_step.1" = "แตะ \"ออกจากระบบฉุกเฉิน\" ด้านล่าง";
+"session.panel.emergency_step.2" = "ปิดแอปทั้งหมด — เลื่อนขึ้นจากด้านล่างและปัดแอปออก";
+"session.panel.emergency_step.3" = "เปิดแอปใหม่อีกครั้ง — ระบบจะสร้างข้อมูลระบุตัวตนอุปกรณ์ใหม่โดยอัตโนมัติ";
+"session.panel.emergency_step.4" = "เข้าสู่ระบบอีกครั้ง";

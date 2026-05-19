@@ -262,6 +262,8 @@ struct ExploreView: View {
                         loadingProfileUserId = nil
                     }
                 })
+                // Force SwiftUI to discard @State and re-init when the profile changes.
+                .id(profile.userId)
                 .transition(.move(edge: .trailing))
                 .zIndex(1000)
             }

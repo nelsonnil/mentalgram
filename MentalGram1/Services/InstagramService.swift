@@ -41,13 +41,19 @@ class InstagramService: ObservableObject {
     @Published var isSessionExpired: Bool = false
     @Published var sessionExpiredContext: SessionExpiredContext = .unknown
 
+    /// How many times validateSession returned .expired since the last successful login.
+    /// Persisted so the counter survives app restarts during a stuck-login loop.
+    @Published var reloginFailCount: Int = UserDefaults.standard.integer(forKey: "relogin_fail_count")
+
     /// Sets session as expired with context and persists across app restarts.
     @MainActor
     func markSessionExpired(context: SessionExpiredContext) {
         isSessionExpired = true
         sessionExpiredContext = context
+        reloginFailCount += 1
         UserDefaults.standard.set(true, forKey: "instagram_session_expired")
         UserDefaults.standard.set(context.rawValue, forKey: "instagram_session_expired_ctx")
+        UserDefaults.standard.set(reloginFailCount, forKey: "relogin_fail_count")
         LogManager.shared.warning("Session expired — context: \(context)", category: .auth)
     }
 
@@ -56,8 +62,10 @@ class InstagramService: ObservableObject {
     func clearSessionExpired() {
         isSessionExpired = false
         sessionExpiredContext = .unknown
+        reloginFailCount = 0
         UserDefaults.standard.removeObject(forKey: "instagram_session_expired")
         UserDefaults.standard.removeObject(forKey: "instagram_session_expired_ctx")
+        UserDefaults.standard.removeObject(forKey: "relogin_fail_count")
     }
 
     /// True while a reveal (unarchive) or re-archive operation is running.
@@ -126,7 +134,8 @@ class InstagramService: ObservableObject {
     private var bandwidthTotalTimeMs: Int = 0
 
     // MARK: - WWW-Claim (anti-bot: Instagram rotates this per session; "0" only valid before first call)
-    private var wwwClaim: String = "0"
+    // Persisted in UserDefaults so it survives app restarts — Notes endpoint rejects wwwClaim="0".
+    private var wwwClaim: String = UserDefaults.standard.string(forKey: "ig_www_claim") ?? "0"
     
     // MARK: - Rate Limiting (anti-bot: max 60 actions/hour)
     private var actionTimestamps: [Date] = []
@@ -214,6 +223,8 @@ class InstagramService: ObservableObject {
             self.isLoggedIn = true
             self.sessionRestoredAt = Date()  // Mark cold-start time for warm-up delay
             print("✅ Session restored for @\(saved.username)")
+            // Resume any incomplete full-profile pre-load for this account.
+            ProfileFullLoaderService.shared.notifyLoggedIn(userId: saved.userId)
 
             // Restore persisted session-expired state so overlay appears immediately
             // after an app restart without needing a new API call.
@@ -517,6 +528,9 @@ class InstagramService: ObservableObject {
         KeychainService.shared.deleteSession()
         KeychainService.shared.clearCredentials()
 
+        // Stop background pre-loading.
+        ProfileFullLoaderService.shared.pause()
+
         // Reset lockdown
         unlock()
 
@@ -527,6 +541,22 @@ class InstagramService: ObservableObject {
         ProfileCacheService.shared.clearAll()
         ProfileCacheService.shared.pendingProfilePic = nil
         UserDefaults.standard.removeObject(forKey: "instagram_mid")
+
+        // ── Reset device fingerprint ────────────────────────────────────────
+        // Deletes the persisted device IDs from Keychain so the NEXT app launch
+        // generates a completely fresh fingerprint. This breaks the server-side
+        // "logged-out indicator" loop caused by Instagram flagging the old ID.
+        // NOTE: deviceId/clientUUID are `let` constants loaded at init time, so
+        // the new IDs only take effect after a force-quit + reopen.
+        let keychainDeviceKey = "com.mindup.instagram.deviceId"
+        let keychainClientKey = "com.mindup.instagram.clientUUID"
+        KeychainService.shared.deleteString(forKey: keychainDeviceKey)
+        KeychainService.shared.deleteString(forKey: keychainClientKey)
+        UserDefaults.standard.removeObject(forKey: "instagram_device_id")
+        UserDefaults.standard.removeObject(forKey: "instagram_client_uuid")
+        // Signal to the app that a restart is needed to complete the fingerprint reset
+        UserDefaults.standard.set(true, forKey: "emergency_restart_pending")
+        print("🔄 [EMERGENCY] Device fingerprint cleared — restart required to generate new IDs")
 
         // Clear HTTP cookies
         if let cookies = HTTPCookieStorage.shared.cookies {
@@ -580,14 +610,19 @@ class InstagramService: ObservableObject {
                 // variation, not a genuine expiry — as evidenced by other endpoints working fine.
                 let hasUser = json["user"] != nil
                 let statusOk = (json["status"] as? String) == "ok"
+                let message = (json["message"] as? String)?.lowercased() ?? ""
+                let statusCode = (json["status_code"] as? String)?.lowercased() ?? ""
                 let hasErrorMsg = json["message"] != nil && (json["status"] as? String) == "fail"
                 let loggedOut = (json["login_required"] as? Bool) == true
+                let explicitLoginRequired = loggedOut
+                    || message.contains("login_required")
+                    || statusCode.contains("login_required")
 
                 let snippet = String(describing: json.keys.prefix(6))
                 print("🔍 [SESSION] current_user response keys: \(snippet)")
                 LogManager.shared.debug("validateSession keys: \(snippet)", category: .api)
 
-                if !hasErrorMsg && !loggedOut && (hasUser || statusOk || !json.isEmpty) {
+                if !hasErrorMsg && !explicitLoginRequired && (hasUser || statusOk || !json.isEmpty) {
                     await MainActor.run {
                         clearSessionExpired()
                         resetUploadPhaseAfterRelogin()
@@ -600,7 +635,11 @@ class InstagramService: ObservableObject {
                 print("⚠️ [SESSION] 200 but response indicates logged-out (keys:\(snippet))")
                 LogManager.shared.warning("validateSession 200 but logged-out indicator (keys:\(snippet))", category: .auth)
                 await markSessionExpired(context: .normal)
-                if wasAlreadyExpired {
+                if explicitLoginRequired {
+                    print("🔑 [SESSION] login_required confirmed → auto-logout to LoginView")
+                    LogManager.shared.warning("Auto-logout: explicit login_required from Instagram", category: .auth)
+                    await MainActor.run { logout() }
+                } else if wasAlreadyExpired {
                     print("🔑 [SESSION] Pre-expired + confirmed dead (200 but logged-out) → auto-logout")
                     LogManager.shared.warning("Auto-logout: pre-expired session confirmed dead via 200/logged-out", category: .auth)
                     await MainActor.run { logout() }
@@ -755,6 +794,8 @@ class InstagramService: ObservableObject {
                     self.resetUploadPhaseAfterRelogin()
                 }
                 InstagramSafetyGate.shared.resetPerformanceThrottle()
+                // Trigger full profile pre-load for this account (resets if account changed).
+                ProfileFullLoaderService.shared.notifyLoggedIn(userId: self.session.userId)
             } else {
                 await MainActor.run {
                     self.isLoggedIn = true
@@ -763,6 +804,8 @@ class InstagramService: ObservableObject {
                     self.resetUploadPhaseAfterRelogin()
                 }
                 InstagramSafetyGate.shared.resetPerformanceThrottle()
+                // Trigger full profile pre-load for this account (resets if account changed).
+                ProfileFullLoaderService.shared.notifyLoggedIn(userId: self.session.userId)
             }
         }
     }
@@ -785,11 +828,16 @@ class InstagramService: ObservableObject {
     func logout() {
         session = .empty
         isLoggedIn = false
+        Task { @MainActor in clearSessionExpired() }
         KeychainService.shared.deleteSession()
         KeychainService.shared.clearCredentials()
 
-        // Clear profile cache (disk + memory) so next login loads fresh data for the new account
-        ProfileCacheService.shared.clearAll()
+        // Stop background pre-loading — it will resume on next login.
+        ProfileFullLoaderService.shared.pause()
+
+        // Keep profile cache on normal logout. ProfileCacheService is keyed by userId,
+        // so re-login with the same account can show cached Performance content
+        // immediately, while a different account reads from its own cache folder.
         ProfileCacheService.shared.pendingProfilePic = nil
 
         // Clear instagram_mid so it is re-fetched for the new account
@@ -1099,6 +1147,15 @@ class InstagramService: ObservableObject {
         return (recentActions.count >= maxActionsPerHour, recentActions.count, remaining)
     }
 
+    /// Returns the moment when ALL actions in the current rolling window will have
+    /// expired (oldest action + 60 min). Returns nil when the budget is already full.
+    func budgetRenewalTime() -> Date? {
+        let now = Date()
+        let recent = actionTimestamps.filter { now.timeIntervalSince($0) < 3600 }
+        guard let oldest = recent.min() else { return nil }
+        return oldest.addingTimeInterval(3600)
+    }
+
     /// Returns true while any "heavy" foreground operation is in flight. Used by
     /// secondary surfaces (Explore mask refresh, Home follower probe, Date Force
     /// auto-load, second web_profile_info reconciliation) to defer their own API
@@ -1390,6 +1447,8 @@ class InstagramService: ObservableObject {
                !claim.isEmpty, claim != "0", claim != wwwClaim {
                 print("🔑 [CLAIM] X-IG-WWW-Claim updated: \(String(claim.prefix(20)))...")
                 wwwClaim = claim
+                // Persist across app restarts — Notes endpoint requires a non-zero claim.
+                UserDefaults.standard.set(claim, forKey: "ig_www_claim")
                 break
             }
         }
@@ -2844,88 +2903,141 @@ class InstagramService: ObservableObject {
     
     // MARK: - Get User Reels
     
-    func getUserReels(userId: String? = nil, amount: Int = 18) async throws -> [InstagramMediaItem] {
+    /// Fetches up to `maxTotal` reels for a user, paginating internally (max 2 pages)
+    /// if the first response has `more_available`. Callers get a flat list.
+    func getUserReels(userId: String? = nil, amount: Int = 50, maxTotal: Int = 50) async throws -> [InstagramMediaItem] {
         let uid = userId ?? session.userId
         print("🎬 [REELS] Fetching reels for user ID: \(uid)")
-        
-        let body: [String: String] = [
-            "target_user_id": uid,
-            "page_size": String(amount),
-            "include_feed_video": "true"
-        ]
-        let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
-        
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("❌ [REELS] Failed to parse reels response")
-            return []
-        }
-        
-        // Log response structure for debugging
-        if let jsonString = String(data: data, encoding: .utf8) {
-            print("🎬 [REELS] Raw response (first 600 chars): \(String(jsonString.prefix(600)))")
-        }
-        print("🎬 [REELS] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
-        
-        var items: [InstagramMediaItem] = []
-        
-        // Try "items" key first (each item may have a nested "media" object)
-        if let reelsItems = json["items"] as? [[String: Any]] {
-            print("🎬 [REELS] Found \(reelsItems.count) items under 'items' key")
-            for item in reelsItems.prefix(amount) {
+
+        var allItems: [InstagramMediaItem] = []
+        var pagingMaxId: String? = nil
+        var page = 0
+        let maxPages = 2   // never more than 2 API calls for reels
+
+        repeat {
+            var body: [String: String] = [
+                "target_user_id": uid,
+                "page_size": String(amount),
+                "include_feed_video": "true"
+            ]
+            if let cursor = pagingMaxId { body["max_id"] = cursor }
+
+            let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
+
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("❌ [REELS] Failed to parse reels response")
+                break
+            }
+
+            if page == 0 {
+                print("🎬 [REELS] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
+            }
+
+            // Parse items — API wraps under "items" or "clips_items", each may have nested "media"
+            let rawList: [[String: Any]]
+            if let items = json["items"] as? [[String: Any]] {
+                rawList = items
+            } else if let items = json["clips_items"] as? [[String: Any]] {
+                rawList = items
+            } else {
+                print("⚠️ [REELS] No items key found page \(page)")
+                break
+            }
+
+            print("🎬 [REELS] Page \(page): \(rawList.count) items from API")
+            for item in rawList {
                 let media = item["media"] as? [String: Any] ?? item
                 guard let mediaItem = parseMediaItem(media) else { continue }
-                items.append(mediaItem)
+                allItems.append(mediaItem)
             }
-        }
-        // Fallback: some endpoints wrap under "clips_items"
-        else if let clipsItems = json["clips_items"] as? [[String: Any]] {
-            print("🎬 [REELS] Found \(clipsItems.count) items under 'clips_items' key")
-            for item in clipsItems.prefix(amount) {
-                let media = item["media"] as? [String: Any] ?? item
-                guard let mediaItem = parseMediaItem(media) else { continue }
-                items.append(mediaItem)
+
+            // Resolve pagination cursor from paging_info or top-level next_max_id
+            let pagingInfo = json["paging_info"] as? [String: Any]
+            let moreAvailable = pagingInfo?["more_available"] as? Bool
+                             ?? (json["more_available"] as? Bool)
+                             ?? false
+            let nextCursor = pagingInfo?["max_id"] as? String
+                          ?? json["next_max_id"] as? String
+
+            if moreAvailable, let cursor = nextCursor, cursor != pagingMaxId {
+                pagingMaxId = cursor
+            } else {
+                pagingMaxId = nil   // stop pagination
             }
-        } else {
-            print("⚠️ [REELS] No 'items' or 'clips_items' key found — account may have 0 reels or endpoint changed")
-        }
-        
-        print("🎬 [REELS] Parsed \(items.count) reels")
-        return items
+
+            page += 1
+
+            // Human delay before fetching page 2+
+            if pagingMaxId != nil && allItems.count < maxTotal {
+                try? await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            }
+
+        } while pagingMaxId != nil && allItems.count < maxTotal && page < maxPages
+
+        let result = Array(allItems.prefix(maxTotal))
+        print("🎬 [REELS] Total parsed: \(result.count) reels (\(page) page(s))")
+        return result
     }
     
     // MARK: - Get User Tagged Posts
     
-    func getUserTagged(userId: String? = nil, amount: Int = 18) async throws -> [InstagramMediaItem] {
+    /// Fetches up to `maxTotal` tagged posts, paginating internally (max 2 pages)
+    /// if the first response has `more_available`. Callers get a flat list.
+    func getUserTagged(userId: String? = nil, amount: Int = 50, maxTotal: Int = 50) async throws -> [InstagramMediaItem] {
         let uid = userId ?? session.userId
         print("🏷️ [TAGGED] Fetching tagged posts for user ID: \(uid)")
-        
-        let data = try await apiRequest(method: "GET", path: "/usertags/\(uid)/feed/")
-        
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("❌ [TAGGED] Failed to parse tagged response")
-            return []
-        }
-        
-        // Log response structure for debugging
-        if let jsonString = String(data: data, encoding: .utf8) {
-            print("🏷️ [TAGGED] Raw response (first 400 chars): \(String(jsonString.prefix(400)))")
-        }
-        print("🏷️ [TAGGED] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
-        
-        var items: [InstagramMediaItem] = []
-        
-        if let taggedItems = json["items"] as? [[String: Any]] {
-            print("🏷️ [TAGGED] Found \(taggedItems.count) items")
-            for item in taggedItems.prefix(amount) {
-                guard let mediaItem = parseMediaItem(item) else { continue }
-                items.append(mediaItem)
+
+        var allItems: [InstagramMediaItem] = []
+        var nextMaxId: String? = nil
+        var page = 0
+        let maxPages = 2
+
+        repeat {
+            var path = "/usertags/\(uid)/feed/?count=\(amount)"
+            if let cursor = nextMaxId { path += "&max_id=\(cursor)" }
+
+            let data = try await apiRequest(method: "GET", path: path)
+
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("❌ [TAGGED] Failed to parse tagged response")
+                break
             }
-        } else {
-            print("⚠️ [TAGGED] No 'items' key found — account may have 0 tagged posts or endpoint changed")
-        }
-        
-        print("🏷️ [TAGGED] Parsed \(items.count) tagged posts")
-        return items
+
+            if page == 0 {
+                print("🏷️ [TAGGED] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
+            }
+
+            guard let taggedItems = json["items"] as? [[String: Any]] else {
+                print("⚠️ [TAGGED] No 'items' key found page \(page)")
+                break
+            }
+
+            print("🏷️ [TAGGED] Page \(page): \(taggedItems.count) items from API")
+            for item in taggedItems {
+                guard let mediaItem = parseMediaItem(item) else { continue }
+                allItems.append(mediaItem)
+            }
+
+            let moreAvailable = json["more_available"] as? Bool ?? false
+            let cursor = json["next_max_id"] as? String
+
+            if moreAvailable, let c = cursor, c != nextMaxId {
+                nextMaxId = c
+            } else {
+                nextMaxId = nil
+            }
+
+            page += 1
+
+            if nextMaxId != nil && allItems.count < maxTotal {
+                try? await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            }
+
+        } while nextMaxId != nil && allItems.count < maxTotal && page < maxPages
+
+        let result = Array(allItems.prefix(maxTotal))
+        print("🏷️ [TAGGED] Total parsed: \(result.count) tagged posts (\(page) page(s))")
+        return result
     }
     
     // MARK: - Get User Story Highlights
@@ -3946,7 +4058,10 @@ class InstagramService: ObservableObject {
             // Capture fresh www-claim from upload response so configure_sidecar uses latest token
             if let claim = (http.allHeaderFields as? [String: String])?
                 .first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
-                await MainActor.run { self.wwwClaim = claim }
+                await MainActor.run {
+                    self.wwwClaim = claim
+                    UserDefaults.standard.set(claim, forKey: "ig_www_claim")
+                }
                 print("   [AMNESIA] Updated wwwClaim from upload response (\(label))")
             }
             if let raw = String(data: data, encoding: .utf8) {
@@ -4053,7 +4168,10 @@ class InstagramService: ObservableObject {
                    let warmHttp = warmResp as? HTTPURLResponse,
                    let hdrs = warmHttp.allHeaderFields as? [String: String],
                    let claim = hdrs.first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
-                    await MainActor.run { self.wwwClaim = claim }
+                    await MainActor.run {
+                        self.wwwClaim = claim
+                        UserDefaults.standard.set(claim, forKey: "ig_www_claim")
+                    }
                     print("📋 [AMNESIA] Fresh wwwClaim captured from warm-up GET")
                 }
             } catch {
@@ -4094,7 +4212,10 @@ class InstagramService: ObservableObject {
                     }
                     // Always capture fresh www-claim (even from 500 responses)
                     if let claim = hdrsResp.first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value {
-                        await MainActor.run { self.wwwClaim = claim }
+                        await MainActor.run {
+                            self.wwwClaim = claim
+                            UserDefaults.standard.set(claim, forKey: "ig_www_claim")
+                        }
                         print("   [AMNESIA] Updated wwwClaim from configure_sidecar response")
                     }
                 }
@@ -4325,7 +4446,59 @@ class InstagramService: ObservableObject {
     }
 
     // MARK: - Instagram Notes
-    
+    //
+    // ── ENDPOINT HISTORY (update this when Instagram breaks Notes) ────────────────
+    //
+    // v1 (original)  — https://i.instagram.com/api/v1/notes/create_note/
+    //   → worked initially.
+    //
+    // v2 (mid-2025)  — switched to https://www.instagram.com/api/v1/notes/create_note/
+    //   → reason: i.instagram.com started returning CORS-style errors for Notes.
+    //   → worked for a while.
+    //
+    // v3 (May-2026)  — rewrote Notes to use apiRequest() (same path as Bio/deleteNote).
+    //   + wwwClaim now persisted to UserDefaults ("ig_www_claim") and restored on init.
+    //   → root cause: manual request building called removeValue(forKey:"Cookie") to
+    //     "let URLSession handle cookies". After a Keychain-restore restart,
+    //     HTTPCookieStorage.shared is empty, so URLSession sent ZERO cookies → 403.
+    //     buildCookieHeader() printed "Sending N cookies" before the removal, hiding
+    //     the bug. Bio worked because apiRequest() never removes the Cookie header.
+    //   → if Notes fails again: check [COOKIE] log line count and wwwClaim value.
+    //     If cookies=0 or claim=0 something is stripping the Cookie header again.
+    //   → if 403 persists with correct cookies: Instagram changed the endpoint.
+    //     Check the Notes endpoint path and required headers in a fresh Instagram APK.
+    //
+    // v4 (May-2026)  — removed a premature InstagramSafetyGate.record(.note) before
+    //   POST /notes/create_note/. apiRequest() already gates and records the action.
+    //   The extra manual record made the create call block itself with "note too soon"
+    //   right after the warm-up succeeded, then restarted the 150s timer on retry.
+    //   Diagnostic signal: warm-up HTTP 200, then SAFETY BLOCK create_note note too soon.
+    //
+    // ── HOW TO DIAGNOSE IF NOTES BREAKS AGAIN ────────────────────────────────────
+    //
+    // 1. Check `[NOTE] wwwClaim=0` in logs:
+    //    → If 0, the claim was never refreshed. Try a GET warm-up to /accounts/current_user/
+    //      on the same base URL before the POST to get a fresh claim.
+    //
+    // 2. Check the HTTP status of the warm-up POST (update_notes_last_seen_timestamp):
+    //    → 403 login_required → wrong domain; switch between i.* and www.*
+    //    → 200 ok            → domain is correct, problem is elsewhere (headers, body params)
+    //
+    // 3. Check response body for clues:
+    //    → "login_required" + logout_reason:2  → domain/cookie mismatch
+    //    → "checkpoint_required"               → bot detection; add delay before retry
+    //    → "media_id_not_found"                → note feature disabled for account temporarily
+    //    → "Please wait a few minutes"         → rate limited; back off
+    //
+    // 4. Instagram sometimes requires `x-ig-app-id` header to be present; verify buildHeaders()
+    //    includes it. Also check that `X-IG-WWW-Claim` is sent with a non-zero value.
+    //
+    // 5. Body param changes Instagram has made historically:
+    //    → Added `note_style` (required, value "0")
+    //    → Added `device_id` (required)
+    //    → audience: 0=close friends+followers, 2=close friends only
+    // ─────────────────────────────────────────────────────────────────────────────
+
     /// Create an Instagram Note (bubble above profile pic in DMs)
     /// Max 60 characters, lasts 24 hours
     func createNote(text: String, audience: Int = 0) async throws -> Bool {
@@ -4375,61 +4548,50 @@ class InstagramService: ObservableObject {
         print("   [NOTE] csrfToken=\(String(session.csrfToken.prefix(8)))... len=\(session.csrfToken.count) audience=\(audience)")
         print("   [NOTE] wwwClaim=\(String(wwwClaim.prefix(20)))")
 
-        // Notes uses www.instagram.com (where the WebView session was established).
-        // i.instagram.com returns web-style CORS headers for this endpoint, suggesting
-        // the Notes backend lives under www. Using www directly avoids any routing mismatch.
-        let notesBase = "https://www.instagram.com/api/v1"
+        // ── CRITICAL LESSON (May-2026 root-cause analysis) ──────────────────────────────
+        // Earlier versions built requests manually and called:
+        //   headers.removeValue(forKey: "Cookie")   // "let URLSession handle cookies"
+        // After a Keychain-restore restart, HTTPCookieStorage.shared is empty, so
+        // URLSession sends ZERO cookies → Instagram returns 403 login_required.
+        // buildCookieHeader() still printed "Sending N cookies" because it was called
+        // before the removal — a misleading log that hid the real cause.
+        // Bio (POST /accounts/edit_profile/) worked because it routes through apiRequest(),
+        // which keeps the explicit Cookie header built from the in-memory session values.
+        // FIX: route ALL Notes calls through apiRequest() — identical code path to Bio.
+        // ────────────────────────────────────────────────────────────────────────────────
 
-        // ── Step 1: warm up ──────────────────────────────────────────────────────────────
-        if let warmupURL = URL(string: "\(notesBase)/notes/update_notes_last_seen_timestamp/") {
-            var warmupReq = URLRequest(url: warmupURL)
-            warmupReq.httpMethod = "POST"
-            warmupReq.timeoutInterval = 20
-            var warmupHeaders = buildHeaders()
-            warmupHeaders.removeValue(forKey: "Cookie") // let URLSession use stored cookies
-            for (k, v) in warmupHeaders { warmupReq.setValue(v, forHTTPHeaderField: k) }
-            let warmupBodyStr = "_uuid=\(clientUUID)&_uid=\(session.userId)&_csrftoken=\(session.csrfToken)"
-            warmupReq.httpBody = warmupBodyStr.data(using: .utf8)
-            if let (wd, wr) = try? await postSession.data(for: warmupReq),
-               let wHttp = wr as? HTTPURLResponse {
-                let ws = (try? JSONSerialization.jsonObject(with: wd) as? [String: Any])?["status"] as? String ?? "?"
-                print("   [NOTE] Warm-up HTTP \(wHttp.statusCode) status=\(ws)")
-                extractAndUpdateCSRF(from: wr)
-            }
+        // ── Step 1: warm-up — tells Instagram we've "seen" the notes tab recently ───────
+        // Non-fatal: if this fails (e.g. safety gate blocks it), we still try the create.
+        // DIAGNOSTIC: If warm-up returns 403, check wwwClaim value and cookie count above.
+        let warmBody: [String: String] = [
+            "_uuid":       clientUUID,
+            "_uid":        session.userId,
+            "_csrftoken":  session.csrfToken
+        ]
+        if let warmData = try? await apiRequest(method: "POST",
+                                                path: "/notes/update_notes_last_seen_timestamp/",
+                                                body: warmBody) {
+            let ws = (try? JSONSerialization.jsonObject(with: warmData) as? [String: Any])?["status"] as? String ?? "?"
+            print("   [NOTE] Warm-up status=\(ws)")
+        } else {
+            print("   [NOTE] Warm-up skipped (non-fatal) — wwwClaim=\(String(wwwClaim.prefix(20)))")
         }
 
         // ── Step 2: create the note ──────────────────────────────────────────────────────
         let body: [String: String] = [
-            "_csrftoken":   session.csrfToken,
-            "_uid":         session.userId,
-            "_uuid":        clientUUID,
-            "device_id":    deviceId,
-            "audience":     String(audience),
-            "note_style":   "0",
-            "text":         text
+            "_csrftoken":  session.csrfToken,
+            "_uid":        session.userId,
+            "_uuid":       clientUUID,
+            "device_id":   deviceId,
+            "audience":    String(audience),
+            "note_style":  "0",
+            "text":        text
         ]
         print("   [NOTE] Body params: \(body.keys.sorted().joined(separator: ", "))")
-
-        guard let noteURL = URL(string: "\(notesBase)/notes/create_note/") else {
-            throw InstagramError.invalidURL
-        }
-        var noteRequest = URLRequest(url: noteURL)
-        noteRequest.httpMethod = "POST"
-        noteRequest.timeoutInterval = 30
-        var createHeaders = buildHeaders()
-        createHeaders.removeValue(forKey: "Cookie") // let URLSession use stored cookies
-        for (k, v) in createHeaders { noteRequest.setValue(v, forHTTPHeaderField: k) }
-        var components = URLComponents()
-        components.queryItems = body.map { URLQueryItem(name: $0.key, value: $0.value) }
-        noteRequest.httpBody = components.percentEncodedQuery?.data(using: .utf8)
-        trackAction()
-        InstagramSafetyGate.shared.record(.note)
-        let (data, noteResponse) = try await postSession.data(for: noteRequest)
-        if let http = noteResponse as? HTTPURLResponse {
-            print("   [NOTE] HTTP \(http.statusCode)")
-            extractAndUpdateCSRF(from: noteResponse)
-            extractMID(from: noteResponse)
-        }
+        // Do NOT call InstagramSafetyGate.record(.note) here. apiRequest() checks and
+        // records /notes/create_note/ internally after the request is allowed. Recording
+        // before apiRequest makes this very call fail with "note too soon".
+        let data = try await apiRequest(method: "POST", path: "/notes/create_note/", body: body)
 
         if let rawResponse = String(data: data, encoding: .utf8) {
             print("   [NOTE] Raw response: \(rawResponse.prefix(400))")
@@ -5771,13 +5933,31 @@ final class InstagramSafetyGate {
         defer { lock.unlock() }
         defaults.removeObject(forKey: key("performance_pause_until"))
         defaults.removeObject(forKey: key("timestamps_\(Action.performanceEntry.rawValue)"))
+        defaults.removeObject(forKey: key("last_heavy_archive_at"))
         print("🔓 [SAFETY-GATE] Performance throttle reset on login")
+    }
+
+    func markHeavyArchiveCompleted(photoCount: Int) {
+        guard photoCount >= 5 else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        defaults.set(Date().timeIntervalSince1970, forKey: key("last_heavy_archive_at"))
+        LogManager.shared.info("Performance cooldown armed after S&A archived \(photoCount) photos", category: .upload)
+    }
+
+    func peekPerformanceEntry() -> PerformanceEntryDecision {
+        lock.lock()
+        defer { lock.unlock() }
+        return performanceEntryDecisionLocked(recordEntry: false)
     }
 
     func recordPerformanceEntry() -> PerformanceEntryDecision {
         lock.lock()
         defer { lock.unlock() }
+        return performanceEntryDecisionLocked(recordEntry: true)
+    }
 
+    private func performanceEntryDecisionLocked(recordEntry: Bool) -> PerformanceEntryDecision {
         let now = Date().timeIntervalSince1970
         if let circuit = activeChallengeCircuit(now: now) {
             logBlock("performance entry blocked — challenge circuit active (\(circuit.waitSeconds)s)")
@@ -5786,6 +5966,20 @@ final class InstagramSafetyGate {
                 waitSeconds: circuit.waitSeconds,
                 reason: "challenge circuit active"
             )
+        }
+
+        if let heavyArchiveAt = defaults.object(forKey: key("last_heavy_archive_at")) as? Double {
+            let elapsed = now - heavyArchiveAt
+            if elapsed < 180 {
+                let wait = max(1, Int(180 - elapsed))
+                logBlock("performance entry blocked — post-archive cooldown \(wait)s")
+                return PerformanceEntryDecision(
+                    allowRemoteCalls: false,
+                    waitSeconds: wait,
+                    reason: "post-archive cooldown"
+                )
+            }
+            defaults.removeObject(forKey: key("last_heavy_archive_at"))
         }
 
         // Check existing pause BEFORE recording a new entry — otherwise a user
@@ -5804,8 +5998,24 @@ final class InstagramSafetyGate {
 
         var entries = timestamps(for: .performanceEntry)
             .filter { now - $0 < 300 }
-        entries.append(now)
-        setTimestamps(entries, for: .performanceEntry)
+
+        // Only count this entry if we are NOT inside the cold-start / warm-resume window.
+        // During those windows ALL remote calls are already blocked by a separate guard,
+        // so penalising the user for opening Performance at that moment (e.g. because
+        // they restarted the app) would unfairly inflate the re-entry counter and cause
+        // cascading 120 s blocks even though no API calls were ever attempted.
+        // NOTE: we check the raw backing vars instead of calling isInColdStartWindow()
+        //       because that property also acquires `lock` and we already hold it here.
+        let nowDate = Date()
+        let duringColdStart: Bool = {
+            let coldActive = appLaunchTime.map { nowDate.timeIntervalSince($0) < coldStartWindow } ?? false
+            let warmActive = warmResumeTime.map { nowDate.timeIntervalSince($0) < warmResumeWindow } ?? false
+            return coldActive || warmActive
+        }()
+        if recordEntry && !duringColdStart {
+            entries.append(now)
+            setTimestamps(entries, for: .performanceEntry)
+        }
 
         // Re-entry penalties: throttle truly rapid re-opens only.
         if entries.count >= 5 {

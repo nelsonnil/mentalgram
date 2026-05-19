@@ -17,6 +17,10 @@ struct UserProfileView: View {
     // MARK: - Infinite Scroll State
     @State private var allMediaURLs: [String] = []
     @State private var mediaItemsByURL: [String: InstagramMediaItem] = [:]
+    /// Separate metadata map for tagged posts. InstagramProfile does not persist tagged
+    /// items, so we hold them here and pass them to the tagged viewer. Without this, the
+    /// viewer would receive the posts-only map and show empty/mismatched captions & dates.
+    @State private var taggedMediaItemsByURL: [String: InstagramMediaItem] = [:]
     @State private var nextMaxId: String? = nil
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
@@ -516,7 +520,7 @@ struct UserProfileView: View {
                             case .tagged(let index):
                                 PostScrollView(
                                     mediaURLs: currentProfile.cachedTaggedURLs,
-                                    mediaItemsByURL: mediaItemsByURL,
+                                    mediaItemsByURL: taggedMediaItemsByURL,
                                     cachedImages: cachedImages,
                                     initialIndex: index,
                                     username: currentProfile.username,
@@ -1137,6 +1141,8 @@ struct UserProfileView: View {
                 let taggedURLs = tagged.map { $0.imageURL }
                 await MainActor.run {
                     currentProfile.cachedTaggedURLs = taggedURLs
+                    // Store full metadata for the tagged viewer (captions, dates, mediaId).
+                    for item in tagged { taggedMediaItemsByURL[item.imageURL] = item }
                     taggedLoaded = true
                     isLoadingTagged = false
                     downloadImagesForURLs(taggedURLs)

@@ -124,7 +124,7 @@
 "settings.ocr" = "OCR";
 "settings.camera" = "カメラ";
 "settings.camera_desc" = "パフォーマンスが開くとカメラがサイレントで起動します。認識時に1回振動します。";
-"settings.camera_desc_full" = "パフォーマンスが開くとカメラがサイレントで起動します。認識されたテキストは自動的に公開されます：文字→単語セット、数字→数字セット。";
+"settings.camera_desc_full" = "音量+を押してカメラをサイレント起動。書かれた文字に向けると自動で読み取り、カメラが停止します。Performanceセッション中は1回のみ認識します。";
 "settings.auto_input" = "自動入力";
 "settings.auto_input_desc" = "パフォーマンスが開くときにInjectまたはカスタムAPIからテキストを取得";
 "settings.api_source" = "API Source";
@@ -1379,4 +1379,61 @@
 "action.remove" = "削除";
 
 "guide.amnesia.script.climax.phase" = "クライマックス";
+"perf.first_time_banner" = "初回読み込み中 — プロフィールをキャッシュしています。これは一度だけ行われます。";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "パフォーマンスの準備";
+"initial_load.phase.validating" = "セッションを確認中…";
+"initial_load.phase.loading_profile" = "Instagramプロフィールを読み込み中…";
+"initial_load.phase.paginating" = "投稿を読み込み中 — ページ %d…";
+"initial_load.phase.loading_reels" = "リールを読み込み中…";
+"initial_load.phase.loading_tagged" = "タグ付き投稿を読み込み中…";
+"initial_load.reels_count" = "%d リール";
+"initial_load.tagged_count" = "%d タグ付き";
+"initial_load.photos_count_one" = "%d件の投稿を読み込み済み";
+"initial_load.photos_count" = "%d件の投稿を読み込み済み";
+"initial_load.estimated_time" = "数分かかる場合があります";
+"initial_load.one_time_promise" = "この一回だけ — 次回はすぐに入れます。";
+"initial_load.footer" = "Instagramに新しい写真を追加した場合は、キャッシュを更新するためにPerformanceを手動でリフレッシュしてください。";
+"initial_load.error.session" = "セッションの有効期限が切れました。続けるには再度ログインしてください。";
+"initial_load.error.load_failed" = "プロフィールを読み込めませんでした。接続を確認して再試行してください。";
 "guide.amnesia.script.climax.text" = "「Instagramをもう一度開いてください。同じ投稿を探してください。」\n\n[観客が5枚の画像を見る]\n\n「何枚見えますか？」— 5枚。\n\n「日付を確認してください。さっきと同じですか？」— はい。\n\n「Instagramは嘘をつきません。日付は変更できません。こうしてアップロードされました。」\n\n[間]\n\n「起きたことは画像を忘れたのではありません。あなたの心はそれを見ないように導かれました。そして今、それが可能だとわかりました。」";
+
+"fullload.warming_up" = "準備中… %d 秒";
+"fullload.grid" = "投稿をキャッシュ中 — %d 件";
+"fullload.reels" = "リールをキャッシュ中…";
+"fullload.tagged" = "タグ付き投稿をキャッシュ中…";
+"fullload.done" = "プロフィール準備完了！";
+"fullload.skip" = "スキップして続行";
+// MARK: - API Budget (appended)
+"budget.title" = "APIバジェット";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "残り%d";
+"budget.renewal_at" = "%@に完全回復";
+"budget.status.full" = "バジェット満タン";
+"budget.status.full_used" = "バジェット使い切り — 回復をお待ちください";
+"budget.warning.title" = "バジェット残量僅か";
+"budget.warning.renewal" = "%@に完全回復";
+"budget.warning.advice" = "ショーの中断を防ぐため、バジェット回復までPerformanceに入らないでください。";
+"action.understood" = "了解";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "セッション期限切れ";
+"performance.gate.session.message" = "セッションが終了しました。Instagramを開いて更新し、再ログインをタップしてください。";
+"performance.gate.wait.title" = "しばらくお待ちください — 残り %@";
+"performance.gate.post_archive.message" = "アーカイブ操作が完了しました。アカウントを保護するため、短い待機時間が設定されています。";
+"performance.gate.safety.message" = "APIリミットからアカウントを保護するため、安全のための一時停止が適用されています。";
+"performance.gate.auto_enter" = "%@ 後に自動入場…";
+"session.panel.open_instagram" = "Instagramを開く";
+"session.panel.relogin_after_instagram" = "Instagram後に再ログイン";
+"common.cancel" = "キャンセル";
+"session.panel.restart.title" = "再起動が必要です";
+"session.panel.restart.message" = "デバイスフィンガープリントが消去されました。アプリを完全に終了してから再度開いてリセットを完了し、もう一度ログインしてください。";
+"common.ok" = "OK";
+"session.panel.stuck.title" = "再ログインが機能していません";
+"session.panel.stuck.message" = "再ログインではセッションを復元できません。Instagramがこのデバイスにフラグを立てている可能性があります。下の緊急ログアウトを使用して新しいデバイスIDを生成し、アプリを完全に終了して再起動してください。";
+"session.panel.emergency_steps.intro" = "手順:";
+"session.panel.emergency_step.1" = "下の「緊急ログアウト」をタップ";
+"session.panel.emergency_step.2" = "アプリを完全に終了 — 下からスワイプしてアプリを画面外に払い除ける";
+"session.panel.emergency_step.3" = "アプリを再度開く — 新しいデバイスIDが自動的に生成されます";
+"session.panel.emergency_step.4" = "再度ログイン";

@@ -112,7 +112,7 @@
 "settings.ocr" = "OCR";
 "settings.camera" = "Kamera";
 "settings.camera_desc" = "Kamera aktiviert sich lautlos beim Öffnen von Auftritt. Vibriert bei Erkennung.";
-"settings.camera_desc_full" = "Kamera startet lautlos beim Öffnen von Auftritt. Erkannter Text enthüllt automatisch: Buchstaben → Wortset, Ziffern → Zahlenset.";
+"settings.camera_desc_full" = "Volume+ drücken, um die Kamera lautlos zu starten. Auf ein geschriebenes Wort richten — die App liest es automatisch und stoppt die Kamera. Eine Erkennung pro Performance-Sitzung.";
 "settings.auto_input" = "Automatische Eingabe";
 "settings.auto_input_desc" = "Text von Inject oder benutzerdefinierter API beim Öffnen von Auftritt abrufen";
 "settings.api_source" = "API Source";
@@ -1561,4 +1561,61 @@
 "action.remove" = "Entfernen";
 
 "guide.amnesia.script.climax.phase" = "HÖHEPUNKT";
+"perf.first_time_banner" = "Erstes Laden — dein Profil wird zwischengespeichert. Das passiert nur einmal.";
+
+// MARK: - Initial Profile Load screen
+"initial_load.title" = "Performance vorbereiten";
+"initial_load.phase.validating" = "Sitzung wird überprüft…";
+"initial_load.phase.loading_profile" = "Instagram-Profil wird geladen…";
+"initial_load.phase.paginating" = "Beiträge werden geladen – Seite %d…";
+"initial_load.phase.loading_reels" = "Reels werden geladen…";
+"initial_load.phase.loading_tagged" = "Markierte Beiträge werden geladen…";
+"initial_load.reels_count" = "%d Reels";
+"initial_load.tagged_count" = "%d markiert";
+"initial_load.photos_count_one" = "%d Beitrag geladen";
+"initial_load.photos_count" = "%d Beiträge geladen";
+"initial_load.estimated_time" = "Dies kann mehrere Minuten dauern";
+"initial_load.one_time_promise" = "Nur dieses eine Mal — beim nächsten Mal wirst du sofort eintreten.";
+"initial_load.footer" = "Wenn du später neue Fotos auf Instagram hochlädst, aktualisiere Performance manuell, um den Cache zu erneuern.";
+"initial_load.error.session" = "Sitzung abgelaufen. Bitte melde dich erneut an, um fortzufahren.";
+"initial_load.error.load_failed" = "Profil konnte nicht geladen werden. Überprüfe die Verbindung und versuche es erneut.";
 "guide.amnesia.script.climax.text" = "„Öffne Instagram erneut. Suche denselben Post.\"\n\n[Zuschauer sieht 5 Bilder]\n\n„Wie viele siehst du?\" — Fünf.\n\n„Schau auf das Datum. Ist es dasselbe wie zuvor?\" — Ja.\n\n„Instagram lügt nicht. Es kann keine Daten ändern. So wurde es hochgeladen.\"\n\n[Pause]\n\n„Was passiert ist, ist nicht, dass du ein Bild vergessen hast. Dein Geist wurde geführt, es nicht zu sehen. Und jetzt weißt du, dass das möglich ist.\"";
+
+"fullload.warming_up" = "Vorbereitung… %d s";
+"fullload.grid" = "Beiträge laden — %d geladen";
+"fullload.reels" = "Reels werden geladen…";
+"fullload.tagged" = "Markierte Beiträge laden…";
+"fullload.done" = "Profil bereit!";
+"fullload.skip" = "Überspringen und trotzdem fortfahren";
+// MARK: - API Budget (appended)
+"budget.title" = "API-Budget";
+"budget.used_of" = "%d / %d";
+"budget.remaining" = "%d verbleibend";
+"budget.renewal_at" = "Volles Budget um %@";
+"budget.status.full" = "Budget voll";
+"budget.status.full_used" = "Budget verbraucht — auf Erneuerung warten";
+"budget.warning.title" = "Budget niedrig";
+"budget.warning.renewal" = "Volles Budget um %@";
+"budget.warning.advice" = "Betrete Performance erst nach der Budget-Erneuerung, um Unterbrechungen zu vermeiden.";
+"action.understood" = "Verstanden";
+
+// ── Performance Gate Sheet ──────────────────────────────────────────────────
+"performance.gate.session.title" = "Sitzung abgelaufen";
+"performance.gate.session.message" = "Deine Sitzung ist abgelaufen. Öffne Instagram, um sie zu aktualisieren, und tippe dann auf Erneut anmelden.";
+"performance.gate.wait.title" = "Bitte warten — noch %@";
+"performance.gate.post_archive.message" = "Archivierungsvorgang abgeschlossen. Eine kurze Pause ist aktiv, um dein Konto zu schützen.";
+"performance.gate.safety.message" = "Eine Sicherheitspause ist aktiv, um dein Konto vor API-Limits zu schützen.";
+"performance.gate.auto_enter" = "Automatischer Eintritt in %@…";
+"session.panel.open_instagram" = "Instagram öffnen";
+"session.panel.relogin_after_instagram" = "Nach Instagram erneut anmelden";
+"common.cancel" = "Abbrechen";
+"session.panel.restart.title" = "Neustart erforderlich";
+"session.panel.restart.message" = "Geräte-Fingerabdruck gelöscht. Schließe die App vollständig und öffne sie erneut, um den Reset abzuschließen, und melde dich dann an.";
+"common.ok" = "OK";
+"session.panel.stuck.title" = "Erneutes Anmelden funktioniert nicht";
+"session.panel.stuck.message" = "Deine Sitzung kann nicht durch erneutes Anmelden wiederhergestellt werden. Das bedeutet meist, dass Instagram dieses Gerät markiert hat. Nutze den Notfall-Logout unten, um eine neue Geräteidentität zu generieren, und schließe dann die App vollständig neu.";
+"session.panel.emergency_steps.intro" = "Diese Schritte befolgen:";
+"session.panel.emergency_step.1" = "Tippe unten auf „Notfall-Abmelden\"";
+"session.panel.emergency_step.2" = "App vollständig schließen — von unten nach oben wischen und die App wegwischen";
+"session.panel.emergency_step.3" = "App erneut öffnen — eine neue Geräteidentität wird automatisch erstellt";
+"session.panel.emergency_step.4" = "Erneut anmelden";

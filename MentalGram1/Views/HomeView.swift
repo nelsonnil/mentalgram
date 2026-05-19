@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UIKit
 
 // MARK: - Main Home View
 
@@ -24,6 +25,13 @@ struct HomeView: View {
     @State private var isArchivingBeforePerformance = false
     @State private var archiveProgress: (done: Int, total: Int) = (0, 0)
     @State private var showArchiveProgressSheet = false
+    @State private var performanceGate: PerformanceGate?
+    @State private var showPerformanceRelogin = false
+    @State private var showInitialProfileLoad = false
+    @State private var showBudgetWarning = false
+    @State private var budgetWarningUsed: Int = 0
+    @State private var budgetWarningRemaining: Int = 55
+    @State private var budgetWarningRenewal: Date? = nil
     
     /// Custom binding that intercepts tab switches to Performance (0)
     /// and shows the pre-check alert if there are visible photos.
@@ -32,16 +40,17 @@ struct HomeView: View {
             get: { selectedTab },
             set: { newValue in
                 if newValue == 0 && instagram.isLoggedIn {
-                    // Gate: require Limits & Safety to be read before first Performance entry
-                    if !limitsGuideRead {
-                        showLimitsGate = true
-                        return  // block the tab switch until guide is acknowledged
-                    }
-                    let visible = visiblePhotosInActiveSets()
-                    if !visible.isEmpty {
-                        visiblePhotosToArchive = visible
-                        showVisiblePhotosAlert = true
-                        return  // block the tab switch
+                    requestPerformanceEntry()
+                    return
+                }
+                // Leaving Performance → check budget and warn if low
+                if selectedTab == 0 && newValue != 0 && instagram.isLoggedIn {
+                    let rl = instagram.checkRateLimit()
+                    if rl.remaining < 15 {
+                        budgetWarningUsed      = rl.actionsUsed
+                        budgetWarningRemaining = rl.remaining
+                        budgetWarningRenewal   = instagram.budgetRenewalTime()
+                        showBudgetWarning      = true
                     }
                 }
                 selectedTab = newValue
@@ -104,6 +113,10 @@ struct HomeView: View {
             }
             .tag(3)
         }
+        // Force light mode at the TabView root so the status bar always shows
+        // dark (black) icons on Performance's white Instagram-style background.
+        // Individual dark-theme views (Sets, Settings) override this locally.
+        .preferredColorScheme(.light)
         .accentColor(selectedTab == 0 ? .primary : VaultTheme.Colors.primary)
         .onChange(of: selectedTab) { newTab in
             updateTabBarAppearance(forTab: newTab)
@@ -112,8 +125,7 @@ struct HomeView: View {
         .onChange(of: urlAction.pendingMode) { mode in
             guard !mode.isEmpty else { return }
             print("📲 [URL] Switching to Performance tab for action: \(mode)")
-            selectedTab = 0
-            updateTabBarAppearance(forTab: 0)
+            requestPerformanceEntry()
         }
         .onAppear {
             // Auto-unlock the Limits gate for users who already have a cached profile
@@ -127,13 +139,7 @@ struct HomeView: View {
                 if !limitsGuideRead {
                     showLimitsGate = true
                 } else {
-                    let visible = visiblePhotosInActiveSets()
-                    if !visible.isEmpty {
-                        visiblePhotosToArchive = visible
-                        showVisiblePhotosAlert = true
-                    } else {
-                        selectedTab = 0
-                    }
+                    requestPerformanceEntry()
                 }
             }
             updateTabBarAppearance(forTab: selectedTab)
@@ -153,8 +159,7 @@ struct HomeView: View {
                             visiblePhotosToArchive = visible
                             showVisiblePhotosAlert = true
                         } else {
-                            selectedTab = 0
-                            updateTabBarAppearance(forTab: 0)
+                            enterPerformanceDirectly()
                         }
                     }
                 }
@@ -162,8 +167,7 @@ struct HomeView: View {
         }
         .alert("Visible Photos Detected", isPresented: $showVisiblePhotosAlert) {
             Button("Continue Anyway") {
-                selectedTab = 0
-                updateTabBarAppearance(forTab: 0)
+                enterPerformanceDirectly()
             }
             // Disable "Verify & Archive" while post-reveal protection is active —
             // the photos were just revealed for a trick and archiving them now
@@ -190,6 +194,42 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showArchiveProgressSheet) {
             archiveProgressView
+        }
+        .sheet(item: $performanceGate) { gate in
+            PerformanceGateSheet(
+                gate: gate,
+                onOpenInstagram: openInstagram,
+                onRelogin: {
+                    performanceGate = nil
+                    showPerformanceRelogin = true
+                },
+                onContinue: {
+                    performanceGate = nil
+                    requestPerformanceEntry()
+                },
+                onCancel: {
+                    performanceGate = nil
+                }
+            )
+        }
+        .sheet(isPresented: $showPerformanceRelogin) {
+            ReloginSheet(isPresented: $showPerformanceRelogin)
+        }
+        .sheet(isPresented: $showBudgetWarning) {
+            BudgetWarningSheet(
+                used: budgetWarningUsed,
+                remaining: budgetWarningRemaining,
+                renewalTime: budgetWarningRenewal,
+                onDismiss: { showBudgetWarning = false }
+            )
+            .presentationDetents([.medium])
+        }
+        .fullScreenCover(isPresented: $showInitialProfileLoad) {
+            InitialProfileLoadView {
+                showInitialProfileLoad = false
+                // Re-run the check so visible-photos gate etc. can still fire
+                requestPerformanceEntry()
+            }
         }
         .fullScreenCover(isPresented: $showingExplore, onDismiss: {
             // Restart volume monitoring if FollowingMagic needs it for Transfer phase 2
@@ -240,6 +280,66 @@ struct HomeView: View {
             dataManager.sets.first(where: { $0.id == id })?.name
         }
         return names.joined(separator: ", ")
+    }
+
+    private func requestPerformanceEntry() {
+        guard instagram.isLoggedIn else {
+            enterPerformanceDirectly()
+            return
+        }
+
+        guard !instagram.isSessionExpired else {
+            performanceGate = .sessionExpired
+            return
+        }
+
+        // Gate: require Limits & Safety to be read before first Performance entry
+        guard limitsGuideRead else {
+            showLimitsGate = true
+            return
+        }
+
+        // First-time full profile load: show blocking loader if there is no cache yet
+        if ProfileCacheService.shared.loadProfile() == nil {
+            showInitialProfileLoad = true
+            return
+        }
+
+        let decision = InstagramSafetyGate.shared.peekPerformanceEntry()
+        if !decision.allowRemoteCalls {
+            let hasOwnProfileCache = ProfileCacheService.shared.loadProfile() != nil
+            let isPostArchiveCooldown = decision.reason == "post-archive cooldown"
+            if isPostArchiveCooldown || !hasOwnProfileCache {
+                performanceGate = .safetyPause(
+                    seconds: max(1, decision.waitSeconds),
+                    reason: decision.reason
+                )
+                return
+            }
+        }
+
+        let visible = visiblePhotosInActiveSets()
+        if !visible.isEmpty {
+            visiblePhotosToArchive = visible
+            showVisiblePhotosAlert = true
+            return
+        }
+
+        enterPerformanceDirectly()
+    }
+
+    private func enterPerformanceDirectly() {
+        selectedTab = 0
+        updateTabBarAppearance(forTab: 0)
+    }
+
+    private func openInstagram() {
+        guard let appURL = URL(string: "instagram://app") else { return }
+        UIApplication.shared.open(appURL) { success in
+            if !success, let webURL = URL(string: "https://www.instagram.com/") {
+                UIApplication.shared.open(webURL)
+            }
+        }
     }
 
     @MainActor
@@ -351,6 +451,150 @@ struct HomeView: View {
     }
 }
 
+// MARK: - Performance Entry Gate
+
+private enum PerformanceGate: Identifiable {
+    case sessionExpired
+    case safetyPause(seconds: Int, reason: String)
+
+    var id: String {
+        switch self {
+        case .sessionExpired:
+            return "sessionExpired"
+        case .safetyPause(_, let reason):
+            return "safetyPause-\(reason)"
+        }
+    }
+}
+
+private struct PerformanceGateSheet: View {
+    let gate: PerformanceGate
+    let onOpenInstagram: () -> Void
+    let onRelogin: () -> Void
+    let onContinue: () -> Void
+    let onCancel: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var remainingSeconds: Int = 0
+
+    private var isSessionExpired: Bool {
+        if case .sessionExpired = gate { return true }
+        return false
+    }
+
+    private var title: String {
+        if isSessionExpired {
+            return String(localized: "performance.gate.session.title")
+        }
+        return String(
+            format: String(localized: "performance.gate.wait.title"),
+            formattedRemaining
+        )
+    }
+
+    private var message: String {
+        switch gate {
+        case .sessionExpired:
+            return String(localized: "performance.gate.session.message")
+        case .safetyPause(_, let reason) where reason == "post-archive cooldown":
+            return String(localized: "performance.gate.post_archive.message")
+        case .safetyPause:
+            return String(localized: "performance.gate.safety.message")
+        }
+    }
+
+    private var formattedRemaining: String {
+        let minutes = remainingSeconds / 60
+        let seconds = remainingSeconds % 60
+        if minutes > 0 {
+            return "\(minutes)m \(seconds)s"
+        }
+        return "\(seconds)s"
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Capsule()
+                .fill(Color.secondary.opacity(0.25))
+                .frame(width: 44, height: 5)
+                .padding(.top, 10)
+
+            Image(systemName: isSessionExpired ? "key.slash.fill" : "clock.fill")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundColor(isSessionExpired ? .orange : .blue)
+                .padding(.top, 6)
+
+            Text(title)
+                .font(.title3.weight(.bold))
+                .multilineTextAlignment(.center)
+
+            Text(message)
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal)
+
+            if isSessionExpired {
+                VStack(spacing: 10) {
+                    Button(action: onOpenInstagram) {
+                        Label(String(localized: "session.panel.open_instagram"), systemImage: "camera.fill")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.black)
+                            .cornerRadius(12)
+                    }
+
+                    Button(action: onRelogin) {
+                        Label(String(localized: "session.panel.relogin_after_instagram"), systemImage: "arrow.triangle.2.circlepath")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.blue)
+                            .cornerRadius(12)
+                    }
+                }
+            } else {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text(String(format: String(localized: "performance.gate.auto_enter"), formattedRemaining))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Button(String(localized: "common.cancel")) {
+                dismiss()
+                onCancel()
+            }
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 24)
+        .presentationDetents([.height(isSessionExpired ? 430 : 330)])
+        .presentationDragIndicator(.hidden)
+        .onAppear {
+            if case .safetyPause(let seconds, _) = gate {
+                remainingSeconds = seconds
+                Task { @MainActor in
+                    while remainingSeconds > 0 {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        remainingSeconds = max(0, remainingSeconds - 1)
+                    }
+                    dismiss()
+                    onContinue()
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Sets List View
 
 struct SetsListView: View {
@@ -373,88 +617,101 @@ struct SetsListView: View {
             // Dark background
             VaultTheme.Colors.background
                 .ignoresSafeArea()
-            
+
             // Hidden NavigationLink for programmatic navigation to newly created set
             if let newSet = newlyCreatedSet {
                 NavigationLink(
                     destination: SetDetailView(set: newSet),
                     isActive: $navigateToNewSet
-                ) {
-                    EmptyView()
-                }
+                ) { EmptyView() }
                 .hidden()
             }
-            
-            ScrollView {
-                LazyVStack(spacing: VaultTheme.Spacing.md) {
-                    // Header
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 10) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(LinearGradient(
-                                        colors: [Color(hex: "7C3AED"), Color(hex: "0EA5E9")],
-                                        startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .frame(width: 38, height: 38)
-                                Image(systemName: "wand.and.stars")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("My Sets")
-                                    .font(.system(size: 22, weight: .bold))
-                                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                                Text("Post Prediction · Old Date")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(VaultTheme.Colors.textTertiary)
-                            }
-                            Spacer()
-                        }
-                        Text("Each set groups photo banks used to unarchive posts during your performance.")
-                            .font(.system(size: 12))
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.horizontal, VaultTheme.Spacing.lg)
-                    .padding(.top, VaultTheme.Spacing.md)
-                    .padding(.bottom, VaultTheme.Spacing.sm)
 
-                    if hasPendingPrePerformanceActions {
-                        pendingArchiveBanner
+            VStack(spacing: 0) {
+                // ── Fixed budget bar (does not scroll) ──────────────────────
+                if instagram.isLoggedIn {
+                    VStack(spacing: 0) {
+                        APIBudgetWidget()
                             .padding(.horizontal, VaultTheme.Spacing.lg)
-            }
-            
-            if dataManager.sets.isEmpty {
-                EmptyStateView(
-                    icon: "square.stack.3d.up.slash.fill",
-                    title: "No Sets Yet",
-                    message: "Create your first photo set to get started with magic performances",
-                    actionTitle: "Create Set",
-                    action: { showingCreateSet = true }
-                )
-                        .padding(.top, 40)
-            } else {
-                        ForEach(dataManager.sets) { set in
-                            NavigationLink(destination: SetDetailView(set: set)) {
-                                SetRowView(
-                                    set: set,
-                                    isLoggedIn: instagram.isLoggedIn,
-                                    onRename: {
-                                        setToRename = set
-                                        renameText = set.name
-                                        showRenameAlert = true
-                                    },
-                                    onDelete: {
-                                        setToDelete = set
-                                        showDeleteAlert = true
-                                    }
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal, VaultTheme.Spacing.lg)
-                                    }
-                        .padding(.bottom, VaultTheme.Spacing.lg)
+                            .padding(.vertical, 10)
+                        Divider()
+                            .background(Color.white.opacity(0.08))
+                    }
+                    .background(VaultTheme.Colors.backgroundSecondary)
+                }
+
+                // ── Scrollable content ───────────────────────────────────────
+                ScrollView {
+                    LazyVStack(spacing: VaultTheme.Spacing.md) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 10) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(LinearGradient(
+                                            colors: [Color(hex: "7C3AED"), Color(hex: "0EA5E9")],
+                                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .frame(width: 38, height: 38)
+                                    Image(systemName: "wand.and.stars")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.white)
                                 }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("My Sets")
+                                        .font(.system(size: 22, weight: .bold))
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    Text("Post Prediction · Old Date")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                                }
+                                Spacer()
+                            }
+                            Text("Each set groups photo banks used to unarchive posts during your performance.")
+                                .font(.system(size: 12))
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.horizontal, VaultTheme.Spacing.lg)
+                        .padding(.top, VaultTheme.Spacing.md)
+                        .padding(.bottom, VaultTheme.Spacing.sm)
+
+                        if hasPendingPrePerformanceActions {
+                            pendingArchiveBanner
+                                .padding(.horizontal, VaultTheme.Spacing.lg)
+                        }
+
+                        if dataManager.sets.isEmpty {
+                            EmptyStateView(
+                                icon: "square.stack.3d.up.slash.fill",
+                                title: "No Sets Yet",
+                                message: "Create your first photo set to get started with magic performances",
+                                actionTitle: "Create Set",
+                                action: { showingCreateSet = true }
+                            )
+                            .padding(.top, 40)
+                        } else {
+                            ForEach(dataManager.sets) { set in
+                                NavigationLink(destination: SetDetailView(set: set)) {
+                                    SetRowView(
+                                        set: set,
+                                        isLoggedIn: instagram.isLoggedIn,
+                                        onRename: {
+                                            setToRename = set
+                                            renameText = set.name
+                                            showRenameAlert = true
+                                        },
+                                        onDelete: {
+                                            setToDelete = set
+                                            showDeleteAlert = true
+                                        }
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, VaultTheme.Spacing.lg)
+                            }
+                            .padding(.bottom, VaultTheme.Spacing.lg)
+                        }
+                    }
                 }
             }
         }
@@ -648,7 +905,7 @@ struct SetRowView: View {
                                         .background(typeAccent.opacity(0.15))
                                         .cornerRadius(4)
                                 }
-
+                        
                         Spacer()
                         
                         if isLoggedIn {
@@ -797,6 +1054,199 @@ struct ActivityLogView: View {
     }
 }
 
+// MARK: - API Budget Widget
+
+/// Compact card showing actions used this hour, a colour-coded progress bar,
+/// and the exact time the budget will be fully renewed.
+/// Designed for the Settings tab — updates on every `.onAppear`.
+struct APIBudgetWidget: View {
+    @ObservedObject private var instagram = InstagramService.shared
+    @State private var used: Int = 0
+    @State private var remaining: Int = 55
+    @State private var renewalTime: Date? = nil
+
+    private let max = 55
+
+    // Colour zones: green → yellow → red
+    private var barColor: Color {
+        switch used {
+        case 0..<36:  return Color(red: 0.22, green: 0.78, blue: 0.45)  // green
+        case 36..<48: return .orange
+        default:      return .red
+        }
+    }
+
+    private var fraction: Double { min(1, Double(used) / Double(max)) }
+
+    private var statusLabel: String {
+        if remaining == 0 {
+            return String(localized: "budget.status.full_used")
+        }
+        if let t = renewalTime {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+            return String(format: String(localized: "budget.renewal_at"), formatter.string(from: t))
+        }
+        return String(localized: "budget.status.full")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "bolt.circle.fill")
+                    .foregroundColor(barColor)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(String(localized: "budget.title"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                Spacer()
+                Text(String(format: String(localized: "budget.used_of"), used, max))
+                    .font(.system(size: 13, weight: .bold).monospacedDigit())
+                    .foregroundColor(barColor)
+            }
+
+            // Progress bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(height: 6)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(barColor)
+                        .frame(width: geo.size.width * fraction, height: 6)
+                        .animation(.easeInOut(duration: 0.4), value: fraction)
+                }
+            }
+            .frame(height: 6)
+
+            HStack {
+                Image(systemName: renewalTime == nil ? "checkmark.circle.fill" : "clock")
+                    .font(.caption2)
+                    .foregroundColor(renewalTime == nil ? .green : VaultTheme.Colors.textSecondary)
+                Text(statusLabel)
+                    .font(.caption)
+                    .foregroundColor(renewalTime == nil ? Color.green.opacity(0.9) : VaultTheme.Colors.textSecondary)
+            }
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(barColor.opacity(0.25), lineWidth: 1))
+        .onAppear { refresh() }
+        // Also refresh whenever the actionsThisHour counter changes
+        .onChange(of: instagram.actionsThisHour) { _ in refresh() }
+    }
+
+    private func refresh() {
+        let rl = instagram.checkRateLimit()
+        used      = rl.actionsUsed
+        remaining = rl.remaining
+        renewalTime = instagram.budgetRenewalTime()
+    }
+}
+
+// MARK: - Exit-Performance Budget Sheet
+
+/// Non-blocking sheet shown when the user leaves Performance with < 15 actions remaining.
+/// Gives them the key info to decide whether to come back soon or wait for renewal.
+struct BudgetWarningSheet: View {
+    let used: Int
+    let remaining: Int
+    let renewalTime: Date?
+    let onDismiss: () -> Void
+
+    private let max = 55
+
+    private var fraction: Double { min(1, Double(used) / Double(max)) }
+
+    private var barColor: Color {
+        remaining < 7 ? .red : .orange
+    }
+
+    private var renewalString: String {
+        guard let t = renewalTime else { return "" }
+        let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none
+        return f.string(from: t)
+    }
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Handle
+            Capsule()
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 40, height: 4)
+                .padding(.top, 12)
+
+            VStack(spacing: 6) {
+                Image(systemName: "bolt.trianglebadge.exclamationmark.fill")
+                    .font(.system(size: 40, weight: .light))
+                    .foregroundColor(barColor)
+                Text(String(localized: "budget.warning.title"))
+                    .font(.title3.bold())
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+            }
+
+            // Budget card
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(String(format: String(localized: "budget.used_of"), used, max))
+                        .font(.system(size: 22, weight: .bold).monospacedDigit())
+                        .foregroundColor(barColor)
+                    Spacer()
+                    Text(String(format: String(localized: "budget.remaining"), remaining))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.08)).frame(height: 8)
+                        RoundedRectangle(cornerRadius: 5).fill(barColor)
+                            .frame(width: geo.size.width * fraction, height: 8)
+                    }
+                }
+                .frame(height: 8)
+
+                if let _ = renewalTime {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock").font(.caption)
+                        Text(String(format: String(localized: "budget.warning.renewal"), renewalString))
+                            .font(.footnote)
+                    }
+                    .foregroundColor(.white.opacity(0.55))
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(14)
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(barColor.opacity(0.3), lineWidth: 1))
+            .padding(.horizontal, 4)
+
+            Text(String(localized: "budget.warning.advice"))
+                .font(.callout)
+                .foregroundColor(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+
+            Button(action: onDismiss) {
+                Text(String(localized: "action.understood"))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.white)
+                    .cornerRadius(12)
+            }
+            .padding(.bottom, 8)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
+        .background(Color(hex: "#1C1C1E").ignoresSafeArea())
+        .preferredColorScheme(.dark)
+    }
+}
+
 // MARK: - Settings View
 
 struct SettingsView: View {
@@ -924,6 +1374,9 @@ struct SettingsView: View {
         if hasPendingPrePerformanceActions {
             prePerformanceWarningSection
         }
+        // API budget — always visible so the magician can check before performing
+        APIBudgetWidget()
+            .padding(.bottom, 8)
         accountSection
         instagramProfileSection
         tricksSection
@@ -993,7 +1446,7 @@ struct SettingsView: View {
         modernCard {
             VStack(spacing: VaultTheme.Spacing.md) {
                 Text("Version 1.0.0")
-                    .font(VaultTheme.Typography.body())
+                                        .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
                     .onTapGesture {
                         withAnimation { developerMode = true }
@@ -1745,16 +2198,16 @@ struct SettingsView: View {
             return
         }
         isLoadingFollower = true
-
+        
         Task {
             do {
                 let follower = try await instagram.getLatestFollower()
-
+                
                 var fullInfo: [String: Any]?
                 if let follower = follower {
                     fullInfo = try await instagram.getUserFullInfo(userId: follower.userId)
                 }
-
+                
                 await MainActor.run {
                     latestFollower = follower
                     followerFullInfo = fullInfo
@@ -4878,6 +5331,271 @@ private struct ZenerStar: View {
             ctx.fill(path, with: .color(.orange.opacity(0.9)))
             ctx.stroke(path, with: .color(.orange), style: StrokeStyle(lineWidth: 1.5))
         }
+    }
+}
+
+// MARK: - Initial Profile Load (first-time blocking loader)
+
+/// Shown the very first time the magician taps Performance and there is no local
+/// cache yet. Loads up to 100 posts with human-paced delays so the full profile is
+/// ready before entering the replica. Cannot be dismissed by the user.
+private struct InitialProfileLoadView: View {
+    let onComplete: () -> Void
+
+    @ObservedObject private var instagram = InstagramService.shared
+
+    enum Phase {
+        case validating, loadingProfile, paginating(Int)
+        case loadingReels, loadingTagged
+        case failed(String)
+    }
+    @State private var phase: Phase = .validating
+    @State private var photosLoaded: Int = 0
+    @State private var reelsLoaded: Int = 0
+    @State private var taggedLoaded: Int = 0
+
+    private let maxPhotos = 100
+    /// Page limit: safety cap (100 posts / ~18 per page ≈ 6 pages)
+    private let maxPages = 8
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 28) {
+                Spacer()
+
+                Image(systemName: iconName)
+                    .font(.system(size: 56, weight: .light))
+                    .foregroundColor(.white)
+                    .animation(.easeInOut(duration: 0.4), value: iconName)
+
+                VStack(spacing: 10) {
+                    Text(String(localized: "initial_load.title"))
+                        .font(.title3.bold())
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text(phaseDescription)
+                        .font(.callout)
+                        .foregroundColor(.white.opacity(0.65))
+                        .multilineTextAlignment(.center)
+                        .animation(.easeInOut, value: phaseDescription)
+                }
+
+                // Progress bar — visual confirmation that the load is actually progressing
+                if case .failed = phase {
+                    EmptyView()
+                } else {
+                    VStack(spacing: 8) {
+                        ProgressView(value: progressFraction)
+                            .progressViewStyle(.linear)
+                            .tint(.white)
+                            .frame(maxWidth: 220)
+                            .animation(.easeInOut, value: progressFraction)
+
+                        if !secondaryStatus.isEmpty {
+                            Text(secondaryStatus)
+                                .font(.footnote.monospacedDigit())
+                                .foregroundColor(.white.opacity(0.7))
+                                .animation(.easeInOut, value: secondaryStatus)
+                        }
+                    }
+                }
+
+                // Reassurance block: estimated time + one-time promise.
+                // Pinned right below the progress so the user reads it without scrolling
+                // and stops worrying that the app is stuck.
+                VStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock")
+                            .font(.footnote)
+                            .foregroundColor(.white.opacity(0.55))
+                        Text(String(localized: "initial_load.estimated_time"))
+                            .font(.footnote)
+                            .foregroundColor(.white.opacity(0.75))
+                    }
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.footnote)
+                            .foregroundColor(Color.green.opacity(0.85))
+                        Text(String(localized: "initial_load.one_time_promise"))
+                            .font(.footnote)
+                            .foregroundColor(.white.opacity(0.85))
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal, 24)
+
+                Spacer()
+
+                Text(String(localized: "initial_load.footer"))
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.35))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+                    .padding(.bottom, 48)
+            }
+            .padding(.horizontal, 28)
+        }
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled()
+        .task { await runLoad() }
+    }
+
+    /// Fraction in 0…1 for the linear progress bar.
+    /// Total estimated items: 100 posts + 20 reels + 20 tagged = 140.
+    private var progressFraction: Double {
+        let total = 140.0
+        let done = Double(photosLoaded) + Double(reelsLoaded) + Double(taggedLoaded)
+        return max(0.02, min(1.0, done / total))
+    }
+
+    /// Secondary status shown below the progress bar.
+    private var secondaryStatus: String {
+        var parts: [String] = []
+        if photosLoaded > 0 {
+            parts.append(photosLoaded == 1
+                ? String(format: String(localized: "initial_load.photos_count_one"), photosLoaded)
+                : String(format: String(localized: "initial_load.photos_count"), photosLoaded))
+        }
+        if reelsLoaded > 0 {
+            parts.append(String(format: String(localized: "initial_load.reels_count"), reelsLoaded))
+        }
+        if taggedLoaded > 0 {
+            parts.append(String(format: String(localized: "initial_load.tagged_count"), taggedLoaded))
+        }
+        return parts.joined(separator: "  ·  ")
+    }
+
+    private var iconName: String {
+        switch phase {
+        case .validating:      return "lock.shield"
+        case .loadingProfile:  return "person.crop.circle"
+        case .paginating:      return "arrow.down.circle"
+        case .loadingReels:    return "play.circle"
+        case .loadingTagged:   return "tag.circle"
+        case .failed:          return "exclamationmark.triangle"
+        }
+    }
+
+    private var phaseDescription: String {
+        switch phase {
+        case .validating:        return String(localized: "initial_load.phase.validating")
+        case .loadingProfile:    return String(localized: "initial_load.phase.loading_profile")
+        case .paginating(let n): return String(format: String(localized: "initial_load.phase.paginating"), n)
+        case .loadingReels:      return String(localized: "initial_load.phase.loading_reels")
+        case .loadingTagged:     return String(localized: "initial_load.phase.loading_tagged")
+        case .failed(let msg):   return msg
+        }
+    }
+
+    @MainActor
+    private func runLoad() async {
+        // 1 ── Validate session
+        phase = .validating
+        let status = await instagram.validateSession()
+        if status == .expired {
+            // Can't load without a valid session; bounce back gracefully
+            phase = .failed(String(localized: "initial_load.error.session"))
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            onComplete()
+            return
+        }
+
+        // 2 ── Load first page (includes profile info + first ~18 posts)
+        phase = .loadingProfile
+        guard var profile = try? await instagram.getProfileInfo() else {
+            phase = .failed(String(localized: "initial_load.error.load_failed"))
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            onComplete()
+            return
+        }
+        photosLoaded = profile.cachedMediaURLs.count
+        ProfileCacheService.shared.saveProfile(profile)
+
+        // 3 ── Paginate with safety-gate-friendly delays until 100 posts or no more pages
+        var cursor     = profile.cachedNextMaxId
+        var allURLs    = profile.cachedMediaURLs
+        var allItems   = profile.cachedMediaItems
+        var page       = 1
+
+        while let currentCursor = cursor,
+              allURLs.count < maxPhotos,
+              page <= maxPages {
+
+            phase = .paginating(page)
+
+            // Human-paced delay between requests (5–8 s)
+            let delayNs = UInt64.random(in: 5_000_000_000...8_000_000_000)
+            try? await Task.sleep(nanoseconds: delayNs)
+
+            guard let (newItems, newCursor) = try? await instagram.getUserMediaItems(
+                userId: nil, amount: 21, maxId: currentCursor
+            ) else { break }  // network / API error → stop, use what we have
+
+            let existingIds = Set(allItems.map(\.mediaId))
+            let fresh = newItems.filter { !existingIds.contains($0.mediaId) }
+            let freshURLs = fresh.map { $0.imageURL }
+
+            allItems += fresh
+            allURLs  += freshURLs
+
+            // Guard against duplicate/looping cursor
+            let nextCursor = (newCursor != currentCursor) ? newCursor : nil
+            cursor = nextCursor
+
+            // Cap at limit
+            allURLs  = Array(allURLs.prefix(maxPhotos))
+            allItems = Array(allItems.prefix(maxPhotos))
+
+            photosLoaded = allURLs.count
+            page += 1
+
+            // Persist incrementally so a mid-load app kill still saves partial data
+            var updated = profile
+            updated.cachedMediaURLs  = allURLs
+            updated.cachedMediaItems = allItems
+            updated.cachedNextMaxId  = cursor    // next-page cursor for PerformanceView
+            updated.cachedAt         = Date()
+            profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+
+            if cursor == nil || allURLs.count >= maxPhotos { break }
+        }
+
+        // 4 ── Load reels (up to 2 pages, handled internally by getUserReels)
+        phase = .loadingReels
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...7_000_000_000))
+        if let reelItems = try? await instagram.getUserReels(userId: nil, amount: 50) {
+            reelsLoaded = reelItems.count
+            var updated = profile
+            updated.cachedReelURLs  = reelItems.map { $0.imageURL }
+            updated.cachedReelItems = reelItems
+            updated.cachedAt        = Date()
+            profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+            // Mark as paginated so fetchReelsIfNeeded never re-fetches the old 10-item cache
+            UserDefaults.standard.set(true, forKey: "reels_paginated_\(profile.userId)")
+        }
+
+        // 5 ── Load tagged (up to 2 pages, handled internally by getUserTagged)
+        phase = .loadingTagged
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...7_000_000_000))
+        if let taggedItems = try? await instagram.getUserTagged(userId: nil, amount: 50) {
+            taggedLoaded = taggedItems.count
+            var updated = profile
+            updated.cachedTaggedURLs = taggedItems.map { $0.imageURL }
+            updated.cachedAt         = Date()
+            profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+            UserDefaults.standard.set(true, forKey: "tagged_paginated_\(profile.userId)")
+        }
+
+        // Brief completion moment so the user sees the final count
+        try? await Task.sleep(nanoseconds: 900_000_000)
+        onComplete()
     }
 }
 
