@@ -100,8 +100,8 @@ class InstagramService: ObservableObject {
     
     private let baseURL = "https://i.instagram.com/api/v1"
     private lazy var userAgent = DeviceInfo.shared.instagramUserAgent
-    private let deviceId: String // Persistent device ID for this install
-    private let clientUUID: String // Client UUID (like _uuid in instagrapi)
+    private var deviceId: String // Persistent device ID for this install
+    private var clientUUID: String // Client UUID (like _uuid in instagrapi)
     private let sigKeyVersion = "4"
     private let sigKey = "109513c04303341a7daf27bb329532b6a76c178d78911a750e0620efaffb2d0c" // Instagram's signature key
     
@@ -543,20 +543,26 @@ class InstagramService: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "instagram_mid")
 
         // ── Reset device fingerprint ────────────────────────────────────────
-        // Deletes the persisted device IDs from Keychain so the NEXT app launch
-        // generates a completely fresh fingerprint. This breaks the server-side
-        // "logged-out indicator" loop caused by Instagram flagging the old ID.
-        // NOTE: deviceId/clientUUID are `let` constants loaded at init time, so
-        // the new IDs only take effect after a force-quit + reopen.
+        // Generate a fresh fingerprint immediately. Previously we only deleted
+        // the persisted values, which required a force-quit before the in-memory
+        // service stopped using the flagged deviceId.
         let keychainDeviceKey = "com.mindup.instagram.deviceId"
         let keychainClientKey = "com.mindup.instagram.clientUUID"
-        KeychainService.shared.deleteString(forKey: keychainDeviceKey)
-        KeychainService.shared.deleteString(forKey: keychainClientKey)
-        UserDefaults.standard.removeObject(forKey: "instagram_device_id")
-        UserDefaults.standard.removeObject(forKey: "instagram_client_uuid")
-        // Signal to the app that a restart is needed to complete the fingerprint reset
-        UserDefaults.standard.set(true, forKey: "emergency_restart_pending")
-        print("🔄 [EMERGENCY] Device fingerprint cleared — restart required to generate new IDs")
+        let oldDeviceId = deviceId
+        let newDeviceId = UUID().uuidString
+        let newClientUUID = UUID().uuidString
+        deviceId = newDeviceId
+        clientUUID = newClientUUID
+        KeychainService.shared.saveString(newDeviceId, forKey: keychainDeviceKey)
+        KeychainService.shared.saveString(newClientUUID, forKey: keychainClientKey)
+        UserDefaults.standard.set(newDeviceId, forKey: "instagram_device_id")
+        UserDefaults.standard.set(newClientUUID, forKey: "instagram_client_uuid")
+        UserDefaults.standard.removeObject(forKey: "emergency_restart_pending")
+        print("🔄 [EMERGENCY] Device fingerprint regenerated immediately: \(String(newDeviceId.prefix(8)))...")
+        LogManager.shared.info(
+            "Emergency logout: device regenerated \(String(oldDeviceId.prefix(8)))… → \(String(newDeviceId.prefix(8)))…",
+            category: .auth
+        )
 
         // Clear HTTP cookies
         if let cookies = HTTPCookieStorage.shared.cookies {
@@ -631,9 +637,21 @@ class InstagramService: ObservableObject {
                     return .valid
                 }
 
-                // 200 but response explicitly signals logged-out state
+                // 200 but response explicitly signals logged-out state.
+                // Emit diagnostic context so we can tell apart device-flag, expired-cookies,
+                // and explicit login_required scenarios from a single log export.
+                let bodyPreview = String(data: data.prefix(300), encoding: .utf8)?
+                    .replacingOccurrences(of: "\n", with: " ") ?? "<binary>"
+                let responseMessage = (json["message"] as? String) ?? ""
+                let responseStatusCode = (json["status_code"] as? String) ?? ""
+                let cookieSummary = currentCookieSummary()
+                let deviceIdPrefix = String(deviceId.prefix(8))
                 print("⚠️ [SESSION] 200 but response indicates logged-out (keys:\(snippet))")
                 LogManager.shared.warning("validateSession 200 but logged-out indicator (keys:\(snippet))", category: .auth)
+                LogManager.shared.warning(
+                    "Session diagnostic | device:\(deviceIdPrefix)… status_code:\(responseStatusCode) message:\(responseMessage) cookies:\(cookieSummary) body:\(bodyPreview)",
+                    category: .auth
+                )
                 await markSessionExpired(context: .normal)
                 if explicitLoginRequired {
                     print("🔑 [SESSION] login_required confirmed → auto-logout to LoginView")
@@ -762,9 +780,16 @@ class InstagramService: ObservableObject {
                 break
             }
         }
-        
+
+        let igCookies = cookies.filter { $0.domain.contains("instagram.com") }
+        LogManager.shared.info(
+            "WebView login captured \(igCookies.count) IG cookie(s) — sessionid:\(sessionId.isEmpty ? "missing" : "len=\(sessionId.count)") ds_user_id:\(userId.isEmpty ? "missing" : userId) csrftoken:\(csrfToken.isEmpty ? "missing" : "set") device:\(String(deviceId.prefix(8)))…",
+            category: .auth
+        )
+
         guard !sessionId.isEmpty, !userId.isEmpty else {
             print("❌ Missing required cookies")
+            LogManager.shared.warning("WebView login finished but sessionid/ds_user_id are empty — session NOT stored", category: .auth)
             return
         }
         
@@ -5733,6 +5758,24 @@ class InstagramService: ObservableObject {
             LogManager.shared.info("Archive scan complete: \(allPhotos.count) photos (cached for \(Int(archivedPhotoCacheTTL/60)) min)", category: .api)
         }
         return allPhotos
+    }
+
+    // MARK: - Diagnostics
+
+    /// Summarises the current Instagram cookies stored by URLSession.
+    /// Used by session diagnostics so log exports show whether the auth cookies
+    /// were present at the time of a "logged-out" response.
+    fileprivate func currentCookieSummary() -> String {
+        guard let allCookies = HTTPCookieStorage.shared.cookies else {
+            return "<none>"
+        }
+        let igCookies = allCookies.filter { $0.domain.contains("instagram.com") }
+        guard !igCookies.isEmpty else { return "<no-ig-cookies>" }
+
+        let sessionId = igCookies.first { $0.name == "sessionid" }?.value ?? ""
+        let userId    = igCookies.first { $0.name == "ds_user_id"  }?.value ?? ""
+        let csrf      = igCookies.first { $0.name == "csrftoken"   }?.value ?? ""
+        return "sessionid:\(sessionId.isEmpty ? "missing" : "len=\(sessionId.count)") ds_user_id:\(userId.isEmpty ? "missing" : userId) csrftoken:\(csrf.isEmpty ? "missing" : "set") total:\(igCookies.count)"
     }
 }
 
