@@ -492,8 +492,11 @@ private struct FollowerRow: View {
     let onAvatarTap: () -> Void
     let onRowTap: () -> Void
 
+    // Show "Follow too" in blue for private accounts — this is the real signal:
+    // private accounts' follower/following lists are inaccessible, so the magician
+    // knows at a glance which spectators cannot be used for Date Force.
     private var showFollowBack: Bool {
-        !isFailed && mode == .followers && abs(follower.userId.hashValue) % 10 < 6
+        !isFailed && mode == .followers && follower.isPrivate
     }
 
     var body: some View {

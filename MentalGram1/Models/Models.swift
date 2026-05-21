@@ -35,6 +35,10 @@ struct InstagramFollower: Codable, Identifiable, Equatable {
     let username: String
     let fullName: String
     let profilePicURL: String?
+    /// True when the follower's Instagram account is set to private.
+    /// Populated from the `is_private` field returned by the followers/following
+    /// endpoints — no extra API call required.
+    var isPrivate: Bool = false
 }
 
 struct InstagramHighlight: Codable, Identifiable {

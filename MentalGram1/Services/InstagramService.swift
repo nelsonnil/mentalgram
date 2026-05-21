@@ -2608,14 +2608,15 @@ class InstagramService: ObservableObject {
             print("   Has Profile Pic: \(hasAnonymousProfilePicture ? "✗" : "✓")")
             print("   Profile Pic URL: \(profilePicURL ?? "N/A")")
             
-            let follower = InstagramFollower(
+            var follower = InstagramFollower(
                 userId: userId,
                 username: username,
                 fullName: fullName,
                 profilePicURL: profilePicURL
             )
+            follower.isPrivate = isPrivate
             
-            print("✅ [FOLLOWER] Found: @\(follower.username) (\(follower.fullName))")
+            print("✅ [FOLLOWER] Found: @\(follower.username) (\(follower.fullName)) private:\(isPrivate)")
             return follower
         }
         
@@ -2651,12 +2652,14 @@ class InstagramService: ObservableObject {
             else if let i = user["pk"] as? Int { userId = String(i) }
             else { continue }
 
-            followers.append(InstagramFollower(
+            var follower = InstagramFollower(
                 userId: userId,
                 username: user["username"] as? String ?? "",
                 fullName: user["full_name"] as? String ?? "",
                 profilePicURL: user["profile_pic_url"] as? String
-            ))
+            )
+            follower.isPrivate = user["is_private"] as? Bool ?? false
+            followers.append(follower)
         }
 
         print("✅ [FOLLOWERS] Got \(followers.count) followers")
@@ -2689,12 +2692,14 @@ class InstagramService: ObservableObject {
             else if let i = user["pk"] as? Int { userId = String(i) }
             else { continue }
 
-            following.append(InstagramFollower(
+            var follower = InstagramFollower(
                 userId: userId,
                 username: user["username"] as? String ?? "",
                 fullName: user["full_name"] as? String ?? "",
                 profilePicURL: user["profile_pic_url"] as? String
-            ))
+            )
+            follower.isPrivate = user["is_private"] as? Bool ?? false
+            following.append(follower)
         }
 
         print("✅ [FOLLOWING] Got \(following.count) following")
@@ -3761,12 +3766,14 @@ class InstagramService: ObservableObject {
                 print("⚠️ [FOLLOWERS] Follower \(index + 1) has no profile pic URL")
             }
             
-            followers.append(InstagramFollower(
+            var follower = InstagramFollower(
                 userId: userId,
                 username: username,
                 fullName: fullName,
                 profilePicURL: profilePicURL
-            ))
+            )
+            follower.isPrivate = user["is_private"] as? Bool ?? false
+            followers.append(follower)
         }
         
         print("✅ [FOLLOWERS] Processed \(followers.count) followers")
