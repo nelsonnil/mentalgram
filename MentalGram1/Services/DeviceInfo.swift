@@ -45,10 +45,24 @@ struct DeviceInfo {
     }
     
     /// Instagram app version - MUST be updated periodically to stay current
-    /// Last verified: Apr 20 2026 (from https://releasealert.dev/appstore/Instagram)
     /// Check latest at: https://apps.apple.com/app/instagram/id389801252
-    let appVersion = "426.0.0.30.91"
-    let appVersionCode = "838009832"
+    ///
+    /// ── CRITICAL CONSISTENCY RULE (May-2026) ────────────────────────────────
+    /// `appVersion` / `appVersionCode` MUST match the `bloksVersionId` hash in
+    /// `InstagramService.swift`. The Bloks hash is a fingerprint of the Bloks
+    /// framework bundled with a specific Instagram release. If the User-Agent
+    /// says "I'm Instagram 426" but the Bloks hash is from 390, Instagram's
+    /// server flags the client as modified/bot and returns HTTP 200 +
+    /// status:fail across all endpoints (notes, bio, even read-only profile).
+    /// Both values MUST be bumped together — never one without the other.
+    ///
+    /// Last verified working pair (matches mentalgramold reference build):
+    ///   appVersion     = "390.0.0.28.85"
+    ///   appVersionCode = "765313520"
+    ///   bloksVersionId = "0a3ae4c88248863609c67e278f34af44673cff300bc76add965a9fb036bd3ca3"
+    /// ─────────────────────────────────────────────────────────────────────────
+    let appVersion = "390.0.0.28.85"
+    let appVersionCode = "765313520"
     
     /// Device locale matching the real device settings
     var deviceLocale: String {

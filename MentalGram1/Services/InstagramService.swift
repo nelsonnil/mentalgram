@@ -147,6 +147,29 @@ class InstagramService: ObservableObject {
     // MARK: - WWW-Claim (anti-bot: Instagram rotates this per session; "0" only valid before first call)
     // Persisted in UserDefaults so it survives app restarts — Notes endpoint rejects wwwClaim="0".
     private var wwwClaim: String = UserDefaults.standard.string(forKey: "ig_www_claim") ?? "0"
+
+    // MARK: - Bearer Authorization (modern IG auth — required by www edge stack since 2024+)
+    //
+    // ── BUG HISTORY (May-2026) ──────────────────────────────────────────────
+    // Instagram migrated newer endpoints (/notes/*, profile reads, some DMs)
+    // from cookie-only auth to Bearer-token auth. The server sends back the
+    // token in the `ig-set-authorization` response header on successful
+    // backend ("distillery") responses. Real Instagram clients store it and
+    // re-send it as `Authorization: Bearer IGT:2:...` on subsequent requests.
+    //
+    // Without this header the edge ("www") stack returns HTTP 200 +
+    // status:fail (the "We're sorry, but something went wrong" body) for the
+    // entire account, even on simple reads like GET /accounts/current_user/.
+    // This looks identical to a server-side soft-block on the account but is
+    // actually the WAF refusing to forward unauthenticated traffic.
+    //
+    // Diagnostic: in a response header dump you'll see
+    //   `ig-set-authorization: Bearer IGT:2:eyJk…`
+    //   `ig-set-use-auth-header-for-sso: True`
+    // on any endpoint that DID accept us (e.g. POST /accounts/edit_profile/).
+    // Capture and re-send.
+    // ─────────────────────────────────────────────────────────────────────────
+    private var authBearer: String = UserDefaults.standard.string(forKey: "ig_auth_bearer") ?? ""
     
     // MARK: - Rate Limiting (anti-bot: max 60 actions/hour)
     private var actionTimestamps: [Date] = []
@@ -640,6 +663,12 @@ class InstagramService: ObservableObject {
         ProfileCacheService.shared.clearAll()
         ProfileCacheService.shared.pendingProfilePic = nil
         UserDefaults.standard.removeObject(forKey: "instagram_mid")
+        // Clear the captured Bearer auth token and WWW-Claim — they are account-scoped
+        // and the next login may belong to a different account.
+        UserDefaults.standard.removeObject(forKey: "ig_auth_bearer")
+        UserDefaults.standard.removeObject(forKey: "ig_www_claim")
+        authBearer = ""
+        wwwClaim   = "0"
 
         // ── Reset device fingerprint ────────────────────────────────────────
         // Generate a fresh fingerprint immediately. Previously we only deleted
@@ -996,6 +1025,11 @@ class InstagramService: ObservableObject {
 
         // Clear instagram_mid so it is re-fetched for the new account
         UserDefaults.standard.removeObject(forKey: "instagram_mid")
+        // Clear the captured Bearer auth token and WWW-Claim — they are account-scoped.
+        UserDefaults.standard.removeObject(forKey: "ig_auth_bearer")
+        UserDefaults.standard.removeObject(forKey: "ig_www_claim")
+        authBearer = ""
+        wwwClaim   = "0"
 
         // Clear HTTP cookies
         if let cookies = HTTPCookieStorage.shared.cookies {
@@ -1219,13 +1253,20 @@ class InstagramService: ObservableObject {
             "X-Bloks-Version-Id": bloksVersionId,
             "X-Bloks-Is-Layout-RTL": "false",
             
-            // ANTI-BOT: WWW Claim — updated from response headers after each successful call.
-            // IMPORTANT: only send when we hold a real claim. Sending "0" on every
-            // request causes Instagram to reject ALL endpoints (bio, notes, profile…)
-            // with HTTP 200 + status:fail, because the server validates this token.
-            // The real Instagram app omits the header entirely until it has a valid value.
-            // Omitting it lets IG generate and return a fresh claim on the next response.
-            // "X-IG-WWW-Claim" is added below, conditionally.
+            // ANTI-BOT: WWW Claim — Instagram requires this header to ALWAYS be present.
+            //
+            // ── HISTORY (May-2026) ──────────────────────────────────────────────
+            // An earlier "fix" omitted this header when wwwClaim == "0", based on
+            // the (wrong) assumption that the real Instagram app skips the header
+            // on first launch. In reality the API treats a MISSING header as a
+            // protocol violation and replies with HTTP 200 + status:fail on every
+            // endpoint (bio, notes, profile read…). With the header set to "0"
+            // Instagram accepts the request and, on success, returns a fresh
+            // claim in X-IG-Set-WWW-Claim which we then capture and persist.
+            // The mentalgramold reference implementation also hard-codes "0"
+            // unconditionally and works correctly. Always send the header.
+            // ────────────────────────────────────────────────────────────────────
+            "X-IG-WWW-Claim": wwwClaim,
             
             // Standard headers
             "X-Requested-With": "XMLHttpRequest",
@@ -1235,21 +1276,47 @@ class InstagramService: ObservableObject {
             "Cookie": buildCookieHeader()
         ]
         
-        // Only include X-IG-WWW-Claim when we hold a real token.
-        // When the claim is "0" (fresh install / wiped UserDefaults), omit the header
-        // entirely — the real Instagram app does the same on first launch. Instagram
-        // will respond with a fresh claim token in X-IG-Set-WWW-Claim which we capture.
-        // Sending "0" causes all endpoints to return HTTP 200 + status:fail immediately.
-        if wwwClaim != "0" {
-            headers["X-IG-WWW-Claim"] = wwwClaim
-        }
-
         // ANTI-BOT: Add X-MID if available (Machine ID, set by Instagram after first request)
         if let mid = UserDefaults.standard.string(forKey: "instagram_mid") {
             headers["X-MID"] = mid
         }
-        
+
+        // Bearer auth — required by modern IG endpoints. See `authBearer` declaration
+        // comment for full history. Without this header the www WAF stack returns
+        // HTTP 200 + status:fail on /notes/, /accounts/current_user/, etc.
+        //
+        // We send a value as soon as we have a session, even before the server has
+        // returned its first `ig-set-authorization` rotation. The token format is
+        // `Bearer IGT:2:<base64-of-JSON({ds_user_id, sessionid})>` — a verifiable
+        // re-encoding of cookies we already hold. Once the server returns a rotated
+        // token in `ig-set-authorization`, extractAndUpdateCSRF persists it and this
+        // function uses the rotated value on subsequent calls.
+        let bearerToSend = !authBearer.isEmpty ? authBearer : buildBearerFromSession()
+        if !bearerToSend.isEmpty {
+            headers["Authorization"] = bearerToSend
+        }
+
         return headers
+    }
+
+    /// Builds an `Authorization: Bearer IGT:2:<base64>` value from the current session
+    /// data, matching the format Instagram's server returns in `ig-set-authorization`.
+    /// Used as a bootstrap before the server has rotated its first Bearer token.
+    private func buildBearerFromSession() -> String {
+        guard !session.sessionId.isEmpty, !session.userId.isEmpty else { return "" }
+        // Real IG payload uses a URL-encoded sessionid (the ":" in "57631997058:abc..."
+        // is encoded as "%3A"). The session.sessionId we hold is already in that form
+        // when restored from cookies, so we send it as-is.
+        let payload: [String: Any] = [
+            "ds_user_id": session.userId,
+            "sessionid":  session.sessionId,
+            "should_use_header_over_cookies": true
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
+            return ""
+        }
+        let b64 = data.base64EncodedString()
+        return "Bearer IGT:2:\(b64)"
     }
     
     /// Refresh Pigeon session ID (call when app comes to foreground)
@@ -1619,25 +1686,24 @@ class InstagramService: ObservableObject {
         // Without the real value, newer endpoints (Notes, Direct…) return status:fail.
         //
         // ── BUG HISTORY (May-2026) ──────────────────────────────────────────────
-        // BUG 1: Earlier code looked up headers with `httpResponse.allHeaderFields[name]`,
+        // Earlier code looked up headers with `httpResponse.allHeaderFields[name]`,
         // which is a Dictionary lookup → case-SENSITIVE. Instagram's actual response
         // header is `X-IG-Set-WWW-Claim` (with the `Set-` segment), and the casing
         // of the key returned by URLSession varies between iOS versions and TLS
         // backends (HTTP/2 vs HTTP/3 routes can normalise to lowercase, others not).
         // The old code searched for "X-IG-WWW-Claim" (no Set-) and "ig-set-ig-www-claim"
         // (lowercase) → neither matched the server's exact casing → claim never
-        // captured → Notes endpoint kept rejecting requests with claim=0 forever.
+        // captured.
         //
-        // BUG 2 (root cause of the full outage): When wwwClaim == "0", buildHeaders()
-        // was including `X-IG-WWW-Claim: 0` on EVERY request — bio, notes, profile GET,
-        // etc. Instagram rejects ALL endpoints that receive this invalid claim with
-        // HTTP 200 + status:fail, creating a complete deadlock: every call failed,
-        // including the GET to /accounts/current_user/ that would refresh the claim.
-        // Fix: buildHeaders() now omits the header entirely when wwwClaim == "0".
-        // Instagram treats the missing header like a first-launch client and returns
-        // a fresh claim token in the first successful response.
+        // CRITICAL — false-positive fix: a previous attempt OMITTED the
+        // X-IG-WWW-Claim header when wwwClaim == "0", believing that was what the
+        // real Instagram app does on first launch. THAT BROKE EVERY ENDPOINT —
+        // missing the header makes IG return HTTP 200 + status:fail on bio, notes
+        // and even read-only GETs. The header MUST be present at all times.
+        // Sending "0" is correct for fresh sessions; IG returns a fresh claim in
+        // X-IG-Set-WWW-Claim which we capture below. See buildHeaders() comment.
         //
-        // Fix for BUG 1: use httpResponse.value(forHTTPHeaderField:), which is
+        // Fix: use httpResponse.value(forHTTPHeaderField:), which is
         // case-insensitive on iOS 13+, and the correct header name `X-IG-Set-WWW-Claim`.
         // Fall back to a lowercase-key scan for unknown future header name variants.
         // ─────────────────────────────────────────────────────────────────────────
@@ -1673,6 +1739,42 @@ class InstagramService: ObservableObject {
             print("🔑 [CLAIM] X-IG-WWW-Claim updated: \(String(claim.prefix(20)))…")
             wwwClaim = claim
             UserDefaults.standard.set(claim, forKey: "ig_www_claim")
+        }
+
+        // ── ig-set-authorization (Bearer token) ─────────────────────────────────
+        // Captured the same way as the claim — case-insensitive header lookup
+        // plus a lowercase-key scan as last-resort. The value already begins
+        // with "Bearer IGT:2:..." and is sent back verbatim as Authorization.
+        var capturedBearer: String? = nil
+        let bearerHeaderCandidates = [
+            "ig-set-authorization",
+            "Ig-Set-Authorization",
+            "IG-Set-Authorization",
+        ]
+        for name in bearerHeaderCandidates {
+            if let val = httpResponse.value(forHTTPHeaderField: name), !val.isEmpty {
+                capturedBearer = val
+                break
+            }
+        }
+        if capturedBearer == nil {
+            for (key, value) in httpResponse.allHeaderFields {
+                if let k = key as? String, let v = value as? String,
+                   k.lowercased() == "ig-set-authorization", !v.isEmpty {
+                    capturedBearer = v
+                    break
+                }
+            }
+        }
+        if let bearer = capturedBearer, bearer != authBearer {
+            // Only persist if the token has a payload — IG sometimes echoes an empty
+            // `ig-set-authorization: ` header on error responses (means "no change").
+            let trimmed = bearer.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.contains("IGT:") {
+                print("🔐 [BEARER] Authorization token \(authBearer.isEmpty ? "captured" : "rotated"): \(String(trimmed.prefix(30)))…")
+                authBearer = trimmed
+                UserDefaults.standard.set(trimmed, forKey: "ig_auth_bearer")
+            }
         }
     }
     
@@ -1804,7 +1906,40 @@ class InstagramService: ObservableObject {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw InstagramError.invalidResponse
         }
-        
+
+        // ── DEEP DIAGNOSTIC for soft-fail responses (May-2026) ──────────────────
+        // When IG returns 200 with a tiny body that's actually status:fail, the
+        // standard log line is misleading. Dump full response headers + body so
+        // we can tell apart server-side account flags from client-side regressions
+        // (User-Agent / Bloks mismatch, missing cookies, malformed body, etc).
+        // Triggers on any response < 300 bytes for /notes/, /accounts/, /usertags/.
+        if data.count < 300 &&
+           (shortPath.contains("/notes/") ||
+            shortPath.contains("/accounts/") ||
+            shortPath.contains("/usertags/")) {
+            print("🩺 [DIAG] \(method) \(shortPath) returned only \(data.count) bytes — likely soft-fail")
+            print("🩺 [DIAG] Request outgoing headers:")
+            for (k, v) in request.allHTTPHeaderFields ?? [:] {
+                let preview = (v.count > 100) ? "\(v.prefix(100))…(+\(v.count - 100))" : v
+                print("🩺   \(k): \(preview)")
+            }
+            if let body = request.httpBody, let bodyStr = String(data: body, encoding: .utf8) {
+                let preview = bodyStr.count > 400 ? "\(bodyStr.prefix(400))…(+\(bodyStr.count - 400))" : bodyStr
+                print("🩺 [DIAG] Request body: \(preview)")
+            }
+            print("🩺 [DIAG] Response status: \(httpResponse.statusCode)")
+            print("🩺 [DIAG] Response headers:")
+            for (k, v) in httpResponse.allHeaderFields {
+                if let key = k as? String, let val = v as? String {
+                    let preview = val.count > 100 ? "\(val.prefix(100))…(+\(val.count - 100))" : val
+                    print("🩺   \(key): \(preview)")
+                }
+            }
+            if let s = String(data: data, encoding: .utf8) {
+                print("🩺 [DIAG] Response body: \(s)")
+            }
+        }
+
         // ANTI-BOT: Extract MID (Machine ID) from response if present
         extractMID(from: response)
 
@@ -5396,80 +5531,40 @@ class InstagramService: ObservableObject {
         // FIX: route ALL Notes calls through apiRequest() — identical code path to Bio.
         // ────────────────────────────────────────────────────────────────────────────────
 
-        // ── REGRESSION FIX (May-2026, again) ─────────────────────────────────────────────
-        // Symptom: HTTP 200 + body `{"status":"fail","message":"We're sorry..."}` on BOTH
-        // the warm-up POST and create_note POST. Log line shows `[NOTE] wwwClaim=0`.
+        // ── REGRESSION FIX (May-2026, second pass) ──────────────────────────────────────
+        // Symptom: HTTP 200 + body `{"status":"fail","message":"We're sorry..."}` on every
+        // Notes call, plus 400/fail on bio after the GET /accounts/current_user/ also
+        // returned status:fail. wwwClaim stuck at 0 even after a GET warm-up.
         //
-        // Root cause: When the app starts cold and `wwwClaim` was wiped from UserDefaults
-        // (fresh install, account switch, or iOS purging the prefs file), the in-memory
-        // claim is "0". The Notes endpoint validates this header strictly and silently
-        // rejects requests with claim=0 by returning a 200 OK with status:fail. Because
-        // the warm-up itself ALSO uses claim=0, it cannot refresh the claim either — both
-        // calls fail with the same soft-error and no Set-Claim header comes back.
+        // Root cause: a previous "fix" had introduced (a) a diagnostic GET warm-up to
+        // /accounts/current_user/?edit=true before the notes POST, (b) a warm-up POST
+        // to /notes/update_notes_last_seen_timestamp/, and (c) the body params
+        // `device_id` + `note_style` instead of the canonical `uuid` token. The combined
+        // effect was a 3-call burst that Instagram flagged as automation + a body shape
+        // that wasn't accepted, so the actual create_note POST always got soft-fail.
+        // The reference mentalgramold implementation does ONE direct POST with the
+        // canonical body and it works. Match that pattern exactly.
         //
-        // Fix: Before the warm-up, do a lightweight GET /accounts/current_user/?edit=true
-        // exactly like the configure_sidecar flow does. Instagram returns a fresh
-        // X-IG-Set-WWW-Claim on this GET, which apiRequest() persists to UserDefaults.
-        // Now the warm-up POST sends a non-zero claim and Instagram accepts both calls.
-        //
-        // Diagnostic: If Notes breaks again look for:
-        //   • `[NOTE] wwwClaim=0` before the warm-up  → this fix is needed/broken
-        //   • `[NOTE] wwwClaim=<non-zero>` + warm-up `status=fail` → something else
-        //     changed in the endpoint (headers, body params, route). See the endpoint
-        //     history block above (v1–v4) for previous breakage patterns.
+        // Diagnostic: If Notes breaks AGAIN:
+        //   • wwwClaim is sent on EVERY request as "X-IG-WWW-Claim: <value>" (or "0"
+        //     for fresh installs). Never omit the header.
+        //   • Body must include `uuid` (fresh UUID per call) — it acts as the IG
+        //     idempotency token. Without it IG returns generic soft-fail.
+        //   • Do NOT chain extra warm-ups before the POST. One direct call.
+        //   • If status:fail persists even with a single canonical POST, the account
+        //     is most likely soft-blocked by IG and only IG can clear that flag.
         // ────────────────────────────────────────────────────────────────────────────────
-        if wwwClaim == "0" {
-            print("   [NOTE] wwwClaim is 0 — running GET warm-up to capture a fresh claim before POST")
-            // apiRequest captures `x-ig-set-www-claim` on every response (success or failure)
-            // and writes it to UserDefaults — see the response-handling block in apiRequest().
-            //
-            // DIAGNOSTIC: We run the GET *outside* apiRequest so we can dump the full
-            // response headers and body when the claim still ends up at 0. The previous
-            // failure pattern was: apiRequest returned silently (200 OK, 106 bytes), but
-            // the claim header was never seen because the response was actually a
-            // soft-fail with no Set-Claim header at all. Without dumping the raw response
-            // we cannot tell whether the header was present-but-misnamed or absent.
-            await diagnosticGetForClaim(path: "/accounts/current_user/?edit=true", label: "[NOTE] claim-refresh GET")
-            print("   [NOTE] After GET warm-up: wwwClaim=\(String(wwwClaim.prefix(20)))")
-        }
 
-        // ── Step 1: warm-up — tells Instagram we've "seen" the notes tab recently ───────
-        // Non-fatal: if this fails (e.g. safety gate blocks it), we still try the create.
-        // DIAGNOSTIC: If warm-up returns 403, check wwwClaim value and cookie count above.
-        let warmBody: [String: String] = [
-            "_uuid":       clientUUID,
-            "_uid":        session.userId,
-            "_csrftoken":  session.csrfToken
-        ]
-        if let warmData = try? await apiRequest(method: "POST",
-                                                path: "/notes/update_notes_last_seen_timestamp/",
-                                                body: warmBody) {
-            let ws = (try? JSONSerialization.jsonObject(with: warmData) as? [String: Any])?["status"] as? String ?? "?"
-            print("   [NOTE] Warm-up status=\(ws)")
-            // Always dump the raw body — for warm-up calls it's tiny, so logging it
-            // costs nothing and is critical when diagnosing soft-fail loops.
-            if let raw = String(data: warmData, encoding: .utf8) {
-                print("   [NOTE] Warm-up raw response: \(raw.prefix(400))")
-            }
-            // If the warm-up itself returned status:fail with claim=0, the create POST is
-            // guaranteed to fail too. Persist this signal so it's easy to spot in logs.
-            if ws == "fail" && wwwClaim == "0" {
-                print("   [NOTE] ⚠️ Warm-up status=fail AND wwwClaim=0 — create_note will fail. Check the regression-fix block.")
-                LogManager.shared.error("Notes warm-up fail with wwwClaim=0 — regression in fresh-claim GET", category: .api)
-            }
-        } else {
-            print("   [NOTE] Warm-up skipped (non-fatal) — wwwClaim=\(String(wwwClaim.prefix(20)))")
-        }
-
-        // ── Step 2: create the note ──────────────────────────────────────────────────────
+        // ── Direct create_note POST (matches mentalgramold's proven pattern) ────────────
         let body: [String: String] = [
+            "audience":    String(audience),
+            "text":        text,
             "_csrftoken":  session.csrfToken,
             "_uid":        session.userId,
             "_uuid":       clientUUID,
-            "device_id":   deviceId,
-            "audience":    String(audience),
-            "note_style":  "0",
-            "text":        text
+            // `uuid` is a per-call idempotency token (fresh UUID, NOT the persistent
+            // clientUUID). IG requires it; without it create_note silently soft-fails.
+            "uuid":        UUID().uuidString
         ]
         print("   [NOTE] Body params: \(body.keys.sorted().joined(separator: ", "))")
         // Do NOT call InstagramSafetyGate.record(.note) here. apiRequest() checks and
