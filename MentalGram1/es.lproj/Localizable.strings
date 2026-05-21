@@ -1492,10 +1492,12 @@
 "limits.help.table.row.profile.new" = "Perfil nuevo de seguidor";
 "limits.help.table.row.sa" = "Sync & Archive (por foto)";
 "limits.help.table.row.upload" = "Subida (por foto)";
+"limits.help.table.row.autoupload" = "Ciclo completo de auto-subida (por foto)";
 "limits.help.table.row.reveal" = "Revelar (por letra/foto)";
 "limits.help.table.row.notebio" = "Cambiar nota o bio";
 "limits.help.table.row.explore" = "Explorar / Buscar";
 "limits.help.sa.auto" = "Después de una actuación completa con revelaciones y visitas a perfiles, la app añade automáticamente una breve espera antes de Sync & Archive. Es normal — protege tu sesión.";
+"limits.help.table.cache.lost" = "La caché de Performance se carga sin coste en visitas repetidas. Se puede perder al: reinstalar la app, cambiar de cuenta, borrar datos de la app o restaurar en un dispositivo nuevo — en esos casos la primera entrada cuesta 3 acciones.";
 
 "limits.help.profiles.title" = "Visitar perfiles — la acción más costosa";
 "limits.help.profiles.body" = "Abrir un perfil nuevo de seguidor cuesta 4–5 acciones cada vez. La segunda visita al mismo perfil es gratuita (se carga desde caché). Por eso abrir 3–4 perfiles distintos en rápida sucesión puede agotar el presupuesto y activar la detección de bot.";
@@ -1508,6 +1510,7 @@
 
 "limits.help.noban.title" = "Tu cuenta nunca será baneada.";
 "limits.help.noban.body" = "Instagram a veces pide confirmar tu identidad — eso es todo. No es un baneo, no es una advertencia y no supone ningún riesgo para tu cuenta. Vault ha sido probada con cientos de cuentas reales de Instagram y ninguna ha sido baneada ni restringida de forma permanente. Si aparece un mensaje, sigue los pasos de arriba y en menos de un minuto estarás de vuelta.";
+"limits.help.continue.button" = "Entendido — abrir Performance";
 
 "relogin.nav_title" = "Volver a iniciar sesión";
 "relogin.cancel" = "Cancelar";
@@ -1700,3 +1703,25 @@
 
 "faq.q.not_instagram.question" = "El público pregunta por qué la app parece Instagram. ¿Qué digo?";
 "faq.q.not_instagram.answer" = "Performance es una réplica visual fiel de tu perfil de Instagram — misma disposición, mismas fotos, mismos contadores. Si alguien pregunta, puedes decir simplemente que estás revisando tu Instagram, porque los datos que se muestran son reales y en directo desde tu cuenta.";
+
+"upload.tip.title" = "Consejo de subida";
+"upload.tip.overnight" = "Mientras la subida está activa, la pantalla permanece encendida — el móvil nunca se bloqueará ni apagará la pantalla. Conéctalo a la corriente y déjalo correr toda la noche para llenar 10 o más banks sin tocarlo.";
+"upload.tip.background" = "¿Prefieres usar el móvil? Puedes cambiar a cualquier otra app libremente. Una alerta emergente te avisará cuando la siguiente foto esté lista para subir.";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "Conoce tu audiencia";
+"dfh.audience.intro" = "Antes de seleccionar a tus espectadores, la app muestra automáticamente quién tiene el perfil público y quién tiene el perfil privado — sin ninguna llamada extra a la API.";
+"dfh.audience.badge_public" = "Perfil público";
+"dfh.audience.badge_private" = "Perfil privado";
+"dfh.audience.badge_note" = "\"Follow too\" en azul = cuenta privada. Sus seguidores/seguidos son accesibles — puedes usarlos para el efecto Date Force.";
+"dfh.audience.strategy_a.title" = "Audiencia grande (4 o más personas)";
+"dfh.audience.strategy_a.option1" = "Pregunta quién tiene el perfil público e instrúyeles para que te sigan. Con un grupo de 10+ personas siempre habrá al menos 4 con perfil público.";
+"dfh.audience.strategy_a.option2" = "Pide a todos que te sigan. Cuando abras la lista de seguidores, la app ya marcará con \"Follow too\" a los que son privados — tú escoges los públicos.";
+"dfh.audience.strategy_b.title" = "Audiencia pequeña o todos privados";
+"dfh.audience.strategy_b.body" = "Si la audiencia es pequeña y todos tienen el perfil privado: pídeles que te sigan desde su Instagram real, acepta las solicitudes, luego cambia de Instagram a Vault y selecciona a los participantes desde la lista de seguidores.";
+"dfh.tip.private_accounts" = "Cuentas privadas detectadas automáticamente. La etiqueta \"Follow too\" en azul indica que la cuenta es privada. Consulta la sección \"Conoce tu audiencia\" para las estrategias completas.";
+"dfh.mockup.followers_tab" = "Seguidores";
+"dfh.mockup.following_tab" = "Seguidos";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "Quitar";

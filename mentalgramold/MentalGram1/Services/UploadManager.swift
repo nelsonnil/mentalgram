@@ -1,0 +1,448 @@
+import SwiftUI
+import Combine
+import UserNotifications
+
+// MARK: - Upload Manager (Singleton)
+// Single source of truth for all upload state.
+// uploadPhase is THE state — everything else derives from it.
+
+class UploadManager: ObservableObject {
+    static let shared = UploadManager()
+    
+    // MARK: - Upload Progress Struct
+    struct UploadProgressInfo {
+        var current: Int = 0
+        var total: Int = 0
+    }
+    
+    // MARK: - Core State (uploadPhase is the single source of truth)
+    @Published var activeSetId: UUID? = nil
+    @Published var uploadPhase: UploadPhase = .idle
+    @Published var currentPhaseDescription = ""
+    @Published var uploadProgress = UploadProgressInfo()
+    
+    // MARK: - Pause Request (checked by upload loop)
+    @Published var requestPause = false
+
+    // MARK: - Auto-resume (set by PerformanceView.onDisappear when it auto-paused the upload)
+    // SetDetailView watches this via onChange and calls resumeUpload() when it turns true.
+    @Published var autoResumePending: Bool = false
+
+    // MARK: - Sync & Archive lock
+    // True while the unified syncThenArchiveAll operation is running.
+    // Auto re-archive checks this flag and defers if active.
+    @Published var isSyncArchiveActive: Bool = false
+
+    // MARK: - Re-verify state (survives view dismissal)
+    @Published var isReverifying: Bool = false
+    @Published var reverifyProgress: Int = 0
+    @Published var reverifyTotal: Int = 0
+    @Published var reverifyDesynced: Int = 0
+    @Published var reverifyError: String? = nil   // shown in UI when fetch fails
+    var reverifyTask: Task<Void, Never>? = nil
+    
+    // MARK: - Active Upload Task (to detect orphaned states)
+    var activeTask: Task<Void, Never>? = nil
+    
+    // MARK: - Background / Foreground persistence
+    /// Absolute timestamp when the current wait/cooldown ends (persisted to UserDefaults).
+    var waitEndTime: Date? {
+        get { UserDefaults.standard.object(forKey: "upload_waitEndTime") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_waitEndTime") }
+    }
+    /// Absolute timestamp when the escalated pause ends (persisted to UserDefaults).
+    var escalatedPauseEndTime: Date? {
+        get { UserDefaults.standard.object(forKey: "upload_escalatedPauseEndTime") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_escalatedPauseEndTime") }
+    }
+    /// Index of the next photo to upload after the wait (persisted).
+    var waitNextPhotoIndex: Int {
+        get { UserDefaults.standard.integer(forKey: "upload_waitNextPhotoIndex") }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_waitNextPhotoIndex") }
+    }
+    /// Background task identifier for finishing in-flight uploads.
+    var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
+    
+    // MARK: - Computed Properties (derived from uploadPhase)
+    var isUploading: Bool {
+        switch uploadPhase {
+        case .uploading, .archiving, .waiting, .cooldown, .autoRetrying, .waitingNetwork:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    var isPaused: Bool {
+        uploadPhase == .paused
+    }
+    
+    var isActive: Bool {
+        // Any phase that means "this set has an ongoing operation"
+        switch uploadPhase {
+        case .idle, .completed:
+            return false
+        default:
+            return true
+        }
+    }
+    
+    var hasError: Bool {
+        switch uploadPhase {
+        case .botLockdown, .sessionExpired, .escalatedPause:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    // MARK: - Error State
+    @Published var showingError: String? = nil
+    @Published var failedPhotoIndex: Int? = nil
+    @Published var isPhotoRejected = false
+    @Published var botDetectionTime: Date? = nil
+    @Published var botCountdownSeconds: Int = 0
+    @Published var cooldownRetryDisabledUntil: Date? = nil
+    
+    // MARK: - Auto-Retry State
+    @Published var consecutiveAutoRetries: Int = 0
+    @Published var autoRetryCountdown: Int = 0
+    @Published var escalatedPauseCountdown: Int = 0
+    @Published var nextPhotoCountdown: Int = 0
+    
+    // MARK: - Timers (internal, not @Published)
+    var botCountdownTimer: Timer?
+    var cooldownTimer: Timer?
+    var nextPhotoTimer: Timer?
+    var autoRetryTimer: Timer?
+    var escalatedPauseTimer: Timer?
+    
+    private init() {}
+    
+    // MARK: - Reset Error State
+    func resetErrorState() {
+        showingError = nil
+        failedPhotoIndex = nil
+        isPhotoRejected = false
+        botCountdownSeconds = 0
+        botCountdownTimer?.invalidate()
+        botCountdownTimer = nil
+        autoRetryTimer?.invalidate()
+        autoRetryTimer = nil
+        autoRetryCountdown = 0
+        escalatedPauseTimer?.invalidate()
+        escalatedPauseTimer = nil
+        escalatedPauseCountdown = 0
+        escalatedPauseEndTime = nil
+    }
+    
+    // MARK: - Reset All State (when upload completes or is cancelled)
+    func resetAllState() {
+        resetErrorState()
+        activeSetId = nil
+        uploadPhase = .idle
+        currentPhaseDescription = ""
+        uploadProgress = UploadProgressInfo()
+        consecutiveAutoRetries = 0
+        nextPhotoCountdown = 0
+        cooldownRetryDisabledUntil = nil
+        requestPause = false
+        autoResumePending = false
+        activeTask?.cancel()
+        activeTask = nil
+        clearWaitPersistence()
+        invalidateAllTimers()
+    }
+    
+    // MARK: - Invalidate All Timers
+    func invalidateAllTimers() {
+        botCountdownTimer?.invalidate()
+        botCountdownTimer = nil
+        cooldownTimer?.invalidate()
+        cooldownTimer = nil
+        autoRetryTimer?.invalidate()
+        autoRetryTimer = nil
+        escalatedPauseTimer?.invalidate()
+        escalatedPauseTimer = nil
+        nextPhotoTimer?.invalidate()
+        nextPhotoTimer = nil
+    }
+    
+    // MARK: - Clear Stuck State
+    // Call on app launch or when starting a new upload to recover from inconsistent states
+    func clearStuckState() {
+        // If we have an activeSetId but no running task, we're stuck
+        if activeSetId != nil && activeTask == nil {
+            switch uploadPhase {
+            case .uploading, .archiving, .waiting, .cooldown, .autoRetrying, .waitingNetwork:
+                // These phases require an active task - if no task, transition to paused
+                print("⚠️ [UPLOAD MANAGER] Detected stuck state (\(uploadPhase)) - transitioning to paused")
+                uploadPhase = .paused
+                currentPhaseDescription = "Upload Paused"
+            case .idle:
+                // idle with activeSetId but no task = stuck, reset
+                if let setId = activeSetId,
+                   let set = DataManager.shared.sets.first(where: { $0.id == setId }),
+                   set.status == .completed {
+                    uploadPhase = .completed
+                    currentPhaseDescription = "Upload Completed"
+                } else {
+                    uploadPhase = .paused
+                    currentPhaseDescription = "Upload Paused"
+                }
+            default:
+                // .paused, .escalatedPause, .botLockdown, .sessionExpired, .completed
+                // These are valid states without a running task
+                break
+            }
+        }
+        
+        // If no activeSetId but phase isn't idle/completed, reset
+        if activeSetId == nil && uploadPhase != .idle && uploadPhase != .completed {
+            print("⚠️ [UPLOAD MANAGER] No active set but phase is \(uploadPhase) - resetting to idle")
+            resetAllState()
+        }
+    }
+    
+    // MARK: - Restore Timers (called on view appear)
+    func restoreTimersIfNeeded() {
+        // First, detect and fix stuck states
+        clearStuckState()
+        
+        // Restore bot lockdown timer
+        if case .botLockdown(let seconds) = uploadPhase, seconds > 0 {
+            botCountdownSeconds = seconds
+            botCountdownTimer?.invalidate()
+            botCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                if self.botCountdownSeconds > 0 {
+                    self.botCountdownSeconds -= 1
+                    self.uploadPhase = .botLockdown(remainingSeconds: self.botCountdownSeconds)
+                    self.currentPhaseDescription = "Bot Detection - Account Locked"
+                } else {
+                    self.botCountdownTimer?.invalidate()
+                    self.botCountdownTimer = nil
+                    self.uploadPhase = .paused
+                    self.currentPhaseDescription = "Upload Paused - Ready to Resume"
+                }
+            }
+        }
+        
+        // Restore escalated pause timer using absolute timestamp
+        if let pauseEnd = escalatedPauseEndTime {
+            let remaining = Int(pauseEnd.timeIntervalSinceNow)
+            if remaining > 0 {
+                escalatedPauseCountdown = remaining
+                uploadPhase = .escalatedPause(remainingSeconds: remaining)
+                currentPhaseDescription = "Multiple errors - Cooling down"
+                escalatedPauseTimer?.invalidate()
+                escalatedPauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                    guard let self = self else { return }
+                    let left = Int((self.escalatedPauseEndTime ?? Date()).timeIntervalSinceNow)
+                    if left > 0 {
+                        self.escalatedPauseCountdown = left
+                        self.uploadPhase = .escalatedPause(remainingSeconds: left)
+                        self.currentPhaseDescription = "Multiple errors - Cooling down"
+                    } else {
+                        self.escalatedPauseTimer?.invalidate()
+                        self.escalatedPauseTimer = nil
+                        self.escalatedPauseEndTime = nil
+                        self.escalatedPauseCountdown = 0
+                        self.uploadPhase = .paused
+                        self.currentPhaseDescription = "Upload Paused - Ready to Resume"
+                    }
+                }
+            } else {
+                // Pause already elapsed while in background - go directly to paused
+                escalatedPauseEndTime = nil
+                escalatedPauseCountdown = 0
+                if case .escalatedPause = uploadPhase {
+                    uploadPhase = .paused
+                    currentPhaseDescription = "Upload Paused - Ready to Resume"
+                }
+            }
+        }
+        
+        // Restore cooldown timer
+        if let cooldownUntil = cooldownRetryDisabledUntil, Date() < cooldownUntil {
+            let remaining = Int(cooldownUntil.timeIntervalSinceNow)
+            uploadPhase = .cooldown(remainingSeconds: remaining)
+            currentPhaseDescription = "Cooldown Active"
+            
+            cooldownTimer?.invalidate()
+            cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                if let until = self.cooldownRetryDisabledUntil {
+                    let remaining = Int(until.timeIntervalSinceNow)
+                    if remaining > 0 {
+                        self.uploadPhase = .cooldown(remainingSeconds: remaining)
+                    } else {
+                        self.cooldownTimer?.invalidate()
+                        self.cooldownTimer = nil
+                        self.cooldownRetryDisabledUntil = nil
+                    }
+                }
+            }
+        }
+        
+        // Restore nextPhoto countdown from persisted timestamp (survives background/kill)
+        if let endTime = waitEndTime {
+            let remaining = max(0, Int(endTime.timeIntervalSinceNow))
+            let nextPhoto = waitNextPhotoIndex
+
+            if remaining > 0 {
+                nextPhotoCountdown = remaining
+                uploadPhase = .waiting(nextPhoto: nextPhoto, remainingSeconds: remaining)
+                currentPhaseDescription = "Next photo in \(remaining / 60):\(String(format: "%02d", remaining % 60))"
+
+                nextPhotoTimer?.invalidate()
+                nextPhotoTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                    guard let self else { return }
+                    let r = self.remainingWaitSeconds()
+                    self.nextPhotoCountdown = r
+                    self.uploadPhase = .waiting(nextPhoto: nextPhoto, remainingSeconds: r)
+                    self.currentPhaseDescription = "Next photo in \(r / 60):\(String(format: "%02d", r % 60))"
+                    if r <= 0 {
+                        self.nextPhotoTimer?.invalidate()
+                        self.nextPhotoTimer = nil
+                    }
+                }
+            } else {
+                // Wait already elapsed while in background — ready immediately
+                nextPhotoCountdown = 0
+                clearWaitPersistence()
+            }
+        } else if case .waiting(let nextPhoto, _) = uploadPhase, nextPhotoCountdown > 0 {
+            // Fallback for old in-memory countdown (no persisted timestamp)
+            nextPhotoTimer?.invalidate()
+            nextPhotoTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                if self.nextPhotoCountdown > 0 {
+                    self.nextPhotoCountdown -= 1
+                    self.uploadPhase = .waiting(nextPhoto: nextPhoto, remainingSeconds: self.nextPhotoCountdown)
+                } else {
+                    self.nextPhotoTimer?.invalidate()
+                    self.nextPhotoTimer = nil
+                }
+            }
+        }
+        
+        // Restore autoRetry countdown timer
+        if case .autoRetrying(_, let attempt) = uploadPhase, autoRetryCountdown > 0 {
+            autoRetryTimer?.invalidate()
+            autoRetryTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                if self.autoRetryCountdown > 0 {
+                    self.autoRetryCountdown -= 1
+                    self.uploadPhase = .autoRetrying(remainingSeconds: self.autoRetryCountdown, attempt: attempt)
+                } else {
+                    self.autoRetryTimer?.invalidate()
+                    self.autoRetryTimer = nil
+                }
+            }
+        }
+        
+        // Check if the active set is completed
+        if let setId = activeSetId,
+           let set = DataManager.shared.sets.first(where: { $0.id == setId }),
+           set.status == .completed {
+            uploadPhase = .completed
+            currentPhaseDescription = "Upload Completed"
+        }
+    }
+
+    // MARK: - Timestamp-based wait persistence
+
+    /// Save the absolute end-time so background/kill doesn't lose it.
+    func persistWait(endTime: Date, nextPhotoIndex: Int) {
+        waitEndTime = endTime
+        waitNextPhotoIndex = nextPhotoIndex
+        scheduleUploadReadyNotification(at: endTime)
+    }
+
+    func clearWaitPersistence() {
+        waitEndTime = nil
+        waitNextPhotoIndex = 0
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["uploadReady"])
+    }
+
+    /// Returns how many seconds remain until the persisted wait ends.
+    /// Negative or zero means the wait already elapsed.
+    func remainingWaitSeconds() -> Int {
+        guard let end = waitEndTime else { return 0 }
+        return max(0, Int(end.timeIntervalSinceNow))
+    }
+
+    // MARK: - Local notification
+
+    private func scheduleUploadReadyNotification(at endTime: Date) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["uploadReady"])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Upload Ready"
+        content.body = "Next photo is ready to upload. Open the app to continue."
+        content.sound = .default
+
+        // Fire 5 seconds before the cooldown ends (or immediately if <5s left)
+        let fireDate = endTime.addingTimeInterval(-5)
+        let delay = max(1, fireDate.timeIntervalSinceNow)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
+
+        let request = UNNotificationRequest(identifier: "uploadReady", content: content, trigger: trigger)
+        center.add(request) { error in
+            if let error {
+                print("⚠️ [NOTIF] Failed to schedule: \(error.localizedDescription)")
+            } else {
+                print("🔔 [NOTIF] Upload-ready notification scheduled in \(Int(delay))s")
+            }
+        }
+    }
+
+    // MARK: - Session expired notification
+
+    /// Fires an immediate local notification telling the user to re-login.
+    /// Safe to call from any thread. No-op if the app is in the foreground
+    /// and the user is already looking at the screen, but still useful when
+    /// the app is in the background or the user is away.
+    func sendSessionExpiredNotification() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["sessionExpired"])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Re-login required"
+        content.body = "Your Instagram session has expired. Open the app and log in again to continue."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(identifier: "sessionExpired", content: content, trigger: trigger)
+        center.add(request) { error in
+            if let error {
+                print("⚠️ [NOTIF] Failed to schedule session-expired notification: \(error.localizedDescription)")
+            } else {
+                print("🔔 [NOTIF] Session-expired notification sent")
+            }
+        }
+    }
+
+    // MARK: - Background task
+
+    /// Call when the app enters background to finish an in-flight upload/archive.
+    func beginBackgroundWork() {
+        guard isUploading else { return }
+        guard backgroundTaskId == .invalid else { return }
+
+        backgroundTaskId = UIApplication.shared.beginBackgroundTask(withName: "FinishUpload") { [weak self] in
+            self?.endBackgroundWork()
+        }
+        print("🌙 [BG] Background task started (id: \(backgroundTaskId.rawValue))")
+    }
+
+    /// Call when the app returns to foreground or when background work finishes.
+    func endBackgroundWork() {
+        guard backgroundTaskId != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskId)
+        print("☀️ [BG] Background task ended")
+        backgroundTaskId = .invalid
+    }
+}

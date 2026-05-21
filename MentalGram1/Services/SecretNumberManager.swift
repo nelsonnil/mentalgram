@@ -10,11 +10,11 @@ import UIKit
 /// - Swipe UP or DOWN on the grid while the buffer has at least 1 digit → validates the number.
 /// - After validation the buffer resets automatically.
 ///
-/// Digit mapping (3-column grid):
-///   Row 0: photos 1, 2, 3  → digits 1, 2, 3
-///   Row 1: photos 4, 5, 6  → digits 4, 5, 6
-///   Row 2: photos 7, 8, 9  → digits 7, 8, 9
-///   Row 3+: any photo       → digit 0
+/// Digit mapping (3-column square grid, cells 1:1):
+///   Row 1  photos 1–3  → digits 1, 2, 3
+///   Row 2  photos 4–6  → digits 4, 5, 6
+///   Row 3  photos 7–9  → digits 7, 8, 9
+///   Row 4+ any photo   → digit 0
 class SecretNumberManager: ObservableObject {
     static let shared = SecretNumberManager()
 
@@ -66,8 +66,9 @@ class SecretNumberManager: ObservableObject {
     ///   - gridWidth: Full width of the 3-column grid (= screen width for full-bleed grids)
     static func digit(x: CGFloat, y: CGFloat, gridWidth: CGFloat) -> Int {
         let cellW = gridWidth / 3.0
-        // 4:5 portrait ratio + 1pt spacing between rows
-        let cellH = cellW * (5.0 / 4.0) + 1.0
+        // Grid cells are 1:1 squares (PhotosGridView / ReelsGridView use aspectRatio(1)).
+        // Add 1 pt for the row spacing configured on LazyVGrid.
+        let cellH = cellW + 1.0
         let col = min(2, max(0, Int(x / cellW)))
         let row = max(0, Int(y / cellH))
         if row >= 3 { return 0 }

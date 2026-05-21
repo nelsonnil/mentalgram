@@ -40,7 +40,11 @@ class VolumeButtonMonitor: ObservableObject {
     /// All audio-session and MPVolumeView setup happens here (deferred from prepareVolume)
     /// so we never touch the window hierarchy during PerformanceView's .onAppear.
     func startMonitoring() {
-        guard volumeObservation == nil else { return }
+        guard volumeObservation == nil else {
+            print("🔊 [VOLUME] startMonitoring() — already monitoring, skipped")
+            return
+        }
+        print("🔊 [VOLUME] startMonitoring() — starting fresh")
         activateSession()
         if cachedSlider == nil { setupPersistentVolumeView() }
 
@@ -82,6 +86,8 @@ class VolumeButtonMonitor: ObservableObject {
 
     /// Stops listening for volume button presses and removes the persistent view.
     func stopMonitoring() {
+        guard volumeObservation != nil else { return }
+        print("🔊 [VOLUME] stopMonitoring() called")
         volumeObservation?.invalidate()
         volumeObservation = nil
         persistentVolumeView?.removeFromSuperview()

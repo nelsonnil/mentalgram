@@ -960,10 +960,12 @@
 "limits.help.table.row.profile.new" = "新关注者资料";
 "limits.help.table.row.sa" = "Sync & Archive（每张照片）";
 "limits.help.table.row.upload" = "上传（每张照片）";
+"limits.help.table.row.autoupload" = "自动上传完整周期（每张照片）";
 "limits.help.table.row.reveal" = "揭示（每个字母/照片）";
 "limits.help.table.row.notebio" = "更改备注或简介";
 "limits.help.table.row.explore" = "探索 / 搜索";
 "limits.help.sa.auto" = "在包含揭示和资料访问的完整表演后，应用会在 Sync & Archive 前自动添加短暂等待时间。这是正常的，可以保护您的会话。";
+"limits.help.table.cache.lost" = "Performance 缓存在重复访问时零成本加载。以下情况可能导致缓存丢失：重新安装应用、切换账号、清除应用数据或在新设备上恢复 — 在这些情况下，首次进入需要消耗 3 个操作。";
 
 "limits.help.profiles.title" = "访问资料 — 消耗最多的操作";
 "limits.help.profiles.body" = "每次打开新的关注者资料需要消耗 4–5 次操作。第二次访问同一资料是免费的（从缓存加载）。因此，快速打开 3–4 个不同资料可能会耗尽预算并触发机器人检测。";
@@ -976,6 +978,7 @@
 
 "limits.help.noban.title" = "您的账号永远不会被封禁。";
 "limits.help.noban.body" = "Instagram 有时会要求确认您的身份——仅此而已。这不是封禁，不是警告，也不会对您的账号造成任何风险。Vault 已在数百个真实 Instagram 账号上进行了测试，没有任何账号被封禁或永久限制。如果出现提示，按照上述步骤操作，不到一分钟您就能恢复正常使用。";
+"limits.help.continue.button" = "明白了 — 打开 Performance";
 
 "perf.safety_gate.wait" = "检测到过多快速加载。\n请等待 %lld 秒…";
 "perf.safety_gate.retrying" = "正在重试…";
@@ -1169,3 +1172,25 @@
 
 "faq.q.not_instagram.question" = "观众问为什么应用看起来像 Instagram。我怎么回答？";
 "faq.q.not_instagram.answer" = "Performance 是您 Instagram 个人资料的忠实视觉副本 — 相同的布局、相同的照片、相同的计数器。如果有人问，您可以简单地说正在查看自己的 Instagram，因为显示的数据是真实的，直接来自您的账号。";
+
+"upload.tip.title" = "上传技巧";
+"upload.tip.overnight" = "上传进行中，屏幕将保持常亮 — 手机绝不会锁屏或进入休眠。插上电源，整夜运行，无需触碰即可轻松填满 10 个以上的 Bank。";
+"upload.tip.background" = "想正常使用手机？随时切换到其他 App 即可。当下一张照片准备好上传时，弹窗提醒会带您回到此界面。";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "了解你的观众";
+"dfh.audience.intro" = "选择参与者前，应用会自动显示谁拥有公开个人资料，谁拥有私密个人资料 — 无需额外API调用。";
+"dfh.audience.badge_public" = "公开资料";
+"dfh.audience.badge_private" = "私密资料";
+"dfh.audience.badge_note" = "蓝色\"Follow too\" = 私密账号。其粉丝/关注可访问 — 可用于魔术效果。";
+"dfh.audience.strategy_a.title" = "大型观众（4人以上）";
+"dfh.audience.strategy_a.option1" = "询问谁有公开资料并指导他们关注你。10人以上的群体中总会有至少4个公开资料。";
+"dfh.audience.strategy_a.option2" = "让所有人关注你。列表会用\"Follow too\"标记私密账号 — 选择公开的即可。";
+"dfh.audience.strategy_b.title" = "小型观众或全员私密";
+"dfh.audience.strategy_b.body" = "如果观众较少且所有人都有私密资料：请他们通过真实Instagram关注你，接受请求，然后切换到Vault并从粉丝列表中选择参与者。";
+"dfh.tip.private_accounts" = "私密账号自动检测。蓝色\"Follow too\"标签表示私密账号。策略请参阅\"了解你的观众\"部分。";
+"dfh.mockup.followers_tab" = "粉丝";
+"dfh.mockup.following_tab" = "关注";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "移除";

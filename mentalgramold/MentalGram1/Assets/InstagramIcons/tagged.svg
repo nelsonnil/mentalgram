@@ -1,0 +1,5 @@
+<!-- Instagram Tagged Icon -->
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M10.201 3.797L12 1.997l1.799 1.8a4.5 4.5 0 0 0 6.363 6.364l1.8 1.799-9.193 9.193a4.5 4.5 0 0 1-6.364 0l-3.607-3.606a4.5 4.5 0 0 1 0-6.364l9.193-9.193Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="12" r="2" fill="currentColor"/>
+</svg>

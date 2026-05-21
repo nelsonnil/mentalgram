@@ -19,6 +19,8 @@ struct DateForceHelpView: View {
                         dfhDivider
                         DFHSection(icon: "gearshape.fill",        iconColor: VaultTheme.Colors.success, title: "Preparación") { setupSteps }
                         dfhDivider
+                        DFHSection(icon: "person.2.badge.key.fill", iconColor: Color(hex: "0095F6"), title: "dfh.section.audience_title") { audienceStrategySection }
+                        dfhDivider
                         DFHSection(icon: "theatermasks.fill",      iconColor: Color(hex: "E63946"),       title: "Presentación y guión") { presentationScript }
                         dfhDivider
                         DFHSection(icon: "mic.fill",              iconColor: VaultTheme.Colors.warning,  title: "Durante el show") { duringShow }
@@ -118,7 +120,7 @@ struct DateForceHelpView: View {
             DFHTip(icon: "clock.badge.exclamationmark", color: VaultTheme.Colors.warning,
                    text: "**Usa el offset de minutos** en Settings si necesitas ajustar la hora para que el truco funcione con la hora exacta del show.")
             DFHTip(icon: "lock.iphone", color: Color(hex: "F472B6"),
-                   text: "**Cuentas privadas.** Si un espectador tiene la cuenta privada y no te sigue de vuelta, es posible que sus conteos no estén disponibles.")
+                   text: "dfh.tip.private_accounts")
         }
     }
 
@@ -223,6 +225,82 @@ struct DateForceHelpView: View {
                 ]
             )
         }
+    }
+
+    // MARK: - Audience Strategy Section
+
+    private var audienceStrategySection: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.lg) {
+            DFHBody("dfh.audience.intro")
+            DFHFollowToMockup()
+            audienceStrategyCard(
+                emoji: "👥",
+                title: "dfh.audience.strategy_a.title",
+                color: Color(hex: "0095F6"),
+                optionA: "dfh.audience.strategy_a.option1",
+                optionB: "dfh.audience.strategy_a.option2"
+            )
+            audienceStrategyCard(
+                emoji: "🔒",
+                title: "dfh.audience.strategy_b.title",
+                color: Color(hex: "F472B6"),
+                body: "dfh.audience.strategy_b.body"
+            )
+        }
+    }
+
+    private func audienceStrategyCard(
+        emoji: String,
+        title: LocalizedStringKey,
+        color: Color,
+        optionA: LocalizedStringKey? = nil,
+        optionB: LocalizedStringKey? = nil,
+        body: LocalizedStringKey? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(emoji).font(.system(size: 18))
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(color)
+            }
+            if let body {
+                Text(body)
+                    .font(.system(size: 12))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let a = optionA {
+                HStack(alignment: .top, spacing: 8) {
+                    Text("A")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 18, height: 18)
+                        .background(Circle().fill(color))
+                    Text(a)
+                        .font(.system(size: 12))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let b = optionB {
+                HStack(alignment: .top, spacing: 8) {
+                    Text("B")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 18, height: 18)
+                        .background(Circle().fill(color.opacity(0.7)))
+                    Text(b)
+                        .font(.system(size: 12))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(12)
+        .background(color.opacity(0.06))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.2), lineWidth: 1))
     }
 
     private func scriptBlock(
@@ -1585,6 +1663,170 @@ private struct DateForceAnimatedDemo: View {
         await sleep(2.5)
         withAnimation(.easeOut(duration: 0.4)) { revealGlow = 0 }
         await sleep(0.3)
+    }
+}
+
+// MARK: - ── Follow Too Mockup ─────────────────────────────────────────────────
+
+/// Inline phone mockup showing how "Follow too" appears on private accounts.
+private struct DFHFollowToMockup: View {
+
+    private struct MockFollower {
+        let username: String
+        let fullName: String
+        let isPrivate: Bool
+    }
+
+    private let rows: [MockFollower] = [
+        .init(username: "@alice_m",  fullName: "Alice Martin",  isPrivate: false),
+        .init(username: "@carlos_r", fullName: "Carlos Ruiz",   isPrivate: true),
+        .init(username: "@sofia_p",  fullName: "Sofía Pérez",   isPrivate: false),
+        .init(username: "@david_k",  fullName: "David Kim",     isPrivate: true),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Legend
+            HStack(spacing: 16) {
+                legendBadge(label: "dfh.audience.badge_public",  color: VaultTheme.Colors.success, icon: "checkmark.circle.fill")
+                legendBadge(label: "dfh.audience.badge_private", color: Color(red: 0.0, green: 0.47, blue: 1.0), icon: "lock.fill")
+            }
+            .frame(maxWidth: .infinity)
+
+            // Phone frame
+            VStack(spacing: 0) {
+                // Nav bar
+                HStack {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.black)
+                        .padding(.leading, 12)
+                    Spacer()
+                    Text("magician_ig")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.black)
+                    Spacer()
+                    Rectangle().frame(width: 20).opacity(0)
+                }
+                .frame(height: 38)
+                .background(Color.white)
+
+                // Tab bar
+                HStack(spacing: 0) {
+                    tabItem(title: "dfh.mockup.followers_tab", selected: true)
+                    tabItem(title: "dfh.mockup.following_tab", selected: false)
+                }
+                .background(Color.white)
+                Divider()
+
+                // Follower rows
+                VStack(spacing: 0) {
+                    ForEach(rows.indices, id: \.self) { i in
+                        followerRow(rows[i])
+                        if i < rows.count - 1 {
+                            Divider().padding(.leading, 62)
+                        }
+                    }
+                }
+                .background(Color.white)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(white: 0.82), lineWidth: 1))
+            .shadow(color: .black.opacity(0.06), radius: 6)
+
+            // Note below mockup
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(red: 0.0, green: 0.47, blue: 1.0))
+                    .padding(.top, 1)
+                Text("dfh.audience.badge_note")
+                    .font(.system(size: 11))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(8)
+            .background(Color(red: 0.0, green: 0.47, blue: 1.0).opacity(0.06))
+            .cornerRadius(8)
+        }
+    }
+
+    private func legendBadge(label: LocalizedStringKey, color: Color, icon: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.08))
+        .cornerRadius(20)
+    }
+
+    private func tabItem(title: LocalizedStringKey, selected: Bool) -> some View {
+        VStack(spacing: 0) {
+            Text(title)
+                .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                .foregroundColor(selected ? .black : Color(white: 0.5))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+            Rectangle()
+                .fill(selected ? Color.black : Color.clear)
+                .frame(height: 1.5)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func followerRow(_ f: MockFollower) -> some View {
+        HStack(spacing: 10) {
+            // Avatar
+            Circle()
+                .fill(f.isPrivate ? Color(white: 0.84) : Color(hex: "E8F4FD"))
+                .frame(width: 42, height: 42)
+                .overlay(
+                    Image(systemName: f.isPrivate ? "lock.fill" : "person.fill")
+                        .font(.system(size: f.isPrivate ? 14 : 16))
+                        .foregroundColor(f.isPrivate ? Color(white: 0.55) : Color(hex: "0095F6"))
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(f.username)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.black)
+                    if f.isPrivate {
+                        Text("·")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(white: 0.5))
+                        Text("dfh.mockup.follow_too")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(red: 0.0, green: 0.47, blue: 1.0))
+                    }
+                }
+                Text(f.fullName)
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(white: 0.45))
+            }
+
+            Spacer()
+
+            // Right button
+            Text("dfh.mockup.remove_btn")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.black)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(white: 0.93))
+                .cornerRadius(7)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(f.isPrivate
+            ? Color(red: 0.0, green: 0.47, blue: 1.0).opacity(0.04)
+            : Color.white)
     }
 }
 

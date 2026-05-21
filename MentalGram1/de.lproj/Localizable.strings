@@ -1450,10 +1450,12 @@
 "limits.help.table.row.profile.new" = "Neues Follower-Profil";
 "limits.help.table.row.sa" = "Sync & Archive (pro Foto)";
 "limits.help.table.row.upload" = "Upload (pro Foto)";
+"limits.help.table.row.autoupload" = "Vollständiger Auto-Upload-Zyklus (pro Foto)";
 "limits.help.table.row.reveal" = "Enthüllen (pro Buchstabe/Foto)";
 "limits.help.table.row.notebio" = "Notiz oder Bio ändern";
 "limits.help.table.row.explore" = "Erkunden / Suchen";
 "limits.help.sa.auto" = "Nach einer vollständigen Performance mit Enthüllungen und Profilbesuchen fügt die App automatisch eine kurze Wartezeit vor Sync & Archive ein. Das ist normal — es schützt deine Session.";
+"limits.help.table.cache.lost" = "Der Performance-Cache lädt bei Wiederholungsbesuchen kostenlos. Er kann verloren gehen bei: Neuinstallation, Kontowechsel, App-Daten löschen oder Wiederherstellen auf einem neuen Gerät — in diesen Fällen kostet der erste Einstieg 3 Aktionen.";
 
 "limits.help.profiles.title" = "Profile besuchen — die teuerste Aktion";
 "limits.help.profiles.body" = "Ein neues Follower-Profil zu öffnen kostet jedes Mal 4–5 Aktionen. Der zweite Besuch desselben Profils ist kostenlos (aus dem Cache geladen). Deshalb kann das schnelle Öffnen von 3–4 verschiedenen Profilen das Budget erschöpfen und Bot-Erkennung auslösen.";
@@ -1466,6 +1468,7 @@
 
 "limits.help.noban.title" = "Dein Konto wird niemals gesperrt.";
 "limits.help.noban.body" = "Instagram bittet manchmal darum, deine Identität zu bestätigen — das ist alles. Das ist kein Bann, keine Warnung und kein Risiko für dein Konto. Vault wurde mit Hunderten echter Instagram-Konten getestet und keines wurde jemals gesperrt oder dauerhaft eingeschränkt. Wenn eine Meldung erscheint, folge den Schritten oben und du bist in weniger als einer Minute wieder dabei.";
+"limits.help.continue.button" = "Verstanden — Performance öffnen";
 
 "perf.safety_gate.wait" = "Zu viele schnelle Ladevorgänge erkannt.\nBitte warte %lld Sekunden…";
 "perf.safety_gate.retrying" = "Erneuter Versuch…";
@@ -1649,3 +1652,25 @@
 
 "faq.q.not_instagram.question" = "Das Publikum fragt, warum die App wie Instagram aussieht. Was sage ich?";
 "faq.q.not_instagram.answer" = "Performance ist eine originalgetreue visuelle Kopie deines Instagram-Profils — gleiches Layout, gleiche Fotos, gleiche Zähler. Wenn jemand fragt, kannst du einfach sagen, dass du dein Instagram überprüfst, da die angezeigten Daten echt und live von deinem Konto stammen.";
+
+"upload.tip.title" = "Upload-Tipp";
+"upload.tip.overnight" = "Während des Uploads bleibt der Bildschirm an — dein Handy sperrt sich nie und dimmt nicht. Lade es auf und lass es über Nacht laufen, um 10 oder mehr Banks ohne Zutun zu füllen.";
+"upload.tip.background" = "Möchtest du dein Handy lieber benutzen? Wechsle jederzeit frei zu einer anderen App. Ein Pop-up-Hinweis bringt dich zurück, sobald das nächste Foto hochgeladen werden kann.";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "Dein Publikum kennen";
+"dfh.audience.intro" = "Bevor du Teilnehmer auswählst, zeigt die App automatisch, wer ein öffentliches und wer ein privates Profil hat — ohne zusätzliche API-Anfragen.";
+"dfh.audience.badge_public" = "Öffentliches Profil";
+"dfh.audience.badge_private" = "Privates Profil";
+"dfh.audience.badge_note" = "\"Follow too\" in Blau = privates Konto. Deren Follower/Folgende sind zugänglich — du kannst sie für den Effekt nutzen.";
+"dfh.audience.strategy_a.title" = "Großes Publikum (4+ Personen)";
+"dfh.audience.strategy_a.option1" = "Frage, wer ein öffentliches Profil hat, und weise sie an, dir zu folgen. Bei 10+ Personen gibt es immer mindestens 4 mit öffentlichem Profil.";
+"dfh.audience.strategy_a.option2" = "Lass alle dir folgen. Wenn du die Followerliste öffnest, markiert die App private Konten mit \"Follow too\" — wähle die öffentlichen.";
+"dfh.audience.strategy_b.title" = "Kleines Publikum oder alle privat";
+"dfh.audience.strategy_b.body" = "Wenn das Publikum klein ist und alle private Profile haben: Bitte sie, dir von ihrem echten Instagram zu folgen, akzeptiere die Anfragen, wechsle dann zu Vault und wähle Teilnehmer aus der Followerliste.";
+"dfh.tip.private_accounts" = "Private Konten automatisch erkannt. Das blaue \"Follow too\"-Label zeigt ein privates Konto an. Strategien im Abschnitt \"Dein Publikum kennen\".";
+"dfh.mockup.followers_tab" = "Follower";
+"dfh.mockup.following_tab" = "Folge ich";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "Entfernen";

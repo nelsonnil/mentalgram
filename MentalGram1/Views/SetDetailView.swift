@@ -331,34 +331,34 @@ struct SetDetailView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "checkmark.shield.fill")
                                 .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.blue)
-                            VStack(alignment: .leading, spacing: 2) {
+                                .foregroundColor(.white)
+                            VStack(alignment: .leading, spacing: 3) {
                                 Text("Re-verify All (\(allUploadedPhotos.count) photos)")
                                     .font(.subheadline.bold())
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(.white)
                                 Text("Check if any photo is currently unarchived on Instagram")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.white.opacity(0.8))
                                     .lineLimit(2)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.white.opacity(0.6))
                         }
                         .padding(12)
-                        .background(Color.blue.opacity(0.08))
+                        .background(Color.blue.opacity(0.55))
                         .cornerRadius(10)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.blue.opacity(0.25), lineWidth: 1)
+                                .stroke(Color.blue.opacity(0.7), lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
 
                     Text("Use Re-verify All before Performance to detect public photos and avoid accidental reveal.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -385,6 +385,7 @@ struct SetDetailView: View {
     }
 
     @State private var showForceDeleteBankConfirm = false
+    @State private var uploadTipExpanded = false
 
     @ViewBuilder private var deleteLastBankButton: some View {
         let hasManyBanks = currentSet.banks.count > 1
@@ -2155,40 +2156,65 @@ struct SetDetailView: View {
     // MARK: - Upload Info Banner
 
     private var uploadInfoBanner: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "bell.badge.fill")
-                    .font(.subheadline)
-                    .foregroundColor(.orange)
-                Text(LocalizedStringKey("set.upload.info.title"))
-                    .font(.subheadline.bold())
-                    .foregroundColor(.orange)
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row — entire row is tappable
+            HStack(spacing: 7) {
+                Image(systemName: "lightbulb.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color(hex: "FFD60A"))
+                Text(String(localized: "upload.tip.title"))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Color(hex: "FFD60A"))
+                Spacer()
+                Image(systemName: uploadTipExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(hex: "FFD60A").opacity(0.7))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    uploadTipExpanded.toggle()
+                }
             }
 
-            Text(LocalizedStringKey("set.upload.info.body"))
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 5) {
-                Image(systemName: "moon.zzz.fill")
-                    .font(.caption2)
-                    .foregroundColor(.blue)
-                Text(LocalizedStringKey("set.upload.info.sleep"))
-                    .font(.caption2)
-                    .foregroundColor(.blue)
-                    .fixedSize(horizontal: false, vertical: true)
+            if uploadTipExpanded {
+                VStack(alignment: .leading, spacing: 11) {
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "moon.zzz.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.65))
+                            .frame(width: 17, alignment: .top)
+                            .padding(.top, 1)
+                        Text(String(localized: "upload.tip.overnight"))
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.65))
+                            .frame(width: 17, alignment: .top)
+                            .padding(.top, 1)
+                        Text(String(localized: "upload.tip.background"))
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 13)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
+        .background(Color(hex: "FFD60A").opacity(0.07))
+        .cornerRadius(VaultTheme.CornerRadius.md)
+        .overlay(
             RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
-                .fill(Color(.systemBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
-                        .stroke(Color.orange.opacity(0.35), lineWidth: 1)
-                )
+                .strokeBorder(Color(hex: "FFD60A").opacity(0.22), lineWidth: 1)
         )
         .padding(.top, 4)
     }

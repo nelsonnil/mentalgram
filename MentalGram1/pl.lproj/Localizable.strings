@@ -1266,10 +1266,12 @@
 "limits.help.table.row.profile.new" = "Nowy profil obserwującego";
 "limits.help.table.row.sa" = "Sync & Archive (na zdjęcie)";
 "limits.help.table.row.upload" = "Przesyłanie (na zdjęcie)";
+"limits.help.table.row.autoupload" = "Pełny cykl automatycznego przesyłania (na zdjęcie)";
 "limits.help.table.row.reveal" = "Ujawnianie (na literę/zdjęcie)";
 "limits.help.table.row.notebio" = "Zmiana notatki lub bio";
 "limits.help.table.row.explore" = "Eksploruj / Szukaj";
 "limits.help.sa.auto" = "Po pełnym występie z ujawnieniami i wizytami na profilach aplikacja automatycznie dodaje krótki okres oczekiwania przed Sync & Archive. To normalne — chroni Twoją sesję.";
+"limits.help.table.cache.lost" = "Pamięć podręczna Performance ładuje się bezpłatnie przy kolejnych wizytach. Może zostać utracona przy: reinstalacji aplikacji, zmianie konta, wyczyszczeniu danych lub przywróceniu na nowym urządzeniu — w tych przypadkach pierwsze wejście kosztuje 3 akcje.";
 
 "limits.help.profiles.title" = "Odwiedzanie profili — najdroższa akcja";
 "limits.help.profiles.body" = "Otwarcie nowego profilu obserwującego kosztuje 4–5 akcji za każdym razem. Druga wizyta na tym samym profilu jest bezpłatna (wczytywana z pamięci podręcznej). Dlatego szybkie otwarcie 3–4 różnych profili może wyczerpać budżet i wywołać wykrycie bota.";
@@ -1282,6 +1284,7 @@
 
 "limits.help.noban.title" = "Twoje konto nigdy nie zostanie zablokowane.";
 "limits.help.noban.body" = "Instagram od czasu do czasu prosi o potwierdzenie tożsamości — to wszystko. To nie jest ban, nie jest ostrzeżenie i nie stanowi żadnego ryzyka dla Twojego konta. Vault był testowany na setkach prawdziwych kont Instagram i żadne z nich nigdy nie zostało zbanowane ani trwale ograniczone. Jeśli pojawi się komunikat, postępuj zgodnie z krokami powyżej, a za niecałą minutę wrócisz do działania.";
+"limits.help.continue.button" = "Rozumiem — otwórz Performance";
 
 "perf.safety_gate.wait" = "Wykryto zbyt wiele szybkich ładowań.\nPoczekaj %lld sekund…";
 "perf.safety_gate.retrying" = "Ponawiam próbę…";
@@ -1465,3 +1468,25 @@
 
 "faq.q.not_instagram.question" = "Publiczność pyta, dlaczego aplikacja wygląda jak Instagram. Co mówię?";
 "faq.q.not_instagram.answer" = "Performance to wierna wizualna replika Twojego profilu na Instagramie — ten sam układ, te same zdjęcia, te same liczniki. Jeśli ktoś zapyta, możesz po prostu powiedzieć, że sprawdzasz swój Instagram, ponieważ wyświetlane dane są prawdziwe i na żywo z Twojego konta.";
+
+"upload.tip.title" = "Wskazówka dotycząca przesyłania";
+"upload.tip.overnight" = "Gdy przesyłanie jest aktywne, ekran pozostaje włączony — telefon nigdy się nie zablokuje ani nie przyciemni. Podłącz go do ładowania i zostaw na całą noc, by wypełnić 10 lub więcej banków bez dotykania.";
+"upload.tip.background" = "Wolisz używać telefonu? Możesz swobodnie przełączyć się na dowolną inną aplikację. Wyskakujące powiadomienie przywróci cię tu, gdy następne zdjęcie będzie gotowe do przesłania.";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "Poznaj swoją widownię";
+"dfh.audience.intro" = "Przed wybraniem uczestników aplikacja automatycznie pokazuje, kto ma profil publiczny, a kto prywatny — bez dodatkowych wywołań API.";
+"dfh.audience.badge_public" = "Profil publiczny";
+"dfh.audience.badge_private" = "Profil prywatny";
+"dfh.audience.badge_note" = "Niebieski napis \"Follow too\" = konto prywatne. Obserwujący/obserwowani są dostępni — można ich użyć do efektu.";
+"dfh.audience.strategy_a.title" = "Duża widownia (4+ osoby)";
+"dfh.audience.strategy_a.option1" = "Zapytaj, kto ma publiczny profil, i poproś, aby cię obserwowali. W grupie 10+ osób zawsze są co najmniej 4 z publicznym profilem.";
+"dfh.audience.strategy_a.option2" = "Poproś wszystkich, żeby cię obserwowali. Lista oznaczy prywatne konta jako \"Follow too\" — wybierz publiczne.";
+"dfh.audience.strategy_b.title" = "Mała widownia lub wszyscy prywatni";
+"dfh.audience.strategy_b.body" = "Jeśli widownia jest mała i wszyscy mają prywatne profile: poproś ich o obserwowanie z prawdziwego Instagrama, zaakceptuj prośby, przełącz na Vault i wybierz uczestników z listy.";
+"dfh.tip.private_accounts" = "Konta prywatne wykrywane automatycznie. Niebieski napis \"Follow too\" oznacza konto prywatne. Strategie w sekcji \"Poznaj swoją widownię\".";
+"dfh.mockup.followers_tab" = "Obserwujący";
+"dfh.mockup.following_tab" = "Obserwowani";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "Usuń";

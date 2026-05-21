@@ -890,10 +890,12 @@
 "limits.help.table.row.profile.new" = "New follower profile";
 "limits.help.table.row.sa" = "Sync & Archive (per photo)";
 "limits.help.table.row.upload" = "Upload (per photo)";
+"limits.help.table.row.autoupload" = "Auto-upload full cycle (per photo)";
 "limits.help.table.row.reveal" = "Reveal (per letter/photo)";
 "limits.help.table.row.notebio" = "Note or bio change";
 "limits.help.table.row.explore" = "Explore / Search";
 "limits.help.sa.auto" = "After a full performance with reveals and profile visits, the app automatically adds a short waiting period before Sync & Archive. This is normal — it protects your session.";
+"limits.help.table.cache.lost" = "Performance cache loads at zero cost on repeat visits. Cache may be lost on: fresh install, account switch, clearing app data, or restoring to a new device — in those cases the first entry costs 3 actions.";
 
 "limits.help.profiles.title" = "Visiting profiles — the most expensive action";
 "limits.help.profiles.body" = "Opening a new follower profile costs 4–5 actions every time. The second visit to the same profile is free (loaded from cache). This is why opening 3–4 different profiles in quick succession can exhaust the budget and trigger bot detection.";
@@ -906,6 +908,7 @@
 
 "limits.help.noban.title" = "Your account will never be banned.";
 "limits.help.noban.body" = "Instagram occasionally asks to confirm your identity — that is all it is. It is not a ban, not a warning, and not a risk to your account. Vault has been tested with hundreds of real Instagram accounts and not a single one has ever been banned or permanently restricted. If a popup appears, follow the steps above and you will be back in under a minute.";
+"limits.help.continue.button" = "I understand — open Performance";
 
 "perf.safety_gate.wait" = "Too many rapid loads detected.\nPlease wait %lld seconds…";
 "perf.safety_gate.retrying" = "Retrying…";
@@ -1096,3 +1099,29 @@
 
 "faq.q.not_instagram.question" = "The audience asks why the app looks like Instagram. What do I say?";
 "faq.q.not_instagram.answer" = "Performance is a faithful visual replica of your Instagram profile — same layout, same photos, same counts. If anyone asks, you can simply say you are checking your Instagram, because the data shown is real and live from your account.";
+
+"upload.tip.title" = "Uploading tip";
+"upload.tip.overnight" = "While uploading is active, the screen stays on — your phone will never lock or dim. Plug it in and let it run overnight to silently fill 10 or more banks without touching it.";
+"upload.tip.background" = "Prefer to use your phone? You can switch to any other app freely. A pop-up alert will bring you back to this screen whenever the next photo is ready to upload.";
+
+"upload.tip.title" = "Uploading tip";
+"upload.tip.overnight" = "While uploading is active, the screen stays on — your phone will never lock or dim. Plug it in and let it run overnight to silently fill 10 or more banks without touching it.";
+"upload.tip.background" = "Prefer to use your phone? You can switch to any other app freely. A pop-up alert will bring you back to this screen whenever the next photo is ready to upload.";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "Know Your Audience";
+"dfh.audience.intro" = "Before selecting participants, the app automatically shows who has a public profile and who has a private one — no extra API call needed.";
+"dfh.audience.badge_public" = "Public profile";
+"dfh.audience.badge_private" = "Private profile";
+"dfh.audience.badge_note" = "\"Follow too\" in blue = private account. Their followers/following are accessible — you can use them for the Date Force effect.";
+"dfh.audience.strategy_a.title" = "Large audience (4+ people)";
+"dfh.audience.strategy_a.option1" = "Ask who has a public profile and instruct them to follow you. With a group of 10+ people, there will always be at least 4 with public profiles.";
+"dfh.audience.strategy_a.option2" = "Have everyone follow you. When you open the followers list, the app marks private accounts with \"Follow too\" — just pick the public ones.";
+"dfh.audience.strategy_b.title" = "Small audience or all-private";
+"dfh.audience.strategy_b.body" = "If the audience is small and everyone has a private profile: ask them to follow you from their real Instagram, accept the requests, then switch from Instagram to Vault and select participants from the followers list.";
+"dfh.tip.private_accounts" = "Private accounts detected automatically. The blue \"Follow too\" label indicates a private account. See the \"Know Your Audience\" section for full strategies.";
+"dfh.mockup.followers_tab" = "Followers";
+"dfh.mockup.following_tab" = "Following";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "Remove";

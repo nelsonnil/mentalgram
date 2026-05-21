@@ -917,10 +917,12 @@
 "limits.help.table.row.profile.new" = "新追蹤者資料";
 "limits.help.table.row.sa" = "Sync & Archive（每張照片）";
 "limits.help.table.row.upload" = "上傳（每張照片）";
+"limits.help.table.row.autoupload" = "自動上傳完整週期（每張照片）";
 "limits.help.table.row.reveal" = "揭示（每個字母/照片）";
 "limits.help.table.row.notebio" = "更改備註或簡介";
 "limits.help.table.row.explore" = "探索 / 搜尋";
 "limits.help.sa.auto" = "在包含揭示和資料訪問的完整表演後，應用程式會在 Sync & Archive 前自動增加短暫等待時間。這是正常的，可以保護您的工作階段。";
+"limits.help.table.cache.lost" = "Performance 快取在重複訪問時零成本載入。以下情況可能導致快取遺失：重新安裝應用程式、切換帳號、清除應用程式資料或在新裝置上還原 — 在這些情況下，首次進入需要消耗 3 個操作。";
 
 "limits.help.profiles.title" = "訪問資料 — 消耗最多的操作";
 "limits.help.profiles.body" = "每次開啟新的追蹤者資料需要消耗 4–5 次操作。第二次訪問同一資料是免費的（從快取載入）。因此，快速開啟 3–4 個不同資料可能會耗盡預算並觸發機器人偵測。";
@@ -933,6 +935,7 @@
 
 "limits.help.noban.title" = "您的帳號永遠不會被封禁。";
 "limits.help.noban.body" = "Instagram 有時會要求確認您的身份——僅此而已。這不是封禁，不是警告，也不會對您的帳號造成任何風險。Vault 已在數百個真實 Instagram 帳號上進行了測試，沒有任何帳號被封禁或永久限制。如果出現提示，按照上述步驟操作，不到一分鐘您就能恢復正常使用。";
+"limits.help.continue.button" = "明白了 — 開啟 Performance";
 
 "perf.safety_gate.wait" = "偵測到過多快速載入。\n請等待 %lld 秒…";
 "perf.safety_gate.retrying" = "正在重試…";
@@ -1126,3 +1129,25 @@
 
 "faq.q.not_instagram.question" = "觀眾問為什麼應用程式看起來像 Instagram。我怎麼回答？";
 "faq.q.not_instagram.answer" = "Performance 是您 Instagram 個人資料的忠實視覺副本 — 相同的版面配置、相同的照片、相同的計數器。如果有人問，您可以簡單地說正在查看自己的 Instagram，因為顯示的資料是真實的，直接來自您的帳號。";
+
+"upload.tip.title" = "上傳技巧";
+"upload.tip.overnight" = "上傳進行中，螢幕將保持常亮 — 手機絕不會鎖定或進入休眠。插上充電器，整晚運行，無需觸碰即可輕鬆填滿 10 個以上的 Bank。";
+"upload.tip.background" = "想正常使用手機？隨時切換到其他 App 即可。當下一張照片準備好上傳時，彈出提醒會帶您回到此介面。";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "了解你的觀眾";
+"dfh.audience.intro" = "選擇參與者前，應用會自動顯示誰擁有公開個人資料，誰擁有私密個人資料 — 無需額外API調用。";
+"dfh.audience.badge_public" = "公開資料";
+"dfh.audience.badge_private" = "私密資料";
+"dfh.audience.badge_note" = "藍色\"Follow too\" = 私密帳號。其粉絲/追蹤可訪問 — 可用於魔術效果。";
+"dfh.audience.strategy_a.title" = "大型觀眾（4人以上）";
+"dfh.audience.strategy_a.option1" = "詢問誰有公開資料並指導他們追蹤你。10人以上的群體中總會有至少4個公開資料。";
+"dfh.audience.strategy_a.option2" = "讓所有人追蹤你。列表會用\"Follow too\"標記私密帳號 — 選擇公開的即可。";
+"dfh.audience.strategy_b.title" = "小型觀眾或全員私密";
+"dfh.audience.strategy_b.body" = "如果觀眾較少且所有人都有私密資料：請他們通過真實Instagram追蹤你，接受請求，然後切換到Vault並從粉絲列表中選擇參與者。";
+"dfh.tip.private_accounts" = "私密帳號自動偵測。藍色\"Follow too\"標籤表示私密帳號。策略請參閱\"了解你的觀眾\"部分。";
+"dfh.mockup.followers_tab" = "粉絲";
+"dfh.mockup.following_tab" = "追蹤中";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "移除";

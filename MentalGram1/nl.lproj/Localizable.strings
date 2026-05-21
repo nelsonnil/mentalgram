@@ -1267,10 +1267,12 @@
 "limits.help.table.row.profile.new" = "Nieuw volgersprofiel";
 "limits.help.table.row.sa" = "Sync & Archive (per foto)";
 "limits.help.table.row.upload" = "Upload (per foto)";
+"limits.help.table.row.autoupload" = "Volledige automatische uploadcyclus (per foto)";
 "limits.help.table.row.reveal" = "Onthullen (per letter/foto)";
 "limits.help.table.row.notebio" = "Notitie of bio wijzigen";
 "limits.help.table.row.explore" = "Verkennen / Zoeken";
 "limits.help.sa.auto" = "Na een volledige performance met onthullingen en profielbezoeken voegt de app automatisch een korte wachttijd toe vóór Sync & Archive. Dit is normaal — het beschermt je sessie.";
+"limits.help.table.cache.lost" = "De Performance-cache laadt gratis bij herhaalde bezoeken. De cache kan verloren gaan bij: herinstallatie, accountwissel, app-gegevens wissen of herstellen op een nieuw apparaat — in die gevallen kost het eerste bezoek 3 acties.";
 
 "limits.help.profiles.title" = "Profielen bezoeken — de duurste actie";
 "limits.help.profiles.body" = "Een nieuw volgersprofiel openen kost elke keer 4–5 acties. Het tweede bezoek aan hetzelfde profiel is gratis (geladen uit cache). Daarom kan het snel openen van 3–4 verschillende profielen het budget uitputten en botdetectie activeren.";
@@ -1283,6 +1285,7 @@
 
 "limits.help.noban.title" = "Je account wordt nooit verbannen.";
 "limits.help.noban.body" = "Instagram vraagt soms om je identiteit te bevestigen — dat is alles. Het is geen ban, geen waarschuwing en vormt geen risico voor je account. Vault is getest met honderden echte Instagram-accounts en geen enkel account is ooit verbannen of permanent beperkt. Als er een bericht verschijnt, volg dan de bovenstaande stappen en je bent binnen een minuut terug.";
+"limits.help.continue.button" = "Begrepen — Performance openen";
 
 "perf.safety_gate.wait" = "Te veel snelle laadpogingen gedetecteerd.\nWacht %lld seconden…";
 "perf.safety_gate.retrying" = "Opnieuw proberen…";
@@ -1466,3 +1469,25 @@
 
 "faq.q.not_instagram.question" = "Het publiek vraagt waarom de app op Instagram lijkt. Wat zeg ik?";
 "faq.q.not_instagram.answer" = "Performance is een getrouwe visuele replica van je Instagram-profiel — dezelfde lay-out, dezelfde foto's, dezelfde tellers. Als iemand vraagt, kun je gewoon zeggen dat je je Instagram controleert, want de getoonde gegevens zijn echt en live van je account.";
+
+"upload.tip.title" = "Upload-tip";
+"upload.tip.overnight" = "Terwijl het uploaden actief is, blijft het scherm aan — je telefoon gaat nooit op slot of dimt. Sluit hem aan en laat hem de hele nacht draaien om 10 of meer banks te vullen zonder hem aan te raken.";
+"upload.tip.background" = "Wil je je telefoon liever gebruiken? Wissel vrij naar een andere app. Een pop-up melding brengt je terug zodra de volgende foto klaar is om te uploaden.";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "Weet wie je publiek is";
+"dfh.audience.intro" = "Voordat je deelnemers selecteert, toont de app automatisch wie een openbaar en wie een privéprofiel heeft — zonder extra API-aanroepen.";
+"dfh.audience.badge_public" = "Openbaar profiel";
+"dfh.audience.badge_private" = "Privéprofiel";
+"dfh.audience.badge_note" = "\"Follow too\" in blauw = privéaccount. Hun volgers/volgend zijn toegankelijk — bruikbaar voor het effect.";
+"dfh.audience.strategy_a.title" = "Groot publiek (4+ personen)";
+"dfh.audience.strategy_a.option1" = "Vraag wie een openbaar profiel heeft en instrueer hen jou te volgen. Bij 10+ personen zijn er altijd minstens 4 met een openbaar profiel.";
+"dfh.audience.strategy_a.option2" = "Laat iedereen je volgen. De lijst markeert privéaccounts met \"Follow too\" — kies de openbare.";
+"dfh.audience.strategy_b.title" = "Klein publiek of allemaal privé";
+"dfh.audience.strategy_b.body" = "Als het publiek klein is en iedereen een privéprofiel heeft: vraag hen te volgen via hun echte Instagram, accepteer de verzoeken, schakel over naar Vault en selecteer deelnemers.";
+"dfh.tip.private_accounts" = "Privéaccounts automatisch gedetecteerd. Het blauwe \"Follow too\"-label geeft een privéaccount aan. Zie \"Weet wie je publiek is\" voor strategieën.";
+"dfh.mockup.followers_tab" = "Volgers";
+"dfh.mockup.following_tab" = "Volgend";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "Verwijderen";

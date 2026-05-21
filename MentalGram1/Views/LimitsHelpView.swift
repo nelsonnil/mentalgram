@@ -210,19 +210,21 @@ struct LimitsHelpView: View {
                 VStack(spacing: 0) {
                     tableHeaderRow
                     Divider().background(Color.white.opacity(0.08))
-                    tableDataRow("limits.help.table.row.performance", first: "1",   again: "0 ✓")
+                    tableDataRow("limits.help.table.row.performance", first: "3",   again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.followers",   first: "1",   again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
-                    tableDataRow("limits.help.table.row.profile.new", first: "4–5", again: "0 ✓")
+                    tableDataRow("limits.help.table.row.profile.new", first: "3–4", again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.sa",          first: "2",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.upload",      first: "1",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
+                    tableDataRow("limits.help.table.row.autoupload",  first: "3",   again: "—")
+                    Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.reveal",      first: "1",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
-                    tableDataRow("limits.help.table.row.notebio",     first: "2",   again: "2")
+                    tableDataRow("limits.help.table.row.notebio",     first: "1–2", again: "1")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.explore",     first: "1–2", again: "0 ✓")
                 }
@@ -235,6 +237,13 @@ struct LimitsHelpView: View {
                     iconColor: VaultTheme.Colors.success,
                     text: "limits.help.sa.auto",
                     bgColor: VaultTheme.Colors.success
+                )
+
+                infoBox(
+                    icon: "internaldrive",
+                    iconColor: Color(hex: "FF9F0A"),
+                    text: "limits.help.table.cache.lost",
+                    bgColor: Color(hex: "FF9F0A")
                 )
             }
         }

@@ -1268,10 +1268,12 @@
 "limits.help.table.row.profile.new" = "新規フォロワープロフィール";
 "limits.help.table.row.sa" = "Sync & Archive（写真1枚）";
 "limits.help.table.row.upload" = "アップロード（写真1枚）";
+"limits.help.table.row.autoupload" = "自動アップロード全サイクル（写真1枚あたり）";
 "limits.help.table.row.reveal" = "リビール（文字/写真1つ）";
 "limits.help.table.row.notebio" = "ノートまたはbio変更";
 "limits.help.table.row.explore" = "探索 / 検索";
 "limits.help.sa.auto" = "リビールとプロフィール訪問を含む完全なパフォーマンスの後、アプリはSync & Archiveの前に自動的に短い待機時間を追加します。これは正常です — セッションを保護します。";
+"limits.help.table.cache.lost" = "Performanceキャッシュは2回目以降ゼロコストで読み込みます。キャッシュが失われる場合：アプリの再インストール、アカウント切替、アプリデータの削除、新しいデバイスへの復元。その場合、最初の起動に3アクション消費します。";
 
 "limits.help.profiles.title" = "プロフィール訪問 — 最もコストの高いアクション";
 "limits.help.profiles.body" = "新しいフォロワープロフィールを開くと毎回4〜5アクションかかります。同じプロフィールの2回目の訪問はキャッシュから読み込まれるため無料です。3〜4種類のプロフィールを素早く開くと予算が枯渇し、ボット検出が発動する場合があります。";
@@ -1284,6 +1286,7 @@
 
 "limits.help.noban.title" = "あなたのアカウントが永久BANされることは絶対にありません。";
 "limits.help.noban.body" = "Instagramが身元確認を求めることがあります — それだけです。BANではなく、警告でもなく、アカウントへのリスクもありません。Vaultは数百の実際のInstagramアカウントでテストされており、BANや恒久的な制限を受けたアカウントは一つもありません。メッセージが表示された場合は、上記の手順に従えば1分以内に復帰できます。";
+"limits.help.continue.button" = "了解 — Performanceを開く";
 
 "perf.safety_gate.wait" = "急速な読み込みが多すぎます。\n%lld秒お待ちください…";
 "perf.safety_gate.retrying" = "再試行中…";
@@ -1467,3 +1470,25 @@
 
 "faq.q.not_instagram.question" = "観客がなぜアプリがInstagramに似ているか聞いてきます。何と言えばいいですか？";
 "faq.q.not_instagram.answer" = "Performanceはあなたのインスタグラムプロフィールの忠実な視覚的レプリカです — 同じレイアウト、同じ写真、同じカウンター。誰かが聞いたら、インスタグラムを確認していると言えばいいだけです。表示されているデータはアカウントからリアルタイムで取得した本物のデータです。";
+
+"upload.tip.title" = "アップロードのヒント";
+"upload.tip.overnight" = "アップロード中は画面がオンのまま維持されます — スリープやロックは一切起きません。充電しながら一晩放置するだけで、手を触れずに10バンク以上を自動で埋めることができます。";
+"upload.tip.background" = "スマホを使いたいですか？他のアプリに自由に切り替えてOKです。次の写真のアップロード準備ができたら、ポップアップ通知でここに戻れます。";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "観客を把握する";
+"dfh.audience.intro" = "参加者を選ぶ前に、アプリは公開プロフィールと非公開プロフィールを自動的に表示します — 追加のAPI呼び出しは不要です。";
+"dfh.audience.badge_public" = "公開プロフィール";
+"dfh.audience.badge_private" = "非公開プロフィール";
+"dfh.audience.badge_note" = "青い\"Follow too\" = 非公開アカウント。フォロワー/フォロー中にアクセス可能 — エフェクトに使用できます。";
+"dfh.audience.strategy_a.title" = "大きな観客（4人以上）";
+"dfh.audience.strategy_a.option1" = "公開プロフィールの人を確認し、フォローするよう指示します。10人以上のグループには常に少なくとも4人の公開プロフィールがあります。";
+"dfh.audience.strategy_a.option2" = "全員にフォローしてもらいます。リストを開くと、非公開アカウントが\"Follow too\"でマークされます — 公開のものを選ぶだけです。";
+"dfh.audience.strategy_b.title" = "少人数または全員非公開";
+"dfh.audience.strategy_b.body" = "観客が少なく全員が非公開の場合：本物のInstagramからフォローするよう依頼し、リクエストを承認してVaultに切り替え、フォロワーリストから参加者を選択します。";
+"dfh.tip.private_accounts" = "非公開アカウントは自動検出されます。青い\"Follow too\"ラベルは非公開アカウントを示します。戦略は\"観客を把握する\"セクションを参照してください。";
+"dfh.mockup.followers_tab" = "フォロワー";
+"dfh.mockup.following_tab" = "フォロー中";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "削除";

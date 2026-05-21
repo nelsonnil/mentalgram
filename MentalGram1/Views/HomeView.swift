@@ -120,6 +120,11 @@ struct HomeView: View {
         .accentColor(selectedTab == 0 ? .primary : VaultTheme.Colors.primary)
         .onChange(of: selectedTab) { newTab in
             updateTabBarAppearance(forTab: newTab)
+            // Leaving Performance → wipe the secret digit buffer so the
+            // following-count indicator is clean on the next entry.
+            if newTab != 0 {
+                SecretNumberManager.shared.reset()
+            }
         }
         // URL scheme: bypass the check and go directly to Performance
         .onChange(of: urlAction.pendingMode) { mode in
@@ -235,10 +240,10 @@ struct HomeView: View {
             // Restart volume monitoring if FollowingMagic needs it for Transfer phase 2
             // (UserProfileView stopped monitoring on dismiss; PerformanceView.onAppear won't fire)
             let fm = FollowingMagicSettings.shared
+            print("🎩 [TRANSFER] HomeView Explore onDismiss — isEnabled:\(fm.isEnabled) transferOffset:\(fm.transferOffset) pendingOffset:\(fm.pendingOffset)")
             if fm.isEnabled && (fm.transferOffset > 0 || fm.pendingOffset > 0) {
                 VolumeButtonMonitor.shared.prepareVolume()
                 VolumeButtonMonitor.shared.startMonitoring()
-                print("🎩 [MAGIC] Monitoring restarted after ExploreView dismissed (transferOffset:\(fm.transferOffset))")
             }
         }) {
             ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
@@ -1058,6 +1063,7 @@ struct ActivityLogView: View {
 /// Designed for the Settings tab — updates on every `.onAppear`.
 struct APIBudgetWidget: View {
     @ObservedObject private var instagram = InstagramService.shared
+    @Environment(\.scenePhase) private var scenePhase
     @State private var used: Int = 0
     @State private var remaining: Int = 55
     @State private var renewalTime: Date? = nil
@@ -1131,8 +1137,13 @@ struct APIBudgetWidget: View {
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(barColor.opacity(0.25), lineWidth: 1))
         .onAppear { refresh() }
-        // Also refresh whenever the actionsThisHour counter changes
+        // Refresh whenever a new action is tracked
         .onChange(of: instagram.actionsThisHour) { _ in refresh() }
+        // Refresh when the app returns to the foreground — the rolling 1-hour window
+        // may have expired actions that are not tracked via actionsThisHour changes.
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { refresh() }
+        }
     }
 
     private func refresh() {

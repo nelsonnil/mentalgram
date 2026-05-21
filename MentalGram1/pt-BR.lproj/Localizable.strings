@@ -1449,10 +1449,12 @@
 "limits.help.table.row.profile.new" = "Novo perfil de seguidor";
 "limits.help.table.row.sa" = "Sync & Archive (por foto)";
 "limits.help.table.row.upload" = "Upload (por foto)";
+"limits.help.table.row.autoupload" = "Ciclo completo de upload automático (por foto)";
 "limits.help.table.row.reveal" = "Revelar (por letra/foto)";
 "limits.help.table.row.notebio" = "Alterar nota ou bio";
 "limits.help.table.row.explore" = "Explorar / Pesquisar";
 "limits.help.sa.auto" = "Após uma performance completa com revelações e visitas a perfis, o app adiciona automaticamente uma breve pausa antes do Sync & Archive. Isso é normal — protege sua sessão.";
+"limits.help.table.cache.lost" = "O cache do Performance carrega sem custo em visitas repetidas. Pode ser perdido ao: reinstalar o app, trocar de conta, limpar dados do app ou restaurar em um novo dispositivo — nesses casos a primeira entrada custa 3 ações.";
 
 "limits.help.profiles.title" = "Visitar perfis — a ação mais cara";
 "limits.help.profiles.body" = "Abrir um novo perfil de seguidor custa 4–5 ações toda vez. A segunda visita ao mesmo perfil é gratuita (carregada do cache). É por isso que abrir 3–4 perfis diferentes rapidamente pode esgotar o orçamento e acionar a detecção de bot.";
@@ -1465,6 +1467,7 @@
 
 "limits.help.noban.title" = "Sua conta jamais será banida.";
 "limits.help.noban.body" = "O Instagram às vezes pede para confirmar sua identidade — só isso. Não é um banimento, não é um aviso e não representa nenhum risco para sua conta. O Vault foi testado com centenas de contas reais do Instagram e nenhuma foi banida ou restrita permanentemente. Se aparecer uma mensagem, siga os passos acima e você estará de volta em menos de um minuto.";
+"limits.help.continue.button" = "Entendido — abrir Performance";
 
 "perf.safety_gate.wait" = "Muitos carregamentos rápidos detectados.\nAguarde %lld segundos…";
 "perf.safety_gate.retrying" = "Tentando novamente…";
@@ -1648,3 +1651,25 @@
 
 "faq.q.not_instagram.question" = "O público pergunta por que o app parece o Instagram. O que eu digo?";
 "faq.q.not_instagram.answer" = "O Performance é uma réplica visual fiel do seu perfil do Instagram — mesmo layout, mesmas fotos, mesmos contadores. Se alguém perguntar, você pode simplesmente dizer que está verificando seu Instagram, pois os dados exibidos são reais e ao vivo da sua conta.";
+
+"upload.tip.title" = "Dica de upload";
+"upload.tip.overnight" = "Enquanto o upload está ativo, a tela permanece ligada — seu celular nunca vai bloquear ou escurecer. Conecte-o na tomada e deixe rodar a noite toda para preencher 10 ou mais banks sem tocá-lo.";
+"upload.tip.background" = "Prefere usar o celular? Você pode trocar para qualquer outro app livremente. Um alerta pop-up vai te trazer de volta quando a próxima foto estiver pronta para enviar.";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "Conhecendo sua audiência";
+"dfh.audience.intro" = "Antes de selecionar participantes, o app mostra automaticamente quem tem perfil público e quem tem perfil privado — sem chamadas API extras.";
+"dfh.audience.badge_public" = "Perfil público";
+"dfh.audience.badge_private" = "Perfil privado";
+"dfh.audience.badge_note" = "\"Follow too\" em azul = conta privada. Seguidores/seguindo acessíveis — usáveis para o efeito.";
+"dfh.audience.strategy_a.title" = "Grande audiência (4+ pessoas)";
+"dfh.audience.strategy_a.option1" = "Pergunte quem tem perfil público e instrua-os a seguir você. Com 10+ pessoas sempre haverá pelo menos 4 com perfil público.";
+"dfh.audience.strategy_a.option2" = "Peça que todos sigam você. A lista marcará contas privadas com \"Follow too\" — escolha as públicas.";
+"dfh.audience.strategy_b.title" = "Audiência pequena ou todos privados";
+"dfh.audience.strategy_b.body" = "Se a audiência é pequena e todos têm perfil privado: peça para seguirem pelo Instagram real, aceite as solicitações, mude para o Vault e selecione os participantes da lista.";
+"dfh.tip.private_accounts" = "Contas privadas detectadas automaticamente. A etiqueta azul \"Follow too\" indica conta privada. Veja \"Conhecendo sua audiência\" para estratégias.";
+"dfh.mockup.followers_tab" = "Seguidores";
+"dfh.mockup.following_tab" = "Seguindo";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "Remover";

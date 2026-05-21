@@ -1269,10 +1269,12 @@
 "limits.help.table.row.profile.new" = "새 팔로워 프로필";
 "limits.help.table.row.sa" = "Sync & Archive (사진당)";
 "limits.help.table.row.upload" = "업로드 (사진당)";
+"limits.help.table.row.autoupload" = "자동 업로드 전체 사이클 (사진 1장당)";
 "limits.help.table.row.reveal" = "리빌 (글자/사진당)";
 "limits.help.table.row.notebio" = "노트 또는 bio 변경";
 "limits.help.table.row.explore" = "탐색 / 검색";
 "limits.help.sa.auto" = "리빌과 프로필 방문을 포함한 완전한 퍼포먼스 후, 앱은 Sync & Archive 전에 자동으로 짧은 대기 시간을 추가합니다. 이는 정상입니다 — 세션을 보호합니다.";
+"limits.help.table.cache.lost" = "Performance 캐시는 반복 방문 시 무료로 로드됩니다. 다음 경우 캐시가 손실될 수 있습니다: 앱 재설치, 계정 전환, 앱 데이터 삭제, 새 기기로 복원 — 이 경우 첫 번째 진입에 3개 액션이 소요됩니다.";
 
 "limits.help.profiles.title" = "프로필 방문 — 가장 비용이 많이 드는 행동";
 "limits.help.profiles.body" = "새 팔로워 프로필을 열 때마다 4–5회 행동이 소비됩니다. 같은 프로필의 두 번째 방문은 캐시에서 로드되므로 무료입니다. 그래서 3–4개의 다른 프로필을 빠르게 열면 예산이 소진되고 봇 탐지가 활성화될 수 있습니다.";
@@ -1285,6 +1287,7 @@
 
 "limits.help.noban.title" = "계정은 절대로 차단되지 않습니다.";
 "limits.help.noban.body" = "Instagram이 가끔 본인 확인을 요청할 수 있습니다 — 그게 전부입니다. 밴이 아니고, 경고도 아니며, 계정에 어떤 위험도 없습니다. Vault는 수백 개의 실제 Instagram 계정으로 테스트되었으며, 단 하나의 계정도 밴되거나 영구적으로 제한된 적이 없습니다. 메시지가 나타나면 위의 단계를 따르면 1분 이내에 다시 사용할 수 있습니다.";
+"limits.help.continue.button" = "이해했습니다 — Performance 열기";
 
 "relogin.nav_title" = "다시 로그인";
 "relogin.cancel" = "취소";
@@ -1471,3 +1474,25 @@
 
 "faq.q.not_instagram.question" = "관중이 왜 앱이 Instagram처럼 생겼냐고 묻습니다. 뭐라고 하나요?";
 "faq.q.not_instagram.answer" = "Performance는 Instagram 프로필의 충실한 시각적 복제본입니다 — 동일한 레이아웃, 동일한 사진, 동일한 카운터. 누군가 묻는다면 Instagram을 확인하는 중이라고 간단히 말하면 됩니다. 표시되는 데이터는 실제이며 계정에서 실시간으로 가져온 것입니다.";
+
+"upload.tip.title" = "업로드 팁";
+"upload.tip.overnight" = "업로드가 활성화된 동안 화면은 계속 켜져 있습니다 — 잠금이나 절전 모드가 절대 발생하지 않습니다. 충전기에 연결하고 밤새 실행하면 10개 이상의 뱅크를 손 하나 안 대고 채울 수 있습니다.";
+"upload.tip.background" = "폰을 사용하고 싶으신가요? 다른 앱으로 자유롭게 전환하세요. 다음 사진을 업로드할 준비가 되면 팝업 알림이 이 화면으로 안내합니다.";
+
+
+/* ── Date Force: Audience Strategy ── */
+"dfh.section.audience_title" = "관객 파악하기";
+"dfh.audience.intro" = "참가자를 선택하기 전에 앱이 자동으로 공개 프로필과 비공개 프로필을 표시합니다 — 추가 API 호출 없이.";
+"dfh.audience.badge_public" = "공개 프로필";
+"dfh.audience.badge_private" = "비공개 프로필";
+"dfh.audience.badge_note" = "파란색 \"Follow too\" = 비공개 계정. 팔로워/팔로잉에 접근 가능 — 이펙트에 사용할 수 있습니다.";
+"dfh.audience.strategy_a.title" = "대규모 관객 (4명 이상)";
+"dfh.audience.strategy_a.option1" = "공개 프로필을 가진 사람을 확인하고 팔로우하도록 안내합니다. 10명 이상의 그룹에는 항상 최소 4명의 공개 프로필이 있습니다.";
+"dfh.audience.strategy_a.option2" = "모두 팔로우하게 합니다. 목록을 열면 앱이 비공개 계정을 \"Follow too\"로 표시합니다 — 공개 계정만 선택하면 됩니다.";
+"dfh.audience.strategy_b.title" = "소규모 관객 또는 모두 비공개";
+"dfh.audience.strategy_b.body" = "관객이 적고 모두 비공개 프로필인 경우: 실제 Instagram에서 팔로우 요청을 보내도록 요청하고, 수락한 후 Vault로 전환하여 팔로워 목록에서 참가자를 선택합니다.";
+"dfh.tip.private_accounts" = "비공개 계정은 자동으로 감지됩니다. 파란색 \"Follow too\" 레이블은 비공개 계정을 나타냅니다. 전략은 \"관객 파악하기\" 섹션을 참조하세요.";
+"dfh.mockup.followers_tab" = "팔로워";
+"dfh.mockup.following_tab" = "팔로잉";
+"dfh.mockup.follow_too" = "Follow too";
+"dfh.mockup.remove_btn" = "삭제";

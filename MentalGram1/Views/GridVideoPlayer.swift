@@ -183,9 +183,12 @@ class VideoPlayerManager: ObservableObject {
             let isHorizontal = width > height * 1.05
 
             DispatchQueue.main.async {
-                self.videoGravity = isHorizontal ? .resizeAspect : .resizeAspectFill
+                // Always fill+crop the grid cell regardless of video orientation.
+                // This matches Instagram's grid behaviour: horizontal videos are
+                // zoomed/cropped to fill the cell, not letterboxed with black bars.
+                self.videoGravity = .resizeAspectFill
                 if isHorizontal {
-                    print("🎬 [VIDEO] Horizontal reel detected (\(Int(width))x\(Int(height))) — using aspect-fit")
+                    print("🎬 [VIDEO] Horizontal reel detected (\(Int(width))x\(Int(height))) — fill+crop (no letterbox)")
                 }
             }
         }

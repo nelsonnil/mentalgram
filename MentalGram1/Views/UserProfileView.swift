@@ -718,6 +718,7 @@ struct UserProfileView: View {
             }
         }
         .onDisappear {
+            print("🎩 [TRANSFER] UserProfileView.onDisappear — isCountingDown:\(isCountingDown) transferEnabled:\(followingMagic.transferEnabled) transferOffset:\(followingMagic.transferOffset) pendingOffset:\(followingMagic.pendingOffset)")
             // If deflation was still running when the user navigated away, it was
             // interrupted — clear any stale transferOffset so the own-profile phase 2
             // does not fire with an invalid (or leftover) offset.
@@ -737,8 +738,9 @@ struct UserProfileView: View {
             // Keep monitoring alive when Transfer deflation fully finished
             // so own profile can still receive the volume press for phase 2.
             if followingMagic.transferEnabled && followingMagic.transferOffset > 0 {
-                print("🎩 [TRANSFER] Keeping monitoring alive for own-profile phase 2")
+                print("🎩 [TRANSFER] Keeping monitoring alive for own-profile phase 2 (offset:\(followingMagic.transferOffset))")
             } else {
+                print("🎩 [TRANSFER] Stopping monitoring — transferEnabled:\(followingMagic.transferEnabled) offset:\(followingMagic.transferOffset)")
                 VolumeButtonMonitor.shared.stopMonitoring()
             }
             followingMagic.clear()
