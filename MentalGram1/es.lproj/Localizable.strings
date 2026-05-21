@@ -1211,6 +1211,7 @@
 "Con **Transfer Effect** activado, el truco tiene una segunda fase: el número \"robado\" del espectador aparece sumándose al perfil del mago." = "Con **Transfer Effect** activado, el truco tiene una segunda fase: el número \"robado\" del espectador aparece sumándose al perfil del mago.";
 "En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel." = "En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel.";
 "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537." = "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537.";
+"El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K)." = "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K).";
 "Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos." = "Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos.";
 "Cuando el espectador comprueba su móvil ve 500 — el número de siempre. Confirma sin saberlo que le quitaron exactamente 37." = "Cuando el espectador comprueba su móvil ve 500 — el número de siempre. Confirma sin saberlo que le quitaron exactamente 37.";
 "El perfil puede ser del espectador, de un voluntario elegido al azar, o el del propio mago." = "El perfil puede ser del espectador, de un voluntario elegido al azar, o el del propio mago.";
@@ -1220,6 +1221,7 @@
 "Memoriza el mapa de dígitos: fila 1 → 1,2,3 · fila 2 → 4,5,6 · fila 3 → 7,8,9 · fila 4 → 0 (cualquier celda)." = "Memoriza el mapa de dígitos: fila 1 → 1,2,3 · fila 2 → 4,5,6 · fila 3 → 7,8,9 · fila 4 → 0 (cualquier celda).";
 "En Performance, abre el perfil del participante. **Antes** de abrirlo, entra al grid de posts y registra los dígitos con swipes izquierda." = "En Performance, abre el perfil del participante. **Antes** de abrirlo, entra al grid de posts y registra los dígitos con swipes izquierda.";
 "El perfil del espectador/voluntario cuenta regresivamente del número inflado al real." = "El perfil del espectador/voluntario cuenta regresivamente del número inflado al real.";
+"**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K)." = "**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K).";
 "Abre tu propio perfil. Pulsa el botón de volumen de nuevo: el mismo número aparece sumándose a tu contador — como si los seguidores hubieran \"viajado\" de un perfil al otro." = "Abre tu propio perfil. Pulsa el botón de volumen de nuevo: el mismo número aparece sumándose a tu contador — como si los seguidores hubieran \"viajado\" de un perfil al otro.";
 "Asegúrate de navegar a tu propio perfil antes de pulsar el volumen la segunda vez. La app guarda el offset de la Fase 1 y lo usa en la Fase 2." = "Asegúrate de navegar a tu propio perfil antes de pulsar el volumen la segunda vez. La app guarda el offset de la Fase 1 y lo usa en la Fase 2.";
 "Señala a un participante. Sin tocar el móvil todavía." = "Señala a un participante. Sin tocar el móvil todavía.";
@@ -1660,13 +1662,41 @@
 "session.panel.open_instagram" = "Abrir Instagram";
 "session.panel.relogin_after_instagram" = "Volver a iniciar sesión";
 "common.cancel" = "Cancelar";
-"session.panel.restart.title" = "Reset de dispositivo completado";
-"session.panel.restart.message" = "Se ha creado una nueva identidad de dispositivo. Inicia sesión de nuevo ahora. Si Instagram todavía muestra una pantalla en blanco o sin internet, cierra la app completamente y ábrela una vez más.";
+"session.panel.restart.title" = "Reinicio necesario";
+"session.panel.restart.message" = "Huella del dispositivo eliminada. Cierra la app completamente y ábrela de nuevo para completar el reinicio y luego vuelve a iniciar sesión.";
 "common.ok" = "OK";
 "session.panel.stuck.title" = "El relogin no está funcionando";
 "session.panel.stuck.message" = "Tu sesión no puede restaurarse con el relogin. Normalmente significa que Instagram ha marcado este dispositivo. Usa el Logout de Emergencia a continuación para generar una nueva identidad de dispositivo y luego cierra y reabre la app.";
 "session.panel.emergency_steps.intro" = "Pasos a seguir:";
 "session.panel.emergency_step.1" = "Pulsa \"Logout de emergencia\" a continuación";
-"session.panel.emergency_step.2" = "Espera el mensaje de reset completado";
-"session.panel.emergency_step.3" = "Se crea una nueva identidad de dispositivo inmediatamente";
-"session.panel.emergency_step.4" = "Inicia sesión de nuevo. Si aún falla, cierra y reabre la app una vez";
+"session.panel.emergency_step.2" = "Cierra la app completamente — desliza hacia arriba desde la parte inferior y elimínala del multitarea";
+"session.panel.emergency_step.3" = "Vuelve a abrir la app — se creará automáticamente una nueva identidad de dispositivo";
+"session.panel.emergency_step.4" = "Inicia sesión de nuevo";
+
+// MARK: - FAQ Help View
+"guide.faq.section" = "FAQ";
+"guide.faq.row.title" = "Preguntas frecuentes";
+"guide.faq.row.subtitle" = "Comportamiento normal explicado en lenguaje sencillo — carga, refresco y más";
+"faq.help.title" = "Preguntas frecuentes";
+
+"faq.q.slow_load.question" = "¿Por qué mi perfil tarda unos segundos en cargar?";
+"faq.q.slow_load.answer" = "Al abrir Performance, la app se conecta a Instagram para obtener tus datos más recientes — publicaciones, seguidores, foto de perfil y más. Esto tarda entre 2 y 5 segundos según tu conexión y la carga de los servidores de Instagram. No hay ningún problema: es exactamente el mismo retraso que tendría la app real de Instagram con una conexión lenta.";
+"faq.q.slow_load.tip" = "Consejo para el escenario: si el público nota la carga, di «déjame abrir Instagram» mientras carga — asumirán que es latencia normal de red, porque realmente lo es.";
+
+"faq.q.refresh.question" = "¿El perfil se actualiza cada vez que abro Performance?";
+"faq.q.refresh.answer" = "Sí, una vez por sesión. La app obtiene datos frescos de Instagram y los guarda en caché para que el contenido esté actualizado. Si abres Performance de nuevo dentro de la misma ventana de 90 segundos, aparece la versión en caché al instante — sin nueva petición.";
+
+"faq.q.new_photo.question" = "Subí una foto nueva a Instagram. ¿Cuándo aparecerá?";
+"faq.q.new_photo.answer" = "Tu nueva foto aparecerá la próxima vez que abras Performance — normalmente a los 90 segundos de publicarla en Instagram. La app siempre obtiene las publicaciones más recientes al entrar, así que no necesitas hacer nada manualmente.";
+
+"faq.q.reels_slow.question" = "Los Reels y el contenido de Etiquetados parecen lentos. ¿Es normal?";
+"faq.q.reels_slow.answer" = "Los Reels y las fotos etiquetadas se cargan automáticamente en segundo plano unos segundos después de que aparezcan tus publicaciones, por lo que están listos antes de que deslices hasta esas pestañas. Una vez cargados se guardan y aparecen al instante en sesiones futuras — sin necesidad de internet.";
+
+"faq.q.no_data.question" = "¿Qué pasa si no tengo conexión cuando abro Performance?";
+"faq.q.no_data.answer" = "La última versión guardada de tu perfil se muestra inmediatamente desde la caché — publicaciones, foto de perfil, contadores y todo. La app intentará actualizar en silencio cuando vuelva la conexión, pero puedes actuar sin interrupciones incluso sin internet.";
+
+"faq.q.bot.question" = "¿Puede el uso de Vault suspender mi cuenta de Instagram?";
+"faq.q.bot.answer" = "Vault está diseñado teniendo en cuenta los límites de Instagram. Espacía las solicitudes automáticamente, respeta los tiempos de espera y nunca envía acciones masivas. En uso normal el riesgo es mínimo. Evita realizar docenas de trucos seguidos en muy poco tiempo — la app ya lo previene automáticamente.";
+
+"faq.q.not_instagram.question" = "El público pregunta por qué la app parece Instagram. ¿Qué digo?";
+"faq.q.not_instagram.answer" = "Performance es una réplica visual fiel de tu perfil de Instagram — misma disposición, mismas fotos, mismos contadores. Si alguien pregunta, puedes decir simplemente que estás revisando tu Instagram, porque los datos que se muestran son reales y en directo desde tu cuenta.";

@@ -3363,6 +3363,7 @@ struct SetDetailView: View {
             print("⏸️ [UPLOAD] Pause requested by user")
             await MainActor.run {
                 uploadManager.requestPause = false
+                uploadManager.preserveWaitOnAutoPause = false
                 uploadManager.invalidateAllTimers()
                 uploadManager.failedPhotoIndex = index
                 uploadManager.uploadPhase = .paused
@@ -3399,6 +3400,31 @@ struct SetDetailView: View {
             let seconds = remainingCooldown % 60
             print("⏰ [UPLOAD] Global cooldown active: \(minutes)m \(seconds)s remaining")
             await waitWithCountdown(seconds: remainingCooldown, label: String(localized: "Cooldown Active"))
+        }
+
+        if startFrom > 0 {
+            let preservedWait = uploadManager.remainingWaitSeconds()
+            if preservedWait > 0 {
+                print("⏳ [UPLOAD] Resuming preserved wait — \(preservedWait)s before next photo")
+                LogManager.shared.info("Upload resumed with preserved wait: \(preservedWait)s", category: .upload)
+                while true {
+                    let remaining = uploadManager.remainingWaitSeconds()
+                    if remaining <= 0 { break }
+                    if uploadManager.requestPause {
+                        if await checkPauseRequested(atPhotoIndex: startFrom) { return }
+                    }
+                    await MainActor.run {
+                        uploadManager.nextPhotoCountdown = remaining
+                        uploadManager.uploadPhase = .waiting(nextPhoto: startFrom + 1, remainingSeconds: remaining)
+                        uploadManager.currentPhaseDescription = String(format: String(localized: "Next photo in %@"), "\(remaining / 60):\(String(format: "%02d", remaining % 60))")
+                    }
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+                await MainActor.run {
+                    uploadManager.clearWaitPersistence()
+                    uploadManager.preserveWaitOnAutoPause = false
+                }
+            }
         }
 
         let initialRate = instagram.checkRateLimit()
@@ -3673,8 +3699,10 @@ struct SetDetailView: View {
                             uploadManager.currentPhaseDescription = String(format: String(localized: "Archiving photo #%d..."), index + 1)
                         }
                         
-                        // Archive
-                        let archived = try await instagram.archivePhoto(mediaId: mediaId)
+                        // Archive. We just received this mediaId from /media/configure/,
+                        // so the photo is known to exist and be public. Skip the extra
+                        // /media/{pk}/info/ pre-check to save 1 API action per upload.
+                        let archived = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
                         
                         if archived {
                             print("✅ [UPLOAD] Photo #\(index + 1) archived successfully")
@@ -3976,10 +4004,15 @@ struct SetDetailView: View {
                             uploadManager.requestPause = false
                             uploadManager.nextPhotoTimer?.invalidate()
                             uploadManager.nextPhotoTimer = nil
-                            uploadManager.clearWaitPersistence()
+                            if uploadManager.preserveWaitOnAutoPause {
+                                print("⏸️ [UPLOAD] Preserving wait countdown for Performance auto-pause")
+                                LogManager.shared.info("Upload wait preserved during Performance auto-pause", category: .upload)
+                            } else {
+                                uploadManager.clearWaitPersistence()
+                            }
                             uploadManager.uploadPhase = .paused
-                uploadManager.currentPhaseDescription = String(localized: "Upload Paused")
-                uploadManager.failedPhotoIndex = index + 1
+                            uploadManager.currentPhaseDescription = String(localized: "Upload Paused")
+                            uploadManager.failedPhotoIndex = index + 1
                             dataManager.updateSetStatus(id: currentSet.id, status: .paused)
                             uploadManager.activeTask = nil
                         }

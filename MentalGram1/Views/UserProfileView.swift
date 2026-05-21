@@ -543,6 +543,149 @@ struct UserProfileView: View {
                 }
             }
         }
+        // ── Progressive: parent updated the profile after presentation ─────────
+        // ExploreView presents `UserProfileView` early with a header-only
+        // snapshot (via `.visitedProfileHeaderReady`). When `getProfileInfo`
+        // finishes in the background, the parent reassigns `searchedProfile`
+        // with the full profile. SwiftUI does NOT call init again because
+        // `.id(profile.userId)` is unchanged, so we must reconcile `currentProfile`
+        // ourselves to keep the grid, counters, etc. in sync.
+        //
+        // We key the observation on `cachedAt` because `InstagramProfile` is
+        // not `Equatable` (would force every nested model to conform). Every
+        // reassignment in ExploreView builds a profile with a fresh `Date()`,
+        // so this triggers reliably.
+        .onChange(of: profile.cachedAt) { _ in
+            let newProfile = profile
+            // Only adopt fields that bring fresh data — never overwrite already
+            // loaded posts with an empty array, etc.
+            var merged = currentProfile
+            if currentProfile.username.isEmpty, !newProfile.username.isEmpty {
+                merged = newProfile
+            } else {
+                // Field-by-field merge: prefer non-empty new values.
+                merged = InstagramProfile(
+                    userId: newProfile.userId,
+                    username: newProfile.username.isEmpty ? currentProfile.username : newProfile.username,
+                    fullName: newProfile.fullName.isEmpty ? currentProfile.fullName : newProfile.fullName,
+                    biography: newProfile.biography.isEmpty ? currentProfile.biography : newProfile.biography,
+                    externalUrl: newProfile.externalUrl ?? currentProfile.externalUrl,
+                    profilePicURL: newProfile.profilePicURL.isEmpty ? currentProfile.profilePicURL : newProfile.profilePicURL,
+                    isVerified: newProfile.isVerified || currentProfile.isVerified,
+                    isPrivate: newProfile.isPrivate,
+                    followerCount: newProfile.followerCount > 0 ? newProfile.followerCount : currentProfile.followerCount,
+                    followingCount: newProfile.followingCount > 0 ? newProfile.followingCount : currentProfile.followingCount,
+                    mediaCount: newProfile.mediaCount > 0 ? newProfile.mediaCount : currentProfile.mediaCount,
+                    followedBy: newProfile.followedBy.isEmpty ? currentProfile.followedBy : newProfile.followedBy,
+                    isFollowing: newProfile.isFollowing,
+                    isFollowRequested: newProfile.isFollowRequested,
+                    cachedAt: newProfile.cachedAt,
+                    cachedMediaURLs: newProfile.cachedMediaURLs.isEmpty ? currentProfile.cachedMediaURLs : newProfile.cachedMediaURLs,
+                    cachedReelURLs: newProfile.cachedReelURLs.isEmpty ? currentProfile.cachedReelURLs : newProfile.cachedReelURLs,
+                    cachedTaggedURLs: newProfile.cachedTaggedURLs.isEmpty ? currentProfile.cachedTaggedURLs : newProfile.cachedTaggedURLs,
+                    cachedHighlights: newProfile.cachedHighlights.isEmpty ? currentProfile.cachedHighlights : newProfile.cachedHighlights,
+                    cachedMediaItems: newProfile.cachedMediaItems.isEmpty ? currentProfile.cachedMediaItems : newProfile.cachedMediaItems,
+                    cachedReelItems: newProfile.cachedReelItems.isEmpty ? currentProfile.cachedReelItems : newProfile.cachedReelItems,
+                    cachedNextMaxId: newProfile.cachedNextMaxId ?? currentProfile.cachedNextMaxId
+                )
+            }
+            currentProfile = merged
+
+            // Refresh the grid state if the parent brought new posts.
+            if !newProfile.cachedMediaURLs.isEmpty,
+               newProfile.cachedMediaURLs != allMediaURLs {
+                allMediaURLs = merged.cachedMediaURLs
+                for item in merged.cachedMediaItems { mediaItemsByURL[item.imageURL] = item }
+                if nextMaxId == nil { nextMaxId = merged.cachedNextMaxId }
+                loadImages()
+            }
+            print("⚡ [UI] UserProfileView synced with parent update for @\(merged.username)")
+        }
+        // ── Progressive: posts arrived while UI is already on screen ─────────
+        .onReceive(NotificationCenter.default.publisher(for: .visitedProfileMediaReady)) { note in
+            guard let notifUid = note.userInfo?["userId"] as? String,
+                  notifUid == currentProfile.userId,
+                  let items = note.userInfo?["mediaItems"] as? [InstagramMediaItem],
+                  !items.isEmpty else { return }
+            let cursor = note.userInfo?["nextMaxId"] as? String
+            let urls = items.map { $0.imageURL }
+            let updated = InstagramProfile(
+                userId: currentProfile.userId,
+                username: currentProfile.username,
+                fullName: currentProfile.fullName,
+                biography: currentProfile.biography,
+                externalUrl: currentProfile.externalUrl,
+                profilePicURL: currentProfile.profilePicURL,
+                isVerified: currentProfile.isVerified,
+                isPrivate: currentProfile.isPrivate,
+                followerCount: currentProfile.followerCount,
+                followingCount: currentProfile.followingCount,
+                mediaCount: currentProfile.mediaCount > 0 ? currentProfile.mediaCount : urls.count,
+                followedBy: currentProfile.followedBy,
+                isFollowing: currentProfile.isFollowing,
+                isFollowRequested: currentProfile.isFollowRequested,
+                cachedAt: currentProfile.cachedAt,
+                cachedMediaURLs: urls,
+                cachedReelURLs: currentProfile.cachedReelURLs,
+                cachedTaggedURLs: currentProfile.cachedTaggedURLs,
+                cachedHighlights: currentProfile.cachedHighlights,
+                cachedMediaItems: items,
+                cachedReelItems: currentProfile.cachedReelItems,
+                cachedNextMaxId: cursor ?? currentProfile.cachedNextMaxId
+            )
+            currentProfile = updated
+            allMediaURLs = urls
+            for item in items { mediaItemsByURL[item.imageURL] = item }
+            if nextMaxId == nil { nextMaxId = cursor }
+            print("⚡ [UI] Progressive visited posts painted (\(urls.count) items) for @\(currentProfile.username)")
+            loadImages()
+        }
+        // ── Progressive: "Followed by..." row arrived ────────────────────────
+        .onReceive(NotificationCenter.default.publisher(for: .visitedProfileFollowedByReady)) { note in
+            guard let notifUid = note.userInfo?["userId"] as? String,
+                  notifUid == currentProfile.userId,
+                  let followers = note.userInfo?["followedBy"] as? [InstagramFollower],
+                  !followers.isEmpty else { return }
+            let updated = InstagramProfile(
+                userId: currentProfile.userId,
+                username: currentProfile.username,
+                fullName: currentProfile.fullName,
+                biography: currentProfile.biography,
+                externalUrl: currentProfile.externalUrl,
+                profilePicURL: currentProfile.profilePicURL,
+                isVerified: currentProfile.isVerified,
+                isPrivate: currentProfile.isPrivate,
+                followerCount: currentProfile.followerCount,
+                followingCount: currentProfile.followingCount,
+                mediaCount: currentProfile.mediaCount,
+                followedBy: followers,
+                isFollowing: currentProfile.isFollowing,
+                isFollowRequested: currentProfile.isFollowRequested,
+                cachedAt: currentProfile.cachedAt,
+                cachedMediaURLs: currentProfile.cachedMediaURLs,
+                cachedReelURLs: currentProfile.cachedReelURLs,
+                cachedTaggedURLs: currentProfile.cachedTaggedURLs,
+                cachedHighlights: currentProfile.cachedHighlights,
+                cachedMediaItems: currentProfile.cachedMediaItems,
+                cachedReelItems: currentProfile.cachedReelItems,
+                cachedNextMaxId: currentProfile.cachedNextMaxId
+            )
+            currentProfile = updated
+            print("⚡ [UI] Progressive visited followedBy painted (\(followers.count)) for @\(currentProfile.username)")
+            // Preload follower thumbnails so the row doesn't ghost
+            Task { @MainActor in
+                for follower in followers {
+                    guard let urlStr = follower.profilePicURL, !urlStr.isEmpty,
+                          cachedImages[urlStr] == nil,
+                          let url = URL(string: urlStr) else { continue }
+                    if let (data, _) = try? await URLSession.shared.data(from: url),
+                       let img = UIImage(data: data) {
+                        cachedImages[urlStr] = img
+                        VisitedProfileCacheService.shared.saveImage(img, forURL: urlStr)
+                    }
+                }
+            }
+        }
         .onAppear {
             profileOpenedAt = Date()
             print("🎨 [UI] UserProfileView appeared for @\(profile.username)")

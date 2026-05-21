@@ -1200,10 +1200,12 @@
 "Con **Transfer Effect** activado, el truco tiene una segunda fase: el número \"robado\" del espectador aparece sumándose al perfil del mago." = "Con **Transfer Effect** attivato, il trucco ha una seconda fase: il numero \"rubato\" allo spettatore appare aggiungendosi al profilo del mago.";
 "En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel." = "Nella griglia di post/reel del profilo, ogni scorrimento a sinistra su una cella registra la cifra in quella posizione (1–9, poi 0). Stesso metodo di Force Reel.";
 "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537." = "Il profilo aperto mostra reale + numero_spettatore. Se il reale è 500 e lo spettatore ha detto 37, vedrà 537.";
+"El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K)." = "Il profilo aperto mostra reale + numero_spettatore. Se il reale è 500 e lo spettatore ha detto 37, vedrà 537. Nei profili con 10K+, ogni unità conta come 1K (input 6 su 200K → mostra 206K → scende a 200K).";
 "Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos." = "Premendo il tasto volume: effetto glitch (distorsione del segnale) e poi il contatore scende da 537 a 500 in ~6 secondi.";
 "Cuando el espectador comprueba su móvil ve 500 — el número de siempre. Confirma sin saberlo que le quitaron exactamente 37." = "Quando lo spettatore controlla il suo telefono vede 500 — il numero di sempre. Conferma senza saperlo che esattamente 37 sono stati rimossi.";
 "El perfil puede ser del espectador, de un voluntario elegido al azar, o el del propio mago." = "Il profilo può essere dello spettatore, di un volontario scelto a caso, o del mago stesso.";
 "El perfil del espectador/voluntario cuenta regresivamente del número inflado al real." = "Il profilo dello spettatore/volontario conta alla rovescia dal numero gonfiato al reale.";
+"**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K)." = "**Profili con 10K+.** L'offset viene moltiplicato automaticamente ×1000. Chiedi allo spettatore un numero da 1 a 10 e il conto alla rovescia scende in unità di K (206K → 200K).";
 "Abre tu propio perfil. Pulsa el botón de volumen de nuevo: el mismo número aparece sumándose a tu contador — como si los seguidores hubieran \"viajado\" de un perfil al otro." = "Apri il tuo profilo. Premi di nuovo il tasto volume: lo stesso numero appare aggiungendosi al tuo contatore — come se i follower avessero \"viaggiato\" da un profilo all'altro.";
 "Asegúrate de navegar a tu propio perfil antes de pulsar el volumen la segunda vez. La app guarda el offset de la Fase 1 y lo usa en la Fase 2." = "Assicurati di navigare al tuo profilo prima di premere il volume una seconda volta. L'app salva l'offset della Fase 1 e lo usa nella Fase 2.";
 "Señala a un participante. Sin tocar el móvil todavía." = "Indica un partecipante. Senza toccare ancora il telefono.";
@@ -1609,13 +1611,41 @@
 "session.panel.open_instagram" = "Apri Instagram";
 "session.panel.relogin_after_instagram" = "Accedi di nuovo dopo Instagram";
 "common.cancel" = "Annulla";
-"session.panel.restart.title" = "Reset dispositivo completato";
-"session.panel.restart.message" = "È stata creata una nuova identità del dispositivo. Accedi di nuovo ora. Se Instagram mostra ancora una schermata vuota o senza internet, chiudi completamente l'app e riaprila una volta.";
+"session.panel.restart.title" = "Riavvio necessario";
+"session.panel.restart.message" = "Impronta del dispositivo cancellata. Chiudi completamente l'app e riaprila per completare il reset, poi accedi di nuovo.";
 "common.ok" = "OK";
 "session.panel.stuck.title" = "Il ri-accesso non funziona";
 "session.panel.stuck.message" = "La sessione non può essere ripristinata con il ri-accesso. Di solito significa che Instagram ha contrassegnato questo dispositivo. Usa il Logout di Emergenza qui sotto per generare una nuova identità dispositivo, poi chiudi e riapri l'app.";
 "session.panel.emergency_steps.intro" = "Passaggi da seguire:";
 "session.panel.emergency_step.1" = "Tocca \"Logout di Emergenza\" qui sotto";
-"session.panel.emergency_step.2" = "Attendi il messaggio di reset completato";
-"session.panel.emergency_step.3" = "Viene creata subito una nuova identità del dispositivo";
-"session.panel.emergency_step.4" = "Accedi di nuovo. Se continua a fallire, chiudi e riapri l'app una volta";
+"session.panel.emergency_step.2" = "Chiudi completamente l'app — scorri verso l'alto dal basso e fai scorrere via l'app";
+"session.panel.emergency_step.3" = "Riapri l'app — verrà creata automaticamente una nuova identità del dispositivo";
+"session.panel.emergency_step.4" = "Accedi di nuovo";
+
+// MARK: - FAQ Help View
+"guide.faq.section" = "FAQ";
+"guide.faq.row.title" = "Domande frequenti";
+"guide.faq.row.subtitle" = "Comportamento normale spiegato in parole semplici — caricamento, aggiornamento e altro";
+"faq.help.title" = "Domande frequenti";
+
+"faq.q.slow_load.question" = "Perché il mio profilo impiega qualche secondo a caricarsi?";
+"faq.q.slow_load.answer" = "Quando apri Performance, l'app si connette a Instagram per recuperare i tuoi dati più recenti — post, follower, foto profilo e altro. Questo richiede 2–5 secondi a seconda della tua connessione e del carico dei server di Instagram. Non c'è nessun problema: è esattamente lo stesso ritardo che avrebbe la vera app di Instagram con una connessione lenta.";
+"faq.q.slow_load.tip" = "Consiglio per lo spettacolo: se il pubblico nota il caricamento, di' «fammi aprire Instagram» mentre carica — penseranno che sia normale latenza di rete, il che è genuinamente vero.";
+
+"faq.q.refresh.question" = "Il profilo si aggiorna ogni volta che apro Performance?";
+"faq.q.refresh.answer" = "Sì, una volta per sessione. L'app recupera dati aggiornati da Instagram e li salva in cache affinché il contenuto rimanga accurato. Se riapri Performance nella stessa finestra di 90 secondi, la versione in cache appare istantaneamente — senza nuova richiesta.";
+
+"faq.q.new_photo.question" = "Ho caricato una nuova foto su Instagram. Quando apparirà?";
+"faq.q.new_photo.answer" = "La tua nuova foto apparirà la prossima volta che apri Performance — tipicamente entro 90 secondi dalla pubblicazione su Instagram. L'app recupera sempre i post più recenti all'accesso, quindi non devi fare nulla manualmente.";
+
+"faq.q.reels_slow.question" = "I Reel e i contenuti Taggati sembrano lenti. È normale?";
+"faq.q.reels_slow.answer" = "I Reel e le foto taggate si caricano automaticamente in background pochi secondi dopo la comparsa dei tuoi post, così sono pronti prima che tu scorra verso quelle schede. Una volta caricati vengono salvati e appaiono immediatamente nelle sessioni future — senza bisogno di internet.";
+
+"faq.q.no_data.question" = "Cosa succede se non ho connessione internet quando apro Performance?";
+"faq.q.no_data.answer" = "L'ultima versione salvata del tuo profilo viene mostrata immediatamente dalla cache — post, foto profilo, contatori e tutto il resto. L'app tenterà silenziosamente di aggiornare quando la connessione torna, ma puoi esibirti senza interruzioni anche offline.";
+
+"faq.q.bot.question" = "L'uso di Vault può sospendere il mio account Instagram?";
+"faq.q.bot.answer" = "Vault è progettato tenendo conto dei limiti di Instagram. Distribuisce le richieste automaticamente, rispetta i tempi di recupero e non invia mai azioni di massa. Nell'uso normale il rischio è minimo. Evita di eseguire decine di trucchi di fila in pochissimo tempo — l'app lo previene già automaticamente.";
+
+"faq.q.not_instagram.question" = "Il pubblico chiede perché l'app sembra Instagram. Cosa dico?";
+"faq.q.not_instagram.answer" = "Performance è una replica visiva fedele del tuo profilo Instagram — stesso layout, stesse foto, stessi contatori. Se qualcuno chiede, puoi semplicemente dire che stai controllando il tuo Instagram, perché i dati mostrati sono reali e in tempo reale dal tuo account.";

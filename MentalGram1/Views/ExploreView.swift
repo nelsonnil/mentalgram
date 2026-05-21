@@ -273,6 +273,37 @@ struct ExploreView: View {
         }
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
         .preferredColorScheme(.light) // CRITICAL: Explore must look exactly like Instagram (light mode)
+        // ── Progressive: visited profile header arrived ───────────────────────
+        // `InstagramService.getProfileInfo` posts this as soon as the searched
+        // user's header (avatar, username, counters) is ready, before the
+        // posts + followers chain finishes. Present `UserProfileView`
+        // immediately with the partial snapshot so the user does not stare at
+        // the search-result spinner for 4-5 extra seconds. The Task keeps
+        // running in the background and `UserProfileView` listens for the
+        // subsequent `.visitedProfileMediaReady` / `.visitedProfileFollowedByReady`
+        // notifications to fill the grid and the "Followed by" row.
+        .onReceive(NotificationCenter.default.publisher(for: .visitedProfileHeaderReady)) { note in
+            guard let snapshot = note.userInfo?["snapshot"] as? InstagramProfile,
+                  let userId = note.userInfo?["userId"] as? String else { return }
+            // Only adopt the snapshot if it matches the profile we are
+            // currently loading — otherwise a stale notification from a
+            // previous tap could re-open Explore on the wrong profile.
+            guard loadingProfileUserId == userId else {
+                print("⚡ [EXPLORE] Ignoring visited header for uid \(userId) (loading \(loadingProfileUserId ?? "nil"))")
+                return
+            }
+            if showingUserProfile, searchedProfile?.userId == userId {
+                // Already presented (e.g. via cache hit) — just refresh the
+                // header. UserProfileView's onChange will reconcile.
+                searchedProfile = snapshot
+            } else {
+                searchedProfile = snapshot
+                withAnimation { showingUserProfile = true }
+                loadingProfileUserId = nil
+                print("⚡ [EXPLORE] Visited profile presented early — @\(snapshot.username) (background fetch still running)")
+                LogManager.shared.info("Visited profile UI presented with progressive header — uid:\(userId) @\(snapshot.username)", category: .general)
+            }
+        }
         .onAppear {
             // If cache has old count (not multiple of 3), clear and force full reload
             let currentCount = exploreManager.exploreMedia.count
@@ -377,6 +408,8 @@ struct ExploreView: View {
     }
     
     private func loadUserProfile(result: UserSearchResult) {
+        dismissSearchKeyboard()
+
         let userId = result.userId
         guard loadingProfileUserId == nil else { return }
 
@@ -434,8 +467,6 @@ struct ExploreView: View {
             return
         }
 
-        isSearchFieldFocused = false
-
         print("🔍 [UI] Loading profile for user ID: \(userId)")
         
         Task {
@@ -491,6 +522,17 @@ struct ExploreView: View {
                 }
             }
         }
+    }
+
+    private func dismissSearchKeyboard() {
+        searchDebounceTask?.cancel()
+        isSearchFieldFocused = false
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
     
     // MARK: - Secret Input Logic
@@ -1122,4 +1164,47 @@ extension Notification.Name {
     /// Posted by ExploreView when a secret-input word reveal finishes successfully.
     /// userInfo["mediaIds"] → [String]  (the unarchived media IDs)
     static let exploreWordRevealComplete = Notification.Name("com.vault.exploreWordRevealComplete")
+
+    /// Posted by `InstagramService.getProfileInfo` for own profile as soon as the
+    /// header (username, profile pic, follower/following/media counts) is ready,
+    /// BEFORE the heavy media/reels/tagged/highlights chain starts. Lets the
+    /// Performance view render the header progressively while the rest loads.
+    /// userInfo["snapshot"] → `InstagramProfile`  (header-only; media arrays empty)
+    static let ownProfileHeaderReady = Notification.Name("com.vault.ownProfileHeaderReady")
+
+    /// Posted as soon as `getFollowedByUsers` returns for own profile, before the
+    /// posts/reels/tagged calls. Lets PerformanceView paint the "Followed by..."
+    /// row right away.
+    /// userInfo["followedBy"] → `[InstagramFollower]`
+    static let ownProfileFollowedByReady = Notification.Name("com.vault.ownProfileFollowedByReady")
+
+    /// Posted as soon as the first page of posts arrives from `getUserMediaItems`
+    /// for own profile, before reels/tagged/highlights. Lets PerformanceView
+    /// paint the grid progressively just like the search-profile view does.
+    /// userInfo["mediaItems"] → `[InstagramMediaItem]`
+    /// userInfo["nextMaxId"]  → `String?`
+    static let ownProfileMediaReady = Notification.Name("com.vault.ownProfileMediaReady")
+
+    /// Posted by `InstagramService.getProfileInfo` for a visited (searched)
+    /// profile as soon as the header (username, profile pic, follower /
+    /// following / media counts) is ready, BEFORE the media + followers chain.
+    /// Lets ExploreView present `UserProfileView` immediately with a partial
+    /// header while the grid loads in the background.
+    /// userInfo["userId"]   → `String`
+    /// userInfo["snapshot"] → `InstagramProfile`  (header-only; media arrays empty)
+    static let visitedProfileHeaderReady = Notification.Name("com.vault.visitedProfileHeaderReady")
+
+    /// Posted as soon as the posts grid arrives for a visited profile (after
+    /// `getUserMediaItems`), before the followers preview call. Lets
+    /// UserProfileView paint thumbnails before `getProfileInfo` returns.
+    /// userInfo["userId"]     → `String`
+    /// userInfo["mediaItems"] → `[InstagramMediaItem]`
+    /// userInfo["nextMaxId"]  → `String?`
+    static let visitedProfileMediaReady = Notification.Name("com.vault.visitedProfileMediaReady")
+
+    /// Posted as soon as the "followed by" preview row arrives for a visited
+    /// profile (after `getFollowedByUsers`).
+    /// userInfo["userId"]     → `String`
+    /// userInfo["followedBy"] → `[InstagramFollower]`
+    static let visitedProfileFollowedByReady = Notification.Name("com.vault.visitedProfileFollowedByReady")
 }

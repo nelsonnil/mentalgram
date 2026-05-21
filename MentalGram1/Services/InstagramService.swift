@@ -45,6 +45,17 @@ class InstagramService: ObservableObject {
     /// Persisted so the counter survives app restarts during a stuck-login loop.
     @Published var reloginFailCount: Int = UserDefaults.standard.integer(forKey: "relogin_fail_count")
 
+    /// Coalesces duplicate foreground validation calls. Performance entry and the
+    /// first-time loader can appear in the same second; without this they both hit
+    /// /accounts/current_user/ and spend two actions from the same hourly budget.
+    private var sessionValidationInFlight = false
+    private var lastSessionValidationResult: SessionStatus?
+
+    /// Coalesces duplicate own-profile loads. A fresh install/no-cache path can show
+    /// the blocking loader while PerformanceView also appears, otherwise we fetch the
+    /// full own profile twice (followers/feed/reels/tagged/highlights duplicated).
+    private var ownProfileInfoTask: Task<InstagramProfile?, Error>?
+
     /// Sets session as expired with context and persists across app restarts.
     @MainActor
     func markSessionExpired(context: SessionExpiredContext) {
@@ -223,8 +234,17 @@ class InstagramService: ObservableObject {
             self.isLoggedIn = true
             self.sessionRestoredAt = Date()  // Mark cold-start time for warm-up delay
             print("✅ Session restored for @\(saved.username)")
-            // Resume any incomplete full-profile pre-load for this account.
-            ProfileFullLoaderService.shared.notifyLoggedIn(userId: saved.userId)
+
+            // CRITICAL: HTTPCookieStorage.shared lives in the app's data container,
+            // which iOS WIPES on reinstall — but the Keychain (ThisDeviceOnly)
+            // survives. So after a reinstall + iCloud restore we can end up with
+            // `isLoggedIn=true` and a usable sessionId in Keychain, while
+            // HTTPCookieStorage is empty → every Instagram request goes out without
+            // `sessionid` / `csrftoken` / `ds_user_id` cookies and IG replies with
+            // 200 status:fail (looks identical to a soft-block).
+            // Rebuild the 3 critical cookies from the persisted session so URLSession
+            // can authenticate the very first call after relaunch.
+            rehydrateInstagramCookiesFromSessionIfNeeded(saved)
 
             // Restore persisted session-expired state so overlay appears immediately
             // after an app restart without needing a new API call.
@@ -243,7 +263,86 @@ class InstagramService: ObservableObject {
         // Start network monitoring
         startNetworkMonitoring()
     }
-    
+
+    // MARK: - Cookie Rehydration (post-restart / post-reinstall)
+
+    /// Rebuilds the 3 critical Instagram cookies (`sessionid`, `csrftoken`,
+    /// `ds_user_id`) inside `HTTPCookieStorage.shared` from the persisted
+    /// `InstagramSession`. We only do this when:
+    ///   • The Keychain has a valid session (sessionId / userId non-empty), AND
+    ///   • `HTTPCookieStorage` is missing `sessionid` for instagram.com.
+    ///
+    /// Background: `HTTPCookieStorage` lives in the app's data container so a
+    /// reinstall (Fresh install detected) leaves it empty, even though the
+    /// Keychain survives. Without these cookies every `apiRequest()` call goes
+    /// out unauthenticated and IG replies with HTTP 200 + `status:"fail"` —
+    /// looks identical to a soft-block.
+    private func rehydrateInstagramCookiesFromSessionIfNeeded(_ session: InstagramSession) {
+        guard !session.sessionId.isEmpty, !session.userId.isEmpty else {
+            // Keychain still claims `isLoggedIn=true` but the bytes inside are
+            // unusable. Without sessionId we can never authenticate. Mark the
+            // session as expired so the UI shows the re-login flow instead of
+            // an eternal skeleton.
+            print("🍪 [REHYDRATE] Restored session has empty sessionId/userId — marking session expired so user can re-login")
+            LogManager.shared.warning(
+                "Cookie rehydrate skipped — restored session has empty sessionId/userId; forcing re-login overlay",
+                category: .auth
+            )
+            UserDefaults.standard.set(true, forKey: "instagram_session_expired")
+            UserDefaults.standard.set(SessionExpiredContext.normal.rawValue, forKey: "instagram_session_expired_ctx")
+            self.isSessionExpired = true
+            self.sessionExpiredContext = .normal
+            return
+        }
+
+        let storage = HTTPCookieStorage.shared
+        let igURL = URL(string: "https://www.instagram.com")!
+        let existing = storage.cookies(for: igURL) ?? []
+
+        let hasSessionId = existing.contains { $0.name == "sessionid" && !$0.value.isEmpty }
+        let hasCsrf     = existing.contains { $0.name == "csrftoken"  && !$0.value.isEmpty }
+        let hasDsUserId = existing.contains { $0.name == "ds_user_id" && !$0.value.isEmpty }
+
+        if hasSessionId && hasCsrf && hasDsUserId {
+            print("🍪 [REHYDRATE] HTTPCookieStorage already has sessionid + csrftoken + ds_user_id — no rebuild needed")
+            return
+        }
+
+        print("🍪 [REHYDRATE] HTTPCookieStorage missing IG auth cookies (sessionid=\(hasSessionId) csrftoken=\(hasCsrf) ds_user_id=\(hasDsUserId)) — rebuilding from Keychain session")
+
+        // Cookies must be valid for ALL instagram.com subdomains (www., i., etc.)
+        // because the app hits both. Using `.instagram.com` as Domain achieves that.
+        let expires = Date().addingTimeInterval(60 * 60 * 24 * 365)  // 1 year
+
+        let cookieSpecs: [(String, String)] = [
+            ("sessionid", session.sessionId),
+            ("csrftoken", session.csrfToken),
+            ("ds_user_id", session.userId)
+        ]
+
+        var built = 0
+        for (name, value) in cookieSpecs where !value.isEmpty {
+            let props: [HTTPCookiePropertyKey: Any] = [
+                .name: name,
+                .value: value,
+                .domain: ".instagram.com",
+                .path: "/",
+                .expires: expires,
+                .secure: true
+            ]
+            if let cookie = HTTPCookie(properties: props) {
+                storage.setCookie(cookie)
+                built += 1
+            }
+        }
+
+        print("🍪 [REHYDRATE] Rebuilt \(built) cookie(s) in HTTPCookieStorage from restored session for ds_user_id=\(session.userId)")
+        LogManager.shared.info(
+            "Rehydrated \(built) IG cookie(s) in HTTPCookieStorage after Keychain restore (fresh install / data-container wipe recovery)",
+            category: .auth
+        )
+    }
+
     // MARK: - Network Monitoring
     
     private func startNetworkMonitoring() {
@@ -599,11 +698,29 @@ class InstagramService: ObservableObject {
         guard isLoggedIn else { return .expired }
         guard isConnected else { return .networkError }
 
+        if sessionValidationInFlight {
+            print("🔁 [SESSION] Validation already in flight — waiting for shared result")
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if !sessionValidationInFlight {
+                    return lastSessionValidationResult ?? .networkError
+                }
+            }
+            LogManager.shared.warning("validateSession shared wait timed out — returning networkError", category: .auth)
+            return .networkError
+        }
+        sessionValidationInFlight = true
+
         // Track whether the session was ALREADY expired before this call (persisted
         // across a restart). If so, and the call confirms the session is still dead,
         // we auto-logout so the app goes straight to LoginView instead of showing
         // the confusing overlay with multiple buttons.
         let wasAlreadyExpired = isSessionExpired
+        func finish(_ status: SessionStatus) -> SessionStatus {
+            lastSessionValidationResult = status
+            sessionValidationInFlight = false
+            return status
+        }
 
         print("🔍 [SESSION] Validating session...")
         do {
@@ -634,39 +751,44 @@ class InstagramService: ObservableObject {
                         resetUploadPhaseAfterRelogin()
                     }
                     print("✅ [SESSION] Session is valid (hasUser:\(hasUser) statusOk:\(statusOk))")
-                    return .valid
+                    return finish(.valid)
                 }
 
-                // 200 but response explicitly signals logged-out state.
-                // Emit diagnostic context so we can tell apart device-flag, expired-cookies,
-                // and explicit login_required scenarios from a single log export.
+                // HTTP 200 + status=fail is not always logout. Instagram sometimes returns
+                // {"message":"We're sorry, but something went wrong.","status_code":"200","status":"fail"}
+                // from /accounts/current_user/ while the same freshly captured cookies keep
+                // working for other endpoints. Treat only explicit login_required (or real
+                // 401/403 handled by apiRequest) as expired; generic 200/fail is a transient
+                // validation/network-format problem and must not wipe the session or device.
                 let bodyPreview = String(data: data.prefix(300), encoding: .utf8)?
                     .replacingOccurrences(of: "\n", with: " ") ?? "<binary>"
                 let responseMessage = (json["message"] as? String) ?? ""
                 let responseStatusCode = (json["status_code"] as? String) ?? ""
                 let cookieSummary = currentCookieSummary()
                 let deviceIdPrefix = String(deviceId.prefix(8))
-                print("⚠️ [SESSION] 200 but response indicates logged-out (keys:\(snippet))")
-                LogManager.shared.warning("validateSession 200 but logged-out indicator (keys:\(snippet))", category: .auth)
+                print("⚠️ [SESSION] 200 but validation returned fail (keys:\(snippet))")
+                LogManager.shared.warning("validateSession 200/fail indicator (keys:\(snippet))", category: .auth)
                 LogManager.shared.warning(
                     "Session diagnostic | device:\(deviceIdPrefix)… status_code:\(responseStatusCode) message:\(responseMessage) cookies:\(cookieSummary) body:\(bodyPreview)",
                     category: .auth
                 )
-                await markSessionExpired(context: .normal)
                 if explicitLoginRequired {
                     print("🔑 [SESSION] login_required confirmed → auto-logout to LoginView")
                     LogManager.shared.warning("Auto-logout: explicit login_required from Instagram", category: .auth)
+                    await markSessionExpired(context: .normal)
                     await MainActor.run { logout() }
-                } else if wasAlreadyExpired {
-                    print("🔑 [SESSION] Pre-expired + confirmed dead (200 but logged-out) → auto-logout")
-                    LogManager.shared.warning("Auto-logout: pre-expired session confirmed dead via 200/logged-out", category: .auth)
-                    await MainActor.run { logout() }
+                    return finish(.expired)
                 }
-                return .expired
+
+                if wasAlreadyExpired {
+                    print("ℹ️ [SESSION] Pre-expired flag + generic 200/fail — keeping session, returning networkError")
+                    LogManager.shared.warning("Pre-expired flag ignored for generic 200/fail validation response", category: .auth)
+                }
+                return finish(.networkError)
             }
             // JSON parse failed entirely — treat as network/format error, not expiry
             print("⚠️ [SESSION] Could not parse response — treating as network error")
-            return .networkError
+            return finish(.networkError)
         } catch InstagramError.sessionExpired {
             // Context already set by apiRequest — only set if not already marked
             if !isSessionExpired { await markSessionExpired(context: .normal) }
@@ -679,16 +801,16 @@ class InstagramService: ObservableObject {
                 LogManager.shared.warning("Auto-logout: pre-expired session confirmed dead via 403", category: .auth)
                 await MainActor.run { logout() }
             }
-            return .expired
+            return finish(.expired)
         } catch InstagramError.challengeRequired {
             print("⚠️ [SESSION] Challenge required during validation")
-            return .challenged
+            return finish(.challenged)
         } catch InstagramError.networkError {
             print("📶 [SESSION] Network error during validation")
-            return .networkError
+            return finish(.networkError)
         } catch {
             print("⚠️ [SESSION] Validation error: \(error) — assuming network issue")
-            return .networkError
+            return finish(.networkError)
         }
     }
 
@@ -786,7 +908,7 @@ class InstagramService: ObservableObject {
             "WebView login captured \(igCookies.count) IG cookie(s) — sessionid:\(sessionId.isEmpty ? "missing" : "len=\(sessionId.count)") ds_user_id:\(userId.isEmpty ? "missing" : userId) csrftoken:\(csrfToken.isEmpty ? "missing" : "set") device:\(String(deviceId.prefix(8)))…",
             category: .auth
         )
-
+        
         guard !sessionId.isEmpty, !userId.isEmpty else {
             print("❌ Missing required cookies")
             LogManager.shared.warning("WebView login finished but sessionid/ds_user_id are empty — session NOT stored", category: .auth)
@@ -807,30 +929,37 @@ class InstagramService: ObservableObject {
             isLoggedIn: true
         )
         
-        // Fetch username
+        // IMPORTANT: clear the persisted "session expired" state before any post-login
+        // API call. A re-login can happen while `isSessionExpired` is still true from a
+        // previous run; if we wait until after fetchUsername(), apiRequest() blocks the
+        // username fetch locally with `sessionExpired` and the app falls into a false
+        // logout loop even though WebView just captured a fresh sessionid.
         Task {
+            await MainActor.run {
+                self.isLoggedIn = true
+                self.clearSessionExpired()
+                self.isSessionChallenged = false
+                self.hasRecentApiError = false
+                KeychainService.shared.saveSession(self.session)
+            }
+
+            // Fetch username after the stale expired flag has been cleared.
             if let username = await fetchUsername() {
                 await MainActor.run {
                     self.session.username = username
-                    self.isLoggedIn = true
-                    self.clearSessionExpired()
                     KeychainService.shared.saveSession(self.session)
                     print("✅ Logged in as @\(username)")
                     self.resetUploadPhaseAfterRelogin()
                 }
                 InstagramSafetyGate.shared.resetPerformanceThrottle()
-                // Trigger full profile pre-load for this account (resets if account changed).
-                ProfileFullLoaderService.shared.notifyLoggedIn(userId: self.session.userId)
+                // ProfileFullLoaderService is deprecated — see init() comment.
             } else {
                 await MainActor.run {
-                    self.isLoggedIn = true
-                    self.clearSessionExpired()
                     KeychainService.shared.saveSession(self.session)
                     self.resetUploadPhaseAfterRelogin()
                 }
                 InstagramSafetyGate.shared.resetPerformanceThrottle()
-                // Trigger full profile pre-load for this account (resets if account changed).
-                ProfileFullLoaderService.shared.notifyLoggedIn(userId: self.session.userId)
+                // ProfileFullLoaderService is deprecated — see init() comment.
             }
         }
     }
@@ -1048,7 +1177,7 @@ class InstagramService: ObservableObject {
         print("🍪 [COOKIE] Sending \(parts.count) cookies: \(seen.sorted().joined(separator: ", "))")
         return header
     }
-
+    
     private func buildHeaders() -> [String: String] {
         let device = DeviceInfo.shared
         
@@ -1090,8 +1219,13 @@ class InstagramService: ObservableObject {
             "X-Bloks-Version-Id": bloksVersionId,
             "X-Bloks-Is-Layout-RTL": "false",
             
-            // ANTI-BOT: WWW Claim — updated from response headers after each successful call
-            "X-IG-WWW-Claim": wwwClaim,
+            // ANTI-BOT: WWW Claim — updated from response headers after each successful call.
+            // IMPORTANT: only send when we hold a real claim. Sending "0" on every
+            // request causes Instagram to reject ALL endpoints (bio, notes, profile…)
+            // with HTTP 200 + status:fail, because the server validates this token.
+            // The real Instagram app omits the header entirely until it has a valid value.
+            // Omitting it lets IG generate and return a fresh claim on the next response.
+            // "X-IG-WWW-Claim" is added below, conditionally.
             
             // Standard headers
             "X-Requested-With": "XMLHttpRequest",
@@ -1101,6 +1235,15 @@ class InstagramService: ObservableObject {
             "Cookie": buildCookieHeader()
         ]
         
+        // Only include X-IG-WWW-Claim when we hold a real token.
+        // When the claim is "0" (fresh install / wiped UserDefaults), omit the header
+        // entirely — the real Instagram app does the same on first launch. Instagram
+        // will respond with a fresh claim token in X-IG-Set-WWW-Claim which we capture.
+        // Sending "0" causes all endpoints to return HTTP 200 + status:fail immediately.
+        if wwwClaim != "0" {
+            headers["X-IG-WWW-Claim"] = wwwClaim
+        }
+
         // ANTI-BOT: Add X-MID if available (Machine ID, set by Instagram after first request)
         if let mid = UserDefaults.standard.string(forKey: "instagram_mid") {
             headers["X-MID"] = mid
@@ -1170,6 +1313,14 @@ class InstagramService: ObservableObject {
         let recentActions = actionTimestamps.filter { now.timeIntervalSince($0) < 3600 }
         let remaining = max(0, maxActionsPerHour - recentActions.count)
         return (recentActions.count >= maxActionsPerHour, recentActions.count, remaining)
+    }
+
+    /// True when only user-critical actions should be allowed. Performance entry,
+    /// first-time preload, reels/tagged/highlights, and silent refreshes use this to
+    /// avoid spending the last actions in the hourly budget on optional cache work.
+    var shouldUseCacheOnlyForOptionalCalls: Bool {
+        let rate = checkRateLimit()
+        return rate.actionsUsed >= 45 || rate.remaining <= 10
     }
 
     /// Returns the moment when ALL actions in the current rolling window will have
@@ -1466,16 +1617,62 @@ class InstagramService: ObservableObject {
         // ── X-IG-WWW-Claim ───────────────────────────────────────────────────────
         // Instagram sends the updated claim in response headers.
         // Without the real value, newer endpoints (Notes, Direct…) return status:fail.
-        let claimHeaders = ["ig-set-ig-u-ig-igHeader", "X-IG-WWW-Claim", "ig-set-ig-www-claim"]
-        for headerName in claimHeaders {
-            if let claim = httpResponse.allHeaderFields[headerName] as? String,
-               !claim.isEmpty, claim != "0", claim != wwwClaim {
-                print("🔑 [CLAIM] X-IG-WWW-Claim updated: \(String(claim.prefix(20)))...")
-                wwwClaim = claim
-                // Persist across app restarts — Notes endpoint requires a non-zero claim.
-                UserDefaults.standard.set(claim, forKey: "ig_www_claim")
+        //
+        // ── BUG HISTORY (May-2026) ──────────────────────────────────────────────
+        // BUG 1: Earlier code looked up headers with `httpResponse.allHeaderFields[name]`,
+        // which is a Dictionary lookup → case-SENSITIVE. Instagram's actual response
+        // header is `X-IG-Set-WWW-Claim` (with the `Set-` segment), and the casing
+        // of the key returned by URLSession varies between iOS versions and TLS
+        // backends (HTTP/2 vs HTTP/3 routes can normalise to lowercase, others not).
+        // The old code searched for "X-IG-WWW-Claim" (no Set-) and "ig-set-ig-www-claim"
+        // (lowercase) → neither matched the server's exact casing → claim never
+        // captured → Notes endpoint kept rejecting requests with claim=0 forever.
+        //
+        // BUG 2 (root cause of the full outage): When wwwClaim == "0", buildHeaders()
+        // was including `X-IG-WWW-Claim: 0` on EVERY request — bio, notes, profile GET,
+        // etc. Instagram rejects ALL endpoints that receive this invalid claim with
+        // HTTP 200 + status:fail, creating a complete deadlock: every call failed,
+        // including the GET to /accounts/current_user/ that would refresh the claim.
+        // Fix: buildHeaders() now omits the header entirely when wwwClaim == "0".
+        // Instagram treats the missing header like a first-launch client and returns
+        // a fresh claim token in the first successful response.
+        //
+        // Fix for BUG 1: use httpResponse.value(forHTTPHeaderField:), which is
+        // case-insensitive on iOS 13+, and the correct header name `X-IG-Set-WWW-Claim`.
+        // Fall back to a lowercase-key scan for unknown future header name variants.
+        // ─────────────────────────────────────────────────────────────────────────
+        var capturedClaim: String? = nil
+        let claimHeaderCandidates = [
+            "X-IG-Set-WWW-Claim",   // canonical — used by Instagram API responses
+            "x-ig-set-www-claim",   // lowercase variant (HTTP/2/3 normalisation)
+            "X-IG-WWW-Claim",       // legacy/echo variant (kept for safety)
+        ]
+        for name in claimHeaderCandidates {
+            if let val = httpResponse.value(forHTTPHeaderField: name),
+               !val.isEmpty, val != "0" {
+                capturedClaim = val
                 break
             }
+        }
+        // Last-resort: scan all header fields by lowercased key in case Instagram
+        // introduces a new variant we haven't seen yet (e.g. "ig-set-claim").
+        if capturedClaim == nil {
+            for (key, value) in httpResponse.allHeaderFields {
+                if let k = key as? String,
+                   let v = value as? String,
+                   k.lowercased().contains("www-claim") || k.lowercased().contains("ig-claim"),
+                   !v.isEmpty, v != "0" {
+                    print("🔑 [CLAIM] Found unknown claim-like header: \(k) — capturing")
+                    capturedClaim = v
+                    break
+                }
+            }
+        }
+
+        if let claim = capturedClaim, claim != wwwClaim {
+            print("🔑 [CLAIM] X-IG-WWW-Claim updated: \(String(claim.prefix(20)))…")
+            wwwClaim = claim
+            UserDefaults.standard.set(claim, forKey: "ig_www_claim")
         }
     }
     
@@ -1603,7 +1800,7 @@ class InstagramService: ObservableObject {
         }
         
         let duration = String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - requestStart) * 1000)
-
+        
         guard let httpResponse = response as? HTTPURLResponse else {
             throw InstagramError.invalidResponse
         }
@@ -1774,7 +1971,7 @@ class InstagramService: ObservableObject {
             print("📷 [MEDIA] Response is not a JSON dictionary")
             return ([], nil)
         }
-
+        
         let items = json["items"] as? [[String: Any]] ?? []
         print("📷 [MEDIA] Response keys: \(json.keys.sorted().joined(separator: ", "))")
         print("📷 [MEDIA] items count: \(items.count), more_available: \(json["more_available"] ?? "nil")")
@@ -2504,26 +2701,166 @@ class InstagramService: ObservableObject {
     ) async throws -> InstagramProfile? {
         let uid = userId ?? session.userId
         let isOwnProfile = (uid == session.userId)
+
+        if isOwnProfile, usernameHint == nil, fullNameHint == nil, profilePicURLHint == nil, isVerifiedHint == nil {
+            if let existing = ownProfileInfoTask {
+                print("🔁 [PROFILE] Own profile load already in flight — reusing shared task")
+                return try await existing.value
+            }
+
+            let task = Task<InstagramProfile?, Error> {
+                try await self.fetchProfileInfoUnshared(
+                    userId: userId,
+                    usernameHint: usernameHint,
+                    fullNameHint: fullNameHint,
+                    profilePicURLHint: profilePicURLHint,
+                    isVerifiedHint: isVerifiedHint
+                )
+            }
+            ownProfileInfoTask = task
+            defer { ownProfileInfoTask = nil }
+            return try await task.value
+        }
+
+        return try await fetchProfileInfoUnshared(
+            userId: userId,
+            usernameHint: usernameHint,
+            fullNameHint: fullNameHint,
+            profilePicURLHint: profilePicURLHint,
+            isVerifiedHint: isVerifiedHint
+        )
+    }
+
+    private func fetchProfileInfoUnshared(
+        userId: String? = nil,
+        usernameHint: String? = nil,
+        fullNameHint: String? = nil,
+        profilePicURLHint: String? = nil,
+        isVerifiedHint: Bool? = nil
+    ) async throws -> InstagramProfile? {
+        let uid = userId ?? session.userId
+        let isOwnProfile = (uid == session.userId)
         print("📊 [PROFILE] Fetching complete profile for user ID: \(uid)")
         print("📊 [PROFILE] Is own profile: \(isOwnProfile)")
         LogManager.shared.info("Profile header fetch started — uid:\(uid) own:\(isOwnProfile)", category: .profile)
-        
-        let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
-        
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("❌ [PROFILE] Failed to parse JSON response")
-            let rawStr = String(data: data.prefix(500), encoding: .utf8) ?? "(binary)"
-            LogManager.shared.error("getProfileInfo: JSON parse failed — raw: \(rawStr)", category: .api)
-            return nil
+
+        // ── FAST-PATH for accounts/IPs where `/users/{id}/info/` is permanently broken ──
+        // Some accounts get this endpoint stuck returning a 25-byte
+        // `{"user":{},"status":"ok"}` response. The escalation block below already
+        // recovers via `web_profile_info`, but that path costs:
+        //   /users/info/  (≈0.5s wasted)  +  /accounts/current_user/ (≈0.5s wasted)  +
+        //   /feed/user/?count=1 (≈1s, only to discover username)
+        // = ~2 extra seconds on every Performance entry.
+        //
+        // We track this at two granularities:
+        //   • per-uid (`instagram_users_info_broken_<uid>`) — owner-strong signal
+        //   • globally (`instagram_users_info_globally_broken_ts`) — IP/account-wide:
+        //     the moment we see ANY uid replying with ≤50 B we assume the endpoint
+        //     is account-broken (the symptom always affects every uid at once).
+        //     Lets us fast-path searched profiles too without having to first call
+        //     and waste an action on each new uid we encounter.
+        let usersInfoBrokenKey = "instagram_users_info_broken_\(uid)"
+        let usersInfoBrokenTs = UserDefaults.standard.double(forKey: usersInfoBrokenKey)
+        let usersInfoBrokenIsFresh = usersInfoBrokenTs > 0
+            && (Date().timeIntervalSince1970 - usersInfoBrokenTs) < 7 * 24 * 3600  // 7 days
+
+        let usersInfoGloballyBrokenKey = "instagram_users_info_globally_broken_ts"
+        let usersInfoGloballyBrokenTs = UserDefaults.standard.double(forKey: usersInfoGloballyBrokenKey)
+        let usersInfoGloballyBroken = usersInfoGloballyBrokenTs > 0
+            && (Date().timeIntervalSince1970 - usersInfoGloballyBrokenTs) < 24 * 3600  // 1 day
+
+        var user: [String: Any]
+        var usedFastPath = false
+
+        if isOwnProfile && usersInfoBrokenIsFresh && !session.username.isEmpty {
+            print("⚡ [PROFILE] Fast-path: /users/info marked broken for uid \(uid) — going straight to web_profile_info for @\(session.username)")
+            LogManager.shared.info("Profile fast-path: skipping /users/info (cached broken \(Int(Date().timeIntervalSince1970 - usersInfoBrokenTs))s ago) — calling web_profile_info for @\(session.username)", category: .profile)
+
+            if let webUser = await fetchWebProfileInfoFallback(username: session.username) {
+                user = webUser
+                if extractProfileUserId(from: user) == "0" {
+                    user["pk"] = uid
+                    user["pk_id"] = uid
+                    user["id"] = uid
+                }
+                usedFastPath = true
+                print("⚡ [PROFILE] Fast-path succeeded — header ready in 1 call: followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"])) media:\(Self.robustInt(user["media_count"]))")
+                LogManager.shared.success("Profile fast-path web_profile_info OK — @\(user["username"] as? String ?? session.username) followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"]))", category: .profile)
+            } else {
+                print("⚡ [PROFILE] Fast-path failed — falling back to /users/info chain")
+                LogManager.shared.warning("Profile fast-path: web_profile_info returned nil — falling back to /users/info", category: .profile)
+                user = [:]
+            }
+        } else if !isOwnProfile && usersInfoGloballyBroken,
+                  let hint = usernameHint?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !hint.isEmpty {
+            // Searched profile fast-path: we have the username from the search
+            // results AND we know /users/info is account-globally broken right
+            // now. Skip the inevitable 25-byte response (costs 1 action of our
+            // 55/h budget) and ask web_profile_info directly. It returns the
+            // complete header + counts in one shot.
+            print("⚡ [PROFILE] Fast-path (searched): /users/info globally broken (\(Int(Date().timeIntervalSince1970 - usersInfoGloballyBrokenTs))s ago) — calling web_profile_info for @\(hint)")
+            LogManager.shared.info("Searched-profile fast-path: skipping /users/info, calling web_profile_info for @\(hint)", category: .profile)
+
+            if let webUser = await fetchWebProfileInfoFallback(username: hint) {
+                user = webUser
+                if extractProfileUserId(from: user) == "0" {
+                    user["pk"] = uid
+                    user["pk_id"] = uid
+                    user["id"] = uid
+                }
+                if let pic = profilePicURLHint, !pic.isEmpty, (user["profile_pic_url"] as? String ?? "").isEmpty {
+                    user["profile_pic_url"] = pic
+                }
+                if let fn = fullNameHint, !fn.isEmpty, (user["full_name"] as? String ?? "").isEmpty {
+                    user["full_name"] = fn
+                }
+                if let v = isVerifiedHint, user["is_verified"] == nil {
+                    user["is_verified"] = v
+                }
+                usedFastPath = true
+                print("⚡ [PROFILE] Searched fast-path succeeded — @\(user["username"] as? String ?? hint) followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"])) media:\(Self.robustInt(user["media_count"]))")
+                LogManager.shared.success("Searched-profile fast-path OK — @\(user["username"] as? String ?? hint) followers:\(Self.robustInt(user["follower_count"]))", category: .profile)
+            } else {
+                print("⚡ [PROFILE] Searched fast-path failed — falling back to /users/info chain")
+                LogManager.shared.warning("Searched-profile fast-path: web_profile_info nil for @\(hint), reverting to /users/info", category: .profile)
+                user = [:]
+            }
+        } else {
+            user = [:]
         }
 
-        guard var user = json["user"] as? [String: Any] else {
-            let topKeys = json.keys.sorted().joined(separator: ", ")
-            print("❌ [PROFILE] No 'user' key — top-level keys: \(topKeys)")
-            LogManager.shared.error("getProfileInfo: missing 'user' key — keys: \(topKeys)", category: .api)
-            return nil
+        if !usedFastPath {
+            let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
+
+            // Detect the "endpoint permanently broken" pattern so we can fast-path
+            // future calls. The empty-body response is ~25 bytes (`{"user":{},...}`).
+            if data.count <= 50 {
+                let secsSinceLast = usersInfoBrokenTs > 0 ? (Date().timeIntervalSince1970 - usersInfoBrokenTs) : -1
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: usersInfoBrokenKey)
+                // Also bump the global marker so searched profiles can fast-path
+                // without paying for their own 25-byte probe.
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: usersInfoGloballyBrokenKey)
+                print("🔴 [PROFILE] /users/info returned only \(data.count) bytes for uid \(uid) — caching as broken (last seen broken \(Int(secsSinceLast))s ago)")
+                LogManager.shared.warning("/users/{uid}/info/ empty body (\(data.count)B) for uid:\(uid) — marked broken globally; future searches will fast-path through web_profile_info", category: .profile)
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("❌ [PROFILE] Failed to parse JSON response")
+                let rawStr = String(data: data.prefix(500), encoding: .utf8) ?? "(binary)"
+                LogManager.shared.error("getProfileInfo: JSON parse failed — raw: \(rawStr)", category: .api)
+                return nil
+            }
+
+            guard let u = json["user"] as? [String: Any] else {
+                let topKeys = json.keys.sorted().joined(separator: ", ")
+                print("❌ [PROFILE] No 'user' key — top-level keys: \(topKeys)")
+                LogManager.shared.error("getProfileInfo: missing 'user' key — keys: \(topKeys)", category: .api)
+                return nil
+            }
+            user = u
         }
-        
+
         // Debug: Print user data
         print("📊 [PROFILE] User data keys: \(user.keys.sorted().joined(separator: ", "))")
         LogManager.shared.debug("Profile user keys: \(user.keys.sorted().joined(separator: ","))", category: .profile)
@@ -2582,6 +2919,139 @@ class InstagramService: ObservableObject {
         print("📊 [PROFILE] Profile is private: \(isPrivate)")
         print("📊 [PROFILE] We are following: \(isFollowing)")
         print("📊 [PROFILE] Request pending: \(isFollowRequested)")
+
+        // Own-profile /users/{id}/info sometimes returns an empty "user" object while
+        // heavier feed endpoints still work. Do not start the expensive chain
+        // followers + feed + reels + tagged + highlights until the header is usable:
+        // that was causing 7-10 API calls, then rejecting the profile as invalid.
+        if isOwnProfile {
+            let headerEmptyBeforeMedia = extractedUserId == "0"
+                || ((user["username"] as? String ?? "").isEmpty
+                    && (user["profile_pic_url"] as? String ?? "").isEmpty
+                    && user["follower_count"] == nil
+                    && user["following_count"] == nil)
+
+            if headerEmptyBeforeMedia {
+                print("⚠️ [PROFILE] Own header empty before media fetch — trying current_user fallback first")
+                LogManager.shared.warning("Own profile header empty before media fetch — delaying heavy profile chain", category: .profile)
+                do {
+                    let currentData = try await apiRequest(method: "GET", path: "/accounts/current_user/?edit=true")
+                    if let currentJSON = try? JSONSerialization.jsonObject(with: currentData) as? [String: Any],
+                       let currentUser = currentJSON["user"] as? [String: Any] {
+                        for (key, value) in currentUser where user[key] == nil || ((user[key] as? String)?.isEmpty == true) {
+                            user[key] = value
+                        }
+                        extractedUserId = extractProfileUserId(from: user)
+                        print("✅ [PROFILE] Early current_user fallback merged. Keys now: \(user.keys.sorted().joined(separator: ", "))")
+                    } else {
+                        LogManager.shared.warning("Early current_user fallback returned unexpected structure", category: .profile)
+                    }
+                } catch {
+                    print("⚠️ [PROFILE] Early current_user fallback failed: \(error.localizedDescription)")
+                    LogManager.shared.warning("Early current_user fallback failed: \(error.localizedDescription)", category: .profile)
+                }
+            }
+
+            if extractedUserId == "0",
+               !uid.isEmpty,
+               (!(user["username"] as? String ?? "").isEmpty
+                || !(user["profile_pic_url"] as? String ?? "").isEmpty
+                || user["follower_count"] != nil
+                || user["following_count"] != nil) {
+                extractedUserId = uid
+                LogManager.shared.info("Own profile userId recovered from session uid before media fetch: \(uid)", category: .profile)
+            }
+
+            let stillInvalidBeforeMedia = extractedUserId == "0"
+                || ((user["username"] as? String ?? "").isEmpty
+                    && (user["profile_pic_url"] as? String ?? "").isEmpty
+                    && user["follower_count"] == nil
+                    && user["following_count"] == nil
+                    && ProfileCacheService.shared.loadProfile() == nil)
+
+            if stillInvalidBeforeMedia {
+                // Some accounts/IPs get `/users/{id}/info/` permanently returning 25-byte
+                // empty bodies while `/feed/user/{id}/` and `web_profile_info` keep
+                // working (same pattern that recovers Explore'd profiles further below).
+                // Before giving up on Performance, replicate that recovery chain:
+                //   1. Try to discover a usable username (session → hint → feed probe).
+                //   2. Merge `web_profile_info` so header/counts come back.
+                // This is what makes Explore'd profiles render even when /users/info
+                // is empty — Performance gets exactly the same treatment now.
+                print("⚠️ [PROFILE] Own header empty after /users/info + /accounts/current_user — escalating to /feed/user + web_profile_info")
+                LogManager.shared.warning("Own profile header empty — escalating to feed/web fallbacks before aborting", category: .profile)
+
+                var discoveredUsername: String? = {
+                    if !session.username.isEmpty { return session.username }
+                    if let hint = usernameHint?.trimmingCharacters(in: .whitespacesAndNewlines), !hint.isEmpty { return hint }
+                    return nil
+                }()
+
+                if discoveredUsername == nil {
+                    // Probe `/feed/user/{uid}/` — its response carries a `user` object
+                    // with `username`/`profile_pic_url` even when `/users/info` is empty.
+                    do {
+                        let feedData = try await apiRequest(method: "GET", path: "/feed/user/\(uid)/?count=1")
+                        if let feedJSON = try? JSONSerialization.jsonObject(with: feedData) as? [String: Any],
+                           let feedUser = feedJSON["user"] as? [String: Any] {
+                            if let uname = feedUser["username"] as? String, !uname.isEmpty {
+                                discoveredUsername = uname
+                                print("🔎 [PROFILE] Username discovered via /feed/user/: @\(uname)")
+                                LogManager.shared.info("Own profile username discovered via /feed/user/: @\(uname)", category: .profile)
+                            }
+                            for (key, value) in feedUser where user[key] == nil || ((user[key] as? String)?.isEmpty == true) {
+                                user[key] = value
+                            }
+                            extractedUserId = extractProfileUserId(from: user)
+                            if extractedUserId == "0", !uid.isEmpty { extractedUserId = uid }
+                        }
+                    } catch {
+                        print("⚠️ [PROFILE] /feed/user/ probe failed: \(error.localizedDescription)")
+                        LogManager.shared.warning("Own profile /feed/user/ probe failed: \(error.localizedDescription)", category: .profile)
+                    }
+                }
+
+                if let username = discoveredUsername, !username.isEmpty {
+                    if let webUser = await fetchWebProfileInfoFallback(username: username) {
+                        for (key, value) in webUser where user[key] == nil || ((user[key] as? String)?.isEmpty == true) || Self.robustInt(user[key]) == 0 {
+                            user[key] = value
+                        }
+                        extractedUserId = extractProfileUserId(from: user)
+                        if extractedUserId == "0", !uid.isEmpty { extractedUserId = uid }
+                        print("✅ [PROFILE] Own header recovered via web_profile_info — followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"]))")
+                        LogManager.shared.success("Own profile web fallback merged — @\(user["username"] as? String ?? username) followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"])) posts:\(Self.robustInt(user["media_count"]))", category: .profile)
+
+                        // Persist the discovered username in the session so future
+                        // launches don't need the feed probe again.
+                        if session.username.isEmpty {
+                            await MainActor.run {
+                                self.session.username = username
+                                KeychainService.shared.saveSession(self.session)
+                            }
+                        }
+                    } else {
+                        LogManager.shared.warning("Own profile web fallback returned nil for @\(username)", category: .profile)
+                    }
+                } else {
+                    LogManager.shared.warning("Own profile: no username could be discovered — cannot try web_profile_info", category: .profile)
+                }
+
+                // Re-evaluate after both fallbacks.
+                let stillInvalidAfterEscalation = extractedUserId == "0"
+                    || ((user["username"] as? String ?? "").isEmpty
+                        && (user["profile_pic_url"] as? String ?? "").isEmpty
+                        && user["follower_count"] == nil
+                        && user["following_count"] == nil)
+
+                if stillInvalidAfterEscalation {
+                    print("🛡️ [PROFILE] Own header still invalid after /feed/user + web_profile_info — aborting")
+                    LogManager.shared.warning("Own profile header invalid after escalation — skipped expensive profile chain", category: .profile)
+                    return nil
+                }
+
+                print("✅ [PROFILE] Own header recovered — continuing with normal media fetch chain")
+            }
+        }
         
         // Only fetch followers and media if:
         // 1. It's our own profile, OR
@@ -2590,6 +3060,79 @@ class InstagramService: ObservableObject {
         // IMPORTANT: Do NOT fetch if only "requested" - this triggers bot detection
         let shouldFetchProtectedData = isOwnProfile || !isPrivate || (isFollowing && !isFollowRequested)
         print("📊 [PROFILE] Should fetch protected data: \(shouldFetchProtectedData)")
+
+        // ── PROGRESSIVE RENDER ─────────────────────────────────────────────────
+        // For own profile, the chain below makes 5 sequential API calls with
+        // 1.2s anti-bot pauses between each (~10s total). The header is already
+        // usable right now, so push it to the UI immediately. PerformanceView
+        // listens for `ownProfileHeaderReady` and paints the header + cached
+        // grid while reels/tagged/highlights load in the background.
+        if isOwnProfile {
+            let headerUsername = (user["username"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let headerPicURL: String = {
+                if let hdInfo = user["hd_profile_pic_url_info"] as? [String: Any],
+                   let hdUrl = hdInfo["url"] as? String, !hdUrl.isEmpty { return hdUrl }
+                if let hdVersions = user["hd_profile_pic_versions"] as? [[String: Any]],
+                   let best = hdVersions.last, let url = best["url"] as? String, !url.isEmpty { return url }
+                return (user["profile_pic_url"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            }()
+            let headerFollowers  = Self.robustInt(user["follower_count"])
+            let headerFollowing  = Self.robustInt(user["following_count"])
+            let headerMediaCount = Self.robustInt(user["media_count"])
+            let headerUserId = (extractedUserId == "0" || extractedUserId.isEmpty) ? uid : extractedUserId
+
+            // Only emit when we have something worth showing — otherwise the
+            // listener would clear an existing valid cache.
+            let headerWorthEmitting = !headerUsername.isEmpty
+                && (!headerPicURL.isEmpty || headerFollowers > 0 || headerFollowing > 0 || headerMediaCount > 0)
+
+            if headerWorthEmitting {
+                // Merge with whatever the cache already has so the grid that the
+                // user is looking at (cachedMediaURLs from previous sessions)
+                // does not get blown away by an empty header snapshot.
+                let existing = ProfileCacheService.shared.loadProfile()
+                let snapshot = InstagramProfile(
+                    userId: headerUserId,
+                    username: headerUsername,
+                    fullName: (user["full_name"] as? String ?? ""),
+                    biography: (user["biography"] as? String ?? existing?.biography ?? ""),
+                    externalUrl: (user["external_url"] as? String) ?? existing?.externalUrl,
+                    profilePicURL: headerPicURL.isEmpty ? (existing?.profilePicURL ?? "") : headerPicURL,
+                    isVerified: (user["is_verified"] as? Bool) ?? existing?.isVerified ?? false,
+                    isPrivate: (user["is_private"] as? Bool) ?? existing?.isPrivate ?? false,
+                    followerCount: headerFollowers > 0 ? headerFollowers : (existing?.followerCount ?? 0),
+                    followingCount: headerFollowing > 0 ? headerFollowing : (existing?.followingCount ?? 0),
+                    mediaCount: headerMediaCount > 0 ? headerMediaCount : (existing?.mediaCount ?? 0),
+                    followedBy: existing?.followedBy ?? [],
+                    isFollowing: existing?.isFollowing ?? false,
+                    isFollowRequested: existing?.isFollowRequested ?? false,
+                    cachedAt: Date(),
+                    cachedMediaURLs: existing?.cachedMediaURLs ?? [],
+                    cachedReelURLs: existing?.cachedReelURLs ?? [],
+                    cachedTaggedURLs: existing?.cachedTaggedURLs ?? [],
+                    cachedHighlights: existing?.cachedHighlights ?? [],
+                    cachedReelItems: existing?.cachedReelItems ?? [],
+                    cachedNextMaxId: existing?.cachedNextMaxId
+                )
+                var snapshotWithItems = snapshot
+                snapshotWithItems.cachedMediaItems = existing?.cachedMediaItems ?? []
+
+                // Persist so the next launch can paint instantly even if the
+                // user kills the app before the heavy chain finishes.
+                ProfileCacheService.shared.saveProfile(snapshotWithItems)
+                print("⚡ [PROFILE] Header snapshot emitted early — @\(headerUsername) followers:\(headerFollowers) following:\(headerFollowing) media:\(headerMediaCount) pic:\(headerPicURL.isEmpty ? "EMPTY" : "OK")")
+                LogManager.shared.info("Own profile header snapshot broadcast — UI can paint before heavy chain (5 calls / ~10s)", category: .profile)
+
+                let snapshotForNotif = snapshotWithItems
+                await MainActor.run {
+                    NotificationCenter.default.post(
+                        name: .ownProfileHeaderReady,
+                        object: nil,
+                        userInfo: ["snapshot": snapshotForNotif]
+                    )
+                }
+            }
+        }
         
         var followedBy: [InstagramFollower] = []
         var mediaURLs: [String] = []
@@ -2605,43 +3148,165 @@ class InstagramService: ObservableObject {
             LogManager.shared.info("Profile protected data fetch allowed", category: .profile)
 
             if isOwnProfile {
-                // Own profile refresh is heavy and anti-bot sensitive: fetch everything,
-                // but paced so one pull-to-refresh cannot create a burst.
+                // Own profile refresh is anti-bot sensitive: fetch only the bare
+                // minimum to render the visible part of the screen as fast as
+                // possible. Reels / tagged / highlights live behind tabs that
+                // PerformanceView already loads lazily on first tap (see
+                // `fetchReelsIfNeeded`, `fetchTaggedIfNeeded`). Pulling them
+                // here too was duplicating ~3 API calls and ~4-5 seconds with
+                // no visible payoff — the user can't even see those tabs yet.
+                //
+                // Progressive render: after each call we broadcast a notification
+                // so PerformanceView can paint "Followed by ..." and the post
+                // grid as soon as they arrive, without waiting for the full
+                // chain to finish (mirrors how a real Instagram profile pops in).
                 followedBy = try await getFollowedByUsers(userId: uid, count: 6)
+                if !followedBy.isEmpty {
+                    let snapshot = followedBy
+                    await MainActor.run {
+                        NotificationCenter.default.post(
+                            name: .ownProfileFollowedByReady,
+                            object: nil,
+                            userInfo: ["followedBy": snapshot]
+                        )
+                    }
+                    LogManager.shared.info("Own profile followedBy broadcast (count:\(snapshot.count)) — UI can paint header row", category: .profile)
+                }
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
 
                 let (mediaItems, ownNextId) = try await getUserMediaItems(userId: uid, amount: 18)
                 mediaURLs = mediaItems.map { $0.imageURL }
                 initialMediaItems = mediaItems
                 initialNextMaxId = ownNextId
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
-
-                do {
-                    let reels = try await getUserReels(userId: uid, amount: 18)
-                    reelURLs = reels.map { $0.imageURL }
-                    reelItems = reels
+                if !mediaItems.isEmpty {
+                    let snapshotItems = mediaItems
+                    let snapshotCursor = ownNextId
+                    await MainActor.run {
+                        NotificationCenter.default.post(
+                            name: .ownProfileMediaReady,
+                            object: nil,
+                            userInfo: [
+                                "mediaItems": snapshotItems,
+                                "nextMaxId": snapshotCursor as Any
+                            ]
+                        )
+                    }
+                    print("⚡ [PROFILE] Posts broadcast (\(mediaItems.count) items) — UI can fill grid before chain finishes")
+                    LogManager.shared.info("Own profile media broadcast (count:\(mediaItems.count) cursor:\(snapshotCursor != nil ? "saved" : "none"))", category: .profile)
                 }
-                catch { print("⚠️ [PROFILE] Reels fetch failed (non-critical): \(error)") }
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
-
-                do {
-                    let tagged = try await getUserTagged(userId: uid, amount: 18)
-                    taggedURLs = tagged.map { $0.imageURL }
-                }
-                catch { print("⚠️ [PROFILE] Tagged fetch failed (non-critical): \(error)") }
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
-
-                do { highlights = try await getUserHighlights(userId: uid) }
-                catch { print("⚠️ [PROFILE] Highlights fetch failed (non-critical): \(error)") }
+                // Reels / tagged / highlights are intentionally not fetched here.
+                // PerformanceView calls `fetchReelsIfNeeded` / `fetchTaggedIfNeeded`
+                // when the user taps each tab. Highlights are part of the
+                // optional background refresh elsewhere when allowed.
             } else {
-                // Searched profiles must open like Instagram: header + posts first.
-                // Reels/tagged/highlights are not fetched before presentation.
+                // Searched profiles open like a real Instagram profile: present
+                // the partial header (avatar, username, counters) as soon as we
+                // have it, then fill in posts and followers progressively.
                 //
-                // ANTI-BOT: add human-like pacing between the sequential API calls
-                // within this profile load. Without it, the burst pattern
-                //   users/info → friendships/show → feed/user (0.3-0.4s apart)
-                // is flagged as automated. A 0.9-1.3s pause mimics the natural
-                // delay between a user seeing the header and their feed scrolling in.
+                // Step 1 — recover the header BEFORE the heavy chain.
+                // /users/info on this account permanently returns 25 B empty,
+                // so without this step the header would only be reconciled at
+                // the very end of getProfileInfo (~6s after entry). Pulling
+                // web_profile_info up here lets us broadcast the header in ~1s.
+                //
+                // Anti-bot: we do NOT add a sleep before this call. The fast
+                // path skips /users/info entirely (so this is the first IG
+                // call); when /users/info ran, friendships/show already came
+                // after it with its own natural ~0.4s gap.
+                let earlyHeaderUsername: String? = {
+                    let candidates = [
+                        user["username"] as? String,
+                        usernameHint
+                    ]
+                    return candidates.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty }
+                }()
+
+                let earlyHeaderIncomplete =
+                    (user["username"] as? String ?? "").isEmpty ||
+                    (user["profile_pic_url"] as? String ?? "").isEmpty ||
+                    user["follower_count"] == nil ||
+                    user["following_count"] == nil ||
+                    extractedUserId == "0"
+
+                if earlyHeaderIncomplete, let webUsername = earlyHeaderUsername {
+                    LogManager.shared.info("Searched profile early header recovery via web_profile_info for @\(webUsername)", category: .profile)
+                    if let webUser = await fetchWebProfileInfoFallback(username: webUsername) {
+                        for (key, value) in webUser where user[key] == nil || ((user[key] as? String)?.isEmpty == true) || Self.robustInt(user[key]) == 0 {
+                            user[key] = value
+                        }
+                        extractedUserId = extractProfileUserId(from: user)
+                        if extractedUserId == "0" { extractedUserId = uid }
+                        print("⚡ [PROFILE] Searched header recovered early — @\(user["username"] as? String ?? webUsername) followers:\(Self.robustInt(user["follower_count"]))")
+                        LogManager.shared.success("Searched-profile early header OK — @\(user["username"] as? String ?? webUsername) followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"]))", category: .profile)
+                    } else {
+                        LogManager.shared.warning("Searched-profile early web_profile_info nil for @\(webUsername) — will retry later", category: .profile)
+                    }
+                }
+
+                // Apply hints to fill anything web_profile_info could not.
+                if (user["username"] as? String ?? "").isEmpty, let h = earlyHeaderUsername { user["username"] = h }
+                if (user["full_name"] as? String ?? "").isEmpty, let fn = fullNameHint, !fn.isEmpty { user["full_name"] = fn }
+                if (user["profile_pic_url"] as? String ?? "").isEmpty, let pic = profilePicURLHint, !pic.isEmpty { user["profile_pic_url"] = pic }
+                if user["is_verified"] == nil, let v = isVerifiedHint { user["is_verified"] = v }
+                if extractedUserId == "0" { extractedUserId = uid }
+
+                // ── BROADCAST VISITED HEADER ──────────────────────────────────
+                // ExploreView listens for this and presents UserProfileView
+                // immediately. The Task keeps running below to populate posts
+                // and followers progressively (same pattern as own profile).
+                let visitedHeaderUsername = (user["username"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let visitedHeaderPic: String = {
+                    if let hdInfo = user["hd_profile_pic_url_info"] as? [String: Any],
+                       let hdUrl = hdInfo["url"] as? String, !hdUrl.isEmpty { return hdUrl }
+                    return (user["profile_pic_url"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                }()
+                let visitedHeaderFollowers  = Self.robustInt(user["follower_count"])
+                let visitedHeaderFollowing  = Self.robustInt(user["following_count"])
+                let visitedHeaderMediaCount = Self.robustInt(user["media_count"])
+
+                let visitedHeaderWorthEmitting = !visitedHeaderUsername.isEmpty
+                    && (!visitedHeaderPic.isEmpty || visitedHeaderFollowers > 0 || visitedHeaderFollowing > 0 || visitedHeaderMediaCount > 0)
+
+                if visitedHeaderWorthEmitting {
+                    let visitedSnapshot = InstagramProfile(
+                        userId: extractedUserId,
+                        username: visitedHeaderUsername,
+                        fullName: user["full_name"] as? String ?? "",
+                        biography: user["biography"] as? String ?? "",
+                        externalUrl: user["external_url"] as? String,
+                        profilePicURL: visitedHeaderPic,
+                        isVerified: user["is_verified"] as? Bool ?? false,
+                        isPrivate: user["is_private"] as? Bool ?? isPrivate,
+                        followerCount: visitedHeaderFollowers,
+                        followingCount: visitedHeaderFollowing,
+                        mediaCount: visitedHeaderMediaCount,
+                        followedBy: [],
+                        isFollowing: isFollowing,
+                        isFollowRequested: isFollowRequested,
+                        cachedAt: Date(),
+                        cachedMediaURLs: [],
+                        cachedReelURLs: [],
+                        cachedTaggedURLs: [],
+                        cachedHighlights: [],
+                        cachedReelItems: [],
+                        cachedNextMaxId: nil
+                    )
+                    let snapshotUid = extractedUserId
+                    await MainActor.run {
+                        NotificationCenter.default.post(
+                            name: .visitedProfileHeaderReady,
+                            object: nil,
+                            userInfo: [
+                                "userId": snapshotUid,
+                                "snapshot": visitedSnapshot
+                            ]
+                        )
+                    }
+                    print("⚡ [PROFILE] Visited header broadcast — @\(visitedHeaderUsername) followers:\(visitedHeaderFollowers)")
+                    LogManager.shared.info("Visited profile header broadcast — UI can present before posts/followers (uid:\(snapshotUid))", category: .profile)
+                }
+
+                // Step 2 — pacing pause before the posts call (anti-bot, kept identical).
                 try? await Task.sleep(nanoseconds: UInt64.random(in: 900_000_000...1_300_000_000))
 
                 let (mediaItems, visitedNextId) = try await getUserMediaItems(userId: uid, amount: 21)
@@ -2649,11 +3314,45 @@ class InstagramService: ObservableObject {
                 initialMediaItems = mediaItems
                 initialNextMaxId = visitedNextId
 
-                // Second pause between media fetch and followers fetch.
+                if !mediaItems.isEmpty {
+                    let snapshotItems = mediaItems
+                    let snapshotCursor = visitedNextId
+                    let snapshotUid = extractedUserId
+                    await MainActor.run {
+                        NotificationCenter.default.post(
+                            name: .visitedProfileMediaReady,
+                            object: nil,
+                            userInfo: [
+                                "userId": snapshotUid,
+                                "mediaItems": snapshotItems,
+                                "nextMaxId": snapshotCursor as Any
+                            ]
+                        )
+                    }
+                    print("⚡ [PROFILE] Visited posts broadcast (\(mediaItems.count) items) for uid:\(extractedUserId)")
+                }
+
+                // Second pause between media fetch and followers fetch (anti-bot, kept identical).
                 try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_200_000_000))
 
                 do { followedBy = try await getFollowedByUsers(userId: uid, count: 6) }
                 catch { print("⚠️ [PROFILE] Followed-by fetch failed (non-critical): \(error)") }
+
+                if !followedBy.isEmpty {
+                    let snapshot = followedBy
+                    let snapshotUid = extractedUserId
+                    await MainActor.run {
+                        NotificationCenter.default.post(
+                            name: .visitedProfileFollowedByReady,
+                            object: nil,
+                            userInfo: [
+                                "userId": snapshotUid,
+                                "followedBy": snapshot
+                            ]
+                        )
+                    }
+                    print("⚡ [PROFILE] Visited followedBy broadcast (\(snapshot.count)) for uid:\(extractedUserId)")
+                }
             }
 
             print("📊 [PROFILE] Posts: \(mediaURLs.count), Reels: \(reelURLs.count), Tagged: \(taggedURLs.count), Highlights: \(highlights.count)")
@@ -2830,6 +3529,19 @@ class InstagramService: ObservableObject {
         print("📊 [PROFILE] Parsed counts — followers: \(followerCount), following: \(followingCount), media: \(mediaCount)")
         print("📊 [PROFILE] Profile pic URL resolved: \(profilePicURL.isEmpty ? "EMPTY" : String(profilePicURL.prefix(80)))")
         LogManager.shared.info("Profile header parsed — user:@\(user["username"] as? String ?? "") name:\((user["full_name"] as? String ?? "").isEmpty ? "EMPTY" : "OK") posts:\(mediaCount) followers:\(followerCount) following:\(followingCount) pic:\(profilePicURL.isEmpty ? "EMPTY" : "OK")", category: .profile)
+
+        if isOwnProfile {
+            let headerInvalid = extractedUserId == "0"
+                || ((user["username"] as? String ?? "").isEmpty
+                    && profilePicURL.isEmpty
+                    && followerCount == 0
+                    && followingCount == 0)
+            if headerInvalid {
+                print("🛡️ [PROFILE] Own profile header invalid — refusing to build cache entry")
+                LogManager.shared.warning("getProfileInfo refused invalid own-profile header (userId=\(extractedUserId), media=\(mediaURLs.count))", category: .profile)
+                return nil
+            }
+        }
 
         var profile = InstagramProfile(
             userId: extractedUserId,
@@ -4499,6 +5211,16 @@ class InstagramService: ObservableObject {
     //   right after the warm-up succeeded, then restarted the 150s timer on retry.
     //   Diagnostic signal: warm-up HTTP 200, then SAFETY BLOCK create_note note too soon.
     //
+    // v5 (May-2026, late) — added a defensive GET /accounts/current_user/?edit=true
+    //   pre-warm-up that ONLY runs when wwwClaim == "0". When a fresh install or wiped
+    //   UserDefaults leaves the in-memory claim at "0", both the POST warm-up and the
+    //   POST create_note silently fail with HTTP 200 + body status:fail because the
+    //   Notes endpoint refuses claim=0. The POST warm-up cannot self-heal because IG
+    //   does not return a Set-Claim header on a failed POST. A single GET to
+    //   current_user always returns a fresh claim, which apiRequest() persists.
+    //   Diagnostic signal: `[NOTE] wwwClaim=0` followed by `Warm-up status=fail`
+    //   followed by `Raw response: ... "status":"fail" ... "We're sorry..."`.
+    //
     // ── HOW TO DIAGNOSE IF NOTES BREAKS AGAIN ────────────────────────────────────
     //
     // 1. Check `[NOTE] wwwClaim=0` in logs:
@@ -4523,6 +5245,95 @@ class InstagramService: ObservableObject {
     //    → Added `device_id` (required)
     //    → audience: 0=close friends+followers, 2=close friends only
     // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Diagnostic GET that dumps the full response (status, all headers, raw body) and
+    /// attempts to capture a fresh X-IG-WWW-Claim. Used by Notes flow when the in-memory
+    /// claim is "0" and we need maximum visibility into why a refresh GET keeps failing.
+    /// Routes through the shared `getSession`/header builder to stay identical to
+    /// normal traffic, but does NOT go through apiRequest() so we can log headers/body
+    /// even when the safety gate would normally hide them.
+    private func diagnosticGetForClaim(path: String, label: String) async {
+        guard let url = URL(string: "\(baseURL)\(path)") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.timeoutInterval = 15
+        for (k, v) in buildHeaders() { req.setValue(v, forHTTPHeaderField: k) }
+
+        print("🔬 \(label) — sending GET \(path)")
+        print("🔬 \(label) — outgoing X-IG-WWW-Claim header: \(req.value(forHTTPHeaderField: "X-IG-WWW-Claim") ?? "<missing>")")
+        print("🔬 \(label) — outgoing Cookie length: \(req.value(forHTTPHeaderField: "Cookie")?.count ?? 0) chars")
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await getSession.data(for: req)
+        } catch {
+            print("🔬 \(label) — network error: \(error.localizedDescription)")
+            return
+        }
+        let ms = String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - start) * 1000)
+
+        guard let http = response as? HTTPURLResponse else {
+            print("🔬 \(label) — not an HTTPURLResponse")
+            return
+        }
+        print("🔬 \(label) — HTTP \(http.statusCode) [\(ms)] body=\(data.count) bytes")
+
+        // Dump ALL response headers — Instagram's actual claim header name has changed
+        // historically (Set-WWW-Claim, ig-set-www-claim, ig-u-rur, …). Logging everything
+        // means future breakage shows up immediately with the real header name.
+        print("🔬 \(label) — response headers:")
+        for (k, v) in http.allHeaderFields {
+            if let key = k as? String, let val = v as? String {
+                let preview = val.count > 80 ? "\(val.prefix(80))…(+\(val.count - 80))" : val
+                print("🔬   \(key): \(preview)")
+            }
+        }
+
+        // Dump body — usually JSON. Short bodies (<300 bytes) are almost always
+        // soft-fail responses ({"status":"fail","message":"We're sorry…"}). Long
+        // bodies are real profile data — useful to confirm the session is valid.
+        if let s = String(data: data, encoding: .utf8) {
+            let preview = s.count > 600 ? "\(s.prefix(600))…(+\(s.count - 600))" : s
+            print("🔬 \(label) — body: \(preview)")
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let status = json["status"] as? String, status == "fail" {
+                print("🔬 \(label) — IG returned status:fail on what should be a public read endpoint.")
+                print("🔬 \(label) — This is a soft-block. The Set-Claim header will NOT be present, so the warm-up cannot self-heal.")
+                LogManager.shared.error("\(label) status:fail — IG soft-blocked the claim-refresh GET", category: .api)
+            }
+        }
+
+        // Run the same case-insensitive claim capture as apiRequest, so this
+        // diagnostic GET also updates the in-memory + persisted claim on success.
+        var foundClaim: String? = nil
+        for name in ["X-IG-Set-WWW-Claim", "x-ig-set-www-claim", "X-IG-WWW-Claim"] {
+            if let v = http.value(forHTTPHeaderField: name), !v.isEmpty, v != "0" {
+                foundClaim = v
+                break
+            }
+        }
+        if foundClaim == nil {
+            for (key, value) in http.allHeaderFields {
+                if let k = key as? String, let v = value as? String,
+                   k.lowercased().contains("www-claim") || k.lowercased().contains("ig-claim"),
+                   !v.isEmpty, v != "0" {
+                    foundClaim = v
+                    break
+                }
+            }
+        }
+        if let claim = foundClaim {
+            print("🔬 \(label) — captured fresh claim: \(claim.prefix(20))…")
+            await MainActor.run {
+                self.wwwClaim = claim
+                UserDefaults.standard.set(claim, forKey: "ig_www_claim")
+            }
+        } else {
+            print("🔬 \(label) — NO claim header found in response. IG did not send one.")
+        }
+    }
 
     /// Create an Instagram Note (bubble above profile pic in DMs)
     /// Max 60 characters, lasts 24 hours
@@ -4585,6 +5396,43 @@ class InstagramService: ObservableObject {
         // FIX: route ALL Notes calls through apiRequest() — identical code path to Bio.
         // ────────────────────────────────────────────────────────────────────────────────
 
+        // ── REGRESSION FIX (May-2026, again) ─────────────────────────────────────────────
+        // Symptom: HTTP 200 + body `{"status":"fail","message":"We're sorry..."}` on BOTH
+        // the warm-up POST and create_note POST. Log line shows `[NOTE] wwwClaim=0`.
+        //
+        // Root cause: When the app starts cold and `wwwClaim` was wiped from UserDefaults
+        // (fresh install, account switch, or iOS purging the prefs file), the in-memory
+        // claim is "0". The Notes endpoint validates this header strictly and silently
+        // rejects requests with claim=0 by returning a 200 OK with status:fail. Because
+        // the warm-up itself ALSO uses claim=0, it cannot refresh the claim either — both
+        // calls fail with the same soft-error and no Set-Claim header comes back.
+        //
+        // Fix: Before the warm-up, do a lightweight GET /accounts/current_user/?edit=true
+        // exactly like the configure_sidecar flow does. Instagram returns a fresh
+        // X-IG-Set-WWW-Claim on this GET, which apiRequest() persists to UserDefaults.
+        // Now the warm-up POST sends a non-zero claim and Instagram accepts both calls.
+        //
+        // Diagnostic: If Notes breaks again look for:
+        //   • `[NOTE] wwwClaim=0` before the warm-up  → this fix is needed/broken
+        //   • `[NOTE] wwwClaim=<non-zero>` + warm-up `status=fail` → something else
+        //     changed in the endpoint (headers, body params, route). See the endpoint
+        //     history block above (v1–v4) for previous breakage patterns.
+        // ────────────────────────────────────────────────────────────────────────────────
+        if wwwClaim == "0" {
+            print("   [NOTE] wwwClaim is 0 — running GET warm-up to capture a fresh claim before POST")
+            // apiRequest captures `x-ig-set-www-claim` on every response (success or failure)
+            // and writes it to UserDefaults — see the response-handling block in apiRequest().
+            //
+            // DIAGNOSTIC: We run the GET *outside* apiRequest so we can dump the full
+            // response headers and body when the claim still ends up at 0. The previous
+            // failure pattern was: apiRequest returned silently (200 OK, 106 bytes), but
+            // the claim header was never seen because the response was actually a
+            // soft-fail with no Set-Claim header at all. Without dumping the raw response
+            // we cannot tell whether the header was present-but-misnamed or absent.
+            await diagnosticGetForClaim(path: "/accounts/current_user/?edit=true", label: "[NOTE] claim-refresh GET")
+            print("   [NOTE] After GET warm-up: wwwClaim=\(String(wwwClaim.prefix(20)))")
+        }
+
         // ── Step 1: warm-up — tells Instagram we've "seen" the notes tab recently ───────
         // Non-fatal: if this fails (e.g. safety gate blocks it), we still try the create.
         // DIAGNOSTIC: If warm-up returns 403, check wwwClaim value and cookie count above.
@@ -4598,6 +5446,17 @@ class InstagramService: ObservableObject {
                                                 body: warmBody) {
             let ws = (try? JSONSerialization.jsonObject(with: warmData) as? [String: Any])?["status"] as? String ?? "?"
             print("   [NOTE] Warm-up status=\(ws)")
+            // Always dump the raw body — for warm-up calls it's tiny, so logging it
+            // costs nothing and is critical when diagnosing soft-fail loops.
+            if let raw = String(data: warmData, encoding: .utf8) {
+                print("   [NOTE] Warm-up raw response: \(raw.prefix(400))")
+            }
+            // If the warm-up itself returned status:fail with claim=0, the create POST is
+            // guaranteed to fail too. Persist this signal so it's easy to spot in logs.
+            if ws == "fail" && wwwClaim == "0" {
+                print("   [NOTE] ⚠️ Warm-up status=fail AND wwwClaim=0 — create_note will fail. Check the regression-fix block.")
+                LogManager.shared.error("Notes warm-up fail with wwwClaim=0 — regression in fresh-claim GET", category: .api)
+            }
         } else {
             print("   [NOTE] Warm-up skipped (non-fatal) — wwwClaim=\(String(wwwClaim.prefix(20)))")
         }

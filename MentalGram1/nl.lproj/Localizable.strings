@@ -1017,10 +1017,12 @@
 "Con **Transfer Effect** activado, el truco tiene una segunda fase: el número \"robado\" del espectador aparece sumándose al perfil del mago." = "Met **Transfer Effect** ingeschakeld heeft de truc een tweede fase: het \"gestolen\" getal van de toeschouwer verschijnt en telt op bij het profiel van de goochelaar.";
 "En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel." = "In het post-/reel-grid van het profiel registreert elke linksveeg op een cel het cijfer op die positie (1–9, dan 0). Hetzelfde als Force Reel.";
 "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537." = "Het geopende profiel toont echt + toeschouwer_getal. Als het echte 500 is en de toeschouwer zei 37, ziet hij 537.";
+"El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K)." = "Het geopende profiel toont echt + toeschouwer_getal. Als het echte 500 is en de toeschouwer zei 37, ziet hij 537. Bij profielen met 10K+ telt elke eenheid als 1K (input 6 bij 200K → toont 206K → daalt naar 200K).";
 "Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos." = "Op de volumeknop drukken: glitch-effect (signaalvervorming) en dan daalt de teller in ~6 seconden van 537 naar 500.";
 "Cuando el espectador comprueba su móvil ve 500 — el número de siempre. Confirma sin saberlo que le quitaron exactamente 37." = "Wanneer de toeschouwer zijn telefoon controleert ziet hij 500 — het gebruikelijke getal. Hij bevestigt onbewust dat er precies 37 zijn afgenomen.";
 "El perfil puede ser del espectador, de un voluntario elegido al azar, o el del propio mago." = "Het profiel kan van de toeschouwer zijn, van een willekeurig gekozen vrijwilliger, of van de goochelaar zelf.";
 "El perfil del espectador/voluntario cuenta regresivamente del número inflado al real." = "Het profiel van de toeschouwer/vrijwilliger telt af van het opgeblazen getal naar het echte.";
+"**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K)." = "**Profielen met 10K+.** De offset wordt automatisch met ×1000 vermenigvuldigd. Vraag de toeschouwer om een getal van 1–10 en de aftelling daalt in K-eenheden (206K → 200K).";
 "Abre tu propio perfil. Pulsa el botón de volumen de nuevo: el mismo número aparece sumándose a tu contador — como si los seguidores hubieran \"viajado\" de un perfil al otro." = "Open je eigen profiel. Druk nogmaals op de volumeknop: hetzelfde getal verschijnt en telt op bij jouw teller — alsof de volgers van het ene profiel naar het andere zijn \"gereisd\".";
 "Asegúrate de navegar a tu propio perfil antes de pulsar el volumen la segunda vez. La app guarda el offset de la Fase 1 y lo usa en la Fase 2." = "Zorg ervoor dat je naar je eigen profiel navigeert voordat je het volume een tweede keer indrukt. De app slaat de offset van Fase 1 op en gebruikt deze in Fase 2.";
 "Señala a un participante. Sin tocar el móvil todavía." = "Wijs naar een deelnemer. Zonder de telefoon nog aan te raken.";
@@ -1426,13 +1428,41 @@
 "session.panel.open_instagram" = "Instagram openen";
 "session.panel.relogin_after_instagram" = "Opnieuw aanmelden na Instagram";
 "common.cancel" = "Annuleren";
-"session.panel.restart.title" = "Apparaatreset voltooid";
-"session.panel.restart.message" = "Er is een nieuwe apparaatidentiteit aangemaakt. Log nu opnieuw in. Als Instagram nog steeds een leeg scherm of geen-internet scherm toont, sluit de app volledig en open hem één keer opnieuw.";
+"session.panel.restart.title" = "Herstart vereist";
+"session.panel.restart.message" = "Apparaatvingerafdruk gewist. Sluit de app volledig en open hem opnieuw om de reset te voltooien, log dan opnieuw in.";
 "common.ok" = "OK";
 "session.panel.stuck.title" = "Opnieuw aanmelden werkt niet";
 "session.panel.stuck.message" = "Je sessie kan niet worden hersteld via opnieuw aanmelden. Dit betekent doorgaans dat Instagram dit apparaat heeft gemarkeerd. Gebruik de noodafmelding hieronder om een nieuwe apparaatidentiteit te maken en sluit de app volledig en open hem opnieuw.";
 "session.panel.emergency_steps.intro" = "Te volgen stappen:";
 "session.panel.emergency_step.1" = "Tik op \"Noodafmelding\" hieronder";
-"session.panel.emergency_step.2" = "Wacht op het bericht dat de reset voltooid is";
-"session.panel.emergency_step.3" = "Er wordt direct een nieuwe apparaatidentiteit aangemaakt";
-"session.panel.emergency_step.4" = "Log opnieuw in. Als het nog steeds mislukt, sluit en open de app één keer opnieuw";
+"session.panel.emergency_step.2" = "Sluit de app volledig — veeg omhoog vanaf de onderkant en veeg de app weg";
+"session.panel.emergency_step.3" = "Open de app opnieuw — er wordt automatisch een nieuwe apparaatidentiteit aangemaakt";
+"session.panel.emergency_step.4" = "Log opnieuw in";
+
+// MARK: - FAQ Help View
+"guide.faq.section" = "FAQ";
+"guide.faq.row.title" = "Veelgestelde vragen";
+"guide.faq.row.subtitle" = "Normaal gedrag uitgelegd in eenvoudige taal — laden, vernieuwen en meer";
+"faq.help.title" = "Veelgestelde vragen";
+
+"faq.q.slow_load.question" = "Waarom duurt het enkele seconden om mijn profiel te laden?";
+"faq.q.slow_load.answer" = "Wanneer je Performance opent, maakt de app verbinding met Instagram om je meest recente gegevens op te halen — berichten, volgers, profielfoto en meer. Dit duurt 2–5 seconden afhankelijk van je internetverbinding en de belasting van de Instagram-servers. Er is niets mis: dit is precies dezelfde vertraging die de echte Instagram-app zou hebben bij een langzame verbinding.";
+"faq.q.slow_load.tip" = "Podiumtip: als het publiek het laden opmerkt, zeg dan \"laat me Instagram openen\" terwijl het laadt — ze zullen aannemen dat het normale netwerkvertraging is, wat het ook echt is.";
+
+"faq.q.refresh.question" = "Wordt het profiel elke keer vernieuwd als ik Performance open?";
+"faq.q.refresh.answer" = "Ja, één keer per sessie. De app haalt verse gegevens op van Instagram en slaat ze op in de cache zodat de inhoud actueel blijft. Als je Performance opnieuw opent binnen hetzelfde venster van 90 seconden, verschijnt de gecachete versie onmiddellijk — zonder nieuwe aanvraag.";
+
+"faq.q.new_photo.question" = "Ik heb een nieuwe foto op Instagram geüpload. Wanneer verschijnt die?";
+"faq.q.new_photo.answer" = "Je nieuwe foto verschijnt de volgende keer dat je Performance opent — doorgaans binnen 90 seconden na het plaatsen op Instagram. De app haalt altijd de nieuwste berichten op bij binnenkomst, dus je hoeft niets handmatig te doen.";
+
+"faq.q.reels_slow.question" = "Reels en Getagde inhoud lijken traag. Is dat normaal?";
+"faq.q.reels_slow.answer" = "Reels en getagde foto's worden automatisch op de achtergrond geladen, enkele seconden nadat je berichten verschijnen, zodat ze klaar zijn voordat je naar die tabbladen veegt. Eenmaal geladen worden ze opgeslagen en verschijnen ze onmiddellijk in toekomstige sessies — zonder internet.";
+
+"faq.q.no_data.question" = "Wat gebeurt er als ik geen internetverbinding heb wanneer ik Performance open?";
+"faq.q.no_data.answer" = "De laatste opgeslagen versie van je profiel wordt onmiddellijk uit de cache weergegeven — berichten, profielfoto, tellergetallen en alles. De app zal stilletjes proberen te vernieuwen wanneer de verbinding terugkomt, maar je kunt ook offline optreden zonder onderbrekingen.";
+
+"faq.q.bot.question" = "Kan het gebruik van Vault mijn Instagram-account schorsen?";
+"faq.q.bot.answer" = "Vault is ontworpen met de limieten van Instagram in gedachten. Het spreidt verzoeken automatisch, respecteert afkoelperiodes en stuurt nooit massaacties. Bij normaal gebruik is het risico minimaal. Vermijd het uitvoeren van tientallen trucs achter elkaar in zeer korte tijd — de app voorkomt dit al automatisch.";
+
+"faq.q.not_instagram.question" = "Het publiek vraagt waarom de app op Instagram lijkt. Wat zeg ik?";
+"faq.q.not_instagram.answer" = "Performance is een getrouwe visuele replica van je Instagram-profiel — dezelfde lay-out, dezelfde foto's, dezelfde tellers. Als iemand vraagt, kun je gewoon zeggen dat je je Instagram controleert, want de getoonde gegevens zijn echt en live van je account.";

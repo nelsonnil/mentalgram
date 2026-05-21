@@ -27,6 +27,10 @@ class UploadManager: ObservableObject {
     // MARK: - Auto-resume (set by PerformanceView.onDisappear when it auto-paused the upload)
     // SetDetailView watches this via onChange and calls resumeUpload() when it turns true.
     @Published var autoResumePending: Bool = false
+    /// True when Performance paused the upload temporarily. If the upload was in
+    /// "Next photo in..." wait, SetDetailView preserves waitEndTime and resumes
+    /// from the remaining countdown instead of starting the next photo immediately.
+    @Published var preserveWaitOnAutoPause: Bool = false
 
     // MARK: - Sync & Archive lock
     // True while the unified syncThenArchiveAll operation is running.
@@ -155,6 +159,7 @@ class UploadManager: ObservableObject {
         cooldownRetryDisabledUntil = nil
         requestPause = false
         autoResumePending = false
+        preserveWaitOnAutoPause = false
         requiresManualResumeAfterChallenge = false
         activeTask?.cancel()
         activeTask = nil

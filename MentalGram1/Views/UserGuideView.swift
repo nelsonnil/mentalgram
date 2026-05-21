@@ -22,6 +22,7 @@ struct UserGuideView: View {
         case fakeHomeScreen
         case lockscreenInput
         case amnesiaCarousel
+        case faq
 
         var id: Int {
             switch self {
@@ -39,6 +40,7 @@ struct UserGuideView: View {
             case .fakeHomeScreen:  return 11
             case .lockscreenInput: return 12
             case .amnesiaCarousel: return 13
+            case .faq:             return 14
             }
         }
     }
@@ -174,6 +176,18 @@ struct UserGuideView: View {
                         ) { activeSheet = .amnesiaCarousel }
                     }
 
+                    // FAQ
+                    guideSectionLabel("guide.faq.section", icon: "questionmark.circle.fill", color: Color(hex: "64D2FF"))
+                    guideCardGroup {
+                        guideRow(
+                            icon: "questionmark.circle.fill",
+                            iconColor: Color(hex: "64D2FF"),
+                            title: "guide.faq.row.title",
+                            subtitle: "guide.faq.row.subtitle",
+                            isFirst: true, isLast: true
+                        ) { activeSheet = .faq }
+                    }
+
                     // CAMOUFLAGE
                     guideSectionLabel("guide.section.camouflage", icon: "theatermasks.fill", color: colorData)
                     guideCardGroup {
@@ -242,6 +256,8 @@ struct UserGuideView: View {
             LockscreenInputGuideView(onClose: { activeSheet = nil })
         case .amnesiaCarousel:
             AmnesiaCarouselGuideView(onClose: { activeSheet = nil })
+        case .faq:
+            FAQHelpView(onClose: { activeSheet = nil })
         }
     }
 

@@ -21,6 +21,10 @@ enum FullLoadPhase: String, Codable {
 class ProfileFullLoaderService: ObservableObject {
     static let shared = ProfileFullLoaderService()
 
+    private enum FullLoadTimeout: Error {
+        case timedOut
+    }
+
     // MARK: Published state (drives the UI overlay)
     @Published private(set) var phase: FullLoadPhase = .idle
     @Published private(set) var gridPagesLoaded: Int  = 0
@@ -45,24 +49,29 @@ class ProfileFullLoaderService: ObservableObject {
     private let warmupDuration: Int = 90
 
     private init() {
-        restorePersistedState()
+        // The background full-loader is deprecated. PerformanceView now loads its
+        // profile via a single getProfileInfo() call (same pattern as Explore →
+        // UserProfileView), so this service is intentionally kept dormant.
+        // Purge any persisted state from previous builds so no warmup is "resumed"
+        // at the next app launch.
+        defaults.removeObject(forKey: kPhase)
+        defaults.removeObject(forKey: kGridCursor)
+        defaults.removeObject(forKey: kGridPages)
+        defaults.removeObject(forKey: kGridItems)
+        phase = .completed
+        gridPagesLoaded = 0
+        gridItemsLoaded = 0
+        reelsLoaded = false
+        taggedLoaded = false
+        warmupSecondsRemaining = 0
     }
 
     // MARK: - Public API
 
-    /// Call immediately after a successful login.
-    /// Resets state when the account changes, then starts/resumes loading.
+    /// DEPRECATED — kept only for binary compatibility with any caller that still
+    /// references it. PerformanceView fetches its profile directly. This is a no-op.
     func notifyLoggedIn(userId: String) {
-        let savedId = defaults.string(forKey: kAccountId)
-        if savedId != userId {
-            reset(forNewAccount: userId)
-        }
-        guard phase != .completed else {
-            print("✅ [FULL LOAD] Already completed for \(userId)")
-            return
-        }
-        print("🚀 [FULL LOAD] Starting for \(userId), current phase: \(phase.rawValue)")
-        startOrResume()
+        print("⏭️ [FULL LOAD] notifyLoggedIn ignored — service deprecated")
     }
 
     /// Reset all state (called on new account or manual reset).
@@ -89,11 +98,10 @@ class ProfileFullLoaderService: ObservableObject {
         print("⏸️ [FULL LOAD] Paused at phase: \(phase.rawValue)")
     }
 
-    /// Resume after app comes back to foreground or after an interruption.
+    /// DEPRECATED — kept as no-op so existing callers (e.g. scenePhase changes)
+    /// continue to compile and run safely.
     func startOrResume() {
-        guard phase != .completed else { return }
-        loadTask?.cancel()
-        loadTask = Task { await runLoadSequence() }
+        return
     }
 
     /// Skip the remaining loading and mark the profile as completed immediately.
@@ -185,6 +193,11 @@ class ProfileFullLoaderService: ObservableObject {
 
         while gridPagesLoaded < max {
             guard !Task.isCancelled, ig.isLoggedIn, !ig.isLocked else { break }
+            guard !ig.shouldUseCacheOnlyForOptionalCalls else {
+                let rate = ig.checkRateLimit()
+                print("🛡️ [FULL LOAD] Grid pagination paused near rate budget (\(rate.actionsUsed)/55)")
+                break
+            }
 
             // Human-like inter-page delay (skip on first page — the warmup was enough)
             if gridPagesLoaded > 0 {
@@ -194,6 +207,9 @@ class ProfileFullLoaderService: ObservableObject {
 
             do {
                 let (items, nextCursor) = try await ig.getUserMediaItems(amount: 21, maxId: cursor)
+                await MainActor.run {
+                    self.mergeMediaPageIntoProfileCache(items: items, nextCursor: nextCursor)
+                }
                 let page = gridPagesLoaded + 1
                 await MainActor.run {
                     self.gridPagesLoaded = page
@@ -220,9 +236,19 @@ class ProfileFullLoaderService: ObservableObject {
     private func loadReels() async {
         let ig = InstagramService.shared
         guard ig.isLoggedIn, !ig.isLocked else { return }
+        guard !ig.shouldUseCacheOnlyForOptionalCalls else {
+            let rate = ig.checkRateLimit()
+            print("🛡️ [FULL LOAD] Reels skipped near rate budget (\(rate.actionsUsed)/55)")
+            return
+        }
         do {
-            let items = try await ig.getUserReels(amount: 18)
-            await MainActor.run { reelsLoaded = true }
+            let items = try await withTimeout(seconds: 35) {
+                try await ig.getUserReels(amount: 18)
+            }
+            await MainActor.run {
+                reelsLoaded = true
+                mergeReelsIntoProfileCache(items)
+            }
             print("🎬 [FULL LOAD] Reels: \(items.count) items cached")
         } catch {
             print("⚠️ [FULL LOAD] Reels skipped: \(error)")
@@ -232,20 +258,106 @@ class ProfileFullLoaderService: ObservableObject {
     private func loadTagged() async {
         let ig = InstagramService.shared
         guard ig.isLoggedIn, !ig.isLocked else { return }
+        guard !ig.shouldUseCacheOnlyForOptionalCalls else {
+            let rate = ig.checkRateLimit()
+            print("🛡️ [FULL LOAD] Tagged skipped near rate budget (\(rate.actionsUsed)/55)")
+            return
+        }
         do {
-            let items = try await ig.getUserTagged(amount: 18)
-            await MainActor.run { taggedLoaded = true }
+            let items = try await withTimeout(seconds: 35) {
+                try await ig.getUserTagged(amount: 18)
+            }
+            await MainActor.run {
+                taggedLoaded = true
+                mergeTaggedIntoProfileCache(items)
+            }
             print("🏷️ [FULL LOAD] Tagged: \(items.count) items cached")
         } catch {
             print("⚠️ [FULL LOAD] Tagged skipped: \(error)")
         }
     }
 
+    @MainActor
+    private func mergeMediaPageIntoProfileCache(items: [InstagramMediaItem], nextCursor: String?) {
+        guard !items.isEmpty else { return }
+        let ig = InstagramService.shared
+        let existing = ProfileCacheService.shared.loadProfile()
+        var profile = existing ?? InstagramProfile(
+            userId: ig.session.userId,
+            username: ig.session.username,
+            fullName: "",
+            biography: "",
+            externalUrl: nil,
+            profilePicURL: "",
+            isVerified: false,
+            isPrivate: false,
+            followerCount: 0,
+            followingCount: 0,
+            mediaCount: items.count,
+            followedBy: [],
+            isFollowing: false,
+            isFollowRequested: false,
+            cachedAt: Date(),
+            cachedMediaURLs: [],
+            cachedMediaItems: []
+        )
+
+        let existingIds = Set(profile.cachedMediaItems.map(\.mediaId))
+        let freshItems = items.filter { !existingIds.contains($0.mediaId) }
+        guard !freshItems.isEmpty || profile.cachedNextMaxId != nextCursor else { return }
+
+        profile.cachedMediaItems += freshItems
+        profile.cachedMediaURLs += freshItems.map { $0.imageURL }
+        profile.cachedNextMaxId = nextCursor
+        profile.cachedAt = Date()
+        ProfileCacheService.shared.saveProfile(profile)
+    }
+
+    @MainActor
+    private func mergeReelsIntoProfileCache(_ items: [InstagramMediaItem]) {
+        guard var profile = ProfileCacheService.shared.loadProfile() else { return }
+        profile.cachedReelItems = items
+        profile.cachedReelURLs = items.map { $0.imageURL }
+        profile.cachedAt = Date()
+        ProfileCacheService.shared.saveProfile(profile)
+    }
+
+    @MainActor
+    private func mergeTaggedIntoProfileCache(_ items: [InstagramMediaItem]) {
+        guard var profile = ProfileCacheService.shared.loadProfile() else { return }
+        profile.cachedTaggedURLs = items.map { $0.imageURL }
+        profile.cachedAt = Date()
+        ProfileCacheService.shared.saveProfile(profile)
+    }
+
     // MARK: - Helpers
 
     private func setPhase(_ p: FullLoadPhase) {
-        DispatchQueue.main.async { self.phase = p }
+        if Thread.isMainThread {
+            phase = p
+        } else {
+            DispatchQueue.main.sync { self.phase = p }
+        }
         defaults.set(p.rawValue, forKey: kPhase)
+    }
+
+    /// Reels/tagged are secondary cache warmups. They must not leave the
+    /// Performance preparation overlay stuck if Instagram stalls mid-request.
+    private func withTimeout<T>(
+        seconds: UInt64,
+        operation: @escaping () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                throw FullLoadTimeout.timedOut
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 
     private func restorePersistedState() {

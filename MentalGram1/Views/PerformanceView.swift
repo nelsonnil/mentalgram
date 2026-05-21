@@ -110,8 +110,15 @@ struct PerformanceView: View {
 
     // MARK: - Refresh throttle (prevent rapid consecutive API calls)
     /// Persisted across app restarts so throttle survives close/reopen cycles.
+    /// Aligned with `InstagramSafetyGate.entryRefresh` (90s) so this is a
+    /// belt-and-braces fallback for the case where the safety gate's
+    /// in-memory state was wiped by a crash but the user reopens Performance
+    /// immediately. Previous value of 600s blocked every entry refresh for
+    /// 10 minutes, which meant "I just uploaded a photo on Instagram → open
+    /// Performance → photo never appears because the cache is served and the
+    /// refresh is throttled out".
     @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
-    private let minRefreshInterval: TimeInterval = 600  // persistent cooldown between full profile fetches
+    private let minRefreshInterval: TimeInterval = 90
     @State private var isPullRefreshInFlight = false
     @State private var isSilentGridRefreshing = false
     private let fullRefreshAfterGridRefreshGap: TimeInterval = 90
@@ -375,11 +382,71 @@ struct PerformanceView: View {
         }
     }
 
+    /// Schedules a background preload of reels and tagged so they are cached
+    /// before the user swipes to those tabs. Safe to call multiple times —
+    /// `fetchReelsIfNeeded` and `fetchTaggedIfNeeded` skip when already cached.
+    /// Delay is intentionally staggered to avoid competing with the posts
+    /// download burst that just finished.
+    private func scheduleBackgroundReelsTaggedPreload(for cached: InstagramProfile) {
+        // Already both loaded → nothing to do
+        let reelsPaginationKey = "reels_paginated_\(cached.userId)"
+        let alreadyPaginatedReels = UserDefaults.standard.bool(forKey: reelsPaginationKey)
+        let reelsReady = !cached.cachedReelURLs.isEmpty
+            && !cached.cachedReelItems.isEmpty
+            && !(cached.cachedReelItems.count == 10 && !alreadyPaginatedReels)
+
+        let taggedPaginationKey = "tagged_paginated_\(cached.userId)"
+        let alreadyPaginatedTagged = UserDefaults.standard.bool(forKey: taggedPaginationKey)
+        let taggedReady = !cached.cachedTaggedURLs.isEmpty
+            && !(cached.cachedTaggedURLs.count == 18 && !alreadyPaginatedTagged)
+
+        guard !reelsReady || !taggedReady else {
+            print("🎬 [BG] Reels + tagged already cached — skipping preload")
+            return
+        }
+        print("🎬 [BG] Scheduling background preload — reelsReady:\(reelsReady) taggedReady:\(taggedReady)")
+
+        Task { @MainActor in
+            // Delay to let the posts download burst settle first (anti-bot)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !instagram.isLocked,
+                  !instagram.isSessionChallenged,
+                  !instagram.isUploadingProfilePic,
+                  instagram.isLoggedIn else {
+                print("🚫 [BG] Reels/tagged preload deferred — locked/challenged/uploading")
+                return
+            }
+            guard let current = profile else { return }
+            // Use the flag so we don't double-fetch if user swiped to the tab
+            // during the 5s sleep and handleTabSelected already started a fetch.
+            if !reelsReady && !reelsLoadedOnce {
+                print("🎬 [BG] Auto-preloading reels in background…")
+                reelsLoadedOnce = true
+                await fetchReelsIfNeeded(for: current)
+            }
+            // Extra pause between reels and tagged (anti-bot)
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_500_000_000...2_500_000_000))
+            guard !instagram.isLocked, !instagram.isSessionChallenged else { return }
+            guard let current2 = profile else { return }
+            if !taggedReady && !taggedLoadedOnce {
+                print("🏷️ [BG] Auto-preloading tagged in background…")
+                taggedLoadedOnce = true
+                await fetchTaggedIfNeeded(for: current2)
+            }
+        }
+    }
+
     /// Fetches reels for the own profile tab. Safe to call on-demand.
     @MainActor
     private func fetchReelsIfNeeded(for cached: InstagramProfile) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
+        guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
+            let rate = instagram.checkRateLimit()
+            print("🛡️ [REELS] Lazy load skipped near rate budget (\(rate.actionsUsed)/55)")
+            reelsLoadedOnce = false
+            return
+        }
         // Re-fetch when:
         //  a) No cache at all (first load)
         //  b) URLs exist but items list is missing (old cache before cachedReelItems was added)
@@ -429,6 +496,12 @@ struct PerformanceView: View {
     private func fetchTaggedIfNeeded(for cached: InstagramProfile) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
+        guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
+            let rate = instagram.checkRateLimit()
+            print("🛡️ [TAGGED] Lazy load skipped near rate budget (\(rate.actionsUsed)/55)")
+            taggedLoadedOnce = false
+            return
+        }
         let taggedPaginationKey = "tagged_paginated_\(cached.userId)"
         let taggedAlreadyPaginated = UserDefaults.standard.bool(forKey: taggedPaginationKey)
         let taggedLooksOld = cached.cachedTaggedURLs.count == 18 && !taggedAlreadyPaginated
@@ -549,12 +622,10 @@ struct PerformanceView: View {
     var body: some View {
         ZStack {
             ocrModifiers
-
-            // Block performance until the full profile has been pre-loaded.
-            if fullLoader.isBlockingPerformance {
-                FullLoadOverlayView(loader: fullLoader)
-                    .transition(.opacity)
-            }
+            // NOTE: The background full-profile pre-loader has been retired. Performance
+            // now loads its profile the same way UserProfileView (from Explore) does:
+            // cache first, then one getProfileInfo() call if needed. The 90-second
+            // "Getting ready" overlay (FullLoadOverlayView) is no longer rendered.
         }
             .background(Color.white.ignoresSafeArea())
             .toolbar(.hidden, for: .tabBar)
@@ -662,6 +733,9 @@ struct PerformanceView: View {
             let removed = currentSet.subtracting(newSet).count
             let added   = newSet.subtracting(currentSet).count
             print("🔄 [PERF] onChange cachedMediaURLs: \(allMediaURLs.count)→\(newURLs.count) (-\(removed) +\(added))")
+            if profile == nil, let cached = profileCache.cachedProfile {
+                profile = cached
+            }
             allMediaURLs = newURLs
             // Keep mediaItemsByURL in sync with the new URL set:
             //   1) Bring in metadata for any newly-arrived URLs from the cached profile.
@@ -709,6 +783,7 @@ struct PerformanceView: View {
             // Parallel API calls (upload POSTs + profile GETs / auto-pic POSTs) from the
             // same session are a strong bot signal.
             if uploadManager.isUploading {
+                uploadManager.preserveWaitOnAutoPause = true
                 uploadManager.requestPause = true
                 didAutoPauseUpload = true
                 print("⏸️ [PERF] Upload paused — entering Performance view (anti-bot)")
@@ -875,7 +950,7 @@ struct PerformanceView: View {
             // Running them in parallel creates concurrent API calls from the
             // same session → strong bot signal (especially POST+GET combos).
             Task { @MainActor in
-                guard !uploadManager.isActive, !didAutoPauseUpload else {
+                guard !uploadManager.isActive || didAutoPauseUpload else {
                     print("🛡️ [PERF] Auto-actions skipped — upload active/paused")
                     LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped: upload active", category: .general)
                     return
@@ -1001,6 +1076,125 @@ struct PerformanceView: View {
                 } else {
                     await applyURLAction(mode: action.mode, text: action.text)
                 }
+            }
+        }
+        // ── Progressive: "Followed by ..." row ───────────────────────────────
+        // Arrives right after the first call of the own-profile chain. Painting
+        // it immediately makes the avatar row look "alive" while posts load.
+        .onReceive(NotificationCenter.default.publisher(for: .ownProfileFollowedByReady)) { note in
+            guard let followers = note.userInfo?["followedBy"] as? [InstagramFollower],
+                  !followers.isEmpty else { return }
+            guard var current = profile else { return }
+            // Mutate via re-init because the struct's `followedBy` is `let`.
+            let updated = InstagramProfile(
+                userId: current.userId, username: current.username, fullName: current.fullName,
+                biography: current.biography, externalUrl: current.externalUrl,
+                profilePicURL: current.profilePicURL, isVerified: current.isVerified,
+                isPrivate: current.isPrivate, followerCount: current.followerCount,
+                followingCount: current.followingCount, mediaCount: current.mediaCount,
+                followedBy: followers,
+                isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+                cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                cachedHighlights: current.cachedHighlights,
+                cachedMediaItems: current.cachedMediaItems,
+                cachedReelItems: current.cachedReelItems,
+                cachedNextMaxId: current.cachedNextMaxId
+            )
+            profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+            print("⚡ [PERF] Progressive: followedBy row painted (\(followers.count))")
+
+            // Download follower thumbnails eagerly so the row doesn't ghost.
+            Task { @MainActor in
+                for follower in followers {
+                    guard let urlStr = follower.profilePicURL, !urlStr.isEmpty,
+                          cachedImages[urlStr] == nil else { continue }
+                    if let img = await downloadImage(from: urlStr) {
+                        cachedImages[urlStr] = img
+                        ProfileCacheService.shared.saveImage(img, forURL: urlStr)
+                    }
+                }
+            }
+            _ = current  // silence unused-write warning
+        }
+        // ── Progressive: posts grid ──────────────────────────────────────────
+        // Posts grid arrives mid-chain, ~3-4s after entering Performance. Drop
+        // them straight into the UI so the user sees thumbnails immediately
+        // (same behaviour as a real Instagram profile that pops in row-by-row).
+        .onReceive(NotificationCenter.default.publisher(for: .ownProfileMediaReady)) { note in
+            guard let mediaItems = note.userInfo?["mediaItems"] as? [InstagramMediaItem],
+                  !mediaItems.isEmpty else { return }
+            let nextCursor = note.userInfo?["nextMaxId"] as? String
+            guard var current = profile else { return }
+            let mediaURLs = mediaItems.map { $0.imageURL }
+
+            let updated = InstagramProfile(
+                userId: current.userId, username: current.username, fullName: current.fullName,
+                biography: current.biography, externalUrl: current.externalUrl,
+                profilePicURL: current.profilePicURL, isVerified: current.isVerified,
+                isPrivate: current.isPrivate, followerCount: current.followerCount,
+                followingCount: current.followingCount,
+                mediaCount: current.mediaCount > 0 ? current.mediaCount : mediaURLs.count,
+                followedBy: current.followedBy,
+                isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                cachedAt: current.cachedAt,
+                cachedMediaURLs: mediaURLs,
+                cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                cachedHighlights: current.cachedHighlights,
+                cachedMediaItems: mediaItems,
+                cachedReelItems: current.cachedReelItems,
+                cachedNextMaxId: nextCursor ?? current.cachedNextMaxId
+            )
+            profile = updated
+            allMediaURLs = mediaURLs
+            if nextMaxId == nil { nextMaxId = nextCursor }
+            hasMorePages = true
+            // Seed mediaItemsByURL for the post viewer (likes/comments/date).
+            for item in mediaItems { mediaItemsByURL[item.imageURL] = item }
+            ProfileCacheService.shared.saveProfile(updated)
+            print("⚡ [PERF] Progressive: posts grid painted (\(mediaURLs.count) items)")
+            LogManager.shared.info("Performance painted progressive grid — \(mediaURLs.count) posts before chain finished", category: .general)
+            loadCachedImages()
+            _ = current
+        }
+        // ── Progressive header render ─────────────────────────────────────────
+        // `InstagramService.getProfileInfo` posts this for own profile as soon as
+        // the header is ready (after fast-path / web_profile_info), BEFORE the
+        // heavy 5-call chain (followers + media + reels + tagged + highlights ≈ 10s).
+        // Paint username, profile pic and counters immediately so the user is not
+        // staring at the skeleton while the anti-bot sleeps run.
+        .onReceive(NotificationCenter.default.publisher(for: .ownProfileHeaderReady)) { note in
+            guard let snapshot = note.userInfo?["snapshot"] as? InstagramProfile else { return }
+            // Only adopt the snapshot when our current profile is missing the
+            // header that the snapshot brings — otherwise we'd flicker counts.
+            let needsHeader = (profile == nil)
+                || (profile?.username.isEmpty ?? true)
+                || (profile?.profilePicURL.isEmpty ?? true)
+                || ((profile?.followerCount ?? 0) == 0 && snapshot.followerCount > 0)
+                || ((profile?.followingCount ?? 0) == 0 && snapshot.followingCount > 0)
+                || ((profile?.mediaCount ?? 0) == 0 && snapshot.mediaCount > 0)
+
+            if needsHeader {
+                // Preserve any media that is already in `profile` so the user
+                // doesn't lose the grid he is looking at right now.
+                var merged = snapshot
+                if let current = profile {
+                    if merged.cachedMediaURLs.isEmpty { merged.cachedMediaURLs = current.cachedMediaURLs }
+                    if merged.cachedMediaItems.isEmpty { merged.cachedMediaItems = current.cachedMediaItems }
+                    if merged.cachedReelURLs.isEmpty { merged.cachedReelURLs = current.cachedReelURLs }
+                    if merged.cachedReelItems.isEmpty { merged.cachedReelItems = current.cachedReelItems }
+                    if merged.cachedTaggedURLs.isEmpty { merged.cachedTaggedURLs = current.cachedTaggedURLs }
+                    if merged.cachedHighlights.isEmpty { merged.cachedHighlights = current.cachedHighlights }
+                    if merged.cachedNextMaxId == nil { merged.cachedNextMaxId = current.cachedNextMaxId }
+                }
+                profile = merged
+                allMediaURLs = merged.cachedMediaURLs
+                print("⚡ [PERF] Header snapshot adopted — @\(merged.username) followers:\(merged.followerCount) (grid kept: \(merged.cachedMediaURLs.count))")
+                LogManager.shared.info("Performance painted progressive header — heavy chain still running in background", category: .general)
+                loadCachedImages()
+            } else {
+                print("⚡ [PERF] Header snapshot ignored — current profile already has fresher header")
             }
         }
         // ── ExploreView secret-input word reveal completed ───────────────────
@@ -1230,8 +1424,8 @@ struct PerformanceView: View {
                 LogManager.shared.warning("URL custom reveal: no active custom set", category: .general)
                 return
             }
-            if UploadManager.shared.isActive {
-                print("⚠️ [URL] Custom slot reveal blocked: upload is active")
+            if UploadManager.shared.isActive && !didAutoPauseUpload {
+                print("⚠️ [URL] Custom slot reveal blocked: upload is active and not paused by Performance")
                 return
             }
             print("📲 [URL] Custom slot reveal: slot=\(slot) from '\(activeSet.name)'")
@@ -1254,8 +1448,8 @@ struct PerformanceView: View {
                 print("⚠️ [URL] Card reveal: '\(symbol)' is not a valid card symbol")
                 return
             }
-            if UploadManager.shared.isActive {
-                print("⚠️ [URL] Card reveal blocked: upload is active")
+            if UploadManager.shared.isActive && !didAutoPauseUpload {
+                print("⚠️ [URL] Card reveal blocked: upload is active and not paused by Performance")
                 return
             }
             print("📲 [URL] Card reveal: \(symbol) from '\(activeSet.name)'")
@@ -1757,18 +1951,43 @@ struct PerformanceView: View {
 
             loadCachedImages()
 
-            // Some old cached profiles were stored with zeroed stats; refresh once on startup
-            // so followers/following/posts are never blank on initial app launch.
-            if allowRemote && cached.followerCount == 0 && cached.followingCount == 0 && cached.mediaCount == 0 {
-                print("📦 [CACHE] Cached profile has zero stats — triggering one background refresh")
-                loadProfileSync(source: "entry")
-            }
-        } else {
-            print("📦 [CACHE] No cached profile found, loading fresh")
-            if allowRemote {
+            // Background preload reels + tagged from cache hit so they are
+            // ready immediately when the user swipes (or are already showing
+            // if cached from a previous session).
+            scheduleBackgroundReelsTaggedPreload(for: cached)
+
+            // ALWAYS attempt a single entry refresh — that is how the user
+            // sees a photo they just uploaded on the real Instagram app, or
+            // a follower count change, etc. The triple throttle
+            //   • `InstagramSafetyGate.entryRefresh`   (90s, in-memory)
+            //   • `lastRefreshTimestamp` + minRefreshInterval (90s, persisted)
+            //   • `isLoading` / `isPullRefreshInFlight` guards (in `loadProfile`)
+            // means rapid in-and-out navigation is automatically ignored.
+            // Only skip when soft-blocked / challenged / over budget.
+            let headerMissing = cached.username.isEmpty || cached.profilePicURL.isEmpty
+            let zeroStats     = cached.followerCount == 0 && cached.followingCount == 0 && cached.mediaCount == 0
+            if allowRemote
+                && !instagram.shouldUseCacheOnlyForOptionalCalls
+                && !instagram.isSessionChallenged {
+                if headerMissing || zeroStats {
+                    print("📦 [CACHE] Cached profile missing header/stats — refresh on entry")
+                } else {
+                    print("📦 [CACHE] Cached profile loaded — firing entry refresh (gated to 90s minimum)")
+                }
                 loadProfileSync(source: "entry")
             } else {
-                LogManager.shared.warning("CACHE ONLY — no cached profile and remote load blocked by safety gate", category: .general)
+                print("📦 [CACHE] Entry refresh skipped — allowRemote:\(allowRemote) cacheOnly:\(instagram.shouldUseCacheOnlyForOptionalCalls) challenged:\(instagram.isSessionChallenged)")
+            }
+        } else {
+            // First-ever entry for this account (or post-logout). Mirror Explore →
+            // UserProfileView: show skeleton (rendered when profile == nil) and fire
+            // ONE getProfileInfo() call that returns header + first ~18 posts.
+            print("📦 [CACHE] No cached profile — single getProfileInfo() call (Explore pattern)")
+            LogManager.shared.info("Performance entry: cache miss, single profile fetch", category: .general)
+            if allowRemote
+                && !instagram.shouldUseCacheOnlyForOptionalCalls
+                && !instagram.isSessionChallenged {
+                loadProfileSync(source: "entry")
             }
         }
     }
@@ -1900,6 +2119,13 @@ struct PerformanceView: View {
     private func loadProfile(source: String) async {
         guard instagram.isLoggedIn else { return }
 
+        if instagram.shouldUseCacheOnlyForOptionalCalls {
+            let rate = instagram.checkRateLimit()
+            print("🛡️ [PERF] loadProfile skipped — near hourly budget (\(rate.actionsUsed)/55)")
+            LogManager.shared.warning("CACHE ONLY — loadProfile skipped near rate budget (\(rate.actionsUsed)/55)", category: .general)
+            return
+        }
+
         let safetyAction: InstagramSafetyGate.Action = source == "entry" ? .entryRefresh : .pullRefresh
         let safetyDecision = InstagramSafetyGate.shared.decision(for: safetyAction)
         guard safetyDecision.allowed else {
@@ -1985,6 +2211,12 @@ struct PerformanceView: View {
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
                 ProfileCacheService.shared.pendingProfilePic = nil
                         downloadAndCacheImages(profile: fetchedProfile)
+                // Background preload reels + tagged so they are ready before
+                // the user swipes to those tabs. Uses the same fetchReelsIfNeeded /
+                // fetchTaggedIfNeeded that tab-swipe uses, so the logic is
+                // identical: skip if already cached, respect anti-bot budget.
+                // Delay 5s to avoid competing with the posts download burst.
+                scheduleBackgroundReelsTaggedPreload(for: fetchedProfile)
                     } else {
                         print("⚠️ [PERF] getProfileInfo returned nil — profile data unavailable")
                         LogManager.shared.error("loadProfile: getProfileInfo returned nil for userId \(instagram.session.userId)", category: .general)
@@ -2054,9 +2286,13 @@ struct PerformanceView: View {
 
         guard !missingURLs.isEmpty else { return }
 
-        // ── 2. Download missing images in parallel, max 4 concurrent connections ─
+        // ── 2. Download missing images in parallel ─────────────────────────────
+        // Thumbnails are <50 KB each so we can run many concurrent requests
+        // safely. Going from 4 → 10 drops a 66-image first-paint from ~17s to
+        // ~7s on a typical network — directly addresses the "blank for 60s"
+        // perception when iOS has purged the image cache.
         Task {
-            let concurrencyLimit = 4
+            let concurrencyLimit = 10
             await withTaskGroup(of: (String, UIImage?).self) { group in
                 var inFlight = 0
                 var pending = missingURLs.makeIterator()

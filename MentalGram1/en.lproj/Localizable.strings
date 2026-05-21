@@ -470,6 +470,7 @@
 "La app **suma** el número al contador real. El espectador ve el total inflado y cree que siempre fue así. El glitch lo \"devuelve\" al original — que él reconocerá como el número verdadero." = "The app **adds** the number to the real counter. The spectator sees the inflated total and thinks it was always like that. The glitch \"returns\" it to the original — which they will recognise as the true number.";
 "El mago registra **3** y **7** con swipes secretos. El contador **Following** muestra el acumulado" = "The magician registers **3** and **7** with secret swipes. The **Following** counter shows the accumulated value";
 "Inflado invisible" = "Invisible inflation";
+"El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K)." = "The open profile shows real + spectator_number. If the real count is 500 and the spectator said 37, they will see 537. On profiles with 10K+, each unit counts as 1K (input 6 on 200K → shows 206K → drops to 200K).";
 "Glitch + cuenta regresiva" = "Glitch + countdown";
 "Inflado" = "Inflated";
 "Glitch" = "Glitch";
@@ -482,6 +483,7 @@
 "**Perfil propio o ajeno.** Con el perfil del espectador el impacto es mayor porque puede verificar inmediatamente. Con el tuyo tienes más control." = "**Own profile or someone else's.** With the spectator's profile the impact is greater because they can verify immediately. With yours you have more control.";
 "**Registra los dígitos antes de abrir el perfil.** Una vez el número inflado está visible, cualquier swipe accidental lo resetearía." = "**Register the digits before opening the profile.** Once the inflated number is visible, any accidental swipe would reset it.";
 "**Transfer mode** funciona mejor en shows pequeños donde el público puede ver ambos perfiles y el \"viaje\" del número." = "**Transfer mode** works best in small shows where the audience can see both profiles and the number's \"journey\".";
+"**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K)." = "**Profiles with 10K+.** The offset is multiplied ×1000 automatically. Ask the spectator for a number from 1–10 and the countdown drops in K units (206K → 200K).";
 "**Usa el delay.** 3–5 segundos de pausa entre el botón y la cuenta regresiva te dan tiempo para hablar y construir expectativa." = "**Use the delay.** 3–5 seconds of pause between the button and the countdown give you time to speak and build anticipation.";
 "Date Force" = "Date Force";
 "Selección" = "Selection";
@@ -1056,13 +1058,41 @@
 "session.panel.open_instagram" = "Open Instagram";
 "session.panel.relogin_after_instagram" = "Re-login after Instagram";
 "common.cancel" = "Cancel";
-"session.panel.restart.title" = "Device Reset Complete";
-"session.panel.restart.message" = "A new device identity has been created. Log in again now. If Instagram still shows a blank or no-internet screen, force-quit the app and reopen it once.";
+"session.panel.restart.title" = "Restart Required";
+"session.panel.restart.message" = "Device fingerprint cleared. Force-quit the app and reopen it to complete the reset, then log in again.";
 "common.ok" = "OK";
 "session.panel.stuck.title" = "Re-login is not working";
 "session.panel.stuck.message" = "Your session cannot be restored with re-login. This usually means Instagram has flagged this device. Use Emergency Logout below to generate a new device identity, then force-quit and reopen the app.";
 "session.panel.emergency_steps.intro" = "Steps to follow:";
 "session.panel.emergency_step.1" = "Tap \"Emergency Logout\" below";
-"session.panel.emergency_step.2" = "Wait for the reset-complete message";
-"session.panel.emergency_step.3" = "A new device identity is created immediately";
-"session.panel.emergency_step.4" = "Log in again. If it still fails, force-quit and reopen the app once";
+"session.panel.emergency_step.2" = "Force-quit the app — swipe up from the bottom and swipe the app away";
+"session.panel.emergency_step.3" = "Reopen the app — a new device identity will be created automatically";
+"session.panel.emergency_step.4" = "Log in again";
+
+// MARK: - FAQ Help View
+"guide.faq.section" = "FAQ";
+"guide.faq.row.title" = "Frequently Asked Questions";
+"guide.faq.row.subtitle" = "Normal behaviour explained in plain language — loading, refresh and more";
+"faq.help.title" = "Frequently Asked Questions";
+
+"faq.q.slow_load.question" = "Why does my profile take a few seconds to load?";
+"faq.q.slow_load.answer" = "When you open Performance, the app connects to Instagram to fetch your latest data — posts, followers, profile picture and more. This takes 2–5 seconds depending on your internet connection and how busy Instagram's servers are. Nothing is wrong: it is exactly the same delay a real Instagram app would have on a slow connection.";
+"faq.q.slow_load.tip" = "Tip for the stage: if the audience notices the loading, say \"let me open Instagram\" while it loads — they will assume it is normal network latency, which it genuinely is.";
+
+"faq.q.refresh.question" = "Does the profile refresh every time I open Performance?";
+"faq.q.refresh.answer" = "Yes, once per session. The app fetches fresh data from Instagram and caches it so the content stays accurate. If you open Performance again within the same 90-second window, the cached version appears instantly — no new request is made.";
+
+"faq.q.new_photo.question" = "I uploaded a new photo to Instagram. When will it appear?";
+"faq.q.new_photo.answer" = "Your new photo will appear the next time you open Performance — typically within 90 seconds of posting it on Instagram. The app always fetches the latest posts on entry, so you do not need to do anything manually.";
+
+"faq.q.reels_slow.question" = "Reels and Tagged content seem slow to appear. Is that normal?";
+"faq.q.reels_slow.answer" = "Reels and Tagged photos load automatically in the background a few seconds after your posts appear, so they are ready before you swipe to those tabs. Once loaded they are saved and appear instantly on future sessions — no internet needed.";
+
+"faq.q.no_data.question" = "What happens if I have no internet connection when I open Performance?";
+"faq.q.no_data.answer" = "The last saved version of your profile is shown immediately from cache — posts, profile picture, follower counts and all. The app will silently try to refresh when the connection comes back, but you can perform without interruption even offline.";
+
+"faq.q.bot.question" = "Can using Vault get my Instagram account suspended?";
+"faq.q.bot.answer" = "Vault is designed with Instagram's limits in mind. It spaces out requests automatically, respects cooldowns and never sends bulk actions. In normal use the risk is minimal. Avoid performing dozens of tricks in a row in a very short time — the app already prevents this automatically.";
+
+"faq.q.not_instagram.question" = "The audience asks why the app looks like Instagram. What do I say?";
+"faq.q.not_instagram.answer" = "Performance is a faithful visual replica of your Instagram profile — same layout, same photos, same counts. If anyone asks, you can simply say you are checking your Instagram, because the data shown is real and live from your account.";

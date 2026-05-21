@@ -944,6 +944,8 @@
 "El número de siempre ✓" = "平常的數字 ✓";
 "El espectador ve %lld · Real: %lld + %lld" = "觀眾看到 %lld · 實際: %lld + %lld";
 "+%lld recibidos 🎩" = "+%lld 已接收 🎩";
+"El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K)." = "開啟的個人檔案會顯示真實數 + 觀眾數字。如果真實數是 500，觀眾說了 37，就會看到 537。在 10K+ 的個人檔案中，每一單位按 1K 計算（在 200K 輸入 6 → 顯示 206K → 降到 200K）。";
+"**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K)." = "**10K+ 的個人檔案。** 偏移量會自動乘以 ×1000。請觀眾說一個 1–10 的數字，倒數會按 K 單位下降（206K → 200K）。";
 
 // ── Guide: Camouflage section ──
 "guide.section.camouflage" = "偽裝";
@@ -1086,13 +1088,41 @@
 "session.panel.open_instagram" = "開啟 Instagram";
 "session.panel.relogin_after_instagram" = "Instagram 後重新登入";
 "common.cancel" = "取消";
-"session.panel.restart.title" = "裝置重置完成";
-"session.panel.restart.message" = "新的裝置身份已建立。現在請重新登入。如果 Instagram 仍顯示空白或無網路畫面，請完全關閉應用程式並重新開啟一次。";
+"session.panel.restart.title" = "需要重新啟動";
+"session.panel.restart.message" = "裝置指紋已清除。請完全關閉應用程式並重新開啟以完成重置，然後重新登入。";
 "common.ok" = "好的";
 "session.panel.stuck.title" = "重新登入無效";
 "session.panel.stuck.message" = "您的工作階段無法透過重新登入恢復。這通常表示 Instagram 已標記此裝置。請使用下方的緊急登出以生成新的裝置身份，然後完全關閉並重新開啟應用程式。";
 "session.panel.emergency_steps.intro" = "請按照以下步驟操作：";
 "session.panel.emergency_step.1" = "點選下方「緊急登出」";
-"session.panel.emergency_step.2" = "等待重置完成提示";
-"session.panel.emergency_step.3" = "新的裝置身份會立即建立";
-"session.panel.emergency_step.4" = "重新登入。如果仍然失敗，請完全關閉並重新開啟應用程式一次";
+"session.panel.emergency_step.2" = "完全關閉應用程式 — 從底部向上滑動並將應用程式滑走";
+"session.panel.emergency_step.3" = "重新開啟應用程式 — 將自動建立新的裝置身份";
+"session.panel.emergency_step.4" = "重新登入";
+
+// MARK: - FAQ Help View
+"guide.faq.section" = "FAQ";
+"guide.faq.row.title" = "常見問題";
+"guide.faq.row.subtitle" = "用簡單語言解釋正常行為 — 載入、重新整理等";
+"faq.help.title" = "常見問題";
+
+"faq.q.slow_load.question" = "為什麼我的個人資料載入需要幾秒鐘？";
+"faq.q.slow_load.answer" = "開啟 Performance 時，應用程式會連線到 Instagram 取得最新資料 — 貼文、追蹤者、大頭照等。根據您的網路連線和 Instagram 伺服器負載，這需要 2–5 秒。完全正常：這與真實 Instagram 應用程式在慢速連線下的延遲完全相同。";
+"faq.q.slow_load.tip" = "舞台小提示：如果觀眾注意到載入，趁載入時說「讓我開啟 Instagram」— 他們會認為這是正常的網路延遲，事實也確實如此。";
+
+"faq.q.refresh.question" = "每次開啟 Performance 時個人資料都會重新整理嗎？";
+"faq.q.refresh.answer" = "是的，每次工作階段重新整理一次。應用程式從 Instagram 取得最新資料並快取，以保持內容準確。如果您在同一 90 秒視窗內再次開啟 Performance，快取版本會立即顯示 — 無需新請求。";
+
+"faq.q.new_photo.question" = "我在 Instagram 上傳了新照片。什麼時候會出現？";
+"faq.q.new_photo.answer" = "下次開啟 Performance 時會出現新照片 — 通常在 Instagram 發布後 90 秒內。應用程式總會在進入時取得最新貼文，無需手動操作。";
+
+"faq.q.reels_slow.question" = "Reels 和被標記的內容載入很慢。正常嗎？";
+"faq.q.reels_slow.answer" = "Reels 和被標記的照片會在貼文出現後幾秒鐘在背景自動載入，在您滑動到這些分頁之前就已準備好。載入後會儲存，之後開啟時即時顯示 — 無需網路。";
+
+"faq.q.no_data.question" = "開啟 Performance 時沒有網路連線會怎樣？";
+"faq.q.no_data.answer" = "個人資料的最新儲存版本會立即從快取中顯示 — 貼文、大頭照、計數器一切都有。網路恢復後應用程式會悄悄嘗試重新整理，但即使離線您也可以不間斷地演示。";
+
+"faq.q.bot.question" = "使用 Vault 會導致 Instagram 帳號被封嗎？";
+"faq.q.bot.answer" = "Vault 的設計充分考慮了 Instagram 的限制。它自動分散請求、遵守冷卻時間，從不傳送批次操作。正常使用下風險極小。避免在極短時間內連續執行數十個技巧 — 應用程式已自動防止這種情況。";
+
+"faq.q.not_instagram.question" = "觀眾問為什麼應用程式看起來像 Instagram。我怎麼回答？";
+"faq.q.not_instagram.answer" = "Performance 是您 Instagram 個人資料的忠實視覺副本 — 相同的版面配置、相同的照片、相同的計數器。如果有人問，您可以簡單地說正在查看自己的 Instagram，因為顯示的資料是真實的，直接來自您的帳號。";

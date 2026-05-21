@@ -299,17 +299,14 @@ struct HomeView: View {
             return
         }
 
-        // First-time full profile load: show blocking loader if there is no cache yet
-        if ProfileCacheService.shared.loadProfile() == nil {
-            showInitialProfileLoad = true
-            return
-        }
+        // Performance loads its own profile from cache + one getProfileInfo() refresh
+        // when entering (same pattern as Explore → UserProfileView). No background
+        // full-loader is started here.
 
         let decision = InstagramSafetyGate.shared.peekPerformanceEntry()
         if !decision.allowRemoteCalls {
-            let hasOwnProfileCache = ProfileCacheService.shared.loadProfile() != nil
             let isPostArchiveCooldown = decision.reason == "post-archive cooldown"
-            if isPostArchiveCooldown || !hasOwnProfileCache {
+            if isPostArchiveCooldown {
                 performanceGate = .safetyPause(
                     seconds: max(1, decision.waitSeconds),
                     reason: decision.reason
@@ -1252,6 +1249,7 @@ struct BudgetWarningSheet: View {
 struct SettingsView: View {
     @ObservedObject var instagram      = InstagramService.shared
     @ObservedObject var backup         = CloudBackupService.shared
+    @ObservedObject private var uploadManager = UploadManager.shared
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
     @ObservedObject private var integrations = IntegrationsSettings.shared
@@ -2338,6 +2336,7 @@ struct SettingsView: View {
     private func canUpload() -> Bool {
         // Check all anti-bot conditions
         guard selectedImageData != nil else { return false }
+        guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else { return false }
         guard !instagram.isLocked else { return false }
         guard !instagram.isNetworkStabilizing else { return false }
         
@@ -2377,6 +2376,11 @@ struct SettingsView: View {
     
     private func sendNote() {
         guard !noteText.isEmpty else { return }
+        guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
+            noteMessage = uploadWriteBlockedMessage
+            showingNoteAlert = true
+            return
+        }
         
         isSendingNote = true
         let textToSend = noteText
@@ -2409,6 +2413,11 @@ struct SettingsView: View {
 
     private func sendBiography() {
         guard !bioText.isEmpty else { return }
+        guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
+            bioMessage = uploadWriteBlockedMessage
+            showingBioAlert = true
+            return
+        }
         isSendingBio = true
         let textToSend = bioText
 
@@ -2432,11 +2441,20 @@ struct SettingsView: View {
             }
         }
     }
+
+    private var uploadWriteBlockedMessage: String {
+        "Temporarily disabled while a set is uploading.\n\nFinish, pause, or cancel the active upload before sending Notes, Biography, or Profile Picture changes."
+    }
     
     // MARK: - Profile Picture Upload
     
     private func uploadProfilePicture() {
         guard let imageData = selectedImageData else { return }
+        guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
+            uploadMessage = uploadWriteBlockedMessage
+            showingUploadAlert = true
+            return
+        }
         
         isUploadingProfilePic = true
         
@@ -5344,6 +5362,10 @@ private struct InitialProfileLoadView: View {
 
     @ObservedObject private var instagram = InstagramService.shared
 
+    private enum InitialLoadTimeout: Error {
+        case timedOut
+    }
+
     enum Phase {
         case validating, loadingProfile, paginating(Int)
         case loadingReels, loadingTagged
@@ -5527,6 +5549,11 @@ private struct InitialProfileLoadView: View {
 
             phase = .paginating(page)
 
+            if instagram.shouldUseCacheOnlyForOptionalCalls {
+                print("🛡️ [INITIAL LOAD] Pagination stopped near rate budget")
+                break
+            }
+
             // Human-paced delay between requests (5–8 s)
             let delayNs = UInt64.random(in: 5_000_000_000...8_000_000_000)
             try? await Task.sleep(nanoseconds: delayNs)
@@ -5566,9 +5593,17 @@ private struct InitialProfileLoadView: View {
         }
 
         // 4 ── Load reels (up to 2 pages, handled internally by getUserReels)
+        guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
+            print("🛡️ [INITIAL LOAD] Optional reels/tagged skipped near rate budget")
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            onComplete()
+            return
+        }
         phase = .loadingReels
         try? await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...7_000_000_000))
-        if let reelItems = try? await instagram.getUserReels(userId: nil, amount: 50) {
+        if let reelItems = try? await withTimeout(seconds: 35, operation: {
+            try await instagram.getUserReels(userId: nil, amount: 50)
+        }) {
             reelsLoaded = reelItems.count
             var updated = profile
             updated.cachedReelURLs  = reelItems.map { $0.imageURL }
@@ -5583,7 +5618,9 @@ private struct InitialProfileLoadView: View {
         // 5 ── Load tagged (up to 2 pages, handled internally by getUserTagged)
         phase = .loadingTagged
         try? await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...7_000_000_000))
-        if let taggedItems = try? await instagram.getUserTagged(userId: nil, amount: 50) {
+        if let taggedItems = try? await withTimeout(seconds: 35, operation: {
+            try await instagram.getUserTagged(userId: nil, amount: 50)
+        }) {
             taggedLoaded = taggedItems.count
             var updated = profile
             updated.cachedTaggedURLs = taggedItems.map { $0.imageURL }
@@ -5596,6 +5633,25 @@ private struct InitialProfileLoadView: View {
         // Brief completion moment so the user sees the final count
         try? await Task.sleep(nanoseconds: 900_000_000)
         onComplete()
+    }
+
+    /// Secondary profile tabs should never block Performance entry forever.
+    /// If Instagram stalls on reels/tagged, keep the partial cache and continue.
+    private func withTimeout<T>(
+        seconds: UInt64,
+        operation: @escaping () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                throw InitialLoadTimeout.timedOut
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 }
 

@@ -1018,10 +1018,12 @@
 "Con **Transfer Effect** activado, el truco tiene una segunda fase: el número \"robado\" del espectador aparece sumándose al perfil del mago." = "**Transfer Effect**が有効な場合、トリックには第2フェーズがあります：観客から「盗んだ」数字がマジシャンのプロフィールに加算されます。";
 "En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel." = "プロフィールの投稿/リールグリッドで、各セルを左スワイプするとその位置の数字が登録されます（1〜9、次に0）。Force Reelと同じ。";
 "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537." = "開いたプロフィールに実際の数字 + 観客の数字が表示されます。実際が500で観客が37と言えば、537と表示されます。";
+"El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K)." = "開いたプロフィールには実数 + 観客の数字が表示されます。実数が500で観客が37と言った場合、537と表示されます。10K+のプロフィールでは各単位が1Kとして扱われます（200Kで入力6 → 206Kと表示 → 200Kに下がる）。";
 "Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos." = "音量ボタンを押すと：グリッチエフェクト（信号の歪み）が発生し、カウンターが約6秒で537から500に下がります。";
 "Cuando el espectador comprueba su móvil ve 500 — el número de siempre. Confirma sin saberlo que le quitaron exactamente 37." = "観客が自分のスマホを確認すると500が見えます — いつもの数字です。知らないうちにちょうど37が取られたことを確認します。";
 "El perfil puede ser del espectador, de un voluntario elegido al azar, o el del propio mago." = "プロフィールは観客のもの、ランダムに選ばれたボランティアのもの、またはマジシャン自身のものでかまいません。";
 "El perfil del espectador/voluntario cuenta regresivamente del número inflado al real." = "観客/ボランティアのプロフィールが膨らんだ数字から実際の数字にカウントダウンします。";
+"**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K)." = "**10K+のプロフィール。** オフセットは自動的に×1000されます。観客に1〜10の数字を言ってもらうと、カウントダウンはK単位で下がります（206K → 200K）。";
 "Abre tu propio perfil. Pulsa el botón de volumen de nuevo: el mismo número aparece sumándose a tu contador — como si los seguidores hubieran \"viajado\" de un perfil al otro." = "自分のプロフィールを開きます。音量ボタンをもう一度押します：同じ数字が自分のカウンターに加算されて現れます — フォロワーが一方のプロフィールからもう一方に「旅した」かのように。";
 "Asegúrate de navegar a tu propio perfil antes de pulsar el volumen la segunda vez. La app guarda el offset de la Fase 1 y lo usa en la Fase 2." = "2回目に音量を押す前に、自分のプロフィールに移動していることを確認してください。アプリはフェーズ1のオフセットを保存し、フェーズ2で使用します。";
 "Señala a un participante. Sin tocar el móvil todavía." = "参加者を指差します。まだスマホに触れずに。";
@@ -1427,13 +1429,41 @@
 "session.panel.open_instagram" = "Instagramを開く";
 "session.panel.relogin_after_instagram" = "Instagram後に再ログイン";
 "common.cancel" = "キャンセル";
-"session.panel.restart.title" = "デバイスリセット完了";
-"session.panel.restart.message" = "新しいデバイスIDが作成されました。今すぐ再ログインしてください。Instagramがまだ空白画面やインターネットなしの画面を表示する場合は、アプリを完全に終了して一度開き直してください。";
+"session.panel.restart.title" = "再起動が必要です";
+"session.panel.restart.message" = "デバイスフィンガープリントが消去されました。アプリを完全に終了してから再度開いてリセットを完了し、もう一度ログインしてください。";
 "common.ok" = "OK";
 "session.panel.stuck.title" = "再ログインが機能していません";
 "session.panel.stuck.message" = "再ログインではセッションを復元できません。Instagramがこのデバイスにフラグを立てている可能性があります。下の緊急ログアウトを使用して新しいデバイスIDを生成し、アプリを完全に終了して再起動してください。";
 "session.panel.emergency_steps.intro" = "手順:";
 "session.panel.emergency_step.1" = "下の「緊急ログアウト」をタップ";
-"session.panel.emergency_step.2" = "リセット完了メッセージを待ちます";
-"session.panel.emergency_step.3" = "新しいデバイスIDがすぐに作成されます";
-"session.panel.emergency_step.4" = "再ログインします。まだ失敗する場合は、アプリを一度完全に終了して開き直してください";
+"session.panel.emergency_step.2" = "アプリを完全に終了 — 下からスワイプしてアプリを画面外に払い除ける";
+"session.panel.emergency_step.3" = "アプリを再度開く — 新しいデバイスIDが自動的に生成されます";
+"session.panel.emergency_step.4" = "再度ログイン";
+
+// MARK: - FAQ Help View
+"guide.faq.section" = "FAQ";
+"guide.faq.row.title" = "よくある質問";
+"guide.faq.row.subtitle" = "読み込み、更新など日常の動作をわかりやすく説明";
+"faq.help.title" = "よくある質問";
+
+"faq.q.slow_load.question" = "プロフィールの読み込みに数秒かかるのはなぜですか？";
+"faq.q.slow_load.answer" = "Performanceを開くと、アプリはInstagramに接続して最新データ（投稿、フォロワー、プロフィール写真など）を取得します。これはインターネット接続やInstagramのサーバーの負荷によって2〜5秒かかります。問題はありません。低速接続での本物のInstagramアプリとまったく同じ遅延です。";
+"faq.q.slow_load.tip" = "ステージのコツ：読み込み中に観客が気づいたら、「Instagramを開きますね」と言うだけ — 普通のネットワーク遅延だと思ってもらえます。実際にそうですから。";
+
+"faq.q.refresh.question" = "Performanceを開くたびにプロフィールは更新されますか？";
+"faq.q.refresh.answer" = "はい、セッションごとに1回です。アプリはInstagramから最新データを取得してキャッシュし、コンテンツを正確に保ちます。同じ90秒のウィンドウ内でPerformanceを再度開くと、キャッシュ版が即座に表示されます — 新しいリクエストはありません。";
+
+"faq.q.new_photo.question" = "Instagramに新しい写真を投稿しました。いつ表示されますか？";
+"faq.q.new_photo.answer" = "次回Performanceを開いたときに新しい写真が表示されます — 通常、Instagram投稿から90秒以内です。アプリは常に入室時に最新投稿を取得するため、手動で何かをする必要はありません。";
+
+"faq.q.reels_slow.question" = "リールとタグ付きコンテンツの表示が遅いです。正常ですか？";
+"faq.q.reels_slow.answer" = "リールとタグ付き写真は、投稿が表示された数秒後にバックグラウンドで自動的に読み込まれ、それらのタブにスワイプする前に準備が整います。一度読み込まれると保存され、以降のセッションでは即座に表示されます — インターネット不要。";
+
+"faq.q.no_data.question" = "Performance開始時にインターネット接続がない場合はどうなりますか？";
+"faq.q.no_data.answer" = "プロフィールの最後に保存されたバージョンがキャッシュからすぐに表示されます — 投稿、プロフィール写真、カウンターすべて。接続が戻ると、アプリは静かに更新を試みます。オフラインでも中断なくパフォーマンスを実行できます。";
+
+"faq.q.bot.question" = "Vaultを使うとInstagramアカウントが停止されますか？";
+"faq.q.bot.answer" = "VaultはInstagramの制限を考慮して設計されています。リクエストを自動的に分散させ、クールダウンを尊重し、大量のアクションを送信しません。通常の使用ではリスクは最小限です。非常に短時間に何十ものトリックを連続して実行しないでください — アプリが既に自動的に防止しています。";
+
+"faq.q.not_instagram.question" = "観客がなぜアプリがInstagramに似ているか聞いてきます。何と言えばいいですか？";
+"faq.q.not_instagram.answer" = "Performanceはあなたのインスタグラムプロフィールの忠実な視覚的レプリカです — 同じレイアウト、同じ写真、同じカウンター。誰かが聞いたら、インスタグラムを確認していると言えばいいだけです。表示されているデータはアカウントからリアルタイムで取得した本物のデータです。";
