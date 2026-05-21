@@ -370,13 +370,18 @@ struct PerformanceView: View {
         guard let profile else { return }
         switch tab {
         case 1:
-            guard !reelsLoadedOnce else { return }
+            // Allow re-fetch even if reelsLoadedOnce=true when no images are actually
+            // visible — this handles the case where iOS purged the Caches/ directory
+            // (thumbnails lost) and the CDN URLs expired so re-download also failed.
+            let hasReelImages = profile.cachedReelURLs.contains { cachedImages[$0] != nil }
+            guard !reelsLoadedOnce || !hasReelImages else { return }
             reelsLoadedOnce = true
-            Task { await fetchReelsIfNeeded(for: profile) }
+            Task { await fetchReelsIfNeeded(for: profile, forceIfNoImages: !hasReelImages) }
         case 2:
-            guard !taggedLoadedOnce else { return }
+            let hasTaggedImages = profile.cachedTaggedURLs.contains { cachedImages[$0] != nil }
+            guard !taggedLoadedOnce || !hasTaggedImages else { return }
             taggedLoadedOnce = true
-            Task { await fetchTaggedIfNeeded(for: profile) }
+            Task { await fetchTaggedIfNeeded(for: profile, forceIfNoImages: !hasTaggedImages) }
         default:
             break
         }
@@ -437,8 +442,11 @@ struct PerformanceView: View {
     }
 
     /// Fetches reels for the own profile tab. Safe to call on-demand.
+    /// - Parameter forceIfNoImages: when true, re-fetches even if URLs are already
+    ///   cached — used when iOS purged the image cache and CDN URLs have expired,
+    ///   so a fresh URL set is needed before thumbnails can be re-downloaded.
     @MainActor
-    private func fetchReelsIfNeeded(for cached: InstagramProfile) async {
+    private func fetchReelsIfNeeded(for cached: InstagramProfile, forceIfNoImages: Bool = false) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
         guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
@@ -451,18 +459,21 @@ struct PerformanceView: View {
         //  a) No cache at all (first load)
         //  b) URLs exist but items list is missing (old cache before cachedReelItems was added)
         //  c) Exactly 10 items cached — that was the hard server cap before pagination was added.
-        //     After a successful paginated fetch the count will be ≥10 items from 2+ pages
-        //     (or still 10 if the account genuinely has only 10 reels, but we mark it done
-        //     via UserDefaults so we don't re-fetch every session).
+        //  d) forceIfNoImages=true: URLs cached but no images visible (e.g. iOS purged Caches/
+        //     and CDN URLs expired — fresh URLs are needed so downloads can succeed).
         let reelsPaginationKey = "reels_paginated_\(cached.userId)"
         let alreadyPaginated = UserDefaults.standard.bool(forKey: reelsPaginationKey)
         let looksLikeOldSinglePage = cached.cachedReelItems.count == 10 && !alreadyPaginated
         let needsFetch = cached.cachedReelURLs.isEmpty
                       || cached.cachedReelItems.isEmpty
                       || looksLikeOldSinglePage
+                      || forceIfNoImages
         guard needsFetch else {
             print("🎬 [REELS] Already cached (\(cached.cachedReelURLs.count) URLs, \(cached.cachedReelItems.count) items) — skipping fetch")
             return
+        }
+        if forceIfNoImages {
+            print("🎬 [REELS] No visible images — forcing fresh URL fetch (CDN may have expired)")
         }
         print("🎬 [REELS] Lazy-loading reels for first tab visit…")
         do {
@@ -492,8 +503,10 @@ struct PerformanceView: View {
     }
 
     /// Fetches tagged posts for the own profile tab. Safe to call on-demand.
+    /// - Parameter forceIfNoImages: when true, re-fetches even if URLs are already
+    ///   cached — used when iOS purged the image cache and CDN URLs have expired.
     @MainActor
-    private func fetchTaggedIfNeeded(for cached: InstagramProfile) async {
+    private func fetchTaggedIfNeeded(for cached: InstagramProfile, forceIfNoImages: Bool = false) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
         guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
@@ -505,9 +518,12 @@ struct PerformanceView: View {
         let taggedPaginationKey = "tagged_paginated_\(cached.userId)"
         let taggedAlreadyPaginated = UserDefaults.standard.bool(forKey: taggedPaginationKey)
         let taggedLooksOld = cached.cachedTaggedURLs.count == 18 && !taggedAlreadyPaginated
-        guard cached.cachedTaggedURLs.isEmpty || taggedLooksOld else {
+        guard cached.cachedTaggedURLs.isEmpty || taggedLooksOld || forceIfNoImages else {
             print("🏷️ [TAGGED] Already cached (\(cached.cachedTaggedURLs.count)) — skipping fetch")
             return
+        }
+        if forceIfNoImages {
+            print("🏷️ [TAGGED] No visible images — forcing fresh URL fetch (CDN may have expired)")
         }
         print("🏷️ [TAGGED] Lazy-loading tagged for first tab visit…")
         do {
