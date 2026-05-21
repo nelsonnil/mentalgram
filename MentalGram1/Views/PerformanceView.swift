@@ -724,7 +724,10 @@ struct PerformanceView: View {
                 isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
                 cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
                 cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                cachedHighlights: current.cachedHighlights
+                cachedHighlights: current.cachedHighlights,
+                cachedMediaItems: current.cachedMediaItems,
+                cachedReelItems: current.cachedReelItems,
+                cachedNextMaxId: current.cachedNextMaxId
             )
             print("⚡️ [PERF] Biography updated instantly in fake profile (no GET needed)")
             LogManager.shared.info("Biography updated instantly in profile view", category: .general)
@@ -1264,6 +1267,7 @@ struct PerformanceView: View {
             performanceEntryRecorded = false
 
             // Stop volume monitoring and OCR when leaving Performance
+            print("🎩 [TRANSFER] PerformanceView.onDisappear — stopping monitoring (transferOffset:\(FollowingMagicSettings.shared.transferOffset))")
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
             stopApiPolling()
@@ -1491,20 +1495,45 @@ struct PerformanceView: View {
                 if final.count < expanded.count {
                     print("✂️ [URL] Note truncated: \(expanded.count)→\(final.count) chars")
                 }
+                // Optimistic: show note bubble immediately
+                await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
+                    await MainActor.run { lastNoteSentTimestamp = Date().timeIntervalSince1970 }
                     print("✅ [URL] Note sent via URL scheme")
                     LogManager.shared.success("Note sent via URL scheme (\(final.count) chars)", category: .general)
+                    fireDoubleConfirmationVibration()
                 }
             } else if mode == "bio" {
                 let final = truncateAtWordBoundary(expanded, limit: 150)
                 if final.count < expanded.count {
                     print("✂️ [URL] Bio truncated: \(expanded.count)→\(final.count) chars")
                 }
+                // Optimistic: show bio immediately
+                await MainActor.run {
+                    if let current = profile {
+                        profile = InstagramProfile(
+                            userId: current.userId, username: current.username,
+                            fullName: current.fullName, biography: final,
+                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
+                            isVerified: current.isVerified, isPrivate: current.isPrivate,
+                            followerCount: current.followerCount, followingCount: current.followingCount,
+                            mediaCount: current.mediaCount, followedBy: current.followedBy,
+                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                            cachedHighlights: current.cachedHighlights,
+                            cachedMediaItems: current.cachedMediaItems,
+                            cachedReelItems: current.cachedReelItems,
+                            cachedNextMaxId: current.cachedNextMaxId
+                        )
+                    }
+                }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     print("✅ [URL] Biography updated via URL scheme")
                     LogManager.shared.success("Biography updated via URL scheme (\(final.count) chars)", category: .general)
+                    fireDoubleConfirmationVibration()
                 }
             }
         } catch {
@@ -1555,11 +1584,15 @@ struct PerformanceView: View {
                 if final.count < composed.count {
                     print("✂️ [CLIPBOARD] Note truncated at word boundary: \(composed.count)→\(final.count) chars")
                 }
+                // Optimistic: show note bubble immediately
+                await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     clipboardAutoLastSent = text  // track original clipboard text to avoid re-sends
+                    await MainActor.run { lastNoteSentTimestamp = Date().timeIntervalSince1970 }
                     print("✅ [CLIPBOARD] Note sent from clipboard")
                     LogManager.shared.success("Auto-note sent from clipboard (\(final.count) chars)", category: .general)
+                    fireDoubleConfirmationVibration()
                 }
             } else {
                 let composed = applyTemplate(text, template: bioTemplate)
@@ -1567,11 +1600,32 @@ struct PerformanceView: View {
                 if final.count < composed.count {
                     print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(composed.count)→\(final.count) chars")
                 }
+                // Optimistic: show bio immediately
+                await MainActor.run {
+                    if let current = profile {
+                        profile = InstagramProfile(
+                            userId: current.userId, username: current.username,
+                            fullName: current.fullName, biography: final,
+                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
+                            isVerified: current.isVerified, isPrivate: current.isPrivate,
+                            followerCount: current.followerCount, followingCount: current.followingCount,
+                            mediaCount: current.mediaCount, followedBy: current.followedBy,
+                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                            cachedHighlights: current.cachedHighlights,
+                            cachedMediaItems: current.cachedMediaItems,
+                            cachedReelItems: current.cachedReelItems,
+                            cachedNextMaxId: current.cachedNextMaxId
+                        )
+                    }
+                }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     clipboardAutoLastSent = text  // track original clipboard text to avoid re-sends
                     print("✅ [CLIPBOARD] Biography updated from clipboard")
                     LogManager.shared.success("Auto-bio updated from clipboard (\(final.count) chars)", category: .general)
+                    fireDoubleConfirmationVibration()
                 }
             }
         } catch {
@@ -1645,15 +1699,14 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(composed, limit: 60)
+                // Optimistic: show note bubble immediately, before API confirms
+                await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     print("✅ [API AUTO] Note sent: \"\(final)\"")
                     ud.set(trimmed, forKey: lastKey)          // raw text for dedup
                     ud.set(Date(), forKey: dateKey)           // timestamp so dedup expires in 2h
-                    await MainActor.run {
-                        lastNoteText = final
-                        lastNoteSentTimestamp = Date().timeIntervalSince1970
-                    }
+                    await MainActor.run { lastNoteSentTimestamp = Date().timeIntervalSince1970 }
                     fireDoubleConfirmationVibration()
                 }
             } else {
@@ -1671,7 +1724,10 @@ struct PerformanceView: View {
                             isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
                             cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
                             cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                            cachedHighlights: current.cachedHighlights
+                            cachedHighlights: current.cachedHighlights,
+                            cachedMediaItems: current.cachedMediaItems,
+                            cachedReelItems: current.cachedReelItems,
+                            cachedNextMaxId: current.cachedNextMaxId
                         )
                     }
                 }
@@ -1839,14 +1895,13 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(composed, limit: 60)
+                // Optimistic: show note bubble immediately, before API confirms
+                await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final)
                 if ok {
                     ud.set(trimmed, forKey: lastKey)  // raw word for dedup
                     ud.set(Date(), forKey: dateKey)   // timestamp so dedup expires in 2h
-                    await MainActor.run {
-                        lastNoteText = final
-                        lastNoteSentTimestamp = Date().timeIntervalSince1970
-                    }
+                    await MainActor.run { lastNoteSentTimestamp = Date().timeIntervalSince1970 }
                     print("✅ [OCR] Note sent: \"\(final)\"")
                     fireDoubleConfirmationVibration()
                 }
@@ -1865,7 +1920,10 @@ struct PerformanceView: View {
                             isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
                             cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
                             cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                            cachedHighlights: current.cachedHighlights
+                            cachedHighlights: current.cachedHighlights,
+                            cachedMediaItems: current.cachedMediaItems,
+                            cachedReelItems: current.cachedReelItems,
+                            cachedNextMaxId: current.cachedNextMaxId
                         )
                     }
                 }
@@ -1949,7 +2007,23 @@ struct PerformanceView: View {
     
     private func checkAndLoadProfile(allowRemote: Bool) {
         // ALWAYS try to load from cache first (anti-bot: no automatic requests)
-        if let cached = ProfileCacheService.shared.loadProfile() {
+        if var cached = ProfileCacheService.shared.loadProfile() {
+            // Guard against a race condition where the background reel/tagged preload
+            // hasn't saved to disk yet but is already in self.profile memory. If we
+            // blindly overwrite self.profile with the on-disk version (which still has
+            // empty reels/tagged), the reels/tagged grid would flash empty even though
+            // the user was already seeing them. Preserve whichever source has data.
+            if let current = profile {
+                if cached.cachedReelURLs.isEmpty && !current.cachedReelURLs.isEmpty {
+                    cached.cachedReelURLs = current.cachedReelURLs
+                    cached.cachedReelItems = current.cachedReelItems
+                    print("📦 [CACHE] Preserved in-memory reels (\(current.cachedReelURLs.count)) — disk cache not yet updated")
+                }
+                if cached.cachedTaggedURLs.isEmpty && !current.cachedTaggedURLs.isEmpty {
+                    cached.cachedTaggedURLs = current.cachedTaggedURLs
+                    print("📦 [CACHE] Preserved in-memory tagged (\(current.cachedTaggedURLs.count)) — disk cache not yet updated")
+                }
+            }
             print("📦 [CACHE] Loading profile from cache — \(cached.cachedMediaURLs.count) posts, \(cached.cachedMediaItems.count) items")
 
             self.profile = cached
@@ -3220,13 +3294,16 @@ struct PerformanceView: View {
                 UserDefaults.standard.set(assetId, forKey: Self.lastUploadedAssetKey)
                 UserDefaults.standard.set(hash,    forKey: Self.lastUploadedHashKey)
 
-                // Show new image in the fake profile immediately
-                // Use current profilePicURL as cache key — visually correct until next full refresh
+                // Show new image in the fake profile immediately — under the current CDN key.
+                // pendingProfilePic keeps the image alive so loadProfile() can migrate it to
+                // the new CDN URL later; clearing pendingProfilePic triggers the double vibration
+                // that confirms the picture is live on Instagram (same as Post Prediction).
                 let picURL = profile?.profilePicURL ?? "autoPic_pending"
                 cachedImages[picURL] = uiImage
                 ProfileCacheService.shared.saveImage(uiImage, forURL: picURL)
+                ProfileCacheService.shared.pendingProfilePic = uiImage
 
-                print("📷 [AUTO PIC] ✅ Profile picture updated successfully")
+                print("📷 [AUTO PIC] ✅ Profile picture updated — showing instantly, vibration pending CDN confirm")
                 // If the silent refresh was skipped during upload (anti-bot guard),
                 // nextMaxId may still be nil. Schedule a deferred silent refresh
                 // so the first pagination doesn't waste a request re-fetching page 1.
@@ -3616,10 +3693,15 @@ struct InstagramProfileView: View {
         }
         // Transfer effect: volume UP on own profile inflates count by saved offset
         .onChange(of: volumeMonitor.upCount) { _ in
-            guard followingMagic.transferEnabled,
-                  followingMagic.transferOffset > 0,
-                  !followingMagic.isTransferCounting,
-                  !showTransferGlitch else { return }
+            let te  = followingMagic.transferEnabled
+            let to  = followingMagic.transferOffset
+            let tc  = followingMagic.isTransferCounting
+            let stg = showTransferGlitch
+            print("🎩 [INFLATE] upCount changed — transferEnabled:\(te) transferOffset:\(to) isTransferCounting:\(tc) showTransferGlitch:\(stg)")
+            guard te, to > 0, !tc, !stg else {
+                print("🎩 [INFLATE] Guard FAILED — transferEnabled:\(te) offset:\(to) counting:\(tc) glitch:\(stg)")
+                return
+            }
             let delay = followingMagic.triggerDelay
             if delay > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + Double(delay)) {
@@ -4176,8 +4258,9 @@ struct InstagramProfileView: View {
                 EmptyView()
             }
         }
+        .coordinateSpace(name: "secretGrid")
         .simultaneousGesture(
-            DragGesture(minimumDistance: 30, coordinateSpace: .local)
+            DragGesture(minimumDistance: 30, coordinateSpace: .named("secretGrid"))
                 .onEnded { value in handleGridSwipe(value) }
         )
         .fullScreenCover(item: $activeViewer, onDismiss: {
