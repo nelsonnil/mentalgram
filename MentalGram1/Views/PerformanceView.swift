@@ -686,13 +686,11 @@ struct PerformanceView: View {
                 print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
                 LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
             } else {
-                // pendingProfilePic cleared → Instagram CDN confirmed the new picture
-                // Fire haptic so the user knows the pic is live on real Instagram
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.prepare()
-                generator.impactOccurred()
-                print("📳 [PERF] Haptic: profile pic confirmed live on Instagram CDN")
-                LogManager.shared.info("Profile pic confirmed live on Instagram (haptic fired)", category: .general)
+                // pendingProfilePic cleared → Instagram CDN confirmed the new picture.
+                // Same double full-system vibration as Note and Biography confirmations.
+                fireDoubleConfirmationVibration()
+                print("📳 [PERF] Double vibration: profile pic confirmed live on Instagram CDN")
+                LogManager.shared.info("Profile pic confirmed live on Instagram (double vibration fired)", category: .general)
             }
         }
         // Instantly reflect a biography update in the fake Instagram profile view.
@@ -782,12 +780,20 @@ struct PerformanceView: View {
             // Anti-bot: if a set upload is actively running, pause it while we're here.
             // Parallel API calls (upload POSTs + profile GETs / auto-pic POSTs) from the
             // same session are a strong bot signal.
+            // isPausedByPerformance is set immediately so ExploreView search doesn't
+            // get blocked during the brief race between requestPause and the loop
+            // actually transitioning to .paused.
             if uploadManager.isUploading {
+                uploadManager.isPausedByPerformance = true
                 uploadManager.preserveWaitOnAutoPause = true
                 uploadManager.requestPause = true
                 didAutoPauseUpload = true
                 print("⏸️ [PERF] Upload paused — entering Performance view (anti-bot)")
                 LogManager.shared.warning("Upload auto-paused: Performance view opened", category: .general)
+            } else if uploadManager.isActive {
+                // Already paused (e.g. user paused manually before entering Performance).
+                // Still mark context so Explore search is unrestricted.
+                uploadManager.isPausedByPerformance = true
             }
 
             // Activate volume button detection for FollowingMagic and/or OCR.
@@ -1245,6 +1251,9 @@ struct PerformanceView: View {
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
             stopApiPolling()
+
+            // Clear the performance-context pause flag regardless of how we got here.
+            uploadManager.isPausedByPerformance = false
 
             // Anti-bot: if we auto-paused an upload on appear, signal SetDetailView to resume it.
             // Only resume if the upload is still in .paused state (user didn't cancel/error).
@@ -2208,6 +2217,17 @@ struct PerformanceView: View {
                 }
                 if !fetchedProfile.cachedTaggedURLs.isEmpty { taggedLoadedOnce = true }
                         ProfileCacheService.shared.saveProfile(fetchedProfile)
+                // Migrate the locally-captured pending pic to the new CDN URL key
+                // BEFORE clearing it. Instagram may return a different CDN URL on
+                // each profile refresh, so without this the new URL would momentarily
+                // have no image → brief flash/spinner between pendingProfilePic=nil
+                // and the async download completing.
+                if let pendingPic = ProfileCacheService.shared.pendingProfilePic,
+                   !fetchedProfile.profilePicURL.isEmpty {
+                    cachedImages[fetchedProfile.profilePicURL] = pendingPic
+                    ProfileCacheService.shared.saveImage(pendingPic, forURL: fetchedProfile.profilePicURL)
+                    print("⚡️ [PERF] Pending profile pic migrated to new CDN URL — no flash on transition")
+                }
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
                 ProfileCacheService.shared.pendingProfilePic = nil
                         downloadAndCacheImages(profile: fetchedProfile)

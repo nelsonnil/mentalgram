@@ -24,12 +24,19 @@ class UploadManager: ObservableObject {
     // MARK: - Pause Request (checked by upload loop)
     @Published var requestPause = false
 
+    // MARK: - Performance-context pause flag
+    /// Set to true by PerformanceView.onAppear the instant the user enters Performance,
+    /// BEFORE the upload loop has a chance to transition to .paused. This lets Explore
+    /// search allow queries during the brief race window between "pause requested" and
+    /// "actually paused". Cleared by PerformanceView.onDisappear when leaving.
+    @Published var isPausedByPerformance: Bool = false
+
     // MARK: - Auto-resume (set by PerformanceView.onDisappear when it auto-paused the upload)
     // SetDetailView watches this via onChange and calls resumeUpload() when it turns true.
     @Published var autoResumePending: Bool = false
     /// True when Performance paused the upload temporarily. If the upload was in
     /// "Next photo in..." wait, SetDetailView preserves waitEndTime and resumes
-    /// from the remaining countdown instead of starting the next photo immediately.
+    /// from the remaining countdown instead of starting the next photo instead.
     @Published var preserveWaitOnAutoPause: Bool = false
 
     // MARK: - Sync & Archive lock

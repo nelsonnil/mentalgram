@@ -126,7 +126,7 @@ struct ExploreView: View {
                                 .padding()
                             } else if searchResults.isEmpty {
                                 VStack(spacing: 12) {
-                                    if uploadManager.isActive && !uploadManager.isPaused {
+                                    if uploadManager.isUploading && !uploadManager.isPausedByPerformance {
                                         Image(systemName: "arrow.up.circle")
                                             .font(.system(size: 48))
                                             .foregroundColor(.secondary)
@@ -374,9 +374,9 @@ struct ExploreView: View {
                 return
             }
 
-            guard !UploadManager.shared.isActive || UploadManager.shared.isPaused else {
-                print("🛡️ [EXPLORE] Search skipped — upload active/paused")
-                LogManager.shared.warning("SAFETY BLOCK — Explore search skipped: upload active", category: .general)
+            guard !UploadManager.shared.isUploading || UploadManager.shared.isPausedByPerformance else {
+                print("🛡️ [EXPLORE] Search skipped — upload actively running (not paused by Performance)")
+                LogManager.shared.warning("SAFETY BLOCK — Explore search skipped: upload actively running", category: .general)
                 await MainActor.run { isSearching = false }
                 return
             }
@@ -460,9 +460,9 @@ struct ExploreView: View {
             return
         }
 
-        guard !UploadManager.shared.isActive || UploadManager.shared.isPaused else {
-            print("🛡️ [SEARCH] Profile load skipped — upload active/paused")
-            LogManager.shared.warning("SAFETY BLOCK — visited profile load skipped: upload active", category: .general)
+        guard !UploadManager.shared.isUploading || UploadManager.shared.isPausedByPerformance else {
+            print("🛡️ [SEARCH] Profile load skipped — upload actively running (not paused by Performance)")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile load skipped: upload actively running", category: .general)
             loadingProfileUserId = nil
             return
         }
