@@ -386,6 +386,8 @@ struct SetDetailView: View {
 
     @State private var showForceDeleteBankConfirm = false
     @State private var uploadTipExpanded = false
+    /// Task running the smart auto-resume countdown after a network change (A).
+    @State private var networkAutoResumeTask: Task<Void, Never>? = nil
 
     @ViewBuilder private var deleteLastBankButton: some View {
         let hasManyBanks = currentSet.banks.count > 1
@@ -479,14 +481,55 @@ struct SetDetailView: View {
     private var bodyWithLifecycle: some View {
         bodyWithAlerts
         .onChange(of: instagram.networkChangedDuringUpload) { changed in
-            // Network changed during active upload → request pause
-            if changed && uploadManager.isUploading && isThisSetActive {
-                print("⚠️ [UPLOAD] Network changed during upload - requesting PAUSE")
-                LogManager.shared.warning("Network changed during active upload - pausing for safety", category: .network)
-                uploadManager.requestPause = true
-                uploadManager.showingError = "Network Changed\n\nYour connection changed (e.g., WiFi to Cellular).\n\nCheck your connection and tap 'Resume' to continue."
-                // Reset flag
-                instagram.networkChangedDuringUpload = false
+            guard changed else { return }
+            instagram.networkChangedDuringUpload = false
+            guard uploadManager.isUploading && isThisSetActive else { return }
+
+            let newType = instagram.connectionType
+            print("⚠️ [UPLOAD] Network changed → \(newType) — starting smart auto-resume")
+            LogManager.shared.warning("Network changed → \(newType) during upload — smart auto-resume started", category: .network)
+
+            // C: Reset retry counter — pause was caused by a network transition,
+            //    not an upload failure. The user deserves a fresh retry budget.
+            uploadManager.consecutiveAutoRetries = 0
+            uploadManager.requestPause = true
+            // D: Store the new connection type so the UI can display it.
+            uploadManager.networkReconnectingTo = newType
+
+            // A: Enter reconnecting state (attempt: 0 means "auto-resume in progress",
+            //    distinct from attempt: 1+ which is "upload failed, manual retry needed").
+            let stabilizationSeconds = 15
+            uploadManager.networkAutoResumeCountdown = stabilizationSeconds
+            uploadManager.uploadPhase = .waitingNetwork(attempt: 0)
+            uploadManager.currentPhaseDescription = "Connection changed — reconnecting..."
+
+            // A: Launch the smart auto-resume task.
+            networkAutoResumeTask?.cancel()
+            networkAutoResumeTask = Task { @MainActor in
+                // Count down the stabilization window.
+                for i in stride(from: stabilizationSeconds, through: 1, by: -1) {
+                    guard !Task.isCancelled else { return }
+                    // If phase changed externally (e.g. user tapped Resume Now), stop.
+                    guard case .waitingNetwork(let att) = uploadManager.uploadPhase, att == 0 else { return }
+                    uploadManager.networkAutoResumeCountdown = i
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+                guard !Task.isCancelled else { return }
+                guard case .waitingNetwork(let att) = uploadManager.uploadPhase, att == 0 else { return }
+                uploadManager.networkAutoResumeCountdown = 0
+
+                // Verify the new connection is actually up before resuming.
+                guard instagram.isConnected else {
+                    LogManager.shared.warning("Smart auto-resume: no connection after wait — showing manual resume", category: .network)
+                    uploadManager.networkReconnectingTo = ""
+                    uploadManager.uploadPhase = .paused
+                    uploadManager.showingError = "No connection found.\n\nCheck your network (\(newType)) and tap Resume when ready."
+                    return
+                }
+
+                LogManager.shared.info("Smart auto-resume: \(newType) stable — resuming upload automatically", category: .upload)
+                uploadManager.networkReconnectingTo = ""
+                resumeUpload()
             }
         }
         .onAppear {
@@ -1834,7 +1877,13 @@ struct SetDetailView: View {
             if instagram.isLoggedIn {
                 if isThisSetActive {
                     // === THIS SET is the active upload set ===
-                    
+
+                    // E: Network status pill — visible whenever the upload is active.
+                    HStack {
+                        Spacer()
+                        networkStatusPill
+                    }
+
                     // Status icon + text
                     HStack(spacing: 8) {
                         Image(systemName: uploadManager.uploadPhase.icon)
@@ -1938,6 +1987,11 @@ struct SetDetailView: View {
         case .autoRetrying(let secs, let att):
             return String(format: String(localized: "Retrying in %@ (attempt %d/3)"), fmt(secs), att)
         case .waitingNetwork(let att):
+            if att == 0 {
+                return uploadManager.networkAutoResumeCountdown > 0
+                    ? String(format: String(localized: "Auto-resuming in %ds..."), uploadManager.networkAutoResumeCountdown)
+                    : String(localized: "Verifying connection...")
+            }
             return String(format: String(localized: "Waiting for connection... (attempt %d/3)"), att)
         case .paused:
             return String(localized: "Upload Paused")
@@ -1968,21 +2022,64 @@ struct SetDetailView: View {
                     .foregroundColor(.secondary)
             }
         case .waitingNetwork(let attempt):
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .tint(.yellow)
-                    Text("Waiting for connection...")
-                        .font(.subheadline)
-                        .foregroundColor(.yellow)
+            if attempt == 0 {
+                // Smart auto-resume UI (D) — shown after WiFi → Cellular or similar change.
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        Image(systemName: networkConnectionIcon(uploadManager.networkReconnectingTo.isEmpty
+                            ? instagram.connectionType : uploadManager.networkReconnectingTo))
+                            .font(.title3)
+                            .foregroundColor(.yellow)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Connection changed")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.yellow)
+                            let connName = uploadManager.networkReconnectingTo.isEmpty
+                                ? instagram.connectionType : uploadManager.networkReconnectingTo
+                            if !connName.isEmpty && connName != "unknown" {
+                                Text("Now on: \(connName)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        Spacer()
+                        if uploadManager.networkAutoResumeCountdown > 0 {
+                            Text("\(uploadManager.networkAutoResumeCountdown)s")
+                                .font(.system(.title2, design: .rounded).monospacedDigit().bold())
+                                .foregroundColor(.yellow)
+                                .monospacedDigit()
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        ProgressView().tint(.yellow).scaleEffect(0.85)
+                        Text(uploadManager.networkAutoResumeCountdown > 0
+                             ? "Upload will resume automatically — no action needed"
+                             : "Verifying connection before resuming...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
-                Text(String(format: String(localized: "Attempt %d of 3 - Will retry automatically"), attempt))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .padding(12)
+                .background(Color.yellow.opacity(0.08))
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.yellow.opacity(0.25), lineWidth: 1))
+            } else {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.yellow)
+                        Text("Waiting for connection...")
+                            .font(.subheadline)
+                            .foregroundColor(.yellow)
+                    }
+                    Text(String(format: String(localized: "Attempt %d of 3 - Will retry automatically"), attempt))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Color.yellow.opacity(0.1))
+                .cornerRadius(12)
             }
-            .padding()
-            .background(Color.yellow.opacity(0.1))
-            .cornerRadius(12)
         case .escalatedPause(let seconds) where seconds > 0:
             VStack(spacing: 8) {
                 countdownDisplay(seconds: seconds, color: .red, label: "Multiple errors - Cooling down")
@@ -2062,9 +2159,30 @@ struct SetDetailView: View {
                         .background(VaultTheme.Colors.warning)
                         .cornerRadius(VaultTheme.CornerRadius.sm)
                 }
-            case .cooldown, .autoRetrying, .waitingNetwork:
+            case .cooldown, .autoRetrying:
                 // Auto-managed phases — no button (system handles it)
                 EmptyView()
+            case .waitingNetwork(let att):
+                if att == 0 {
+                    // Smart auto-resume: offer a "Resume Now" shortcut to skip the wait.
+                    Button(action: {
+                        networkAutoResumeTask?.cancel()
+                        networkAutoResumeTask = nil
+                        uploadManager.networkAutoResumeCountdown = 0
+                        uploadManager.networkReconnectingTo = ""
+                        resumeUpload()
+                    }) {
+                        Label("Resume Now", systemImage: "play.fill")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.yellow.opacity(0.85))
+                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                    }
+                } else {
+                    EmptyView()
+                }
             case .paused:
                 // Paused — show Resume
                 Button(action: resumeUpload) {
@@ -2153,6 +2271,42 @@ struct SetDetailView: View {
         }
     }
     
+    // MARK: - Network Status Pill (E)
+
+    /// Small pill showing the current connection type and stability during an active upload.
+    private var networkStatusPill: some View {
+        let type = instagram.connectionType
+        let connected = instagram.isConnected
+        let stabilising = instagram.isNetworkStabilizing
+        let label = connected ? (stabilising ? "Stabilising…" : type) : "No connection"
+        let color: Color = connected ? (stabilising ? .yellow : .green) : .red
+        let icon = networkConnectionIcon(type)
+        return HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.12))
+        .cornerRadius(20)
+        .animation(.easeInOut(duration: 0.3), value: connected)
+        .animation(.easeInOut(duration: 0.3), value: stabilising)
+        .animation(.easeInOut(duration: 0.3), value: type)
+    }
+
+    /// SF Symbol name for a given connection type string.
+    private func networkConnectionIcon(_ type: String) -> String {
+        switch type {
+        case "WiFi":     return "wifi"
+        case "Cellular": return "antenna.radiowaves.left.and.right"
+        case "Ethernet": return "cable.connector"
+        default:         return "network"
+        }
+    }
+
     // MARK: - Upload Info Banner
 
     private var uploadInfoBanner: some View {
@@ -3220,6 +3374,39 @@ struct SetDetailView: View {
     }
     
     private func resumeUpload() {
+        // Cancel any pending smart auto-resume task — we are resuming now.
+        networkAutoResumeTask?.cancel()
+        networkAutoResumeTask = nil
+
+        // B: Network availability check — if the connection is absent or still
+        //    stabilising after a recent change, wait it out before firing requests.
+        if !instagram.isConnected {
+            uploadManager.showingError = "No internet connection.\n\nCheck your WiFi or cellular data and tap Resume when ready."
+            LogManager.shared.warning("Resume blocked: no network connection", category: .network)
+            return
+        }
+        if instagram.isNetworkStabilizing {
+            let connectingTo = instagram.connectionType
+            LogManager.shared.info("Resume: network stabilising (\(connectingTo)) — auto-resume in 15s", category: .network)
+            uploadManager.networkReconnectingTo = connectingTo
+            uploadManager.networkAutoResumeCountdown = 15
+            uploadManager.uploadPhase = .waitingNetwork(attempt: 0)
+            uploadManager.currentPhaseDescription = "Connection stabilising — resuming shortly..."
+            networkAutoResumeTask = Task { @MainActor in
+                for i in stride(from: 15, through: 1, by: -1) {
+                    guard !Task.isCancelled else { return }
+                    guard case .waitingNetwork(let att) = uploadManager.uploadPhase, att == 0 else { return }
+                    uploadManager.networkAutoResumeCountdown = i
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+                guard !Task.isCancelled, instagram.isConnected else { return }
+                uploadManager.networkAutoResumeCountdown = 0
+                uploadManager.networkReconnectingTo = ""
+                resumeUpload()
+            }
+            return
+        }
+
         // Clear challenge gate: user tapped Resume manually, acknowledging they checked Instagram
         uploadManager.requiresManualResumeAfterChallenge = false
 
@@ -3264,6 +3451,9 @@ struct SetDetailView: View {
         resetErrorState()
         uploadManager.requestPause = false
         uploadManager.invalidateAllTimers()
+        // Clear any leftover network-change state from the auto-resume flow.
+        uploadManager.networkAutoResumeCountdown = 0
+        uploadManager.networkReconnectingTo = ""
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
         
         // Update phase immediately
@@ -3464,11 +3654,14 @@ struct SetDetailView: View {
         
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
         
-        // ANTI-BOT: Wait if network changed recently (before first upload)
+        // ANTI-BOT: Wait if network changed recently (before first upload).
+        // waitForUploadSafetyWindow enforces a 15s buffer after any network change
+        // (vs. the 4s used by plain waitForNetworkStability) so cellular connections
+        // have time to fully establish before Instagram API requests are made.
         do {
-            try await instagram.waitForNetworkStability()
+            try await instagram.waitForUploadSafetyWindow(label: "upload")
         } catch {
-            print("⚠️ [UPLOAD] Network stability check failed: \(error)")
+            print("⚠️ [UPLOAD] Network safety window failed: \(error)")
             await MainActor.run {
                 dataManager.updateSetStatus(id: currentSet.id, status: .error)
                 uploadManager.showingError = "Network error starting upload: \(error.localizedDescription)"

@@ -126,6 +126,13 @@ class UploadManager: ObservableObject {
     @Published var autoRetryCountdown: Int = 0
     @Published var escalatedPauseCountdown: Int = 0
     @Published var nextPhotoCountdown: Int = 0
+
+    // MARK: - Smart Network Auto-Resume (A, D)
+    /// Countdown (seconds) until the upload auto-resumes after a network change.
+    /// 0 = not in auto-resume mode or resume already fired.
+    @Published var networkAutoResumeCountdown: Int = 0
+    /// Human-readable name of the new connection ("WiFi", "Cellular", …).
+    @Published var networkReconnectingTo: String = ""
     
     // MARK: - Timers (internal, not @Published)
     var botCountdownTimer: Timer?
@@ -164,6 +171,8 @@ class UploadManager: ObservableObject {
         consecutiveAutoRetries = 0
         nextPhotoCountdown = 0
         cooldownRetryDisabledUntil = nil
+        networkAutoResumeCountdown = 0
+        networkReconnectingTo = ""
         requestPause = false
         autoResumePending = false
         preserveWaitOnAutoPause = false
