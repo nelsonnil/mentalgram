@@ -79,7 +79,7 @@ struct FollowersListView: View {
                 Divider()
                 if isLoading {
                     Spacer()
-                    ProgressView().tint(.black)
+                    ProgressView().tint(Color(UIColor.label))
                     Spacer()
                 } else if let err = errorMessage {
                     Spacer()
@@ -92,13 +92,13 @@ struct FollowersListView: View {
                     followersList
                 }
             }
-            .background(Color.white)
+            .background(Color(UIColor.systemBackground))
             .ignoresSafeArea(edges: .top)
 
             // Loading overlay while fetching profile
             if loadingProfileUserId != nil {
                 Color.black.opacity(0.08).ignoresSafeArea()
-                ProgressView().tint(.black)
+                ProgressView().tint(Color(UIColor.label))
             }
 
             // Inline profile view — slides in from right
@@ -114,7 +114,6 @@ struct FollowersListView: View {
                 .zIndex(10)
             }
         }
-        .preferredColorScheme(.light)
         .task { await loadUsers() }
         .onDisappear {
             // Cancel any in-flight profile load when the view is dismissed.
@@ -239,27 +238,27 @@ struct FollowersListView: View {
 
     private var navBar: some View {
         ZStack {
-            Color.white
+            Color(UIColor.systemBackground)
             VStack(spacing: 0) {
                 Color.clear.frame(height: statusBarHeight)
                 HStack {
                     Button(action: commitAndClose) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.black)
+                            .foregroundColor(Color(UIColor.label))
                             .frame(width: 44, height: 44)
                     }
                     Spacer()
                     Text(username)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(Color(UIColor.label))
                     Spacer()
                     ZStack(alignment: .topTrailing) {
                         Image("instagram_add_follower")
                             .renderingMode(.template)
                             .resizable()
                             .scaledToFit()
-                            .foregroundColor(.black)
+                            .foregroundColor(Color(UIColor.label))
                             .frame(width: 24, height: 24)
                         // Budget dot: only visible to magician, only when budget is low.
                         // A spectator glancing at the header won't notice an 8px dot.
@@ -282,7 +281,7 @@ struct FollowersListView: View {
             Circle()
                 .fill(Color.red)
                 .frame(width: 9, height: 9)
-                .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 1.5))
                 .offset(x: 3, y: -3)
                 .transition(.opacity)
         }
@@ -307,7 +306,7 @@ struct FollowersListView: View {
                 TabItem(title: String(localized: "followers.tab.more"), isSelected: false) {}
             }
         }
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
     }
 
     // MARK: - Search bar
@@ -316,11 +315,11 @@ struct FollowersListView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(Color(white: 0.45))
+                .foregroundColor(Color(UIColor.secondaryLabel))
 
             TextField(String(localized: "followers.search"), text: $searchQuery)
                 .font(.system(size: 14))
-                .foregroundColor(.black)
+                .foregroundColor(Color(UIColor.label))
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
 
@@ -328,17 +327,17 @@ struct FollowersListView: View {
                 Button(action: { searchQuery = "" }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundColor(Color(white: 0.55))
+                        .foregroundColor(Color(UIColor.secondaryLabel))
                 }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(white: 0.93))
+        .background(Color(UIColor.systemGray6))
         .cornerRadius(10)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
     }
 
     // MARK: - List
@@ -355,7 +354,7 @@ struct FollowersListView: View {
                 if searchQuery.isEmpty {
                     Text(sectionHeader)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(Color(UIColor.label))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .padding(.top, 14)
@@ -413,7 +412,7 @@ struct FollowersListView: View {
                 }
             }
         }
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
     }
 
     // MARK: - Load
@@ -464,12 +463,12 @@ private struct TabItem: View {
             VStack(spacing: 0) {
                 Text(title)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(isSelected ? .black : Color(white: 0.5))
+                    .foregroundColor(isSelected ? Color(UIColor.label) : Color(UIColor.secondaryLabel))
                     .lineLimit(1)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                 Rectangle()
-                    .fill(isSelected ? Color.black : Color.clear)
+                    .fill(isSelected ? Color(UIColor.label) : Color.clear)
                     .frame(height: 1.5)
             }
         }
@@ -513,17 +512,17 @@ private struct FollowerRow: View {
                     HStack(spacing: 4) {
                         Text(follower.username)
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(isFailed ? Color(white: 0.65) : .black)
+                            .foregroundColor(isFailed ? Color(UIColor.tertiaryLabel) : Color(UIColor.label))
                             .lineLimit(1)
 
                         if isFailed {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 10))
-                                .foregroundColor(Color(white: 0.6))
+                                .foregroundColor(Color(UIColor.secondaryLabel))
                         } else if showFollowBack {
                             Text("·")
                                 .font(.system(size: 12))
-                                .foregroundColor(Color(white: 0.5))
+                                .foregroundColor(Color(UIColor.secondaryLabel))
                             Text(String(localized: "followers.follow_back"))
                                 .font(.system(size: 11))
                                 .foregroundColor(Color(red: 0.0, green: 0.47, blue: 1.0))
@@ -534,7 +533,7 @@ private struct FollowerRow: View {
                     if !follower.fullName.isEmpty {
                         Text(follower.fullName)
                             .font(.system(size: 13))
-                            .foregroundColor(isFailed ? Color(white: 0.65) : Color(white: 0.45))
+                            .foregroundColor(isFailed ? Color(UIColor.tertiaryLabel) : Color(UIColor.secondaryLabel))
                             .lineLimit(1)
                     }
                 }
@@ -542,10 +541,10 @@ private struct FollowerRow: View {
 
                 Text(String(localized: mode == .followers ? "followers.remove_btn" : "followers.following_btn"))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(isFailed ? Color(white: 0.65) : .black)
+                    .foregroundColor(isFailed ? Color(UIColor.tertiaryLabel) : Color(UIColor.label))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background(Color(white: 0.93))
+                    .background(Color(UIColor.systemGray6))
                     .cornerRadius(8)
             }
             .contentShape(Rectangle())
@@ -553,7 +552,7 @@ private struct FollowerRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
         .opacity(isFailed ? 0.55 : 1.0)
     }
 
@@ -601,11 +600,11 @@ private struct FollowerRow: View {
 
     private var avatarPlaceholder: some View {
         Circle()
-            .fill(Color(white: 0.88))
+            .fill(Color(UIColor.systemGray4))
             .overlay(
                 Image(systemName: "person.fill")
                     .font(.system(size: 22))
-                    .foregroundColor(Color(white: 0.65))
+                    .foregroundColor(Color(UIColor.tertiaryLabel))
             )
     }
 }

@@ -6,7 +6,9 @@ struct IGIcon: View {
     let asset: String
     let fallback: String
     var size: CGFloat = 24
-    var color: Color = .black
+    // Adaptive by default: black in light mode, white in dark mode (matches real Instagram).
+    // Callers that need a fixed tint (e.g. white on a photo, blue verified badge) pass `color:` explicitly.
+    var color: Color = Color(UIColor.label)
 
     var body: some View {
         if UIImage(named: asset) != nil {

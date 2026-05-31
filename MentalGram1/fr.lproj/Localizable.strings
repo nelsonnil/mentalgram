@@ -734,7 +734,7 @@
 "postpred.help.input.grid.step3" = "Appuyez sur l'icône Posts pour confirmer et déclencher la révélation.";
 "postpred.help.input.ocr.label" = "OCR — CAMÉRA";
 "postpred.help.input.covert.label" = "FRAPPE SECRÈTE";
-"postpred.help.input.covert.step1" = "Activez **Frappe secrète** dans les paramètres et définissez un mot de couverture — ce que le spectateur verra à l'écran.";
+"postpred.help.input.covert.step1" = "Sur votre carte de set dans **Mes Sets**, sélectionnez **Frappe discrète** et appuyez sur **Configurer** pour définir un mot de couverture — ce que le spectateur verra à l'écran.";
 "postpred.help.input.covert.step2" = "Tapez le mot du spectateur dans le champ de recherche Explore. Le spectateur voit le mot de couverture ; l'app enregistre silencieusement le vrai mot.";
 "postpred.help.input.covert.step3" = "Appuyez sur **Espace une seule fois** pour valider. L'espace disparaît du champ — c'est normal. Une légère vibration confirme que le mot a été capturé et la révélation déclenchée.";
 "postpred.help.input.url.label" = "URL SCHEME / AUTOMATISATION";
@@ -747,7 +747,7 @@
 "postpred.help.settype.custom.desc" = "**1–100 images personnalisées, 1 banque.** Glissez 1–3 chiffres pour sélectionner le numéro de case (1–100). Idéal pour les scores, tirages de tarot ou tout choix visuel.";
 "postpred.help.settype.card.desc" = "**52 cases (A–K × ♠♥♣♦), 1 banque.** Glissez 2 ou 3 chiffres pour sélectionner une carte. Enseignes : 1=♠ 2=♥ 3=♣ 4=♦. Ex : 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.ocr.label" = "OCR - RECONNAISSANCE CAMERA";
-"postpred.help.input.ocr.step1" = "Activez **OCR** dans les parametres Post Prediction.";
+"postpred.help.input.ocr.step1" = "Sur votre carte de set dans **Mes Sets**, sélectionnez **OCR** comme méthode de saisie, puis appuyez sur **Configurer** pour régler la caméra et la langue.";
 "postpred.help.input.ocr.step2" = "Pointez la camera vers un mot ecrit a la main ou imprime. L'app le lit automatiquement et declenche la revelation correspondante.";
 "postpred.help.input.url.label" = "SCHEMA URL";
 "postpred.help.input.url.step1" = "Activez **URL Scheme** dans les parametres Post Prediction.";
@@ -755,8 +755,8 @@
 "postpred.help.before.1" = "Créez un **Set** dans la section Sets. Choisissez Word Reveal, Number Reveal, Custom Set ou Playing Cards. Sélectionnez un modèle d'image ou téléchargez vos propres photos.";
 "postpred.help.before.2" = "Telechargez les images et attendez qu'elles soient **archivees automatiquement**. Cela peut prendre plusieurs heures, laissez l'app active toute la nuit si necessaire.";
 "postpred.help.before.3" = "Pendant le telechargement, **n'utilisez pas l'app**, ne changez pas de reseau et n'interrompez pas le processus. L'ecran reste allume automatiquement. Une notification vous invite a revenir entre chaque telechargement.";
-"postpred.help.before.4" = "Definissez le Set telecharge comme **actif** dans les parametres Post Prediction.";
-"postpred.help.before.5" = "Activez au moins une **methode de saisie**: Grille, OCR ou URL Scheme.";
+"postpred.help.before.4" = "Dans **Mes Sets**, appuyez sur le set que vous avez téléchargé, marquez-le comme **actif** et sélectionnez sa **méthode de saisie** directement depuis la carte du set.";
+"postpred.help.before.5" = "Chaque set possède son propre sélecteur de **méthode de saisie** sur sa carte. Aucun bouton séparé n'est nécessaire — choisissez simplement la méthode qui convient à votre spectacle.";
 "postpred.help.during.step.invite" = "LE CHOIX LIBRE";
 "postpred.help.during.invite.action" = "Demandez au spectateur de penser librement a un mot, un nombre ou une lettre. Ne suggerez rien.";
 "postpred.help.during.invite.dialogue" = "Pensez a n'importe quel mot, ou n'importe quel nombre. Quelque chose de personnel, quelque chose que vous seul connaissez. Ne le dites pas encore.";
@@ -804,7 +804,7 @@
 "postpred.help.input.covert.label" = "FRAPPE DISCRÈTE";
 "postpred.help.input.api.label" = "RÉVÉLATION AUTOMATIQUE API";
 "postpred.help.input.api.intro" = "Connectez Inject (11z.co) ou une API personnalisée. Ouvrez Performance en premier — l'app interroge toutes les 2 s en arrière-plan. Dès que le spectateur soumet sa sélection, la révélation se déclenche automatiquement avec une triple vibration.";
-"postpred.help.input.api.step1" = "Dans Réglages → Post Prediction, réglez Auto Input sur **API** et choisissez votre source (Inject ou API personnalisée).";
+"postpred.help.input.api.step1" = "Sur votre carte de set dans **Mes Sets**, sélectionnez **API** comme méthode de saisie et appuyez sur **Configurer** pour choisir votre source (Inject ou API personnalisée).";
 "postpred.help.input.api.step2" = "Ouvrez la vue Performance sur votre appareil avant de commencer la présentation.";
 "postpred.help.input.api.step3" = "Demandez au spectateur de faire son choix dans le lien Inject ou votre formulaire personnalisé.";
 "postpred.help.input.api.step4" = "En moins de 2 secondes l'app détecte la nouvelle valeur, révèle les photos correspondantes et vibre trois fois pour confirmer.";
@@ -1445,12 +1445,12 @@
 "limits.help.table.col.action" = "Fonctionnalité";
 "limits.help.table.col.first" = "1ère fois";
 "limits.help.table.col.again" = "Répéter";
-"limits.help.table.row.performance" = "Ouvrir Performance (profil + cache arrière-plan)";
+"limits.help.table.row.performance" = "Ouvrir Performance";
 "limits.help.table.row.followers" = "Liste d'abonnés";
 "limits.help.table.row.profile.new" = "Nouveau profil d'abonné";
 "limits.help.table.row.sa" = "Sync & Archive (par photo)";
 "limits.help.table.row.upload" = "Envoi (par photo)";
-"limits.help.table.row.autoupload" = "Auto-upload par photo (upload + archive)";
+"limits.help.table.row.autoupload" = "Cycle complet d'auto-upload (par photo)";
 "limits.help.table.row.reveal" = "Révéler (par lettre/photo)";
 "limits.help.table.row.notebio" = "Changer note ou bio";
 "limits.help.table.row.explore" = "Explorer / Rechercher";
@@ -1480,7 +1480,11 @@
 "guide.fakehome.help.what.title" = "Qu'est-ce que le faux écran d'accueil?";
 "guide.fakehome.help.what.body" = "Lorsque vous ouvrez Performance, au lieu d'aller directement à votre profil, l'application affiche d'abord une capture d'écran de votre vrai écran d'accueil iPhone. Pour un observateur, cela ressemble à une ouverture normale d'Instagram.";
 "guide.fakehome.help.how.title" = "Comment l'utiliser";
-"guide.fakehome.help.how.body" = "1. Prenez une vraie capture d'écran de votre écran d'accueil avec l'icône Instagram visible.\n\n2. Téléchargez-la dans Réglages › Autres › Faux écran d'accueil.\n\n3. Activez le bouton.\n\n4. La prochaine fois que vous ouvrez Performance, cette capture apparaît en plein écran — appuyez n'importe où (idéalement sur l'icône Instagram) pour révéler votre profil.";
+"guide.fakehome.help.how.body" = "1. Prenez une vraie capture d'écran de votre écran d'accueil iPhone en vous assurant que l'icône Instagram est visible.
+
+2. Téléchargez-la dans Réglages › Données › Fake Home Screen.
+
+3. Une fois la capture chargée, l'écran d'accueil fictif s'active automatiquement. La prochaine fois que vous ouvrez Performance, il apparaît en plein écran — appuyez n'importe où (idéalement sur l'icône Instagram) pour révéler votre profil.";
 "guide.fakehome.help.why.title" = "Pourquoi l'utiliser?";
 "guide.fakehome.help.why.body" = "Cela crée l'illusion que vous ouvrez simplement la vraie application Instagram. Quiconque regarde votre écran ne voit que l'écran d'accueil normal avant que votre profil apparaisse.";
 "guide.lockscreen.title" = "Saisie sur écran de verrouillage";
@@ -1490,7 +1494,7 @@
 "guide.lockscreen.help.how.title" = "Comment saisir votre numéro secret";
 "guide.lockscreen.help.how.body" = "1. Tapez les chiffres de votre numéro secret sur le pavé numérique — ils s'enregistrent silencieusement.\n\n2. Tapez en dehors du pavé pour verrouiller ces chiffres.\n\n3. Remplissez les points restants avec n'importe quels chiffres — ils sont ignorés.\n\n4. Une fois les 4 points remplis, l'écran de verrouillage se ferme et Performance s'ouvre.";
 "guide.lockscreen.help.wallpaper.title" = "Fond d'écran";
-"guide.lockscreen.help.wallpaper.body" = "Téléchargez le même fond d'écran que votre vrai écran de verrouillage pour que le faux soit identique. Sans fond d'écran, la saisie sur écran de verrouillage ne peut pas être activée.";
+"guide.lockscreen.help.wallpaper.body" = "Téléchargez le même fond d'écran que celui de votre vrai écran de verrouillage pour que le faux soit identique. Sélectionnez ensuite **Écran de verrouillage** comme méthode de saisie sur votre carte de set dans Mes Sets.";
 "guide.lockscreen.help.why.title" = "Pourquoi l'utiliser?";
 "guide.lockscreen.help.why.body" = "Cela déguise la saisie d'un numéro secret en déverrouillage normal du téléphone. Combiné avec le faux écran d'accueil, la séquence complète ressemble à: déverrouiller → écran d'accueil → ouvrir Instagram.";
 "guide.lockscreen.help.tricks.title" = "Le même numéro secret — plusieurs tours";
@@ -1697,30 +1701,41 @@
 "lockscreen.enter_passcode" = "Entrer le code";
 "lockscreen.emergency" = "Urgence";
 
-/* Per-set input selector */
-"set.input.label" = "Saisie";
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "GLISSEMENT AVEUGLE";
+"postpred.help.input.clockinput.intro" = "Quand Performance s'ouvre, l'écran devient complètement **noir** — simulant que le téléphone est éteint. Tu glisses secrètement pour entrer un nombre ; le spectateur ne voit rien.";
+"postpred.help.input.clockinput.encoding.title" = "ENCODAGE DES CHIFFRES  (chaque chiffre = 2 glissements)";
+"postpred.help.input.clockinput.examples.title" = "EXEMPLES";
+"postpred.help.input.clockinput.example5.note" = "Entrer 05 → chiffre 0 (↑↑) puis chiffre 5 (↓→) — 4 glissements au total";
+"postpred.help.input.clockinput.example37.note" = "Chiffre 3 (→→) puis chiffre 7 (↓←) — 4 glissements au total";
+"postpred.help.input.clockinput.example100.note" = "Chiffre 1 (↑→) puis deux 0s (↑↑ chacun) — 6 glissements au total";
+"postpred.help.input.clockinput.haptic.title" = "RETOUR HAPTIQUE";
+"postpred.help.input.clockinput.haptic.light" = "Tap léger — chaque glissement individuel enregistré";
+"postpred.help.input.clockinput.haptic.medium" = "Impulsion moyenne — chiffre complété (2 glissements)";
+"postpred.help.input.clockinput.haptic.success" = "Double vibration forte — révélation réussie";
+"postpred.help.input.clockinput.haptic.error" = "Buzz d'erreur + flash écran — paire invalide, réinitialisation";
+"postpred.help.input.clockinput.dismiss" = "Après la révélation, **appuie 1 seconde** n'importe où sur l'écran noir pour le fermer. Le faux profil Instagram mis à jour apparaît immédiatement.";
+
+// MARK: - Set Input Picker
+"set.input.label" = "Entrée";
 "set.input.configure" = "Configurer";
-"set.input.covertyping.help" = "Masque ce que vous tapez dans Explorer pour que les spectateurs voient un autre mot. Appuyez sur ESPACE pour révéler.";
+"set.input.covertyping.help" = "Masque ce que tu tapes dans Explore pour que les spectateurs voient un autre mot. Appuie sur ESPACE pour révéler.";
 "set.input.covertyping.maskmode" = "Mode de masque";
-"set.input.api.help" = "Interroge une source en ligne toutes les 2 s pendant Performance et révèle automatiquement à l'arrivée d'une nouvelle valeur.";
+"set.input.api.help" = "Interroge une source en ligne toutes les 2 s quand Performance est ouvert et révèle automatiquement à l'arrivée d'une nouvelle valeur.";
 "set.input.api.source" = "Source API";
-"set.input.api.endpoint_hint" = "Configurez les points de terminaison de l'API dans Réglages → Intégrations.";
-"set.input.ocr.help" = "La caméra démarre en silence à l'ouverture de Performance. Appuyez sur Volume Haut pour scanner ; le texte reconnu révèle automatiquement.";
+"set.input.api.endpoint_hint" = "Configurez les endpoints API dans Réglages → Intégrations.";
+"set.input.ocr.help" = "La caméra démarre silencieusement à l'ouverture de Performance. Appuie sur Volume+ pour scanner ; le texte reconnu révèle automatiquement.";
 "set.input.ocr.camera" = "Caméra";
 "set.input.ocr.language" = "Langue";
-"set.input.lockscreen.help" = "Affiche un faux écran de verrouillage à l'ouverture de Performance pour saisir la valeur en secret. Définissez un fond ci-dessous.";
-"set.input.digitgrid.help" = "Glissez à gauche ou à droite sur la grille pour composer la valeur, puis touchez l'icône Publications pour révéler.";
-"set.input.digitgrid.noconfig" = "Aucune configuration nécessaire.";
-"postpred.perset_note" = "Les méthodes de saisie se configurent désormais sur chaque carte de set dans Mes Sets. Ouvrez un set pour choisir sa saisie.";
-"postpred.no_active_set" = "Aucun set actif. Allez dans Mes Sets et activez-en un.";
+"set.input.lockscreen.help" = "Affiche un faux écran verrouillé à l'ouverture de Performance pour saisir la valeur en secret. Choisis un fond d'écran ci-dessous.";
+"set.input.digitgrid.help" = "Glisse à gauche ou à droite sur la grille pour construire la valeur, puis tape l'icône Publications pour révéler.";
+"set.input.digitgrid.noconfig" = "Aucune configuration requise.";
+"set.input.clockinput.help" = "Affiche un écran entièrement noir à l'ouverture de Performance. Saisis un nombre de 1 à 100 avec des paires de glissements directionnels. Appui long pour fermer après la révélation.";
+"set.input.clockinput.noconfig" = "Aucune configuration requise.";
 
-/* Auto-active inputs (no toggle) */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
 "fakehome.autoactive.title" = "S'active automatiquement";
-"fakehome.autoactive.body" = "Affiché à l'ouverture de Performance si une capture est définie. Touchez n'importe où pour révéler votre profil.";
-"lockscreen.perset_note" = "S'active quand vous choisissez Écran de verrouillage comme saisie d'un set dans Mes Sets.";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
+"fakehome.autoactive.body" = "Affiché à l'ouverture de Performance si une capture est définie. Touche n'importe où pour révéler ton profil.";
+"lockscreen.perset_note" = "S'active quand tu choisis Écran de verrouillage comme méthode d'entrée pour un set dans Mes Sets.";
 "postpred.goto_sets.title" = "Aller dans Sets pour configurer";
-"postpred.goto_sets.body" = "Sélectionnez un set actif et choisissez sa méthode de saisie directement depuis chaque carte de set.";
-"set.url_scheme.copy" = "Copier";
-"set.url_scheme.copied" = "Copié !";
+"postpred.goto_sets.body" = "Sélectionne un set actif et choisis la méthode d'entrée directement sur chaque carte de set.";

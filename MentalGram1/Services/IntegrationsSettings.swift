@@ -4,26 +4,29 @@ import Combine
 // MARK: - Auto Input Mode
 
 enum AutoInputMode: String, CaseIterable {
-    case off       = "off"
-    case clipboard = "clipboard"
-    case api       = "api"
-    case ocr       = "ocr"
+    case off        = "off"
+    case clipboard  = "clipboard"
+    case api        = "api"
+    case ocr        = "ocr"
+    case clockInput = "clockInput"
 
     var displayName: String {
         switch self {
-        case .off:       return "Off"
-        case .clipboard: return "Clipboard"
-        case .api:       return "API"
-        case .ocr:       return "OCR"
+        case .off:        return "Off"
+        case .clipboard:  return "Clipboard"
+        case .api:        return "API"
+        case .ocr:        return "OCR"
+        case .clockInput: return "Clock"
         }
     }
 
     var icon: String {
         switch self {
-        case .off:       return "minus.circle"
-        case .clipboard: return "doc.on.clipboard"
-        case .api:       return "bolt.fill"
-        case .ocr:       return "camera.viewfinder"
+        case .off:        return "minus.circle"
+        case .clipboard:  return "doc.on.clipboard"
+        case .api:        return "bolt.fill"
+        case .ocr:        return "camera.viewfinder"
+        case .clockInput: return "hand.draw.fill"
         }
     }
 }

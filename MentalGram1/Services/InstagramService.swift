@@ -1862,10 +1862,8 @@ class InstagramService: ObservableObject {
             request.httpBody = (components.percentEncodedQuery ?? "").data(using: .utf8)
         }
         
-        // SafetyGate pacing — must happen before the request so the gate can
-        // enforce its minimum inter-request gap. Budget tracking (trackAction)
-        // is deferred to after a successful 200 so that network errors and
-        // Instagram soft-blocks don't silently consume hourly credits.
+        // Track this action for rate limiting
+        trackAction()
         InstagramSafetyGate.shared.recordApiRequest(method: method, path: path)
 
         // Log the request with timing info
@@ -1949,9 +1947,8 @@ class InstagramService: ObservableObject {
         // Auth: refresh CSRF token if Instagram rotated it (prevents POST failures)
         extractAndUpdateCSRF(from: response)
 
-        // ANTI-BOT: Reset consecutive errors on success; count budget only on 200
+        // ANTI-BOT: Reset consecutive errors on success
         if httpResponse.statusCode == 200 {
-            trackAction()   // Only successful requests consume hourly budget
             consecutiveErrors = 0
             consecutiveBotSignalErrors = 0
             challengeRequiredStreak = 0

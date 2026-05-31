@@ -734,7 +734,7 @@
 "postpred.help.input.grid.step3" = "Tippen Sie auf das Posts-Symbol, um die Enthüllung zu bestätigen und auszulösen.";
 "postpred.help.input.ocr.label" = "OCR — KAMERA";
 "postpred.help.input.covert.label" = "VERDECKTE EINGABE";
-"postpred.help.input.covert.step1" = "Aktivieren Sie **Verdeckte Eingabe** in den Einstellungen und legen Sie ein Deckwort fest — das, was der Zuschauer auf dem Bildschirm sieht.";
+"postpred.help.input.covert.step1" = "Wähle auf deiner Set-Karte unter **Meine Sets** **Cover Typing** und tippe auf **Konfigurieren**, um ein Tarnwort festzulegen — das, was der Zuschauer auf dem Bildschirm sieht.";
 "postpred.help.input.covert.step2" = "Tippen Sie das Wort des Zuschauers in das Explore-Suchfeld. Der Zuschauer sieht das Deckwort; die App zeichnet das echte Wort still auf.";
 "postpred.help.input.covert.step3" = "Drücken Sie einmal **Leertaste**, wenn Sie fertig sind. Die Leertaste verschwindet aus dem Feld — das ist beabsichtigt. Eine kurze Vibration bestätigt, dass das Wort erfasst und die Enthüllung ausgelöst wurde.";
 "postpred.help.input.url.label" = "URL SCHEME / AUTOMATISIERUNG";
@@ -747,7 +747,7 @@
 "postpred.help.settype.custom.desc" = "**1–100 eigene Bilder, 1 Bank.** Wischen Sie 1–3 Ziffern, um die Slot-Nummer (1–100) zu wählen. Ideal für Spielergebnisse, Tarot-Karten oder visuelle Auswahl.";
 "postpred.help.settype.card.desc" = "**52 Slots (A–K × ♠♥♣♦), 1 Bank.** Wischen Sie 2 oder 3 Ziffern, um eine Karte zu wählen. Farben: 1=♠ 2=♥ 3=♣ 4=♦. Bsp.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.ocr.label" = "OCR - KAMERAERKENNUNG";
-"postpred.help.input.ocr.step1" = "Aktivieren Sie **OCR** in den Post-Prediction-Einstellungen.";
+"postpred.help.input.ocr.step1" = "Wähle auf deiner Set-Karte unter **Meine Sets** **OCR** als Eingabemethode und tippe dann auf **Konfigurieren**, um Kamera und Sprache einzustellen.";
 "postpred.help.input.ocr.step2" = "Richten Sie die Kamera auf ein handgeschriebenes oder gedrucktes Wort. Die App liest es automatisch und lost die entsprechende Enthullung aus.";
 "postpred.help.input.url.label" = "URL-SCHEMA";
 "postpred.help.input.url.step1" = "Aktivieren Sie **URL Scheme** in den Post-Prediction-Einstellungen.";
@@ -755,8 +755,8 @@
 "postpred.help.before.1" = "Erstellen Sie ein **Set** im Sets-Bereich. Wählen Sie Word Reveal, Number Reveal, Custom Set oder Playing Cards. Wählen Sie ein Bildtemplate oder laden Sie eigene Fotos hoch.";
 "postpred.help.before.2" = "Laden Sie die Bilder hoch und warten Sie, bis sie **automatisch archiviert** wurden. Dies kann mehrere Stunden dauern, lassen Sie die App bei Bedarf uber Nacht laufen.";
 "postpred.help.before.3" = "Wahrend des Uploads **verwenden Sie die App nicht**, wechseln Sie nicht das Netzwerk und unterbrechen Sie den Vorgang nicht. Der Bildschirm bleibt automatisch aktiv. Eine Benachrichtigung fordert Sie auf, zwischen den Uploads zuruckzukehren.";
-"postpred.help.before.4" = "Legen Sie das hochgeladene Set als **aktiv** in den Post-Prediction-Einstellungen fest.";
-"postpred.help.before.5" = "Aktivieren Sie mindestens eine **Eingabemethode**: Raster, OCR oder URL-Schema.";
+"postpred.help.before.4" = "Tippe unter **Meine Sets** auf das hochgeladene Set, markiere es als **aktiv** und wähle seine **Eingabemethode** direkt auf der Set-Karte.";
+"postpred.help.before.5" = "Jedes Set hat seinen eigenen **Eingabemethoden**-Selektor auf seiner Karte. Kein separater Schalter nötig — wähle einfach die Methode, die zu deiner Vorführung passt.";
 "postpred.help.during.step.invite" = "DIE FREIE WAHL";
 "postpred.help.during.invite.action" = "Bitten Sie den Zuschauer, frei an ein Wort, eine Zahl oder einen Buchstaben zu denken. Schlagen Sie nichts vor.";
 "postpred.help.during.invite.dialogue" = "Denken Sie an ein beliebiges Wort oder eine beliebige Zahl. Etwas Personliches, etwas nur Sie wissen. Sagen Sie es noch nicht.";
@@ -804,7 +804,7 @@
 "postpred.help.input.covert.label" = "VERDECKTE EINGABE";
 "postpred.help.input.api.label" = "AUTOMATISCHE API-ENTHÜLLUNG";
 "postpred.help.input.api.intro" = "Verbinde Inject (11z.co) oder eine benutzerdefinierte API. Öffne zuerst Performance — die App fragt alle 2 s im Hintergrund ab. Sobald der Zuschauer seine Auswahl bestätigt, wird die Enthüllung automatisch mit dreifacher Vibration ausgelöst.";
-"postpred.help.input.api.step1" = "In Einstellungen → Post Prediction, stelle Auto Input auf **API** und wähle deine Quelle (Inject oder benutzerdefinierte API).";
+"postpred.help.input.api.step1" = "Wähle auf deiner Set-Karte unter **Meine Sets** **API** als Eingabemethode und tippe auf **Konfigurieren**, um deine Quelle auszuwählen (Inject oder Custom API).";
 "postpred.help.input.api.step2" = "Öffne die Performance-Ansicht auf deinem Gerät, bevor du die Vorstellung beginnst.";
 "postpred.help.input.api.step3" = "Bitte den Zuschauer, seine Auswahl im Inject-Link oder deinem benutzerdefinierten Formular zu treffen.";
 "postpred.help.input.api.step4" = "Innerhalb von 2 Sekunden erkennt die App den neuen Wert, enthüllt die passenden Fotos und vibriert dreimal zur Bestätigung.";
@@ -1445,12 +1445,12 @@
 "limits.help.table.col.action" = "Funktion";
 "limits.help.table.col.first" = "1. Mal";
 "limits.help.table.col.again" = "Wiederholt";
-"limits.help.table.row.performance" = "Performance öffnen (Profil + Hintergrundcache)";
+"limits.help.table.row.performance" = "Performance öffnen";
 "limits.help.table.row.followers" = "Follower-Liste";
 "limits.help.table.row.profile.new" = "Neues Follower-Profil";
 "limits.help.table.row.sa" = "Sync & Archive (pro Foto)";
 "limits.help.table.row.upload" = "Upload (pro Foto)";
-"limits.help.table.row.autoupload" = "Auto-Upload pro Foto (Upload + Archivierung)";
+"limits.help.table.row.autoupload" = "Vollständiger Auto-Upload-Zyklus (pro Foto)";
 "limits.help.table.row.reveal" = "Enthüllen (pro Buchstabe/Foto)";
 "limits.help.table.row.notebio" = "Notiz oder Bio ändern";
 "limits.help.table.row.explore" = "Erkunden / Suchen";
@@ -1480,7 +1480,11 @@
 "guide.fakehome.help.what.title" = "Was ist der gefälschte Startbildschirm?";
 "guide.fakehome.help.what.body" = "Beim Öffnen von Performance zeigt die App zunächst einen Screenshot deines echten iPhone-Startbildschirms. Für Zuschauer sieht es so aus, als würdest du einfach Instagram öffnen.";
 "guide.fakehome.help.how.title" = "So verwendest du es";
-"guide.fakehome.help.how.body" = "1. Mache einen echten Screenshot deines Startbildschirms mit sichtbarem Instagram-Symbol.\n\n2. Lade ihn unter Einstellungen › Sonstiges › Gefälschter Startbildschirm hoch.\n\n3. Aktiviere den Schalter.\n\n4. Beim nächsten Öffnen von Performance erscheint der Screenshot im Vollbild — tippe irgendwo (idealerweise auf das Instagram-Symbol), um dein Profil anzuzeigen.";
+"guide.fakehome.help.how.body" = "1. Mache einen echten Screenshot deines iPhone-Startbildschirms und stelle sicher, dass das Instagram-Symbol sichtbar ist.
+
+2. Lade ihn in Einstellungen › Daten › Fake Home Screen hoch.
+
+3. Sobald ein Screenshot geladen ist, aktiviert sich der gefälschte Startbildschirm automatisch. Beim nächsten Öffnen von Performance erscheint er im Vollbild — tippe irgendwo (idealerweise direkt auf das Instagram-Symbol), um dein Profil zu enthüllen.";
 "guide.fakehome.help.why.title" = "Warum verwenden?";
 "guide.fakehome.help.why.body" = "Es erweckt den Eindruck, dass du einfach die echte Instagram-App öffnest. Jeder, der auf deinen Bildschirm schaut, sieht nur den normalen Startbildschirm, bevor dein Profil erscheint.";
 "guide.lockscreen.title" = "Sperrbildschirm-Eingabe";
@@ -1490,7 +1494,7 @@
 "guide.lockscreen.help.how.title" = "So gibst du deine geheime Zahl ein";
 "guide.lockscreen.help.how.body" = "1. Tippe die Ziffern deiner Geheimzahl auf dem Ziffernfeld — sie werden lautlos registriert.\n\n2. Tippe außerhalb des Ziffernfelds, um diese Ziffern zu sperren.\n\n3. Fülle die verbleibenden Punkte mit beliebigen Ziffern — sie werden ignoriert.\n\n4. Sobald alle 4 Punkte gefüllt sind, schließt sich der Sperrbildschirm und Performance öffnet sich.";
 "guide.lockscreen.help.wallpaper.title" = "Hintergrundbild";
-"guide.lockscreen.help.wallpaper.body" = "Lade dasselbe Hintergrundbild hoch, das du auf deinem echten Sperrbildschirm verwendest. Ohne Hintergrundbild kann die Sperrbildschirm-Eingabe nicht aktiviert werden.";
+"guide.lockscreen.help.wallpaper.body" = "Lade dasselbe Hintergrundbild hoch, das du auf deinem echten Sperrbildschirm verwendest, damit der gefälschte identisch aussieht. Wähle dann auf deiner Set-Karte unter Meine Sets **Sperrbildschirm** als Eingabemethode.";
 "guide.lockscreen.help.why.title" = "Warum verwenden?";
 "guide.lockscreen.help.why.body" = "Es tarnt die Eingabe einer Geheimzahl als normale Telefonentsperrung. Kombiniert mit dem gefälschten Startbildschirm sieht die vollständige Abfolge so aus: Telefon entsperren → Startbildschirm → Instagram öffnen.";
 "guide.lockscreen.help.tricks.title" = "Dieselbe Geheimzahl — viele Tricks";
@@ -1696,30 +1700,41 @@
 "lockscreen.enter_passcode" = "Code eingeben";
 "lockscreen.emergency" = "Notruf";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "BLIND WISCHEN";
+"postpred.help.input.clockinput.intro" = "Beim Öffnen von Performance wird der Bildschirm vollständig **schwarz** — simuliert, dass das Telefon ausgeschaltet ist. Du wischt geheim, um eine Zahl einzugeben; der Zuschauer sieht nichts.";
+"postpred.help.input.clockinput.encoding.title" = "ZIFFERNKODIERUNG  (jede Ziffer = 2 Wischgesten)";
+"postpred.help.input.clockinput.examples.title" = "BEISPIELE";
+"postpred.help.input.clockinput.example5.note" = "05 eingeben → Ziffer 0 (↑↑) dann Ziffer 5 (↓→) — 4 Wischgesten insgesamt";
+"postpred.help.input.clockinput.example37.note" = "Ziffer 3 (→→) dann Ziffer 7 (↓←) — 4 Wischgesten insgesamt";
+"postpred.help.input.clockinput.example100.note" = "Ziffer 1 (↑→) dann zwei 0en (↑↑ jeweils) — 6 Wischgesten insgesamt";
+"postpred.help.input.clockinput.haptic.title" = "HAPTISCHES FEEDBACK";
+"postpred.help.input.clockinput.haptic.light" = "Leichtes Tippen — jede einzelne Wischgeste registriert";
+"postpred.help.input.clockinput.haptic.medium" = "Mittlerer Impuls — Ziffer vollständig (2 Wischgesten)";
+"postpred.help.input.clockinput.haptic.success" = "Doppelte starke Vibration — Enthüllung erfolgreich";
+"postpred.help.input.clockinput.haptic.error" = "Fehler-Vibration + Bildschirmblitz — ungültige Wischgeste, zurückgesetzt";
+"postpred.help.input.clockinput.dismiss" = "Nach der Enthüllung **1 Sekunde lang drücken** auf den schwarzen Bildschirm, um ihn zu schließen. Das aktualisierte Fake-Profil erscheint sofort.";
+
+// MARK: - Set Input Picker
 "set.input.label" = "Eingabe";
 "set.input.configure" = "Konfigurieren";
-"set.input.covertyping.help" = "Maskiert, was du in Entdecken tippst, sodass Zuschauer ein anderes Wort sehen. Drücke LEERTASTE zum Aufdecken.";
-"set.input.covertyping.maskmode" = "Maskenmodus";
-"set.input.api.help" = "Fragt alle 2 s eine Online-Quelle ab, während Performance geöffnet ist, und deckt automatisch auf, wenn ein neuer Wert eintrifft.";
+"set.input.covertyping.help" = "Maskiert, was du im Explore tippst, damit Zuschauer ein anderes Wort sehen. Drücke LEERTASTE zum Enthüllen.";
+"set.input.covertyping.maskmode" = "Maskierungsmodus";
+"set.input.api.help" = "Fragt alle 2 Sek. eine Online-Quelle ab, solange Performance geöffnet ist, und enthüllt automatisch bei neuem Wert.";
 "set.input.api.source" = "API-Quelle";
-"set.input.api.endpoint_hint" = "Konfiguriere die API-Endpunkte in Einstellungen → Integrationen.";
-"set.input.ocr.help" = "Die Kamera startet beim Öffnen von Performance lautlos. Drücke Lauter zum Scannen; erkannter Text deckt automatisch auf.";
+"set.input.api.endpoint_hint" = "API-Endpunkte in Einstellungen → Integrationen konfigurieren.";
+"set.input.ocr.help" = "Kamera startet stumm beim Öffnen von Performance. Lautstärke+ drücken zum Scannen; erkannter Text enthüllt automatisch.";
 "set.input.ocr.camera" = "Kamera";
 "set.input.ocr.language" = "Sprache";
-"set.input.lockscreen.help" = "Zeigt beim Öffnen von Performance einen gefälschten Sperrbildschirm, um den Wert heimlich einzugeben. Lege unten ein Hintergrundbild fest.";
-"set.input.digitgrid.help" = "Wische im Foto-Raster nach links oder rechts, um den Wert zu bilden, und tippe auf das Beiträge-Symbol zum Aufdecken.";
-"set.input.digitgrid.noconfig" = "Keine Einrichtung nötig.";
-"postpred.perset_note" = "Eingabemethoden werden jetzt auf jeder Set-Karte unter Meine Sets festgelegt. Öffne ein Set, um seine Eingabe zu wählen.";
-"postpred.no_active_set" = "Kein aktives Set. Gehe zu Meine Sets und aktiviere eins.";
+"set.input.lockscreen.help" = "Zeigt beim Öffnen von Performance einen falschen Sperrbildschirm, damit du den Wert geheim eingeben kannst. Wähle unten ein Hintergrundbild.";
+"set.input.digitgrid.help" = "Wische links oder rechts über das Raster, um den Wert zu erstellen, und tippe auf das Beiträge-Symbol zum Enthüllen.";
+"set.input.digitgrid.noconfig" = "Keine Konfiguration erforderlich.";
+"set.input.clockinput.help" = "Zeigt beim Öffnen von Performance einen komplett schwarzen Bildschirm. Gib eine Zahl von 1–100 mit direktionalen Wischpaaren ein. Langes Drücken zum Schließen nach der Enthüllung.";
+"set.input.clockinput.noconfig" = "Keine Konfiguration erforderlich.";
 
-/* Auto-active inputs (no toggle) */
-"fakehome.autoactive.title" = "Wird automatisch aktiviert";
-"fakehome.autoactive.body" = "Wird beim Öffnen von Performance angezeigt, wenn ein Screenshot festgelegt ist. Tippe irgendwo, um dein Profil aufzudecken.";
-"lockscreen.perset_note" = "Wird aktiviert, wenn du Sperrbildschirm als Eingabe eines Sets unter Meine Sets wählst.";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
-"postpred.goto_sets.title" = "Zu Sets gehen und konfigurieren";
-"postpred.goto_sets.body" = "Wähle ein aktives Set und lege seine Eingabemethode direkt in jeder Set-Karte fest.";
-"set.url_scheme.copy" = "Kopieren";
-"set.url_scheme.copied" = "Kopiert!";
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
+"fakehome.autoactive.title" = "Aktiviert sich automatisch";
+"fakehome.autoactive.body" = "Wird beim Öffnen von Performance angezeigt, wenn ein Screenshot gesetzt ist. Tippe irgendwo, um dein Profil zu enthüllen.";
+"lockscreen.perset_note" = "Aktiviert sich, wenn du in Meine Sets den Sperrbildschirm als Eingabemethode für ein Set wählst.";
+"postpred.goto_sets.title" = "Zu Sets wechseln und konfigurieren";
+"postpred.goto_sets.body" = "Wähle ein aktives Set und wähle die Eingabemethode direkt auf jeder Set-Karte.";

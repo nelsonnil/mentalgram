@@ -615,7 +615,7 @@
 "postpred.help.input.grid.step3" = "点击帖子图标确认并触发揭示。";
 "postpred.help.input.ocr.label" = "OCR — 摄像头";
 "postpred.help.input.covert.label" = "隐秘输入";
-"postpred.help.input.covert.step1" = "在设置中启用**隐秘输入**并设置掩护词 — 观众在屏幕上看到的词。";
+"postpred.help.input.covert.step1" = "在**我的套牌**的套牌卡片中，选择 **Cover Typing** 并点击**配置**以定义掩护词——观众将在屏幕上看到的内容。";
 "postpred.help.input.covert.step2" = "在Explore搜索栏中输入观众的词。观众看到掩护词；应用悄悄记录真实的词。";
 "postpred.help.input.covert.step3" = "完成后**按一次空格键**。空格从输入栏消失 — 这是正常现象。轻微振动确认词语已捕获并触发了揭示。";
 "postpred.help.input.url.label" = "URL方案 / 自动化";
@@ -627,7 +627,7 @@
 "postpred.help.settype.number.desc" = "**10个槽位（0–9）× N个库。**每个库揭示一个数字。库1 = 第1个数字，库2 = 第2个数字。";
 "postpred.help.settype.custom.desc" = "**自定义图像1–100张，1个库。**滑动1–3位数字选择槽位编号（1–100）。适合比赛结果、塔罗牌或任何视觉选择。";
 "postpred.help.settype.card.desc" = "**52个槽位（A–K × ♠♥♣♦），1个库。**滑动2–3位数字选择一张牌。花色：1=♠ 2=♥ 3=♣ 4=♦。例：4→2 = 4♥ · 1→1→1 = J♠。";
-"postpred.help.input.ocr.step1" = "在帖子预言设置中启用**OCR**。";
+"postpred.help.input.ocr.step1" = "在**我的套牌**的套牌卡片中，选择 **OCR** 作为输入方式，然后点击**配置**以设置摄像头和语言。";
 "postpred.help.input.ocr.step2" = "将摄像头对准手写或印刷的单词。应用自动读取并触发相应揭示。";
 "postpred.help.input.url.label" = "URL方案";
 "postpred.help.input.url.step1" = "在帖子预言设置中启用**URL Scheme**。";
@@ -635,8 +635,8 @@
 "postpred.help.before.1" = "在合集部分创建一个**合集**。选择Word Reveal、Number Reveal、Custom Set或Playing Cards。选择图像模板或上传您自己的照片。";
 "postpred.help.before.2" = "上传图片并等待它们**自动归档**。这可能需要数小时，如有必要让应用整夜运行。";
 "postpred.help.before.3" = "上传期间，**不要使用应用**，不要更换网络，不要中断过程。屏幕会自动保持常亮。";
-"postpred.help.before.4" = "在帖子预言设置中将已上传的合集设置为**活跃**。";
-"postpred.help.before.5" = "启用至少一种**输入方法**：网格、OCR或URL方案。";
+"postpred.help.before.4" = "在**我的套牌**中，点击您上传的套牌，将其标记为**活跃**，然后直接从套牌卡片中选择其**输入方式**。";
+"postpred.help.before.5" = "每个套牌在其卡片上都有自己的**输入方式**选择器。不需要单独的开关——只需选择适合您表演的方式即可。";
 "postpred.help.during.step.invite" = "自由选择";
 "postpred.help.during.invite.action" = "请观众自由思考一个单词、数字或字母。不要提示任何内容。";
 "postpred.help.during.invite.dialogue" = "想任何一个单词，或任何数字。一些个人的，只有您知道的东西。先不要说出来。";
@@ -690,7 +690,7 @@
 "postpred.help.input.covert.label" = "隐蔽输入";
 "postpred.help.input.api.label" = "API 自动揭示";
 "postpred.help.input.api.intro" = "连接 Inject (11z.co) 或自定义 API。先打开 Performance — 应用每 2 秒在后台查询一次。观众提交选择的瞬间，揭示会自动触发并伴随三次震动。";
-"postpred.help.input.api.step1" = "在设置 → Post Prediction 中，将 Auto Input 设为 **API** 并选择来源（Inject 或自定义 API）。";
+"postpred.help.input.api.step1" = "在**我的套牌**的套牌卡片中，选择 **API** 作为输入方式，然后点击**配置**以选择您的来源（Inject 或自定义 API）。";
 "postpred.help.input.api.step2" = "在开始表演前，在设备上打开 Performance 界面。";
 "postpred.help.input.api.step3" = "请观众在 Inject 链接或您的自定义表单中做出选择。";
 "postpred.help.input.api.step4" = "2 秒内应用检测到新值，揭示对应照片，并三次震动确认。";
@@ -955,12 +955,12 @@
 "limits.help.table.col.action" = "功能";
 "limits.help.table.col.first" = "首次";
 "limits.help.table.col.again" = "再次";
-"limits.help.table.row.performance" = "打开 Performance（个人主页 + 后台缓存）";
+"limits.help.table.row.performance" = "打开 Performance";
 "limits.help.table.row.followers" = "关注者列表";
 "limits.help.table.row.profile.new" = "新关注者资料";
 "limits.help.table.row.sa" = "Sync & Archive（每张照片）";
 "limits.help.table.row.upload" = "上传（每张照片）";
-"limits.help.table.row.autoupload" = "自动上传（每张照片：上传 + 归档）";
+"limits.help.table.row.autoupload" = "自动上传完整周期（每张照片）";
 "limits.help.table.row.reveal" = "揭示（每个字母/照片）";
 "limits.help.table.row.notebio" = "更改备注或简介";
 "limits.help.table.row.explore" = "探索 / 搜索";
@@ -1000,7 +1000,11 @@
 "guide.fakehome.help.what.title" = "什么是虚假主屏幕？";
 "guide.fakehome.help.what.body" = "打开Performance时，应用不会直接跳转到个人资料，而是先显示您真实iPhone主屏幕的截图。对观众来说，看起来就像您在正常打开Instagram。";
 "guide.fakehome.help.how.title" = "如何使用";
-"guide.fakehome.help.how.body" = "1. 拍摄显示Instagram图标的主屏幕真实截图。\n\n2. 在设置 › 其他 › 虚假主屏幕中上传。\n\n3. 开启开关。\n\n4. 下次打开Performance时，该截图将全屏显示 — 点击任意位置（最好是Instagram图标）来显示您的个人资料。";
+"guide.fakehome.help.how.body" = "1. 确保 Instagram 图标可见，对 iPhone 主屏幕截图。
+
+2. 在设置 › 数据 › Fake Home Screen 中上传。
+
+3. 截图加载后，虚假主屏幕会自动激活。下次打开 Performance 时，它会全屏显示 — 点击任意位置（最好是 Instagram 图标上）以显示您的个人主页。";
 "guide.fakehome.help.why.title" = "为什么使用？";
 "guide.fakehome.help.why.body" = "创造您只是在打开真实Instagram应用的幻觉。任何看您屏幕的人在您的个人资料出现之前只会看到正常的主屏幕。";
 "guide.lockscreen.title" = "锁屏输入";
@@ -1010,7 +1014,7 @@
 "guide.lockscreen.help.how.title" = "如何输入秘密数字";
 "guide.lockscreen.help.how.body" = "1. 在数字键盘上点击您的秘密数字 — 静默记录。\n\n2. 点击键盘外部锁定这些数字。\n\n3. 点击任意数字填充剩余圆点 — 将被忽略。\n\n4. 所有4个圆点填满后，锁屏关闭，Performance打开。";
 "guide.lockscreen.help.wallpaper.title" = "壁纸";
-"guide.lockscreen.help.wallpaper.body" = "上传与真实锁屏相同的壁纸使虚假锁屏看起来一模一样。没有壁纸则无法启用锁屏输入。";
+"guide.lockscreen.help.wallpaper.body" = "上传与您真实锁屏相同的壁纸，使虚假锁屏看起来完全一致。然后在「我的套牌」的套牌卡片中选择**锁定屏幕**作为输入方式。";
 "guide.lockscreen.help.why.title" = "为什么使用？";
 "guide.lockscreen.help.why.body" = "将秘密数字的输入伪装成正常的手机解锁。与虚假主屏幕结合使用，完整序列看起来像：解锁手机 → 主屏幕 → 打开Instagram。";
 "guide.lockscreen.help.tricks.title" = "同一秘密数字 — 多种魔术";
@@ -1216,30 +1220,41 @@
 "lockscreen.enter_passcode" = "输入密码";
 "lockscreen.emergency" = "紧急呼叫";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "盲划输入";
+"postpred.help.input.clockinput.intro" = "打开 Performance 时，屏幕完全变**黑** — 模拟手机关机。你秘密滑动输入数字；观众看不到任何东西。";
+"postpred.help.input.clockinput.encoding.title" = "数字编码  (每个数字 = 2次滑动)";
+"postpred.help.input.clockinput.examples.title" = "示例";
+"postpred.help.input.clockinput.example5.note" = "输入 05 → 数字 0 (↑↑) 然后数字 5 (↓→) — 共 4 次滑动";
+"postpred.help.input.clockinput.example37.note" = "数字 3 (→→) 然后数字 7 (↓←) — 共 4 次滑动";
+"postpred.help.input.clockinput.example100.note" = "数字 1 (↑→) 然后两个 0 (↑↑ 各一次) — 共 6 次滑动";
+"postpred.help.input.clockinput.haptic.title" = "触觉反馈";
+"postpred.help.input.clockinput.haptic.light" = "轻触 — 每次滑动均已记录";
+"postpred.help.input.clockinput.haptic.medium" = "中等震动 — 数字完成（2次滑动）";
+"postpred.help.input.clockinput.haptic.success" = "双重强震 — 揭示成功";
+"postpred.help.input.clockinput.haptic.error" = "错误震动 + 屏幕闪烁 — 无效组合，重置";
+"postpred.help.input.clockinput.dismiss" = "揭示后，在黑屏上**长按 1 秒**以关闭。更新后的虚假 Instagram 主页立即显示。";
+
+// MARK: - Set Input Picker
 "set.input.label" = "输入";
 "set.input.configure" = "配置";
-"set.input.covertyping.help" = "遮罩你在探索中输入的内容，让观众看到不同的词。按空格键揭示。";
-"set.input.covertyping.maskmode" = "遮罩模式";
-"set.input.api.help" = "Performance 打开时每 2 秒轮询一次在线来源，收到新值时自动揭示。";
+"set.input.covertyping.help" = "在探索中输入内容时进行遮盖，让观众看到不同的词。按空格键揭示。";
+"set.input.covertyping.maskmode" = "遮盖模式";
+"set.input.api.help" = "Performance 开启时每 2 秒轮询一次在线来源，收到新值时自动揭示。";
 "set.input.api.source" = "API 来源";
 "set.input.api.endpoint_hint" = "在设置 → 集成中配置 API 端点。";
-"set.input.ocr.help" = "打开 Performance 时摄像头会静默启动。按音量加键扫描；识别到的文本会自动揭示。";
+"set.input.ocr.help" = "Performance 开启时摄像头静默启动。按音量+扫描；识别的文字自动揭示。";
 "set.input.ocr.camera" = "摄像头";
 "set.input.ocr.language" = "语言";
-"set.input.lockscreen.help" = "打开 Performance 时显示假锁屏，便于你秘密输入数值。在下方设置壁纸。";
-"set.input.digitgrid.help" = "在照片网格上左右滑动以组成数值，然后点按帖子图标揭示。";
-"set.input.digitgrid.noconfig" = "无需设置。";
-"postpred.perset_note" = "现在在“我的套牌”中每个套牌卡片上设置输入方式。打开一个套牌以选择其输入。";
-"postpred.no_active_set" = "没有激活的套牌。前往“我的套牌”并激活一个。";
+"set.input.lockscreen.help" = "Performance 开启时显示虚假锁屏，以便秘密输入值。在下方设置壁纸。";
+"set.input.digitgrid.help" = "在网格上左右滑动构建数值，然后点击帖子图标揭示。";
+"set.input.digitgrid.noconfig" = "无需配置。";
+"set.input.clockinput.help" = "Performance 开启时显示全黑屏幕。用方向滑动对输入 1–100 的数字。揭示后长按关闭。";
+"set.input.clockinput.noconfig" = "无需配置。";
 
-/* Auto-active inputs (no toggle) */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
 "fakehome.autoactive.title" = "自动激活";
-"fakehome.autoactive.body" = "设置截图后，打开 Performance 时会显示。点按任意处即可揭示你的资料页。";
-"lockscreen.perset_note" = "在“我的套牌”中将锁屏选为某套牌的输入时即会激活。";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
-"postpred.goto_sets.title" = "前往 Sets 进行配置";
-"postpred.goto_sets.body" = "直接在每张套牌卡片中选择活跃套牌并选择其输入方式。";
-"set.url_scheme.copy" = "复制";
-"set.url_scheme.copied" = "已复制!";
+"fakehome.autoactive.body" = "如果设置了截图，打开 Performance 时显示。点击任意位置以显示您的个人资料。";
+"lockscreen.perset_note" = "当您在我的套装中为某个套装选择锁屏作为输入方式时激活。";
+"postpred.goto_sets.title" = "前往套装进行配置";
+"postpred.goto_sets.body" = "选择一个活跃套装，并直接在每张套装卡上选择输入方式。";

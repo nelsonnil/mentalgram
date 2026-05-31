@@ -521,7 +521,7 @@
 "postpred.help.input.grid.step3" = "Tik op het Posts-pictogram om te bevestigen en de onthulling te activeren.";
 "postpred.help.input.ocr.label" = "OCR — CAMERA";
 "postpred.help.input.covert.label" = "VERBORGEN INVOER";
-"postpred.help.input.covert.step1" = "Schakel **Verborgen invoer** in de instellingen in en stel een dekwoord in — wat de toeschouwer op het scherm ziet.";
+"postpred.help.input.covert.step1" = "Selecteer op je setkaart in **Mijn Sets** **Cover Typing** en tik op **Configureren** om een dekkend woord in te stellen — wat de toeschouwer op het scherm ziet.";
 "postpred.help.input.covert.step2" = "Typ het woord van de toeschouwer in het Explore-zoekveld. De toeschouwer ziet het dekwoord; de app registreert het echte woord stil.";
 "postpred.help.input.covert.step3" = "Druk éénmaal op **Spatie** als u klaar bent. De spatie verdwijnt uit het veld — dit is normaal. Een subtiele trilling bevestigt dat het woord is vastgelegd en de onthulling is geactiveerd.";
 "postpred.help.input.url.label" = "URL SCHEME / AUTOMATISERING";
@@ -533,7 +533,7 @@
 "postpred.help.settype.number.desc" = "**10 slots (0–9) × N banken.** Elke bank onthult een cijfer. Bank 1 = 1e cijfer, Bank 2 = 2e cijfer.";
 "postpred.help.settype.custom.desc" = "**1–100 eigen afbeeldingen, 1 bank.** Veeg 1–3 cijfers om het slotnummer (1–100) te kiezen. Ideaal voor wedstrijduitslagen, tarot of visuele keuzes.";
 "postpred.help.settype.card.desc" = "**52 slots (A–K × ♠♥♣♦), 1 bank.** Veeg 2 of 3 cijfers om een kaart te kiezen. Kleuren: 1=♠ 2=♥ 3=♣ 4=♦. Bijv.: 4→2 = 4♥ · 1→1→1 = J♠.";
-"postpred.help.input.ocr.step1" = "Schakel **OCR** in bij de Post Prediction-instellingen.";
+"postpred.help.input.ocr.step1" = "Selecteer op je setkaart in **Mijn Sets** **OCR** als invoermethode en tik dan op **Configureren** om camera en taal in te stellen.";
 "postpred.help.input.ocr.step2" = "Richt de camera op een handgeschreven of gedrukt woord. De app leest het automatisch en activeert de bijbehorende onthulling.";
 "postpred.help.input.url.label" = "URL-SCHEMA";
 "postpred.help.input.url.step1" = "Schakel **URL Scheme** in bij de Post Prediction-instellingen.";
@@ -541,8 +541,8 @@
 "postpred.help.before.1" = "Maak een **Set** aan in de Sets-sectie. Kies Word Reveal, Number Reveal, Custom Set of Playing Cards. Selecteer een afbeeldingssjabloon of upload uw eigen foto's.";
 "postpred.help.before.2" = "Upload de afbeeldingen en wacht tot ze **automatisch zijn gearchiveerd**. Dit kan enkele uren duren.";
 "postpred.help.before.3" = "Tijdens het uploaden **gebruikt u de app niet**, wisselt u niet van netwerk en onderbreekt u het proces niet. Het scherm blijft automatisch aan.";
-"postpred.help.before.4" = "Stel de geuploadede Set in als **actief** in de Post Prediction-instellingen.";
-"postpred.help.before.5" = "Schakel ten minste een **invoermethode** in: Raster, OCR of URL-schema.";
+"postpred.help.before.4" = "Tik in **Mijn Sets** op de geüploade set, markeer hem als **actief** en selecteer de **invoermethode** direct op de setkaart.";
+"postpred.help.before.5" = "Elke set heeft zijn eigen **invoermethode**-selector op zijn kaart. Geen aparte schakelaar nodig — kies gewoon de methode die bij je optreden past.";
 "postpred.help.during.step.invite" = "DE VRIJE KEUZE";
 "postpred.help.during.invite.action" = "Vraag de toeschouwer vrij aan een woord, getal of letter te denken. Suggereer niets.";
 "postpred.help.during.invite.dialogue" = "Denk aan een willekeurig woord of getal. Iets persoonlijks, iets alleen u weet. Zeg het nog niet.";
@@ -590,7 +590,7 @@
 "postpred.help.input.covert.label" = "HEIMELIJKE INVOER";
 "postpred.help.input.api.label" = "API AUTO REVEAL";
 "postpred.help.input.api.intro" = "Verbind Inject (11z.co) of een eigen API. Open Performance eerst — de app controleert elke 2 s op de achtergrond. Zodra de toeschouwer zijn keuze instuurt, wordt de onthulling automatisch geactiveerd met een drievoudige trilling.";
-"postpred.help.input.api.step1" = "Zet in Instellingen → Post Prediction Auto Input op **API** en kies je bron (Inject of eigen API).";
+"postpred.help.input.api.step1" = "Selecteer op je setkaart in **Mijn Sets** **API** als invoermethode en tik op **Configureren** om uw bron te kiezen (Inject of aangepaste API).";
 "postpred.help.input.api.step2" = "Open de Performance-weergave op je apparaat voordat je met de presentatie begint.";
 "postpred.help.input.api.step3" = "Vraag de toeschouwer zijn keuze te maken via de Inject-link of je eigen formulier.";
 "postpred.help.input.api.step4" = "Binnen 2 seconden detecteert de app de nieuwe waarde, onthult de bijbehorende foto's en trilt drie keer ter bevestiging.";
@@ -1262,12 +1262,12 @@
 "limits.help.table.col.action" = "Functie";
 "limits.help.table.col.first" = "1e keer";
 "limits.help.table.col.again" = "Herhalen";
-"limits.help.table.row.performance" = "Performance openen (profiel + achtergrondcache)";
+"limits.help.table.row.performance" = "Performance openen";
 "limits.help.table.row.followers" = "Volgerslijst";
 "limits.help.table.row.profile.new" = "Nieuw volgersprofiel";
 "limits.help.table.row.sa" = "Sync & Archive (per foto)";
 "limits.help.table.row.upload" = "Upload (per foto)";
-"limits.help.table.row.autoupload" = "Auto-upload per foto (upload + archief)";
+"limits.help.table.row.autoupload" = "Volledige automatische uploadcyclus (per foto)";
 "limits.help.table.row.reveal" = "Onthullen (per letter/foto)";
 "limits.help.table.row.notebio" = "Notitie of bio wijzigen";
 "limits.help.table.row.explore" = "Verkennen / Zoeken";
@@ -1297,7 +1297,11 @@
 "guide.fakehome.help.what.title" = "What is Fake Home Screen?";
 "guide.fakehome.help.what.body" = "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally.";
 "guide.fakehome.help.how.title" = "How to use it";
-"guide.fakehome.help.how.body" = "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.\n\n2. Upload it in Settings › Other › Fake Home Screen.\n\n3. Enable the toggle.\n\n4. Next time you open Performance, that screenshot appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile.";
+"guide.fakehome.help.how.body" = "1. Maak een echte screenshot van het startscherm van je iPhone en zorg dat het Instagram-icoon zichtbaar is.
+
+2. Upload het via Instellingen › Gegevens › Fake Home Screen.
+
+3. Zodra een screenshot is geladen, wordt het nep-startscherm automatisch geactiveerd. De volgende keer dat je Performance opent, verschijnt het op volledig scherm — tik ergens (bij voorkeur op het Instagram-icoon) om je profiel te onthullen.";
 "guide.fakehome.help.why.title" = "Why use it?";
 "guide.fakehome.help.why.body" = "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears.";
 "guide.lockscreen.title" = "Lockscreen Input";
@@ -1307,7 +1311,7 @@
 "guide.lockscreen.help.how.title" = "How to enter your secret number";
 "guide.lockscreen.help.how.body" = "1. Tap the digits of your secret number on the numpad — they register silently.\n\n2. Tap anywhere outside the numpad to lock those digits in place.\n\n3. Fill the remaining dots by tapping any digits — they are ignored.\n\n4. Once all 4 dots are filled the lockscreen dismisses and Performance opens.";
 "guide.lockscreen.help.wallpaper.title" = "Wallpaper";
-"guide.lockscreen.help.wallpaper.body" = "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Without a wallpaper the lockscreen input cannot be enabled.";
+"guide.lockscreen.help.wallpaper.body" = "Upload hetzelfde achtergrond als op je echte vergrendelscherm zodat de nep er identiek uitziet. Selecteer daarna **Vergrendelscherm** als invoermethode op je setkaart in Mijn Sets.";
 "guide.lockscreen.help.why.title" = "Why use it?";
 "guide.lockscreen.help.why.body" = "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram.";
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
@@ -1513,30 +1517,41 @@
 "lockscreen.enter_passcode" = "Voer toegangscode in";
 "lockscreen.emergency" = "Noodoproep";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "BLIND VEGEN";
+"postpred.help.input.clockinput.intro" = "Wanneer Performance opent, wordt het scherm volledig **zwart** — alsof de telefoon uit is. Je veegt stiekem om een getal in te voeren; de toeschouwer ziet niets.";
+"postpred.help.input.clockinput.encoding.title" = "CIJFERCODERING  (elk cijfer = 2 veegbewegingen)";
+"postpred.help.input.clockinput.examples.title" = "VOORBEELDEN";
+"postpred.help.input.clockinput.example5.note" = "Voer 05 in → cijfer 0 (↑↑) dan cijfer 5 (↓→) — 4 veegbewegingen totaal";
+"postpred.help.input.clockinput.example37.note" = "Cijfer 3 (→→) dan cijfer 7 (↓←) — 4 veegbewegingen totaal";
+"postpred.help.input.clockinput.example100.note" = "Cijfer 1 (↑→) dan twee 0s (↑↑ elk) — 6 veegbewegingen totaal";
+"postpred.help.input.clockinput.haptic.title" = "HAPTISCHE FEEDBACK";
+"postpred.help.input.clockinput.haptic.light" = "Lichte tik — elke afzonderlijke veegbeweging geregistreerd";
+"postpred.help.input.clockinput.haptic.medium" = "Middel puls — cijfer voltooid (2 veegbewegingen)";
+"postpred.help.input.clockinput.haptic.success" = "Dubbele sterke trilling — onthulling geslaagd";
+"postpred.help.input.clockinput.haptic.error" = "Foutbuzz + schermflits — ongeldig paar, reset";
+"postpred.help.input.clockinput.dismiss" = "Na de onthulling **1 seconde ingedrukt houden** op het zwarte scherm om het te sluiten. Het bijgewerkte neppe Instagram-profiel verschijnt direct.";
+
+// MARK: - Set Input Picker
 "set.input.label" = "Invoer";
 "set.input.configure" = "Configureren";
-"set.input.covertyping.help" = "Maskeert wat je in Verkennen typt zodat toeschouwers een ander woord zien. Druk op SPATIE om te onthullen.";
-"set.input.covertyping.maskmode" = "Maskermodus";
-"set.input.api.help" = "Pollt elke 2 s een online bron terwijl Performance open is en onthult automatisch wanneer een nieuwe waarde binnenkomt.";
+"set.input.covertyping.help" = "Maskeert wat je typt in Verkennen zodat toeschouwers een ander woord zien. Druk op SPATIE om te onthullen.";
+"set.input.covertyping.maskmode" = "Maskeermodus";
+"set.input.api.help" = "Bevraagt elke 2 s een online bron terwijl Performance open is en onthult automatisch bij een nieuwe waarde.";
 "set.input.api.source" = "API-bron";
-"set.input.api.endpoint_hint" = "Configureer de API-eindpunten in Instellingen → Integraties.";
-"set.input.ocr.help" = "De camera start stil wanneer Performance opent. Druk op Volume Omhoog om te scannen; herkende tekst onthult automatisch.";
+"set.input.api.endpoint_hint" = "Configureer API-eindpunten via Instellingen → Integraties.";
+"set.input.ocr.help" = "Camera start stilletjes bij het openen van Performance. Druk op Volume+ om te scannen; herkende tekst onthult automatisch.";
 "set.input.ocr.camera" = "Camera";
 "set.input.ocr.language" = "Taal";
-"set.input.lockscreen.help" = "Toont een nep-vergrendelscherm wanneer Performance opent zodat je de waarde stiekem kunt invoeren. Stel hieronder een achtergrond in.";
-"set.input.digitgrid.help" = "Veeg links of rechts op het rooster om de waarde te vormen en tik op het Berichten-icoon om te onthullen.";
-"set.input.digitgrid.noconfig" = "Geen instelling nodig.";
-"postpred.perset_note" = "Invoermethoden stel je nu in op elke setkaart in Mijn Sets. Open een set om de invoer te kiezen.";
-"postpred.no_active_set" = "Geen actieve set. Ga naar Mijn Sets en activeer er een.";
+"set.input.lockscreen.help" = "Toont een nep-vergrendelscherm bij het openen van Performance om de waarde geheim in te voeren. Kies een achtergrond hieronder.";
+"set.input.digitgrid.help" = "Veeg links of rechts over het raster om de waarde te vormen en tik op het Berichten-icoon om te onthullen.";
+"set.input.digitgrid.noconfig" = "Geen configuratie vereist.";
+"set.input.clockinput.help" = "Toont een volledig zwart scherm bij het openen van Performance. Voer een getal van 1–100 in met richtingsveegparen. Lang indrukken om te sluiten na de onthulling.";
+"set.input.clockinput.noconfig" = "Geen configuratie vereist.";
 
-/* Auto-active inputs (no toggle) */
-"fakehome.autoactive.title" = "Wordt automatisch geactiveerd";
-"fakehome.autoactive.body" = "Wordt getoond bij het openen van Performance als er een schermafbeelding is ingesteld. Tik ergens om je profiel te onthullen.";
-"lockscreen.perset_note" = "Wordt geactiveerd wanneer je Vergrendelscherm als invoer van een set kiest in Mijn Sets.";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
+"fakehome.autoactive.title" = "Activeert automatisch";
+"fakehome.autoactive.body" = "Getoond bij het openen van Performance als er een screenshot is ingesteld. Tik ergens om je profiel te onthullen.";
+"lockscreen.perset_note" = "Activeert wanneer je Vergrendelscherm kiest als invoermethode voor een set in Mijn Sets.";
 "postpred.goto_sets.title" = "Ga naar Sets om te configureren";
-"postpred.goto_sets.body" = "Selecteer een actieve set en kies de invoermethode direct in elke setkaart.";
-"set.url_scheme.copy" = "Kopiëren";
-"set.url_scheme.copied" = "Gekopieerd!";
+"postpred.goto_sets.body" = "Selecteer een actieve set en kies de invoermethode direct op elke setkaart.";

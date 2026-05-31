@@ -193,8 +193,7 @@ class DataManager: ObservableObject {
             photos: setPhotos,
             createdAt: Date(),
             selectedAlphabet: selectedAlphabet,
-            targetBankCount: (type == .word || type == .number) ? bankCount : nil,
-            inputMethod: InputMethod.defaultMethod(for: type)
+            targetBankCount: (type == .word || type == .number) ? bankCount : nil
         )
         
         sets.append(newSet)
@@ -496,37 +495,24 @@ class DataManager: ObservableObject {
         print("✅ [SWAP] Swapped position \(indexA + 1) ↔ \(indexB + 1)")
     }
     
-    // MARK: - Input Method (per-set)
+    // MARK: - Per-Set Input Method
 
-    /// The single globally-active set, if any.
-    var activeSet: PhotoSet? {
-        guard let id = ActiveSetSettings.shared.activeSetId else { return nil }
-        return sets.first { $0.id == id }
-    }
-
-    /// The input method of the active set (nil if no set is active).
-    var activeInputMethod: InputMethod? {
-        activeSet?.resolvedInputMethod
-    }
-
-    /// True when the active set uses the given input method. This is the single
-    /// gate used by all runtime reveal triggers (cover typing, digit grid,
-    /// lockscreen, API, OCR) so only one input is ever live at a time.
-    func isActiveInput(_ method: InputMethod) -> Bool {
-        activeInputMethod == method
-    }
-
-    /// Updates the input method for a set, ignoring values not allowed for its type.
-    func setInputMethod(_ method: InputMethod, for setId: UUID) {
-        guard let idx = sets.firstIndex(where: { $0.id == setId }) else { return }
-        guard InputMethod.allowed(for: sets[idx].type).contains(method) else {
-            print("⚠️ [INPUT] \(method.rawValue) not allowed for \(sets[idx].type.rawValue) set — ignored")
-            return
-        }
+    /// Assigns an InputMethod to a specific set and persists the change.
+    func setInputMethod(_ method: InputMethod, for id: UUID) {
+        guard let idx = sets.firstIndex(where: { $0.id == id }) else { return }
         sets[idx].inputMethod = method
         saveSets()
-        objectWillChange.send()
-        print("🎚️ [INPUT] Set '\(sets[idx].name)' input → \(method.rawValue)")
+    }
+
+    /// Returns the active set's resolved input method, or nil when no set is active.
+    var activeInputMethod: InputMethod? {
+        guard let activeId = ActiveSetSettings.shared.activeSetId else { return nil }
+        return sets.first { $0.id == activeId }?.resolvedInputMethod
+    }
+
+    /// True when the currently active set uses the given input method.
+    func isActiveInput(_ method: InputMethod) -> Bool {
+        activeInputMethod == method
     }
 
     func renameSet(id: UUID, newName: String) {

@@ -61,7 +61,10 @@ struct HomeView: View {
     
     var body: some View {
         TabView(selection: tabBinding) {
-            // Performance Tab - MUST stay light (Instagram replica)
+            // Performance Tab — fake Instagram replica.
+            // Follows the device appearance (light/dark) like the real Instagram app:
+            // the adaptive UIColor.* values inside paint white in light mode and black
+            // in dark mode automatically. No scheme is forced here.
             Group {
                 if instagram.isLoggedIn {
                     PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
@@ -71,9 +74,6 @@ struct HomeView: View {
                         .ignoresSafeArea()
                 }
             }
-            // Force light color scheme on this tab so the status bar always shows
-            // dark (black) icons on the white Instagram-style background.
-            .preferredColorScheme(.light)
             .tabItem {
                 Label("Performance", systemImage: "chart.bar.fill")
             }
@@ -113,10 +113,9 @@ struct HomeView: View {
             }
             .tag(3)
         }
-        // Force light mode at the TabView root so the status bar always shows
-        // dark (black) icons on Performance's white Instagram-style background.
-        // Individual dark-theme views (Sets, Settings) override this locally.
-        .preferredColorScheme(.light)
+        // No global color-scheme forcing: Performance follows the device appearance
+        // (like the real Instagram), while the dark-themed tabs (Sets, Settings) force
+        // .dark locally inside their own views.
         .accentColor(selectedTab == 0 ? .primary : VaultTheme.Colors.primary)
         .onChange(of: selectedTab) { newTab in
             updateTabBarAppearance(forTab: newTab)
@@ -247,7 +246,6 @@ struct HomeView: View {
             }
         }) {
             ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
-                .preferredColorScheme(.light)
         }
     }
 
@@ -651,7 +649,7 @@ struct SetsListView: View {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 10)
                                         .fill(LinearGradient(
-                                            colors: [Color(hex: "7C3AED"), Color(hex: "0EA5E9")],
+                                            colors: [Color(hex: "7C3AED"), Color(hex: "FF9500")],
                                             startPoint: .topLeading, endPoint: .bottomTrailing))
                                         .frame(width: 38, height: 38)
                                     Image(systemName: "wand.and.stars")
@@ -837,7 +835,7 @@ struct SetRowView: View {
     private var typeAccent: Color {
         switch set.type {
         case .word:   return Color(hex: "7C3AED")  // purple
-        case .number: return Color(hex: "0EA5E9")  // sky blue
+        case .number: return Color(hex: "FF9500")  // orange
         case .custom: return Color(hex: "F97316")  // orange
         case .card:   return Color(hex: "16A34A")  // green
         }
@@ -846,7 +844,7 @@ struct SetRowView: View {
     private var typeGradient: [Color] {
         switch set.type {
         case .word:   return [Color(hex: "7C3AED"), Color(hex: "6D28D9")]
-        case .number: return [Color(hex: "0EA5E9"), Color(hex: "0369A1")]
+        case .number: return [Color(hex: "FF9500"), Color(hex: "C2670A")]
         case .custom: return [Color(hex: "F97316"), Color(hex: "EA580C")]
         case .card:   return [Color(hex: "16A34A"), Color(hex: "15803D")]
         }
@@ -984,9 +982,7 @@ struct SetRowView: View {
                         .padding(.top, 10)
                     }
 
-                    // Active toggle strip — always visible at the bottom of the card.
-                    // Only ONE set is active app-wide, so activating this set
-                    // implicitly deactivates any other active set.
+                    // Active toggle strip — always visible at the bottom of the card
                     Divider()
                         .background(Color.white.opacity(0.06))
                         .padding(.top, 10)
@@ -1019,20 +1015,28 @@ struct SetRowView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Per-set input selector — restricted to inputs valid for this type.
+                    // ── Per-set input method picker ───────────────
                     Divider()
                         .background(Color.white.opacity(0.06))
-                        .padding(.bottom, 2)
+                        .padding(.top, 4)
 
                     SetInputPicker(set: set)
-                        .padding(.top, 2)
+                        .id(set.id)
 
-                    // URL Scheme — shown for types that support automation via URL.
+                    // ── URL Scheme (only for types that support it) ─
                     if set.type.revealURLTemplate != nil {
                         Divider()
                             .background(Color.white.opacity(0.06))
-                            .padding(.top, 8)
-
+                            .padding(.top, 4)
+                        HStack(spacing: 6) {
+                            Image(systemName: "link")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                            Text("URL Scheme")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                                .textCase(.uppercase)
+                        }
                         SetURLSchemeRow(set: set)
                     }
                 }
@@ -1047,71 +1051,47 @@ struct SetRowView: View {
 
 // MARK: - Set URL Scheme Row
 
-private struct SetURLSchemeRow: View {
+/// Displays the vault:// reveal URL for a specific set with a one-tap copy button.
+struct SetURLSchemeRow: View {
     let set: PhotoSet
     @State private var copied = false
 
-    /// Builds the real URL for this set including its name as the &set= parameter.
-    private var revealURL: String {
-        let name = set.name
+    private var urlScheme: String {
+        let safeName = set.name
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? set.name
+        guard let mode = set.type.revealURLTemplate else { return "" }
         switch set.type {
-        case .word:
-            return URLActionManager.revealURL(word: "<word>", setName: name)
-        case .custom:
-            return URLActionManager.revealCustomSlotURL(slot: 1, setName: name)
-                .replacingOccurrences(of: "slot=1", with: "slot=<1-100>")
-        case .card:
-            return URLActionManager.revealCardURL(symbol: "J♠", setName: name)
-                .replacingOccurrences(of: "J%E2%99%A0", with: "J%E2%99%A0")
-        case .number:
-            return ""
+        case .word:           return "vault://reveal?\(mode)=<word>&set=\(safeName)"
+        case .number, .custom: return "vault://reveal?\(mode)=<value>&set=\(safeName)"
+        case .card:           return "vault://reveal?\(mode)=<card>&set=\(safeName)"
         }
     }
 
     var body: some View {
         HStack(spacing: VaultTheme.Spacing.sm) {
             Image(systemName: "link")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(VaultTheme.Colors.primary)
-                .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("URL Scheme")
-                    .font(VaultTheme.Typography.captionSmall())
-                    .fontWeight(.semibold)
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                Text(revealURL)
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            Spacer()
-
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(VaultTheme.Colors.textTertiary)
+            Text(urlScheme)
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
             Button {
-                UIPasteboard.general.string = revealURL
+                UIPasteboard.general.string = urlScheme
                 withAnimation(.easeInOut(duration: 0.15)) { copied = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     withAnimation { copied = false }
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(copied ? "set.url_scheme.copied" : "set.url_scheme.copy")
-                        .font(VaultTheme.Typography.captionSmall())
-                }
-                .foregroundColor(copied ? VaultTheme.Colors.success : .white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(copied ? VaultTheme.Colors.success.opacity(0.18) : VaultTheme.Colors.primary)
-                .cornerRadius(VaultTheme.CornerRadius.sm)
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(copied ? .green : VaultTheme.Colors.textSecondary)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
         }
-        .padding(.top, 4)
-        .padding(.bottom, 2)
     }
 }
 
@@ -1386,11 +1366,24 @@ struct SettingsView: View {
     // Text templates — user writes "My prediction is {word}" and the app
     // replaces {word} with the detected/fetched word at send time.
     @AppStorage("note_template") private var noteTemplate: String = ""
-    @AppStorage("bio_template")   private var bioTemplate:  String = ""   // template slot 1 (legacy key)
+    @AppStorage("bio_template")   private var bioTemplate1: String = ""
     @AppStorage("bio_template_2") private var bioTemplate2: String = ""
     @AppStorage("bio_template_3") private var bioTemplate3: String = ""
     @AppStorage("bio_template_4") private var bioTemplate4: String = ""
     @AppStorage("bio_active_slot") private var bioActiveSlot: Int = 0
+
+    private var activeBioBinding: Binding<String> {
+        switch bioActiveSlot {
+        case 1:  return $bioTemplate2
+        case 2:  return $bioTemplate3
+        case 3:  return $bioTemplate4
+        default: return $bioTemplate1
+        }
+    }
+    private var bioTemplate: String {
+        get { activeBioBinding.wrappedValue }
+        nonmutating set { activeBioBinding.wrappedValue = newValue }
+    }
 
     // OCR configuration (shared between note and bio)
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
@@ -1923,19 +1916,6 @@ struct SettingsView: View {
         })
     }
 
-    // MARK: - Bio template helpers (4 slots)
-
-    private var activeBioBinding: Binding<String> {
-        switch bioActiveSlot {
-        case 1: return $bioTemplate2
-        case 2: return $bioTemplate3
-        case 3: return $bioTemplate4
-        default: return $bioTemplate
-        }
-    }
-
-    private var activeBioText: String { activeBioBinding.wrappedValue }
-
     // MARK: - Biography Card
 
     private var biographyCard: some View {
@@ -1944,32 +1924,30 @@ struct SettingsView: View {
                         isExpanded: $bioExpanded,
                         helpAction: { showBioHelp = true }) {
             let currentBio = ProfileCacheService.shared.cachedProfile?.biography ?? ""
-            // ── Template selector ─────────────────────────────────────────────
-            HStack(spacing: 6) {
-                ForEach(0..<4) { i in
-                    Button {
-                        bioFieldFocused = false
-                        bioActiveSlot = i
-                    } label: {
-                        Text("T\(i + 1)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(bioActiveSlot == i ? .white : VaultTheme.Colors.textSecondary)
-                            .padding(.horizontal, 13).padding(.vertical, 7)
-                            .background(bioActiveSlot == i ? Self.colorProfile : Color(hex: "#2C2C2E"))
-                            .cornerRadius(7)
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer()
-                Text("Select template slot")
-                    .font(.system(size: 11))
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-            }
-
-            // ── Text editor (= template) ─────────────────────────────────────
             VStack(alignment: .leading, spacing: 6) {
+
+                // ── T1 / T2 / T3 / T4 template slot selector ──────────────────
+                HStack(spacing: 6) {
+                    ForEach(0..<4) { idx in
+                        let label = ["T1","T2","T3","T4"][idx]
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) { bioActiveSlot = idx }
+                        } label: {
+                            Text(label)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(bioActiveSlot == idx ? .white : VaultTheme.Colors.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 7)
+                                .background(bioActiveSlot == idx ? Self.colorProfile : Color(hex: "#2C2C2E"))
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                // ── Text editor (= active template slot) ──────────────────────
                 ZStack(alignment: .topLeading) {
-                    if activeBioText.isEmpty {
+                    if activeBioBinding.wrappedValue.isEmpty {
                         Text(currentBio.isEmpty ? String(localized: "Write your biography…") : currentBio)
                             .font(VaultTheme.Typography.body())
                             .foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.5))
@@ -1982,49 +1960,50 @@ struct SettingsView: View {
                         .padding(.horizontal, VaultTheme.Spacing.sm).padding(.vertical, 4)
                         .scrollContentBackground(.hidden).background(Color.clear)
                         .focused($bioFieldFocused).disabled(isSendingBio)
-                        .onChange(of: activeBioText) { newVal in
-                            if newVal.count > 150 { activeBioBinding.wrappedValue = String(newVal.prefix(150)) }
-                        }
+                        .onChange(of: activeBioBinding.wrappedValue) { if $0.count > 150 { activeBioBinding.wrappedValue = String($0.prefix(150)) } }
                 }
                 .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
 
-                // ── Insert buttons + char counter ─────────────────────────────
+                // ── Insert buttons + char counter (no ↩ — TextEditor handles line breaks)
                 HStack(spacing: 6) {
                     ForEach(["{text1}", "{text2}", "{text3}"], id: \.self) { token in
                         Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { activeBioBinding.wrappedValue += token }
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                activeBioBinding.wrappedValue += token
+                            }
                         } label: {
                             Text(token)
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 10).padding(.vertical, 7)
-                                .background(activeBioText.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
+                                .background(bioTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
                                 .cornerRadius(7)
                         }
                         .buttonStyle(.plain)
                     }
                     Spacer()
-                    Text("\(activeBioText.count)/150")
+                    Text("\(bioTemplate.count)/150")
                         .font(VaultTheme.Typography.captionSmall())
-                        .foregroundColor(activeBioText.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                        .foregroundColor(bioTemplate.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
                 }
 
-                // ── Per-placeholder source pickers (dynamic) ──────────────────
-                InlineSourcePickerView(target: "bio", template: activeBioText, accentColor: Self.colorProfile)
+                // ── Per-placeholder input pickers (dynamic) ───────────────────
+                InlineSourcePickerView(target: "bio", template: bioTemplate, accentColor: Self.colorProfile)
             }
 
             modernActionButton(title: isSendingBio ? "Updating…" : "Update Biography",
                                icon: "checkmark.circle.fill", loading: isSendingBio,
-                               enabled: !activeBioText.isEmpty && !isSendingBio && !instagram.isLocked) {
+                               enabled: !bioTemplate.isEmpty && !isSendingBio && !instagram.isLocked) {
                 bioFieldFocused = false; sendBiography()
             }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to update biography when Performance opens",
-                         url: urlSchemeExample(mode: "bio", template: activeBioText))
+                         url: urlSchemeExample(mode: "bio", template: bioTemplate))
         })
     }
+
 
     // MARK: - Section accent colors (internal so CollapsibleCard structs can reference them)
     static let colorAccount     = Color(hex: "#0A84FF")
@@ -2602,16 +2581,6 @@ struct SettingsView: View {
 
         Task {
             do {
-                // ANTI-BOT: wait if the app just launched (cold-start window)
-                if InstagramSafetyGate.shared.isInColdStartWindow {
-                    let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
-                    LogManager.shared.info("[COLD-START] Note send deferred — \(remaining)s", category: .general)
-                    try await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 2...4)) * 1_000_000_000)
-                    guard !instagram.isLocked, !instagram.isSessionChallenged else {
-                        await MainActor.run { isSendingNote = false }
-                        return
-                    }
-                }
                 // Resolve {text1}/{text2}/{text3} from configured sources before sending
                 var resolved = rawTemplate
                 let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{word}")
@@ -2663,27 +2632,17 @@ struct SettingsView: View {
     }
 
     private func sendBiography() {
-        guard !activeBioText.isEmpty else { return }
+        guard !bioTemplate.isEmpty else { return }
         guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
             bioMessage = uploadWriteBlockedMessage
             showingBioAlert = true
             return
         }
         isSendingBio = true
-        let rawTemplate = activeBioText
+        let rawTemplate = bioTemplate
 
         Task {
             do {
-                // ANTI-BOT: wait if the app just launched (cold-start window)
-                if InstagramSafetyGate.shared.isInColdStartWindow {
-                    let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
-                    LogManager.shared.info("[COLD-START] Biography send deferred — \(remaining)s", category: .general)
-                    try await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 2...4)) * 1_000_000_000)
-                    guard !instagram.isLocked, !instagram.isSessionChallenged else {
-                        await MainActor.run { isSendingBio = false }
-                        return
-                    }
-                }
                 // Resolve {text1}/{text2}/{text3} from configured sources before sending
                 var resolved = rawTemplate
                 let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{word}")
@@ -2707,7 +2666,7 @@ struct SettingsView: View {
                     if success {
                         bioMessage = "✅ Biography updated!\n\nYour Instagram profile now shows:\n\"\(textToSend)\""
                         showingBioAlert = true
-                        // Don't clear — it's a reusable template slot
+                        // Don't clear bioTemplate — it's a reusable template
                     }
                 }
             } catch {
@@ -2819,7 +2778,7 @@ private struct InlineSourcePickerView: View {
         if !visibleTokens.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Divider().background(Color(hex: "#3A3A3C"))
-                Text("SOURCES")
+                Text("INPUTS")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textSecondary)
 
@@ -3499,26 +3458,20 @@ struct ForceReelSettingsCard: View {
 // MARK: - Force Number Reveal Settings Card
 
 struct ForceNumberRevealSettingsCard: View {
-    @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
-    @ObservedObject private var dataManager     = DataManager.shared
-    @State private var showingHelp  = false
-
-    private var activeSet: PhotoSet? {
-        guard let id = activeSetSettings.activeSetId else { return nil }
-        return dataManager.sets.first { $0.id == id }
-    }
+    @State private var showingHelp = false
 
     var body: some View {
         VaultCard {
-            VStack(spacing: 0) {
-                // ── Header ────────────────────────────────────────────
+            VStack(spacing: VaultTheme.Spacing.md) {
+
+                // ── Header ───────────────────────────────────────────
                 HStack(spacing: VaultTheme.Spacing.sm) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(SettingsView.colorTricks)
-                            .frame(width: 34, height: 34)
+                            .frame(width: 32, height: 32)
                         Image(systemName: "number.circle.fill")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)
                     }
                     VStack(alignment: .leading, spacing: 2) {
@@ -3530,7 +3483,7 @@ struct ForceNumberRevealSettingsCard: View {
                             .foregroundColor(VaultTheme.Colors.textSecondary)
                     }
                     Spacer()
-                    Button(action: { showingHelp = true }) {
+                    Button { showingHelp = true } label: {
                         Image(systemName: "questionmark.circle")
                             .font(.system(size: 16))
                             .foregroundColor(VaultTheme.Colors.textTertiary)
@@ -3539,38 +3492,23 @@ struct ForceNumberRevealSettingsCard: View {
                 }
 
                 Divider()
-                    .background(Color.white.opacity(0.06))
-                    .padding(.vertical, 10)
-
-                // ── Active set summary ────────────────────────────────
-                PostPredictionActiveSetSummary(activeSet: activeSet)
-
-                Divider()
-                    .background(Color.white.opacity(0.06))
-                    .padding(.vertical, 10)
 
                 // ── Go to Sets hint ───────────────────────────────────
-                HStack(spacing: 8) {
-                    Text("⭐")
-                        .font(.system(size: 15))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("postpred.goto_sets.title")
-                            .font(VaultTheme.Typography.caption())
+                HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(SettingsView.colorTricks)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(String(localized: "postpred.goto_sets.title"))
+                            .font(VaultTheme.Typography.bodyBold())
                             .foregroundColor(VaultTheme.Colors.textPrimary)
-                            .fontWeight(.medium)
-                        Text("postpred.goto_sets.body")
+                        Text(String(localized: "postpred.goto_sets.body"))
                             .font(VaultTheme.Typography.caption())
                             .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
                 }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 2)
-                .background(Color.yellow.opacity(0.06))
-                .cornerRadius(8)
             }
         }
         .sheet(isPresented: $showingHelp) {
@@ -3579,39 +3517,396 @@ struct ForceNumberRevealSettingsCard: View {
     }
 }
 
-// MARK: - Active set summary (single active set + its input)
+// MARK: - Post Prediction Sub-Views
+// Extracted as standalone View structs to keep ForceNumberRevealSettingsCard's
+// body type-graph shallow and prevent SwiftUI TupleView stack overflows.
 
-private struct PostPredictionActiveSetSummary: View {
-    let activeSet: PhotoSet?
+// MARK: - PostPredictionInputModeView (Off / API / OCR — unified, mutually exclusive)
+
+private struct PostPredictionInputModeView: View {
+    @ObservedObject var settings: ForceNumberRevealSettings
+    @Binding var ppTopInputMode: String
+    @Binding var apiSource: ApiSource
+    @Binding var ocrCamera: Int
+    @Binding var ocrLanguage: String
+    let activeWordSet: PhotoSet?
+    let activeNumberSet: PhotoSet?
+
+    private var currentMode: AutoInputMode {
+        AutoInputMode(rawValue: ppTopInputMode) ?? .off
+    }
 
     var body: some View {
-        if let set = activeSet {
-            HStack(spacing: VaultTheme.Spacing.sm) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(VaultTheme.Colors.success)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(set.type.title): \(set.name)")
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            Text("Auto Input")
+                .font(VaultTheme.Typography.bodyBold())
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+            Text("Choose one input method. Open Performance first, then ask the spectator to make their selection.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+
+            // ── Off / API / OCR / Swipe pills ────────────────────────
+            HStack(spacing: 8) {
+                ForEach([AutoInputMode.off, AutoInputMode.api, AutoInputMode.ocr, AutoInputMode.clockInput], id: \.rawValue) { mode in
+                    let isSelected = currentMode == mode
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            ppTopInputMode = mode.rawValue
+                            settings.ocrEnabled = (mode == .ocr)
+                            if mode != .api { apiSource = .none }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: mode.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(mode.displayName)
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundColor(isSelected ? .white : VaultTheme.Colors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity)
+                        .background(isSelected ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                        .cornerRadius(8)
+                    }
+                    .contentShape(Rectangle())
+                }
+            }
+
+            // ── API source sub-picker ─────────────────────────────────
+            if currentMode == .api {
+                VStack(alignment: .leading, spacing: 6) {
+                    Divider().background(Color(hex: "#3A3A3C"))
+                    Text("API Source")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .textCase(.uppercase)
+                    Text("Polls every 2 s while Performance is active. Reveals automatically when a new word arrives.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                    HStack(spacing: 6) {
+                        ForEach(ApiSource.allCases.filter { $0 != .none && $0 != .ocr }, id: \.rawValue) { src in
+                            let isActive = apiSource == src
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    apiSource = isActive ? .none : src
+                                }
+                            } label: {
+                                Text(src.displayName.replacingOccurrences(of: "Custom API ", with: "API "))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(isActive ? .white : VaultTheme.Colors.textSecondary)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 5)
+                                    .background(isActive ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                                    .cornerRadius(6)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                    }
+                }
+                .padding(.top, 2)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal:   .opacity.combined(with: .move(edge: .top))
+                ))
+            }
+
+            // ── OCR sub-panel ─────────────────────────────────────────
+            if currentMode == .ocr {
+                VStack(alignment: .leading, spacing: 10) {
+                    Divider().background(Color(hex: "#3A3A3C"))
+                    Text("Camera starts silently when Performance opens. Recognized text auto-reveals: letters → word set, digits → number set.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    HStack(spacing: VaultTheme.Spacing.sm) {
+                        Image(systemName: "text.cursor")
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Word set: \(activeWordSet?.name ?? "None selected")")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(activeWordSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
+                            Text("Number set: \(activeNumberSet?.name ?? "None selected")")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(activeNumberSet != nil ? VaultTheme.Colors.textPrimary : VaultTheme.Colors.warning)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Camera")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .textCase(.uppercase)
+                        HStack(spacing: 6) {
+                            ForEach([0, 1], id: \.self) { val in
+                                let sel = ocrCamera == val
+                                Button { ocrCamera = val } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: val == 0 ? "camera.fill" : "camera.rotate.fill")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text(val == 0 ? "Rear" as LocalizedStringKey : "Front")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .foregroundColor(sel ? .white : VaultTheme.Colors.textSecondary)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .frame(maxWidth: .infinity)
+                                    .background(sel ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                                    .cornerRadius(8)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Language")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .textCase(.uppercase)
+                        Menu {
+                            ForEach(OCRConfiguration.supportedLanguages, id: \.code) { lang in
+                                Button { ocrLanguage = lang.code } label: {
+                                    if ocrLanguage == lang.code {
+                                        Label(lang.display, systemImage: "checkmark")
+                                    } else {
+                                        Text(lang.display)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "globe").font(.system(size: 12))
+                                Text(OCRConfiguration.displayName(for: ocrLanguage))
+                                    .font(.system(size: 12, weight: .semibold))
+                                Spacer()
+                                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11))
+                            }
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                            .padding(.horizontal, 10).padding(.vertical, 8)
+                            .background(Color(hex: "#2C2C2E"))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+                .padding(.top, 2)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal:   .opacity.combined(with: .move(edge: .top))
+                ))
+            }
+
+            // ── Clock Input sub-panel ─────────────────────────────────
+            if currentMode == .clockInput {
+                VStack(alignment: .leading, spacing: 8) {
+                    Divider().background(Color(hex: "#3A3A3C"))
+                    HStack(spacing: 8) {
+                        Image(systemName: "hand.draw.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(SettingsView.colorTricks)
+                        Text("Black Screen Swipe Input")
+                            .font(VaultTheme.Typography.bodyBold())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                    }
+                    Text("When Performance opens, the screen goes completely black — simulating the phone is off. Enter a 2-digit number (01–99) or 100 using directional swipes. Each digit needs 2 swipes:")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        let table: [(String, String)] = [
+                            ("0", "↑↑"), ("1", "↑→"), ("2", "→↑"), ("3", "→→"), ("4", "→↓"),
+                            ("5", "↓→"), ("6", "↓↓"), ("7", "↓←"), ("8", "←↓"), ("9", "←←")
+                        ]
+                        let rows = stride(from: 0, to: table.count, by: 5).map {
+                            Array(table[$0..<min($0 + 5, table.count)])
+                        }
+                        ForEach(rows.indices, id: \.self) { ri in
+                            HStack(spacing: 4) {
+                                ForEach(rows[ri].indices, id: \.self) { ci in
+                                    let pair = rows[ri][ci]
+                                    Text("\(pair.0):\(pair.1)")
+                                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                        .padding(.horizontal, 6).padding(.vertical, 3)
+                                        .background(Color(hex: "#2C2C2E"))
+                                        .cornerRadius(5)
+                                }
+                            }
+                        }
+                    }
+
+                    Text("Example: to reveal #5, swipe ↓→ for digit 0, then ↓→ for digit 5 (\"05\" = 4 swipes total). For 100: ↑→ (1) + ↑↑ (0) + ↑↑ (0) = 6 swipes.\n\nAfter a successful reveal, long-press (1 s) to dismiss and see the updated fake Instagram.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                .padding(.top, 2)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal:   .opacity.combined(with: .move(edge: .top))
+                ))
+            }
+        }
+    }
+}
+
+private struct PostPredictionActiveSetView: View {
+    let activeNumberSet: PhotoSet?
+    let activeWordSet: PhotoSet?
+
+    var body: some View {
+        VStack(spacing: VaultTheme.Spacing.sm) {
+                    if let set = activeNumberSet {
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(VaultTheme.Colors.success)
+                            VStack(alignment: .leading, spacing: 2) {
+                        Text("Active number set: \(set.name)")
+                                    .font(VaultTheme.Typography.bodyBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+                    } else {
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(VaultTheme.Colors.warning)
+                            Text("No active number set selected. Go to your sets and mark one as active.")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                    }
+            if let set = activeWordSet {
+                    HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(VaultTheme.Colors.success)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Active word set: \(set.name)")
+                            .font(VaultTheme.Typography.bodyBold())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Text("\(set.banks.count) banks · \(set.totalPhotos) photos")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                        Spacer()
+                }
+            }
+        }
+    }
+}
+
+/// Shows only the name of the single globally-active set (new architecture).
+private struct PostPredictionCoverTypingView: View {
+    @ObservedObject var secretSettings: SecretInputSettings
+    let coverTypingPreview: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            HStack {
+                Text("Cover Typing")
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+                Toggle("", isOn: $secretSettings.isEnabled).labelsHidden()
+            }
+            Text("Masks what you type in Explore so spectators see a different word. Pressing SPACE triggers the word reveal.")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+
+            if secretSettings.isEnabled {
+                        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+                    Text("Mask Mode")
                         .font(VaultTheme.Typography.bodyBold())
                         .foregroundColor(VaultTheme.Colors.textPrimary)
-                    HStack(spacing: 5) {
-                        Image(systemName: set.resolvedInputMethod.icon)
-                            .font(.system(size: 10))
-                        Text(set.resolvedInputMethod.title)
+                    ForEach(MaskInputMode.allCases, id: \.self) { mode in
+                        let selected = secretSettings.mode == mode
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { secretSettings.mode = mode }
+                        } label: {
+                            HStack(spacing: VaultTheme.Spacing.md) {
+                                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(selected ? VaultTheme.Colors.primary : VaultTheme.Colors.textSecondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(mode.displayName)
+                                        .font(VaultTheme.Typography.body())
+                                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    Text(mode.rawValue)
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .font(VaultTheme.Typography.caption())
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                }
-                Spacer()
-            }
-        } else {
+                    if secretSettings.mode == .customUsername {
+                        TextField("Custom username", text: $secretSettings.customUsername)
+                            .font(VaultTheme.Typography.body())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                            .padding(VaultTheme.Spacing.md)
+                            .background(Color(hex: "#2C2C2E"))
+                            .cornerRadius(VaultTheme.CornerRadius.sm)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                    }
+                    HStack(spacing: 4) {
+                        Text("Preview:")
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                        Text("\"coche\" → \"\(coverTypingPreview)\"")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.primary)
+                    }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+
+private struct PostPredictionURLSchemeView: View {
+    private let templateURL = "vault://reveal?word=<your word>"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
             HStack(spacing: VaultTheme.Spacing.sm) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(VaultTheme.Colors.warning)
-                Text("postpred.no_active_set")
-                    .font(VaultTheme.Typography.caption())
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                Spacer()
+                Image(systemName: "link")
+                    .foregroundColor(VaultTheme.Colors.primary)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("URL Scheme")
+                        .font(VaultTheme.Typography.bodyBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Open this URL to trigger a reveal directly when Performance opens")
+                        .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                                Spacer()
+                Button {
+                    UIPasteboard.general.string = templateURL
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link")
+                        Text("Copy")
+                                }
+                                .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, VaultTheme.Spacing.sm)
+                    .padding(.vertical, 6)
+                    .background(VaultTheme.Colors.primary)
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                }
             }
+            Text(templateURL)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .lineLimit(2)
+                .padding(.horizontal, VaultTheme.Spacing.sm)
+                .padding(.vertical, 4)
+                .background(VaultTheme.Colors.backgroundSecondary)
+                .cornerRadius(VaultTheme.CornerRadius.sm)
         }
     }
 }
@@ -4375,19 +4670,15 @@ struct FakeHomeScreenCard: View {
                     .foregroundColor(.white)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text("fakehome.autoactive.title")
+                Text(String(localized: "fakehome.autoactive.title"))
                     .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
-                Text("fakehome.autoactive.body")
+                Text(String(localized: "fakehome.autoactive.body"))
                     .font(VaultTheme.Typography.caption())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            if illusionService.hasImage {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(Self.accent)
-            }
         }
     }
 
@@ -4544,18 +4835,10 @@ struct LockscreenInputSettingsCard: View {
                             }
                             .buttonStyle(.plain)
                         }) {
-            Text("settings.lockscreen.description", comment: "Lockscreen card description")
+            Label(String(localized: "lockscreen.perset_note"), systemImage: "info.circle")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
-
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "info.circle.fill")
-                    .foregroundColor(SettingsView.colorData)
-                    .font(.system(size: 13))
-                Text("lockscreen.perset_note")
-                    .font(VaultTheme.Typography.caption())
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-            }
+                .fixedSize(horizontal: false, vertical: true)
 
             Divider()
 
@@ -4614,15 +4897,23 @@ struct LockscreenInputSettingsCard: View {
                         .cornerRadius(10)
                     }
                     .buttonStyle(.plain)
+
+                    if settings.isEnabled {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(VaultTheme.Colors.warning)
+                                .font(.system(size: 12))
+                            Text("settings.lockscreen.warning_no_wallpaper", comment: "Warning when no wallpaper set")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.warning)
+                        }
+                    }
                 }
             }
         }
         .sheet(isPresented: $showingPicker) {
             HomeScreenImagePicker { image in
                 settings.saveWallpaper(image)
-                // No global toggle anymore — enable the ready flag so the
-                // lockscreen shows once it's selected as a set's input.
-                settings.isEnabled = true
             }
         }
         .sheet(isPresented: $showingHelp) {

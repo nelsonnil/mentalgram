@@ -194,7 +194,7 @@ struct UserProfileView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color.white.ignoresSafeArea()
+            Color(UIColor.systemBackground).ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Header (igual que Instagram)
@@ -225,7 +225,7 @@ struct UserProfileView: View {
                 }
                 .responsiveHorizontalPadding()
                 .padding(.vertical, 12)
-                .background(Color.white)
+                .background(Color(UIColor.systemBackground))
                 
                 // Main content
                 ScrollView {
@@ -276,7 +276,7 @@ struct UserProfileView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(profile.fullName)
                                     .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(Color(UIColor.label))
                                     .lineLimit(1)
 
                                 HStack(spacing: 0) {
@@ -1019,23 +1019,23 @@ struct UserProfileView: View {
         VStack(spacing: 0) {
             // Thin separator that replaces the tabs line
             Rectangle()
-                .fill(Color(white: 0.88))
+                .fill(Color(UIColor.separator))
                 .frame(height: 1)
 
             VStack(spacing: 12) {
                 // Lock circle — matches Instagram's private account icon
                 Image(systemName: "lock.circle")
                     .font(.system(size: 62, weight: .light))
-                    .foregroundColor(.black)
+                    .foregroundColor(Color(UIColor.label))
                     .padding(.top, 36)
 
                 Text("ig.private.title")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.black)
+                    .foregroundColor(Color(UIColor.label))
 
                 Text("ig.private.subtitle")
                     .font(.system(size: 13))
-                    .foregroundColor(Color(white: 0.45))
+                    .foregroundColor(Color(UIColor.secondaryLabel))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 260)
 
@@ -1054,7 +1054,7 @@ struct UserProfileView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
-                    .background(isFollowRequested ? Color(white: 0.7) : Color(hex: "0095F6"))
+                    .background(isFollowRequested ? Color(UIColor.systemGray) : Color(hex: "0095F6"))
                     .cornerRadius(8)
                 }
                 .disabled(isFollowActionLoading || isFollowRequested)

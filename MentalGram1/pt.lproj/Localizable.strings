@@ -1722,3 +1722,21 @@
 "postpred.goto_sets.body" = "Selecione um set ativo e escolha o método de entrada diretamente em cada cartão de set.";
 "set.url_scheme.copy" = "Copiar";
 "set.url_scheme.copied" = "Copiado!";
+
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "DESLIZE CEGO";
+"postpred.help.input.clockinput.intro" = "Quando o Performance abre, o ecrã fica completamente **preto** — simulando que o telemóvel está desligado. Deslizas em segredo para introduzir um número; o espetador não vê nada.";
+"postpred.help.input.clockinput.encoding.title" = "CODIFICAÇÃO DE DÍGITOS  (cada dígito = 2 deslizes)";
+"postpred.help.input.clockinput.examples.title" = "EXEMPLOS";
+"postpred.help.input.clockinput.example5.note" = "Introduzir 05 → dígito 0 (↑↑) depois dígito 5 (↓→) — 4 deslizes no total";
+"postpred.help.input.clockinput.example37.note" = "Dígito 3 (→→) depois dígito 7 (↓←) — 4 deslizes no total";
+"postpred.help.input.clockinput.example100.note" = "Dígito 1 (↑→) depois dois 0s (↑↑ cada) — 6 deslizes no total";
+"postpred.help.input.clockinput.haptic.title" = "FEEDBACK HÁPTICO";
+"postpred.help.input.clockinput.haptic.light" = "Toque leve — cada deslize individual registado";
+"postpred.help.input.clockinput.haptic.medium" = "Pulso médio — dígito concluído (2 deslizes)";
+"postpred.help.input.clockinput.haptic.success" = "Dupla vibração forte — revelação bem-sucedida";
+"postpred.help.input.clockinput.haptic.error" = "Buzz de erro + flash no ecrã — par inválido, reiniciado";
+"postpred.help.input.clockinput.dismiss" = "Após a revelação, **pressiona 1 segundo** em qualquer lugar do ecrã preto para fechar. O perfil falso do Instagram atualizado aparece instantaneamente.";
+
+"set.input.clockinput.help" = "Mostra um ecrã completamente preto ao abrir o Performance. Introduza um número de 1 a 100 com pares de deslizamentos direcionais. Prima longamente para fechar após a revelação.";
+"set.input.clockinput.noconfig" = "Nenhuma configuração necessária.";

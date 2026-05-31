@@ -158,7 +158,7 @@ struct PostPredictionHelpView: View {
                 ]
             )
             PPSetTypeRow(
-                icon: "number", color: Color(hex: "0EA5E9"),
+                icon: "number", color: Color(hex: "FF9500"),
                 title: "Number Reveal",
                 description: "postpred.help.settype.number.desc",
                 badges: [
@@ -206,7 +206,7 @@ struct PostPredictionHelpView: View {
                 label: "postpred.help.input.grid.label",
                 labelColor: VaultTheme.Colors.primary,
                 badges: [
-                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9")),
+                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
                     PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
                     PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
                 ]
@@ -214,7 +214,7 @@ struct PostPredictionHelpView: View {
                 PPBodyText("postpred.help.input.grid.intro")
                 PPGridInputDemo()
                 VStack(alignment: .leading, spacing: 10) {
-                    PPGridCaseRow(color: Color(hex: "0EA5E9"), setType: "Number",
+                    PPGridCaseRow(color: Color(hex: "FF9500"), setType: "Number",
                                   detail: "postpred.help.input.grid.case.number")
                     PPGridCaseRow(color: Color(hex: "F97316"), setType: "Custom",
                                   detail: "postpred.help.input.grid.case.custom")
@@ -233,7 +233,7 @@ struct PostPredictionHelpView: View {
                 labelColor: VaultTheme.Colors.success,
                 badges: [
                     PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
-                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9"))
+                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500"))
                 ]
             ) {
                 PPStepBullet("postpred.help.input.ocr.step1", color: VaultTheme.Colors.success)
@@ -260,18 +260,18 @@ struct PostPredictionHelpView: View {
                 labelColor: VaultTheme.Colors.warning,
                 badges: [
                     PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
-                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9")),
+                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
                     PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
                     PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
                 ]
             ) {
                 PPBodyText("postpred.help.input.url.intro")
                 VStack(alignment: .leading, spacing: 10) {
-                    PPURLExample(url: "vault://reveal?word=COCHE",
+                    PPURLExample(url: "vault://reveal?word=COCHE&set=MySet",
                                  description: "postpred.help.input.url.example.word")
-                    PPURLExample(url: "vault://reveal?slot=15",
+                    PPURLExample(url: "vault://reveal?slot=15&set=MySet",
                                  description: "postpred.help.input.url.example.slot")
-                    PPURLExample(url: "vault://reveal?card=J\u{2660}",
+                    PPURLExample(url: "vault://reveal?card=J\u{2660}&set=MySet",
                                  description: "postpred.help.input.url.example.card")
                 }
             }
@@ -282,7 +282,7 @@ struct PostPredictionHelpView: View {
                 labelColor: Color(hex: "FFD60A"),
                 badges: [
                     PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
-                    PPBadgeItem(label: "Number", color: Color(hex: "0EA5E9")),
+                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
                     PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
                     PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
                 ]
@@ -294,6 +294,18 @@ struct PostPredictionHelpView: View {
                     PPStepBullet("postpred.help.input.api.step3", color: Color(hex: "FFD60A"))
                     PPStepBullet("postpred.help.input.api.step4", color: Color(hex: "FFD60A"))
                 }
+            }
+
+            // ── F: Clock Input — black screen swipe input ────────────────
+            PPInputMethodBlock(
+                label: "postpred.help.input.swipeblind.label",
+                labelColor: Color(hex: "94A3B8"),
+                badges: [
+                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
+                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
+                ]
+            ) {
+                PPClockInputDescription()
             }
         }
     }
@@ -993,7 +1005,7 @@ private struct PPGridInputDemo: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 6) {
-                ppPill("1", "Swipe",   active: phase == .swipe,   color: accent)
+                ppPill("1", "Clock",   active: phase == .swipe,   color: accent)
                 ppPill("2", "Confirm", active: phase == .confirm, color: accent)
                 ppPill("3", "Reveal",  active: phase == .reveal,  color: gold)
             }
@@ -1732,8 +1744,152 @@ private struct PPCovertTypingDemo: View {
     }
 }
 
-// MARK: - ── PPBanksDemo ────────────────────────────────────────────────────────
-// Animated explanation of Sets & Banks:
+// MARK: - ── PPClockInputDescription ──────────────────────────────────────────
+// Explains the Clock Input input: a black fullscreen that encodes digits as
+// pairs of directional swipes so the magician can secretly enter a number.
+
+private struct PPClockInputDescription: View {
+
+    private let accent = Color(hex: "94A3B8")
+    private let digits: [(String, String)] = [
+        ("0","↑↑"), ("1","↑→"), ("2","→↑"), ("3","→→"), ("4","→↓"),
+        ("5","↓→"), ("6","↓↓"), ("7","↓←"), ("8","←↓"), ("9","←←")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+
+            // How it works
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "iphone")
+                    .font(.system(size: 13)).foregroundColor(accent).padding(.top, 1)
+                Text("postpred.help.input.clockinput.intro")
+                    .font(.system(size: 13))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .background(accent.opacity(0.07))
+            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.2), lineWidth: 1))
+
+            // Encoding table
+            VStack(alignment: .leading, spacing: 8) {
+                Text("postpred.help.input.clockinput.encoding.title")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(accent)
+                    .tracking(0.5)
+
+                let rows = stride(from: 0, to: digits.count, by: 5).map {
+                    Array(digits[$0..<min($0 + 5, digits.count)])
+                }
+                ForEach(rows.indices, id: \.self) { ri in
+                    HStack(spacing: 5) {
+                        ForEach(rows[ri].indices, id: \.self) { ci in
+                            HStack(spacing: 3) {
+                                Text(rows[ri][ci].0)
+                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.white)
+                                Text(rows[ri][ci].1)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(accent)
+                            }
+                            .padding(.horizontal, 7).padding(.vertical, 4)
+                            .background(Color.white.opacity(0.05))
+                            .cornerRadius(6)
+                            .overlay(RoundedRectangle(cornerRadius: 6)
+                                .stroke(accent.opacity(0.2), lineWidth: 0.8))
+                        }
+                        Spacer()
+                    }
+                }
+            }
+
+            // Examples
+            VStack(alignment: .leading, spacing: 8) {
+                Text("postpred.help.input.clockinput.examples.title")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(accent).tracking(0.5)
+
+                PPSwipeExample(number: "5",   swipes: "↑↑ + ↓→",       noteKey: "postpred.help.input.clockinput.example5.note")
+                PPSwipeExample(number: "37",  swipes: "→→ + ↓←",       noteKey: "postpred.help.input.clockinput.example37.note")
+                PPSwipeExample(number: "100", swipes: "↑→ + ↑↑ + ↑↑", noteKey: "postpred.help.input.clockinput.example100.note")
+            }
+
+            // Haptic feedback legend
+            VStack(alignment: .leading, spacing: 6) {
+                Text("postpred.help.input.clockinput.haptic.title")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(accent).tracking(0.5)
+                PPHapticRow(icon: "hand.point.right.fill", color: Color(hex: "60A5FA"),
+                            labelKey: "postpred.help.input.clockinput.haptic.light")
+                PPHapticRow(icon: "circle.hexagongrid.fill", color: Color(hex: "A78BFA"),
+                            labelKey: "postpred.help.input.clockinput.haptic.medium")
+                PPHapticRow(icon: "iphone.radiowaves.left.and.right", color: Color(hex: "34D399"),
+                            labelKey: "postpred.help.input.clockinput.haptic.success")
+                PPHapticRow(icon: "xmark.circle.fill", color: VaultTheme.Colors.error,
+                            labelKey: "postpred.help.input.clockinput.haptic.error")
+            }
+
+            // Dismiss note
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 12)).foregroundColor(Color(hex: "F59E0B")).padding(.top, 1)
+                Text("postpred.help.input.clockinput.dismiss")
+                    .font(.system(size: 13))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct PPSwipeExample: View {
+    let number: String
+    let swipes: String
+    let noteKey: LocalizedStringKey
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6).fill(Color(hex: "FF9500").opacity(0.14))
+                    .frame(width: 32, height: 28)
+                Text(number)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "FF9500"))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(swipes)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                Text(noteKey)
+                    .font(.system(size: 11))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct PPHapticRow: View {
+    let icon: String
+    let color: Color
+    let labelKey: LocalizedStringKey
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12)).foregroundColor(color)
+                .frame(width: 18).padding(.top, 1)
+            Text(labelKey)
+                .font(.system(size: 12))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+// MARK: - ── PPBanksDemo ────────────────────────────────────────────────────────// Animated explanation of Sets & Banks:
 //   Phase 1 — Bank 1: 26 photos (A-Z) upload one by one, counter 1→26
 //   Phase 2 — Bank 1 shrinks to pill; Bank 2 uploads and shrinks
 //   Phase 3 — Bank 3 uploads and shrinks

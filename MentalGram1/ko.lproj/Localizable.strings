@@ -521,7 +521,7 @@
 "postpred.help.input.grid.step3" = "게시물 아이콘을 탭하여 확인하고 공개를 트리거합니다.";
 "postpred.help.input.ocr.label" = "OCR — 카메라";
 "postpred.help.input.covert.label" = "은밀 입력";
-"postpred.help.input.covert.step1" = "설정에서 **은밀 입력**을 활성화하고 커버 단어를 설정합니다 — 관객이 화면에서 볼 단어입니다.";
+"postpred.help.input.covert.step1" = "**내 세트**의 세트 카드에서 **Cover Typing**을 선택하고 **구성**을 탭하여 커버 단어(관객이 화면에서 볼 내용)를 설정하세요.";
 "postpred.help.input.covert.step2" = "Explore 검색 필드에서 관객의 단어를 입력합니다. 관객에게는 커버 단어가 표시되고 앱은 실제 단어를 조용히 기록합니다.";
 "postpred.help.input.covert.step3" = "완료되면 **스페이스를 한 번** 누릅니다. 스페이스가 필드에서 사라지는 것은 정상입니다. 미세한 진동이 단어가 캡처되고 공개가 트리거되었음을 확인합니다.";
 "postpred.help.input.url.label" = "URL 스킴 / 자동화";
@@ -533,7 +533,7 @@
 "postpred.help.settype.number.desc" = "**10슬롯 (0–9) × N뱅크.** 각 뱅크가 한 숫자를 공개합니다. 뱅크 1 = 1번째 숫자, 뱅크 2 = 2번째 숫자.";
 "postpred.help.settype.custom.desc" = "**커스텀 이미지 1–100개, 1뱅크.** 1–3자리를 스와이프하여 슬롯 번호(1–100)를 선택합니다. 경기 결과, 타로 또는 시각적 선택에 이상적입니다.";
 "postpred.help.settype.card.desc" = "**52슬롯 (A–K × ♠♥♣♦), 1뱅크.** 2–3자리를 스와이프하여 카드를 선택합니다. 문양: 1=♠ 2=♥ 3=♣ 4=♦. 예: 4→2 = 4♥ · 1→1→1 = J♠.";
-"postpred.help.input.ocr.step1" = "Post Prediction 설정에서 **OCR**을 활성화합니다.";
+"postpred.help.input.ocr.step1" = "**내 세트**의 세트 카드에서 입력 방법으로 **OCR**을 선택한 다음 **구성**을 탭하여 카메라와 언어를 설정하세요.";
 "postpred.help.input.ocr.step2" = "손으로 쓴 글자나 인쇄된 글자에 카메라를 향합니다. 앱이 자동으로 읽어 해당 공개를 트리거합니다.";
 "postpred.help.input.url.label" = "URL 스킴";
 "postpred.help.input.url.step1" = "Post Prediction 설정에서 **URL Scheme**을 활성화합니다.";
@@ -541,8 +541,8 @@
 "postpred.help.before.1" = "세트 섹션에서 **세트**를 만듭니다. Word Reveal, Number Reveal, Custom Set 또는 Playing Cards를 선택합니다. 이미지 템플릿을 선택하거나 직접 사진을 업로드합니다.";
 "postpred.help.before.2" = "이미지를 업로드하고 **자동으로 보관**될 때까지 기다립니다. 몇 시간이 걸릴 수 있습니다.";
 "postpred.help.before.3" = "업로드 중에는 **앱을 사용하지 말고**, 네트워크를 변경하거나 프로세스를 중단하지 마세요.";
-"postpred.help.before.4" = "업로드한 세트를 Post Prediction 설정에서 **활성화**로 설정합니다.";
-"postpred.help.before.5" = "최소 하나의 **입력 방법**을 활성화합니다: 그리드, OCR 또는 URL 스킴.";
+"postpred.help.before.4" = "**내 세트**에서 업로드한 세트를 탭하고 **활성**으로 표시한 다음 세트 카드에서 직접 **입력 방법**을 선택하세요.";
+"postpred.help.before.5" = "각 세트는 카드에 자체 **입력 방법** 선택기가 있습니다. 별도의 토글이 필요 없습니다 — 공연에 맞는 방법을 선택하기만 하면 됩니다.";
 "postpred.help.during.step.invite" = "자유 선택";
 "postpred.help.during.invite.action" = "관객에게 단어, 숫자, 또는 문자를 자유롭게 생각하도록 합니다.";
 "postpred.help.during.invite.dialogue" = "아무 단어나 생각하세요. 아니면 아무 숫자나. 개인적인 것, 당신만 아는 것. 아직 말하지 마세요.";
@@ -590,7 +590,7 @@
 "postpred.help.input.covert.label" = "비밀 입력";
 "postpred.help.input.api.label" = "API 자동 리빌";
 "postpred.help.input.api.intro" = "Inject (11z.co) 또는 커스텀 API를 연결하세요. Performance를 먼저 열면 — 앱이 백그라운드에서 2초마다 확인합니다. 관객이 선택을 제출하는 순간 트리플 진동과 함께 자동으로 리빌이 실행됩니다.";
-"postpred.help.input.api.step1" = "설정 → Post Prediction에서 Auto Input을 **API**로 설정하고 소스（Inject 또는 커스텀 API）를 선택합니다.";
+"postpred.help.input.api.step1" = "**내 세트**의 세트 카드에서 입력 방법으로 **API**를 선택하고 **구성**을 탭하여 소스(Inject 또는 Custom API)를 선택하세요.";
 "postpred.help.input.api.step2" = "프레젠테이션을 시작하기 전에 기기에서 Performance 화면을 엽니다.";
 "postpred.help.input.api.step3" = "관객에게 Inject 링크 또는 커스텀 양식에서 선택하도록 요청합니다.";
 "postpred.help.input.api.step4" = "2초 이내에 앱이 새 값을 감지하여 해당 사진을 공개하고 세 번 진동으로 확인합니다.";
@@ -1264,12 +1264,12 @@
 "limits.help.table.col.action" = "기능";
 "limits.help.table.col.first" = "첫 번째";
 "limits.help.table.col.again" = "재사용";
-"limits.help.table.row.performance" = "Performance 열기 (프로필 + 백그라운드 캐시)";
+"limits.help.table.row.performance" = "Performance 열기";
 "limits.help.table.row.followers" = "팔로워 목록";
 "limits.help.table.row.profile.new" = "새 팔로워 프로필";
 "limits.help.table.row.sa" = "Sync & Archive (사진당)";
 "limits.help.table.row.upload" = "업로드 (사진당)";
-"limits.help.table.row.autoupload" = "사진당 자동 업로드 (업로드 + 아카이브)";
+"limits.help.table.row.autoupload" = "자동 업로드 전체 사이클 (사진 1장당)";
 "limits.help.table.row.reveal" = "리빌 (글자/사진당)";
 "limits.help.table.row.notebio" = "노트 또는 bio 변경";
 "limits.help.table.row.explore" = "탐색 / 검색";
@@ -1302,7 +1302,11 @@
 "guide.fakehome.help.what.title" = "가짜 홈 화면이란?";
 "guide.fakehome.help.what.body" = "Performance를 열면 프로필로 바로 이동하는 대신 실제 iPhone 홈 화면 스크린샷이 먼저 표시됩니다. 관찰자에게는 Instagram을 정상적으로 여는 것처럼 보입니다.";
 "guide.fakehome.help.how.title" = "사용 방법";
-"guide.fakehome.help.how.body" = "1. Instagram 아이콘이 보이는 홈 화면의 실제 스크린샷을 찍습니다.\n\n2. 설정 › 기타 › 가짜 홈 화면에서 업로드합니다.\n\n3. 토글을 활성화합니다.\n\n4. 다음에 Performance를 열면 해당 스크린샷이 전체 화면으로 나타납니다 — 아무 곳이나 (이상적으로는 Instagram 아이콘) 탭하여 프로필을 표시합니다.";
+"guide.fakehome.help.how.body" = "1. Instagram 아이콘이 보이도록 iPhone 홈 화면의 실제 스크린샷을 찍으세요.
+
+2. 설정 › 데이터 › Fake Home Screen에서 업로드하세요.
+
+3. 스크린샷이 로드되면 가짜 홈 화면이 자동으로 활성화됩니다. 다음에 Performance를 열면 전체 화면으로 표시됩니다 — 아무 곳이나 탭하여(이상적으로는 Instagram 아이콘 위) 프로필을 공개하세요.";
 "guide.fakehome.help.why.title" = "왜 사용하나요?";
 "guide.fakehome.help.why.body" = "실제 Instagram 앱을 열고 있는 것처럼 보이는 환상을 만듭니다. 화면을 보는 사람은 프로필이 나타나기 전에 일반 홈 화면만 봅니다.";
 "guide.lockscreen.title" = "잠금 화면 입력";
@@ -1312,7 +1316,7 @@
 "guide.lockscreen.help.how.title" = "비밀 번호 입력 방법";
 "guide.lockscreen.help.how.body" = "1. 숫자 키패드에서 비밀 번호의 숫자를 탭합니다 — 소리 없이 기록됩니다.\n\n2. 키패드 밖을 탭하여 해당 숫자를 잠급니다.\n\n3. 남은 점들을 아무 숫자로 채웁니다 — 무시됩니다.\n\n4. 4개의 점이 모두 채워지면 잠금 화면이 닫히고 Performance가 열립니다.";
 "guide.lockscreen.help.wallpaper.title" = "배경화면";
-"guide.lockscreen.help.wallpaper.body" = "가짜를 동일하게 보이게 하려면 실제 잠금 화면에서 사용하는 동일한 배경화면을 업로드하세요. 배경화면 없이는 잠금 화면 입력을 활성화할 수 없습니다.";
+"guide.lockscreen.help.wallpaper.body" = "가짜 잠금 화면이 실제와 동일하게 보이도록 실제 잠금 화면에 사용하는 것과 같은 배경 화면을 업로드하세요. 그런 다음 내 세트의 세트 카드에서 입력 방법으로 **잠금 화면**을 선택하세요.";
 "guide.lockscreen.help.why.title" = "왜 사용하나요?";
 "guide.lockscreen.help.why.body" = "비밀 번호 입력을 일반 전화 잠금 해제로 위장합니다. 가짜 홈 화면과 결합하면 전체 시퀀스가 다음처럼 보입니다: 전화 잠금 해제 → 홈 화면 → Instagram 열기.";
 "guide.lockscreen.help.tricks.title" = "같은 비밀 번호 — 다양한 트릭";
@@ -1518,30 +1522,41 @@
 "lockscreen.enter_passcode" = "암호 입력";
 "lockscreen.emergency" = "긴급전화";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "스와이프 블라인드";
+"postpred.help.input.clockinput.intro" = "Performance가 열리면 화면이 완전히 **검게** 됩니다 — 전화가 꺼진 것처럼 보입니다. 비밀리에 스와이프하여 숫자를 입력하면 관객은 아무것도 볼 수 없습니다.";
+"postpred.help.input.clockinput.encoding.title" = "숫자 인코딩  (각 숫자 = 스와이프 2회)";
+"postpred.help.input.clockinput.examples.title" = "예시";
+"postpred.help.input.clockinput.example5.note" = "05 입력 → 숫자 0 (↑↑) 다음 숫자 5 (↓→) — 총 4회 스와이프";
+"postpred.help.input.clockinput.example37.note" = "숫자 3 (→→) 다음 숫자 7 (↓←) — 총 4회 스와이프";
+"postpred.help.input.clockinput.example100.note" = "숫자 1 (↑→) 다음 0 두 번 (↑↑ 각각) — 총 6회 스와이프";
+"postpred.help.input.clockinput.haptic.title" = "햅틱 피드백";
+"postpred.help.input.clockinput.haptic.light" = "가벼운 탭 — 스와이프마다 등록";
+"postpred.help.input.clockinput.haptic.medium" = "중간 펄스 — 숫자 완성 (2회 스와이프)";
+"postpred.help.input.clockinput.haptic.success" = "강한 이중 진동 — 공개 성공";
+"postpred.help.input.clockinput.haptic.error" = "오류 버즈 + 화면 플래시 — 잘못된 쌍, 초기화";
+"postpred.help.input.clockinput.dismiss" = "공개 후 검은 화면을 닫으려면 **1초 길게 누르세요**. 업데이트된 가짜 Instagram 프로필이 즉시 나타납니다.";
+
+// MARK: - Set Input Picker
 "set.input.label" = "입력";
-"set.input.configure" = "설정";
-"set.input.covertyping.help" = "탐색에서 입력한 내용을 가려 관객에게는 다른 단어가 보입니다. 스페이스를 눌러 공개하세요.";
+"set.input.configure" = "구성";
+"set.input.covertyping.help" = "탐색에서 입력하는 내용을 가려 관객에게 다른 단어가 보이게 합니다. 공개하려면 스페이스를 누르세요.";
 "set.input.covertyping.maskmode" = "마스크 모드";
-"set.input.api.help" = "Performance가 열려 있는 동안 2초마다 온라인 소스를 확인하고 새 값이 도착하면 자동으로 공개합니다.";
+"set.input.api.help" = "Performance가 열린 동안 2초마다 온라인 소스를 폴링하고 새 값이 오면 자동으로 공개합니다.";
 "set.input.api.source" = "API 소스";
-"set.input.api.endpoint_hint" = "API 엔드포인트는 설정 → 연동에서 구성하세요.";
-"set.input.ocr.help" = "Performance를 열면 카메라가 조용히 시작됩니다. 볼륨 업을 눌러 스캔하면 인식된 텍스트가 자동으로 공개됩니다.";
+"set.input.api.endpoint_hint" = "설정 → 통합에서 API 엔드포인트를 구성하세요.";
+"set.input.ocr.help" = "Performance가 열릴 때 카메라가 조용히 시작됩니다. 볼륨+를 눌러 스캔하면 인식된 텍스트가 자동으로 공개됩니다.";
 "set.input.ocr.camera" = "카메라";
 "set.input.ocr.language" = "언어";
-"set.input.lockscreen.help" = "Performance를 열면 가짜 잠금 화면이 표시되어 값을 몰래 입력할 수 있습니다. 아래에서 배경화면을 설정하세요.";
-"set.input.digitgrid.help" = "그리드를 좌우로 스와이프해 값을 만들고 게시물 아이콘을 눌러 공개하세요.";
-"set.input.digitgrid.noconfig" = "설정이 필요 없습니다.";
-"postpred.perset_note" = "입력 방식은 이제 내 세트의 각 세트 카드에서 설정합니다. 세트를 열어 입력을 선택하세요.";
-"postpred.no_active_set" = "활성 세트가 없습니다. 내 세트에서 하나를 활성화하세요.";
+"set.input.lockscreen.help" = "Performance가 열릴 때 가짜 잠금 화면을 표시하여 비밀리에 값을 입력할 수 있습니다. 아래에서 배경화면을 설정하세요.";
+"set.input.digitgrid.help" = "그리드에서 좌우로 스와이프하여 값을 만들고 게시물 아이콘을 탭하여 공개합니다.";
+"set.input.digitgrid.noconfig" = "구성이 필요하지 않습니다.";
+"set.input.clockinput.help" = "Performance가 열릴 때 완전히 검은 화면을 표시합니다. 방향 스와이프 쌍으로 1–100 숫자를 입력합니다. 공개 후 길게 눌러 닫습니다.";
+"set.input.clockinput.noconfig" = "구성이 필요하지 않습니다.";
 
-/* Auto-active inputs (no toggle) */
-"fakehome.autoactive.title" = "자동으로 활성화됩니다";
-"fakehome.autoactive.body" = "스크린샷이 설정되어 있으면 Performance를 열 때 표시됩니다. 아무 곳이나 탭하면 프로필이 공개됩니다.";
-"lockscreen.perset_note" = "내 세트에서 세트의 입력으로 잠금 화면을 선택하면 활성화됩니다.";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
-"postpred.goto_sets.title" = "Sets에서 설정하세요";
-"postpred.goto_sets.body" = "각 세트 카드에서 활성 세트를 선택하고 입력 방법을 선택하세요.";
-"set.url_scheme.copy" = "복사";
-"set.url_scheme.copied" = "복사됨!";
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
+"fakehome.autoactive.title" = "자동으로 활성화됨";
+"fakehome.autoactive.body" = "스크린샷이 설정된 경우 Performance를 열 때 표시됩니다. 프로필을 공개하려면 아무 곳이나 탭하세요.";
+"lockscreen.perset_note" = "내 Sets에서 세트의 입력 방법으로 잠금 화면을 선택하면 활성화됩니다.";
+"postpred.goto_sets.title" = "구성하려면 Sets로 이동";
+"postpred.goto_sets.body" = "활성 세트를 선택하고 각 세트 카드에서 직접 입력 방법을 선택하세요.";

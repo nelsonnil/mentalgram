@@ -546,7 +546,7 @@ struct BiographyHelpView: View {
                 IPHMethodPill(label: "API", color: Color(hex: "0A84FF"))
                 IPHMethodPill(label: "URL Scheme", color: accent)
                 IPHMethodPill(label: "OCR", color: Color(hex: "A78BFA"))
-                IPHMethodPill(label: "Presets", color: Color(hex: "30D158"))
+                IPHMethodPill(label: "Templates", color: Color(hex: "30D158"))
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -585,13 +585,15 @@ struct BiographyHelpView: View {
             iphDivider
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Bio Presets")
+                Text("Bio Templates (T1 – T4)")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
-                IPHBullet(icon: "tray.full.fill", iconColor: Color(hex: "30D158"),
-                          text: "Save multiple biography texts as named presets. Tap any preset to load it into the bio field instantly — great for recurring shows where you reuse the same reveals.")
-                IPHBullet(icon: "tray.full.fill", iconColor: Color(hex: "30D158"),
-                          text: "To save a preset: type your bio text, then tap \"Bio Presets\" → \"Save current bio as preset\". Give it a name (optional) and tap Save.")
+                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "30D158"),
+                          text: "Above the biography text field there are four template slots — T1, T2, T3, T4. Tap a slot to switch to that template and edit it freely.")
+                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "30D158"),
+                          text: "The active template is the one used when you tap \"Update Biography\", during Performance auto-updates, and when triggered via URL Scheme — so you can have up to 4 completely different bio texts ready without retyping.")
+                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "30D158"),
+                          text: "You can include {text1}, {text2}, {text3} placeholders inside any template. The placeholders are replaced at send time by their configured API, OCR, or Inject source.")
             }
         }
     }
@@ -601,7 +603,7 @@ struct BiographyHelpView: View {
             IPHBullet(icon: "1.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Have the spectator write or choose a word / phrase beforehand (up to 150 characters).")
             IPHBullet(icon: "2.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Capture it via OCR, load it via API, or type it manually — or load a saved preset in one tap.")
+                      text: "Capture it via OCR, load it via API, type it manually, or select the matching template slot (T1–T4) in one tap.")
             IPHBullet(icon: "3.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Open Performance (or trigger the URL Scheme) — the biography updates in the fake profile instantly.")
             IPHBullet(icon: "4.circle.fill", iconColor: VaultTheme.Colors.warning,
@@ -613,7 +615,7 @@ struct BiographyHelpView: View {
     private var tips: some View {
         VStack(alignment: .leading, spacing: 8) {
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
-                      text: "Save your \"normal\" bio as a preset so you can restore it in one tap after the show.")
+                      text: "Save your regular bio in template T1 and your reveal bio in T2 — switch between them in one tap during any show.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
                       text: "The biography works for any text — not just single words. You can reveal a sentence, a date, or a full phrase.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),

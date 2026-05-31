@@ -36,7 +36,7 @@ struct SetInputPicker: View {
     private var accent: Color {
         switch set.type {
         case .word:   return Color(hex: "7C3AED")
-        case .number: return Color(hex: "0EA5E9")
+        case .number: return Color(hex: "FF9500")
         case .custom: return Color(hex: "F97316")
         case .card:   return Color(hex: "16A34A")
         }
@@ -63,18 +63,6 @@ struct SetInputPicker: View {
                         .background(accent.opacity(0.15))
                         .cornerRadius(5)
                 }
-                if selected.needsConfig {
-                    Button { configMethod = selected } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text("set.input.configure")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundColor(accent)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
 
             LazyVGrid(
@@ -85,6 +73,27 @@ struct SetInputPicker: View {
                 ForEach(allowed) { method in
                     chip(for: method)
                 }
+            }
+
+            // Configure button — full-width, shown when selected method has settings
+            if selected.needsConfig {
+                Button { configMethod = selected } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("set.input.configure")
+                            .font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundColor(accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(accent.opacity(0.12))
+                    .cornerRadius(9)
+                }
+                .buttonStyle(.plain)
             }
         }
         .sheet(item: $configMethod) { method in
@@ -143,6 +152,7 @@ struct SetInputConfigSheet: View {
                     case .ocr:         OCRInputConfig(accent: accent)
                     case .lockscreen:  LockscreenConfig(accent: accent)
                     case .digitGrid:   DigitGridConfig()
+                    case .clockInput:  ClockInputConfig()
                     }
                 }
                 .padding(VaultTheme.Spacing.lg)
@@ -438,6 +448,21 @@ private struct DigitGridConfig: View {
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
             Label("set.input.digitgrid.noconfig", systemImage: "checkmark.seal")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textTertiary)
+        }
+    }
+}
+
+// MARK: - Clock Input (no config)
+
+private struct ClockInputConfig: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            Label("set.input.clockinput.help", systemImage: "hand.draw.fill")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+            Label("set.input.clockinput.noconfig", systemImage: "checkmark.seal")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textTertiary)
         }

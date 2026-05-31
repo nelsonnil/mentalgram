@@ -434,7 +434,11 @@
 "guide.fakehome.help.what.title" = "Màn hình chủ giả là gì?";
 "guide.fakehome.help.what.body" = "Khi bạn mở Trình diễn, thay vì đi thẳng đến hồ sơ, ứng dụng đầu tiên hiển thị ảnh chụp màn hình chủ iPhone thật của bạn. Với người xem, trông như bạn vừa mở ứng dụng Instagram bình thường.";
 "guide.fakehome.help.how.title" = "Cách sử dụng";
-"guide.fakehome.help.how.body" = "1. Chụp ảnh màn hình chủ iPhone thật đảm bảo biểu tượng Instagram hiển thị.\n\n2. Tải lên trong Cài đặt › Khác › Màn hình chủ giả.\n\n3. Bật công tắc.\n\n4. Lần tới khi mở Trình diễn, ảnh chụp đó xuất hiện toàn màn hình — nhấn vào bất kỳ đâu (lý tưởng ngay trên biểu tượng Instagram) để hiện hồ sơ.";
+"guide.fakehome.help.how.body" = "1. Chụp ảnh màn hình thật của màn hình chính iPhone, đảm bảo biểu tượng Instagram hiển thị.
+
+2. Tải lên trong Cài đặt › Dữ liệu › Fake Home Screen.
+
+3. Sau khi ảnh chụp màn hình được tải, màn hình chính giả sẽ tự động kích hoạt. Lần sau khi bạn mở Performance, nó hiển thị toàn màn hình — chạm vào bất kỳ đâu (tốt nhất là ngay trên biểu tượng Instagram) để hiển thị hồ sơ của bạn.";
 "guide.fakehome.help.why.title" = "Tại sao dùng nó?";
 "guide.fakehome.help.why.body" = "Nó tạo ảo giác rằng bạn chỉ đơn giản đang mở ứng dụng Instagram thật. Bất kỳ ai nhìn vào màn hình chỉ thấy màn hình chủ bình thường trước khi hồ sơ của bạn xuất hiện, làm cho trải nghiệm trông hoàn toàn tự nhiên.";
 
@@ -445,7 +449,7 @@
 "guide.lockscreen.help.how.title" = "Cách nhập số bí mật";
 "guide.lockscreen.help.how.body" = "1. Nhấn các chữ số của số bí mật trên bàn phím — chúng đăng ký âm thầm.\n\n2. Nhấn bất kỳ đâu ngoài bàn phím để khóa các chữ số đó lại.\n\n3. Điền các chấm còn lại bằng cách nhấn bất kỳ chữ số nào — chúng bị bỏ qua.\n\n4. Khi tất cả 4 chấm được điền, màn hình khóa đóng và Trình diễn mở.";
 "guide.lockscreen.help.wallpaper.title" = "Hình nền";
-"guide.lockscreen.help.wallpaper.body" = "Tải lên cùng hình nền bạn dùng trên màn hình khóa thật để màn hình giả trông y hệt. Không có hình nền thì không thể bật nhập màn hình khóa.";
+"guide.lockscreen.help.wallpaper.body" = "Tải lên cùng hình nền bạn dùng trên màn hình khóa thật để màn hình giả trông giống hệt. Sau đó chọn **Màn hình khóa** làm phương thức nhập trên thẻ set của bạn trong My Sets.";
 "guide.lockscreen.help.why.title" = "Tại sao dùng nó?";
 "guide.lockscreen.help.why.body" = "Nó che giấu việc nhập số bí mật như việc mở khóa điện thoại bình thường. Kết hợp với Màn hình chủ giả, toàn bộ trình tự trông như: mở khóa điện thoại → màn hình chủ → mở Instagram — hoàn toàn tự nhiên với bất kỳ người xem nào.";
 "guide.lockscreen.help.tricks.title" = "Cùng số bí mật — nhiều thủ thuật";
@@ -725,3 +729,28 @@
 "postpred.goto_sets.body" = "Chọn một set đang hoạt động và chọn phương thức nhập trực tiếp từ mỗi thẻ set.";
 "set.url_scheme.copy" = "Sao chép";
 "set.url_scheme.copied" = "Đã sao chép!";
+
+/* Updated guide strings */
+"postpred.help.input.ocr.step1" = "Trên thẻ set của bạn trong **My Sets**, chọn **OCR** làm phương thức nhập, rồi nhấn **Cấu hình** để cài đặt camera và ngôn ngữ.";
+"postpred.help.input.covert.step1" = "Trên thẻ set của bạn trong **My Sets**, chọn **Cover Typing** và nhấn **Cấu hình** để định nghĩa từ che đậy — những gì khán giả sẽ thấy trên màn hình.";
+"postpred.help.input.api.step1" = "Trên thẻ set của bạn trong **My Sets**, chọn **API** làm phương thức nhập và nhấn **Cấu hình** để chọn nguồn của bạn (Inject hoặc Custom API).";
+"postpred.help.before.4" = "Trong **My Sets**, nhấn vào set bạn đã tải lên, đánh dấu là **active** và chọn **phương thức nhập** trực tiếp từ thẻ set.";
+"postpred.help.before.5" = "Mỗi set có bộ chọn **phương thức nhập** riêng trên thẻ của nó. Không cần toggle riêng — chỉ cần chọn phương thức phù hợp với màn trình diễn của bạn.";
+
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "VUỐT MÙ";
+"postpred.help.input.clockinput.intro" = "Khi Performance mở ra, màn hình trở nên **đen** hoàn toàn — mô phỏng điện thoại đang tắt. Bạn vuốt bí mật để nhập số; khán giả không thấy gì.";
+"postpred.help.input.clockinput.encoding.title" = "MÃ HÓA CHỮ SỐ  (mỗi chữ số = 2 lần vuốt)";
+"postpred.help.input.clockinput.examples.title" = "VÍ DỤ";
+"postpred.help.input.clockinput.example5.note" = "Nhập 05 → chữ số 0 (↑↑) rồi chữ số 5 (↓→) — tổng cộng 4 lần vuốt";
+"postpred.help.input.clockinput.example37.note" = "Chữ số 3 (→→) rồi chữ số 7 (↓←) — tổng cộng 4 lần vuốt";
+"postpred.help.input.clockinput.example100.note" = "Chữ số 1 (↑→) rồi hai số 0 (↑↑ mỗi số) — tổng cộng 6 lần vuốt";
+"postpred.help.input.clockinput.haptic.title" = "PHẢN HỒI HAPTIC";
+"postpred.help.input.clockinput.haptic.light" = "Nhấn nhẹ — mỗi lần vuốt được ghi nhận";
+"postpred.help.input.clockinput.haptic.medium" = "Rung vừa — chữ số hoàn thành (2 lần vuốt)";
+"postpred.help.input.clockinput.haptic.success" = "Rung mạnh hai lần — tiết lộ thành công";
+"postpred.help.input.clockinput.haptic.error" = "Rung lỗi + màn hình chớp — cặp không hợp lệ, đặt lại";
+"postpred.help.input.clockinput.dismiss" = "Sau khi tiết lộ, **nhấn giữ 1 giây** trên màn hình đen để thoát. Hồ sơ Instagram giả đã cập nhật hiển thị ngay lập tức.";
+
+"set.input.clockinput.help" = "Hiển thị màn hình đen hoàn toàn khi Performance mở. Nhập số từ 1–100 bằng các cặp vuốt theo hướng. Nhấn giữ để đóng sau khi tiết lộ.";
+"set.input.clockinput.noconfig" = "Không cần cấu hình.";

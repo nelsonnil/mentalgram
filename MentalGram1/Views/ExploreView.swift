@@ -47,7 +47,7 @@ struct ExploreView: View {
             // Main Explore view
             ZStack(alignment: .bottom) {
                 // White background covering everything
-                Color.white.ignoresSafeArea()
+                Color(UIColor.systemBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
                 // Search bar at top
@@ -111,7 +111,7 @@ struct ExploreView: View {
                 }
                 .responsiveHorizontalPadding()
                 .padding(.vertical, 8)
-                .background(Color.white)
+                .background(Color(UIColor.systemBackground))
                 
                 // Show search results if searching
                 if !searchText.isEmpty {
@@ -152,7 +152,7 @@ struct ExploreView: View {
                             }
                         }
                     }
-                    .background(Color.white)
+                    .background(Color(UIColor.systemBackground))
                 } else {
                     // Grid of explore content
                     if exploreManager.isLoading {
@@ -272,7 +272,6 @@ struct ExploreView: View {
             // Magician gets haptic feedback: medium pulse on space, success/error on completion
         }
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
-        .preferredColorScheme(.light) // CRITICAL: Explore must look exactly like Instagram (light mode)
         // ── Progressive: visited profile header arrived ───────────────────────
         // `InstagramService.getProfileInfo` posts this as soon as the searched
         // user's header (avatar, username, counters) is ready, before the
@@ -538,12 +537,6 @@ struct ExploreView: View {
     // MARK: - Secret Input Logic
     
     private func updateMaskTextCache() {
-        // Cover typing only runs when the active set is a Word set using it.
-        // Bail out early otherwise so we never fire the getLatestFollower() call.
-        guard DataManager.shared.isActiveInput(.coverTyping) else {
-            maskTextCache = ""
-            return
-        }
         // Custom mode — no async needed.
         guard secretInputSettings.mode == .latestFollower else {
             maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
@@ -1074,7 +1067,7 @@ struct SearchResultRow: View {
             }
             .responsiveHorizontalPadding()
             .padding(.vertical, 8)
-            .background(Color.white)
+            .background(Color(UIColor.systemBackground))
         }
         .buttonStyle(PlainButtonStyle())
         .onAppear {

@@ -521,7 +521,7 @@
 "postpred.help.input.grid.step3" = "投稿アイコンをタップして確定し、公開をトリガーします。";
 "postpred.help.input.ocr.label" = "OCR — カメラ";
 "postpred.help.input.covert.label" = "秘密入力";
-"postpred.help.input.covert.step1" = "設定で**秘密入力**を有効にし、カバーワードを設定します — 観客に見せる単語です。";
+"postpred.help.input.covert.step1" = "**マイセット**のセットカードで**Cover Typing**を選択し、**設定**をタップしてカバーワード（観客が画面で見る言葉）を定義してください。";
 "postpred.help.input.covert.step2" = "Exploreの検索フィールドで観客の単語を入力します。観客にはカバーワードが表示され、アプリは本当の単語を静かに記録します。";
 "postpred.help.input.covert.step3" = "完了したら**スペースを一度**押します。スペースはフィールドから消えますが、これは正常です。わずかな振動が、単語がキャプチャされ公開がトリガーされたことを確認します。";
 "postpred.help.input.url.label" = "URL スキーム / 自動化";
@@ -533,7 +533,7 @@
 "postpred.help.settype.number.desc" = "**10スロット (0〜9) × Nバンク。**各バンクが1桁を公開します。バンク1 = 1桁目、バンク2 = 2桁目。";
 "postpred.help.settype.custom.desc" = "**カスタム画像1〜100枚、1バンク。**1〜3桁をスワイプしてスロット番号(1〜100)を選択します。スコア、タロット、視覚的な選択に最適です。";
 "postpred.help.settype.card.desc" = "**52スロット (A〜K × ♠♥♣♦)、1バンク。**2〜3桁をスワイプしてカードを選択します。スート: 1=♠ 2=♥ 3=♣ 4=♦。例: 4→2 = 4♥ · 1→1→1 = J♠。";
-"postpred.help.input.ocr.step1" = "Post Prediction設定で**OCR**を有効にします。";
+"postpred.help.input.ocr.step1" = "**マイセット**のセットカードで、入力方法として**OCR**を選択し、**設定**をタップしてカメラと言語を設定してください。";
 "postpred.help.input.ocr.step2" = "手書きまたは印刷された単語にカメラを向けます。アプリが自動的に読み取り、対応する公開をトリガーします。";
 "postpred.help.input.url.label" = "URLスキーム";
 "postpred.help.input.url.step1" = "Post Prediction設定で**URL Scheme**を有効にします。";
@@ -541,8 +541,8 @@
 "postpred.help.before.1" = "Setsセクションで**セット**を作成します。Word Reveal、Number Reveal、Custom Set、またはPlaying Cardsを選択します。画像テンプレートを選択するか独自の写真をアップロードします。";
 "postpred.help.before.2" = "画像をアップロードし、**自動的にアーカイブ**されるまで待ちます。数時間かかる場合があります。";
 "postpred.help.before.3" = "アップロード中は**アプリを使用しない**で、ネットワークを変更せず、プロセスを中断しないでください。";
-"postpred.help.before.4" = "アップロードしたセットをPost Prediction設定で**アクティブ**に設定します。";
-"postpred.help.before.5" = "少なくとも1つの**入力方法**を有効にします: グリッド、OCR、またはURLスキーム。";
+"postpred.help.before.4" = "**マイセット**で、アップロードしたセットをタップし、**アクティブ**としてマークして、セットカードから直接**入力方法**を選択してください。";
+"postpred.help.before.5" = "各セットにはカード上に独自の**入力方法**セレクターがあります。別途トグルは不要です — パフォーマンスに合った方法を選ぶだけです。";
 "postpred.help.during.step.invite" = "自由な選択";
 "postpred.help.during.invite.action" = "観客に単語、数字、または文字を自由に考えてもらいます。何も提案しないでください。";
 "postpred.help.during.invite.dialogue" = "何でもいい単語を考えてください。または数字でも。個人的なもの、あなただけが知っているもの。まだ言わないでください。";
@@ -590,7 +590,7 @@
 "postpred.help.input.covert.label" = "秘密入力";
 "postpred.help.input.api.label" = "API 自動リビール";
 "postpred.help.input.api.intro" = "Inject (11z.co) またはカスタム API を接続します。まず Performance を開いてください — アプリはバックグラウンドで 2 秒ごとに確認します。観客が選択を送信した瞬間、トリプル振動とともに自動でリビールが発動します。";
-"postpred.help.input.api.step1" = "設定 → Post Prediction で Auto Input を **API** に設定し、ソース（Inject またはカスタム API）を選択します。";
+"postpred.help.input.api.step1" = "**マイセット**のセットカードで入力方法として**API**を選択し、**設定**をタップしてソース（InjectまたはCustom API）を選んでください。";
 "postpred.help.input.api.step2" = "プレゼンテーションを始める前に、デバイスで Performance ビューを開きます。";
 "postpred.help.input.api.step3" = "観客に Inject リンクまたはカスタムフォームで選択するよう依頼します。";
 "postpred.help.input.api.step4" = "2 秒以内にアプリが新しい値を検出し、対応する写真をリビールして 3 回振動で確認します。";
@@ -1263,12 +1263,12 @@
 "limits.help.table.col.action" = "機能";
 "limits.help.table.col.first" = "初回";
 "limits.help.table.col.again" = "再利用";
-"limits.help.table.row.performance" = "Performanceを開く（プロフィール＋バックグラウンドキャッシュ）";
+"limits.help.table.row.performance" = "Performanceを開く";
 "limits.help.table.row.followers" = "フォロワーリスト";
 "limits.help.table.row.profile.new" = "新規フォロワープロフィール";
 "limits.help.table.row.sa" = "Sync & Archive（写真1枚）";
 "limits.help.table.row.upload" = "アップロード（写真1枚）";
-"limits.help.table.row.autoupload" = "自動アップロード（写真1枚：アップ＋アーカイブ）";
+"limits.help.table.row.autoupload" = "自動アップロード全サイクル（写真1枚あたり）";
 "limits.help.table.row.reveal" = "リビール（文字/写真1つ）";
 "limits.help.table.row.notebio" = "ノートまたはbio変更";
 "limits.help.table.row.explore" = "探索 / 検索";
@@ -1298,7 +1298,11 @@
 "guide.fakehome.help.what.title" = "フェイクホーム画面とは?";
 "guide.fakehome.help.what.body" = "Performanceを開くと、プロフィールに直接移動する代わりに、本物のiPhoneホーム画面のスクリーンショットが表示されます。観客にはInstagramを普通に開いているように見えます。";
 "guide.fakehome.help.how.title" = "使い方";
-"guide.fakehome.help.how.body" = "1. Instagramアイコンが見えるホーム画面の実際のスクリーンショットを撮影します。\n\n2. 設定 › その他 › フェイクホーム画面でアップロードします。\n\n3. スイッチをオンにします。\n\n4. 次回Performanceを開くと、そのスクリーンショットが全画面で表示されます — どこかをタップ（理想はInstagramアイコン）してプロフィールを表示します。";
+"guide.fakehome.help.how.body" = "1. Instagramのアイコンが見えるようにして、iPhoneのホーム画面のスクリーンショットを撮影してください。
+
+2. 設定 › データ › Fake Home Screen でアップロードしてください。
+
+3. スクリーンショットを読み込むと、フェイクホーム画面が自動的に有効になります。次にPerformanceを開いたとき、全画面で表示されます — どこでもタップ（できればInstagramアイコン上）してプロフィールを表示してください。";
 "guide.fakehome.help.why.title" = "なぜ使うの?";
 "guide.fakehome.help.why.body" = "本物のInstagramアプリを開いているように見せます。画面を見た人には、プロフィールが表示される前に通常のホーム画面しか見えません。";
 "guide.lockscreen.title" = "ロック画面入力";
@@ -1308,7 +1312,7 @@
 "guide.lockscreen.help.how.title" = "秘密の数字の入力方法";
 "guide.lockscreen.help.how.body" = "1. テンキーで秘密の数字を入力します — 音なしで記録されます。\n\n2. テンキー外をタップしてその数字をロックします。\n\n3. 残りの点をどの数字でも入力して埋めます — 無視されます。\n\n4. 4つの点が全部埋まるとロック画面が閉じてPerformanceが開きます。";
 "guide.lockscreen.help.wallpaper.title" = "壁紙";
-"guide.lockscreen.help.wallpaper.body" = "本物のロック画面と同じ壁紙をアップロードして、フェイクを同一に見せます。壁紙なしではロック画面入力を有効にできません。";
+"guide.lockscreen.help.wallpaper.body" = "本物のロック画面と同じ壁紙をアップロードして、偽物と見分けがつかないようにしてください。その後、マイセットのセットカードで入力方法として**ロック画面**を選択してください。";
 "guide.lockscreen.help.why.title" = "なぜ使うの?";
 "guide.lockscreen.help.why.body" = "秘密の数字の入力を通常の電話ロック解除として偽装します。フェイクホーム画面と組み合わせると、完全なシーケンスは: 電話のロック解除 → ホーム画面 → Instagramを開く のように見えます。";
 "guide.lockscreen.help.tricks.title" = "同じ秘密の数字 — 多くのトリック";
@@ -1514,30 +1518,41 @@
 "lockscreen.enter_passcode" = "パスコードを入力";
 "lockscreen.emergency" = "緊急";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "スワイプブラインド";
+"postpred.help.input.clockinput.intro" = "Performanceを開くと画面が完全に**黒く**なります — 電話がオフのように見せます。秘密のスワイプで数字を入力します。観客には何も見えません。";
+"postpred.help.input.clockinput.encoding.title" = "数字のエンコード  (各数字 = スワイプ2回)";
+"postpred.help.input.clockinput.examples.title" = "例";
+"postpred.help.input.clockinput.example5.note" = "05を入力 → 数字0 (↑↑) 次に数字5 (↓→) — 合計4スワイプ";
+"postpred.help.input.clockinput.example37.note" = "数字3 (→→) 次に数字7 (↓←) — 合計4スワイプ";
+"postpred.help.input.clockinput.example100.note" = "数字1 (↑→) 次に0を2回 (↑↑ 各1回) — 合計6スワイプ";
+"postpred.help.input.clockinput.haptic.title" = "ハプティクスフィードバック";
+"postpred.help.input.clockinput.haptic.light" = "軽いタップ — スワイプごとに登録";
+"postpred.help.input.clockinput.haptic.medium" = "中程度のパルス — 数字完了（2スワイプ）";
+"postpred.help.input.clockinput.haptic.success" = "強い二重振動 — リベール成功";
+"postpred.help.input.clockinput.haptic.error" = "エラーバズ + 画面フラッシュ — 無効なペア、リセット";
+"postpred.help.input.clockinput.dismiss" = "リベール後、黒い画面を閉じるには**1秒長押し**してください。更新されたフェイクInstagramプロフィールがすぐに表示されます。";
+
+// MARK: - Set Input Picker
 "set.input.label" = "入力";
 "set.input.configure" = "設定";
-"set.input.covertyping.help" = "探索で入力した内容をマスクし、観客には別の単語が見えます。スペースキーで公開します。";
+"set.input.covertyping.help" = "探索タブで入力する内容をマスクして、観客には別の単語が見えるようにします。SPACEキーで公開。";
 "set.input.covertyping.maskmode" = "マスクモード";
-"set.input.api.help" = "Performanceを開いている間、2秒ごとにオンラインソースを確認し、新しい値が届くと自動的に公開します。";
+"set.input.api.help" = "Performanceが開いている間、2秒ごとにオンラインソースをポーリングし、新しい値が来たら自動的に公開します。";
 "set.input.api.source" = "APIソース";
-"set.input.api.endpoint_hint" = "APIのエンドポイントは設定→連携で構成します。";
-"set.input.ocr.help" = "Performanceを開くとカメラが静かに起動します。音量アップでスキャンし、認識したテキストが自動的に公開されます。";
+"set.input.api.endpoint_hint" = "設定 → インテグレーションでAPIエンドポイントを設定してください。";
+"set.input.ocr.help" = "Performanceを開くとカメラが静かに起動します。音量+を押してスキャン；認識されたテキストが自動的に公開されます。";
 "set.input.ocr.camera" = "カメラ";
 "set.input.ocr.language" = "言語";
-"set.input.lockscreen.help" = "Performanceを開くと偽のロック画面が表示され、こっそり値を入力できます。下で壁紙を設定してください。";
-"set.input.digitgrid.help" = "グリッドを左右にスワイプして値を作り、投稿アイコンをタップして公開します。";
-"set.input.digitgrid.noconfig" = "設定は不要です。";
-"postpred.perset_note" = "入力方法はマイセットの各セットカードで設定するようになりました。セットを開いて入力を選択してください。";
-"postpred.no_active_set" = "アクティブなセットがありません。マイセットで1つをアクティブにしてください。";
+"set.input.lockscreen.help" = "Performanceを開くと偽のロック画面が表示され、秘密裏に値を入力できます。下で壁紙を設定してください。";
+"set.input.digitgrid.help" = "グリッドを左右にスワイプして値を作成し、投稿アイコンをタップして公開します。";
+"set.input.digitgrid.noconfig" = "設定は必要ありません。";
+"set.input.clockinput.help" = "Performanceを開くと完全に黒い画面が表示されます。方向スワイプペアで1〜100の数字を入力します。公開後は長押しで閉じます。";
+"set.input.clockinput.noconfig" = "設定は必要ありません。";
 
-/* Auto-active inputs (no toggle) */
-"fakehome.autoactive.title" = "自動的に有効になります";
-"fakehome.autoactive.body" = "スクリーンショットを設定していると、Performanceを開いたときに表示されます。どこでもタップするとプロフィールが表示されます。";
-"lockscreen.perset_note" = "マイセットでセットの入力としてロック画面を選ぶと有効になります。";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
+"fakehome.autoactive.title" = "自動でアクティブになります";
+"fakehome.autoactive.body" = "スクリーンショットが設定されている場合、Performanceを開くと表示されます。プロフィールを表示するにはどこかをタップしてください。";
+"lockscreen.perset_note" = "マイセットのセットで「ロック画面」を入力方法として選択すると有効になります。";
 "postpred.goto_sets.title" = "Setsに移動して設定する";
-"postpred.goto_sets.body" = "各セットカードからアクティブなセットを選択し、入力方法を設定してください。";
-"set.url_scheme.copy" = "コピー";
-"set.url_scheme.copied" = "コピー済み！";
+"postpred.goto_sets.body" = "アクティブなセットを選択し、各セットカードで直接入力方法を選択します。";

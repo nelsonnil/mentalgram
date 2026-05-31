@@ -112,12 +112,12 @@ struct InstagramProfileSkeleton: View {
                     ForEach(["square.grid.3x3", "play.rectangle", "person.crop.square"], id: \.self) { icon in
                         Image(systemName: icon)
                             .font(.system(size: 24))
-                            .foregroundColor(icon == "square.grid.3x3" ? .black : Color(white: 0.56))
+                            .foregroundColor(icon == "square.grid.3x3" ? Color(UIColor.label) : Color(UIColor.secondaryLabel))
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
                             .overlay(
                                 Rectangle()
-                                    .fill(icon == "square.grid.3x3" ? Color.black : Color.clear)
+                                    .fill(icon == "square.grid.3x3" ? Color(UIColor.label) : Color.clear)
                                     .frame(height: 1),
                                 alignment: .bottom
                             )
@@ -144,7 +144,7 @@ struct InstagramProfileSkeleton: View {
                 }
             }  // VStack
         }  // ScrollView
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
     }
 }
 

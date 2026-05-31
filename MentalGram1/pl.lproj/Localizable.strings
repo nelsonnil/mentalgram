@@ -519,7 +519,7 @@
 "postpred.help.input.grid.step3" = "Dotknij ikony Postów, aby potwierdzić i uruchomić ujawnienie.";
 "postpred.help.input.ocr.label" = "OCR — KAMERA";
 "postpred.help.input.covert.label" = "UKRYTE WPROWADZANIE";
-"postpred.help.input.covert.step1" = "Włącz **Ukryte wprowadzanie** w ustawieniach i ustaw słowo osłonowe — to, co widz zobaczy na ekranie.";
+"postpred.help.input.covert.step1" = "Na karcie zestawu w **Moje zestawy** wybierz **Cover Typing** i dotknij **Konfiguruj**, aby zdefiniować słowo maskujące — to, co widz zobaczy na ekranie.";
 "postpred.help.input.covert.step2" = "Wpisz słowo widza w polu wyszukiwania Explore. Widz widzi słowo osłonowe; aplikacja po cichu rejestruje prawdziwe słowo.";
 "postpred.help.input.covert.step3" = "Po zakończeniu naciśnij **Spację jeden raz**. Spacja znika z pola — to normalne. Delikatna wibracja potwierdza, że słowo zostało przechwycone i ujawnienie zostało aktywowane.";
 "postpred.help.input.url.label" = "URL SCHEME / AUTOMATYZACJA";
@@ -531,7 +531,7 @@
 "postpred.help.settype.number.desc" = "**10 slotów (0–9) × N banków.** Każdy bank ujawnia jedną cyfrę. Bank 1 = 1. cyfra, Bank 2 = 2. cyfra.";
 "postpred.help.settype.custom.desc" = "**1–100 własnych obrazów, 1 bank.** Przesuń 1–3 cyfry, aby wybrać numer slotu (1–100). Idealne do wyników meczów, tarota lub wizualnego wyboru.";
 "postpred.help.settype.card.desc" = "**52 sloty (A–K × ♠♥♣♦), 1 bank.** Przesuń 2 lub 3 cyfry, aby wybrać kartę. Kolory: 1=♠ 2=♥ 3=♣ 4=♦. Np.: 4→2 = 4♥ · 1→1→1 = J♠.";
-"postpred.help.input.ocr.step1" = "Wlacz **OCR** w ustawieniach Post Prediction.";
+"postpred.help.input.ocr.step1" = "Na karcie zestawu w **Moje zestawy** wybierz **OCR** jako metodę wejścia, a następnie dotknij **Konfiguruj**, aby ustawić kamerę i język.";
 "postpred.help.input.ocr.step2" = "Skieruj kamere na odrecznne lub wydrukowane slowo. Aplikacja odczyta je automatycznie i uruchomi odpowiednie ujawnienie.";
 "postpred.help.input.url.label" = "SCHEMAT URL";
 "postpred.help.input.url.step1" = "Wlacz **URL Scheme** w ustawieniach Post Prediction.";
@@ -539,8 +539,8 @@
 "postpred.help.before.1" = "Utwórz **Zestaw** w sekcji Zestawy. Wybierz Word Reveal, Number Reveal, Custom Set lub Playing Cards. Wybierz szablon obrazu lub prześlij własne zdjęcia.";
 "postpred.help.before.2" = "Prze. lij obrazy i poczekaj, az zostana **automatycznie zarchiwizowane**. Mo.e to zaj.c kilka godzin.";
 "postpred.help.before.3" = "Podczas przesylania **nie korzystaj z aplikacji**, nie zmieniaj sieci i nie przerywaj procesu. Ekran pozostaje aktywny automatycznie.";
-"postpred.help.before.4" = "Ustaw przeslany Zestaw jako **aktywny** w ustawieniach Post Prediction.";
-"postpred.help.before.5" = "Wlacz co najmniej jedn. **metod. wprowadzania**: Siatka, OCR lub Schemat URL.";
+"postpred.help.before.4" = "W **Moje zestawy** dotknij przesłanego zestawu, oznacz go jako **aktywny** i wybierz jego **metodę wejścia** bezpośrednio z karty zestawu.";
+"postpred.help.before.5" = "Każdy zestaw ma własny selektor **metody wejścia** na swojej karcie. Żaden osobny przełącznik nie jest potrzebny — po prostu wybierz metodę, która pasuje do twojego pokazu.";
 "postpred.help.during.step.invite" = "WOLNY WYBOR";
 "postpred.help.during.invite.action" = "Poprós widza, aby swobodnie pomyslal o slowie, liczbie lub literze. Nic nie sugeruj.";
 "postpred.help.during.invite.dialogue" = "Pomysl o dowolnym slowie lub dowolnej liczbie. Cos osobistego, cos tylko Ty znasz. Jeszcze nie mow.";
@@ -588,7 +588,7 @@
 "postpred.help.input.covert.label" = "UKRYTE WPISYWANIE";
 "postpred.help.input.api.label" = "AUTOMATYCZNE UJAWNIENIE API";
 "postpred.help.input.api.intro" = "Połącz Inject (11z.co) lub własne API. Najpierw otwórz Performance — aplikacja odpytuje co 2 s w tle. W momencie gdy widz wyśle swój wybór, ujawnienie uruchamia się automatycznie z potrójną wibracją.";
-"postpred.help.input.api.step1" = "W Ustawieniach → Post Prediction ustaw Auto Input na **API** i wybierz źródło (Inject lub własne API).";
+"postpred.help.input.api.step1" = "Na karcie zestawu w **Moje zestawy** wybierz **API** jako metodę wejścia i dotknij **Konfiguruj**, aby wybrać źródło (Inject lub Custom API).";
 "postpred.help.input.api.step2" = "Otwórz widok Performance na urządzeniu przed rozpoczęciem prezentacji.";
 "postpred.help.input.api.step3" = "Poproś widza o dokonanie wyboru w linku Inject lub Twoim formularzu.";
 "postpred.help.input.api.step4" = "W ciągu 2 sekund aplikacja wykrywa nową wartość, ujawnia odpowiednie zdjęcia i wibruje trzykrotnie w celu potwierdzenia.";
@@ -1261,12 +1261,12 @@
 "limits.help.table.col.action" = "Funkcja";
 "limits.help.table.col.first" = "1. raz";
 "limits.help.table.col.again" = "Ponownie";
-"limits.help.table.row.performance" = "Otwórz Performance (profil + cache w tle)";
+"limits.help.table.row.performance" = "Otwórz Performance";
 "limits.help.table.row.followers" = "Lista obserwujących";
 "limits.help.table.row.profile.new" = "Nowy profil obserwującego";
 "limits.help.table.row.sa" = "Sync & Archive (na zdjęcie)";
 "limits.help.table.row.upload" = "Przesyłanie (na zdjęcie)";
-"limits.help.table.row.autoupload" = "Auto-przesyłanie na zdjęcie (upload + archiwum)";
+"limits.help.table.row.autoupload" = "Pełny cykl automatycznego przesyłania (na zdjęcie)";
 "limits.help.table.row.reveal" = "Ujawnianie (na literę/zdjęcie)";
 "limits.help.table.row.notebio" = "Zmiana notatki lub bio";
 "limits.help.table.row.explore" = "Eksploruj / Szukaj";
@@ -1296,7 +1296,11 @@
 "guide.fakehome.help.what.title" = "What is Fake Home Screen?";
 "guide.fakehome.help.what.body" = "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally.";
 "guide.fakehome.help.how.title" = "How to use it";
-"guide.fakehome.help.how.body" = "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.\n\n2. Upload it in Settings › Other › Fake Home Screen.\n\n3. Enable the toggle.\n\n4. Next time you open Performance, that screenshot appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile.";
+"guide.fakehome.help.how.body" = "1. Zrób prawdziwy zrzut ekranu ekranu głównego iPhone'a, upewniając się, że ikona Instagrama jest widoczna.
+
+2. Prześlij go w Ustawienia › Dane › Fake Home Screen.
+
+3. Po załadowaniu zrzutu ekranu fałszywy ekran główny aktywuje się automatycznie. Następnym razem gdy otworzysz Performance, pojawia się na pełnym ekranie — dotknij gdziekolwiek (najlepiej ikony Instagrama), aby odsłonić swój profil.";
 "guide.fakehome.help.why.title" = "Why use it?";
 "guide.fakehome.help.why.body" = "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears.";
 "guide.lockscreen.title" = "Lockscreen Input";
@@ -1306,7 +1310,7 @@
 "guide.lockscreen.help.how.title" = "How to enter your secret number";
 "guide.lockscreen.help.how.body" = "1. Tap the digits of your secret number on the numpad — they register silently.\n\n2. Tap anywhere outside the numpad to lock those digits in place.\n\n3. Fill the remaining dots by tapping any digits — they are ignored.\n\n4. Once all 4 dots are filled the lockscreen dismisses and Performance opens.";
 "guide.lockscreen.help.wallpaper.title" = "Wallpaper";
-"guide.lockscreen.help.wallpaper.body" = "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Without a wallpaper the lockscreen input cannot be enabled.";
+"guide.lockscreen.help.wallpaper.body" = "Prześlij to samo tapetę, która jest na Twoim prawdziwym ekranie blokady, aby fałszywy wyglądał identycznie. Następnie wybierz **Ekran blokady** jako metodę wejścia na karcie zestawu w Moje zestawy.";
 "guide.lockscreen.help.why.title" = "Why use it?";
 "guide.lockscreen.help.why.body" = "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram.";
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
@@ -1512,30 +1516,41 @@
 "lockscreen.enter_passcode" = "Wprowadź kod";
 "lockscreen.emergency" = "Nagły wypadek";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "ŚLEPY PRZECIĄG";
+"postpred.help.input.clockinput.intro" = "Po otwarciu Performance ekran staje się całkowicie **czarny** — symulując wyłączony telefon. Potajemnie przesuwasz, aby wprowadzić numer; widz nie widzi nic.";
+"postpred.help.input.clockinput.encoding.title" = "KODOWANIE CYFR  (każda cyfra = 2 przeciągnięcia)";
+"postpred.help.input.clockinput.examples.title" = "PRZYKŁADY";
+"postpred.help.input.clockinput.example5.note" = "Wprowadź 05 → cyfra 0 (↑↑) potem cyfra 5 (↓→) — 4 przeciągnięcia łącznie";
+"postpred.help.input.clockinput.example37.note" = "Cyfra 3 (→→) potem cyfra 7 (↓←) — 4 przeciągnięcia łącznie";
+"postpred.help.input.clockinput.example100.note" = "Cyfra 1 (↑→) potem dwa 0 (↑↑ każde) — 6 przeciągnięć łącznie";
+"postpred.help.input.clockinput.haptic.title" = "SPRZĘŻENIE DOTYKOWE";
+"postpred.help.input.clockinput.haptic.light" = "Lekkie stuknięcie — każde przeciągnięcie zarejestrowane";
+"postpred.help.input.clockinput.haptic.medium" = "Średni impuls — cyfra ukończona (2 przeciągnięcia)";
+"postpred.help.input.clockinput.haptic.success" = "Podwójna silna wibracja — ujawnienie zakończone sukcesem";
+"postpred.help.input.clockinput.haptic.error" = "Brzęczyk błędu + błysk ekranu — nieprawidłowa para, reset";
+"postpred.help.input.clockinput.dismiss" = "Po ujawnieniu **przytrzymaj 1 sekundę** na czarnym ekranie, aby go zamknąć. Zaktualizowany fałszywy profil Instagram pojawi się natychmiast.";
+
+// MARK: - Set Input Picker
 "set.input.label" = "Wejście";
 "set.input.configure" = "Konfiguruj";
-"set.input.covertyping.help" = "Maskuje to, co wpisujesz w Eksploruj, aby widzowie widzieli inne słowo. Naciśnij SPACJĘ, aby ujawnić.";
+"set.input.covertyping.help" = "Maskuje to, co wpisujesz w Eksploruj, aby widzowie widzieli inne słowo. Naciśnij SPACJĘ, aby odsłonić.";
 "set.input.covertyping.maskmode" = "Tryb maski";
-"set.input.api.help" = "Odpytuje źródło online co 2 s, gdy Performance jest otwarty, i ujawnia automatycznie po nadejściu nowej wartości.";
+"set.input.api.help" = "Odpytuje źródło online co 2 s gdy Performance jest otwarty i odsłania automatycznie przy nowej wartości.";
 "set.input.api.source" = "Źródło API";
-"set.input.api.endpoint_hint" = "Skonfiguruj punkty końcowe API w Ustawienia → Integracje.";
-"set.input.ocr.help" = "Aparat uruchamia się cicho po otwarciu Performance. Naciśnij Głośność w górę, aby zeskanować; rozpoznany tekst ujawnia się automatycznie.";
-"set.input.ocr.camera" = "Aparat";
+"set.input.api.endpoint_hint" = "Konfiguruj punkty końcowe API w Ustawienia → Integracje.";
+"set.input.ocr.help" = "Kamera uruchamia się cicho po otwarciu Performance. Naciśnij Volume+ aby skanować; rozpoznany tekst odsłania automatycznie.";
+"set.input.ocr.camera" = "Kamera";
 "set.input.ocr.language" = "Język";
-"set.input.lockscreen.help" = "Pokazuje fałszywy ekran blokady po otwarciu Performance, aby potajemnie wpisać wartość. Ustaw tapetę poniżej.";
-"set.input.digitgrid.help" = "Przesuń w lewo lub w prawo po siatce, aby utworzyć wartość, a następnie dotknij ikony Posty, aby ujawnić.";
-"set.input.digitgrid.noconfig" = "Nie wymaga konfiguracji.";
-"postpred.perset_note" = "Metody wejścia ustawiasz teraz na każdej karcie zestawu w Moje zestawy. Otwórz zestaw, aby wybrać jego wejście.";
-"postpred.no_active_set" = "Brak aktywnego zestawu. Przejdź do Moje zestawy i aktywuj jeden.";
+"set.input.lockscreen.help" = "Wyświetla fałszywy ekran blokady po otwarciu Performance, aby wprowadzić wartość w sekrecie. Ustaw tapetę poniżej.";
+"set.input.digitgrid.help" = "Przesuń w lewo lub prawo po siatce, aby zbudować wartość, a następnie dotknij ikony Posty, aby odsłonić.";
+"set.input.digitgrid.noconfig" = "Konfiguracja nie jest wymagana.";
+"set.input.clockinput.help" = "Po otwarciu Performance wyświetla całkowicie czarny ekran. Wprowadź liczbę od 1 do 100 za pomocą par kierunkowych przeciągnięć. Przytrzymaj, aby zamknąć po ujawnieniu.";
+"set.input.clockinput.noconfig" = "Konfiguracja nie jest wymagana.";
 
-/* Auto-active inputs (no toggle) */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
 "fakehome.autoactive.title" = "Aktywuje się automatycznie";
-"fakehome.autoactive.body" = "Pokazywany po otwarciu Performance, jeśli ustawiono zrzut ekranu. Dotknij w dowolnym miejscu, aby ujawnić profil.";
-"lockscreen.perset_note" = "Aktywuje się, gdy wybierzesz Ekran blokady jako wejście zestawu w Moje zestawy.";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
-"postpred.goto_sets.title" = "Przejdź do Zestawów, aby skonfigurować";
-"postpred.goto_sets.body" = "Wybierz aktywny zestaw i wybierz jego metodę wejścia bezpośrednio z każdej karty zestawu.";
-"set.url_scheme.copy" = "Kopiuj";
-"set.url_scheme.copied" = "Skopiowano!";
+"fakehome.autoactive.body" = "Wyświetlane po otwarciu Performance jeśli ustawiono zrzut ekranu. Dotknij gdziekolwiek, aby ujawnić swój profil.";
+"lockscreen.perset_note" = "Aktywuje się, gdy wybierzesz Ekran blokady jako metodę wejścia dla setu w Moje Sety.";
+"postpred.goto_sets.title" = "Przejdź do Sets aby skonfigurować";
+"postpred.goto_sets.body" = "Wybierz aktywny set i wybierz metodę wejścia bezpośrednio na każdej karcie setu.";

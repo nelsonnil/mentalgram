@@ -547,7 +547,7 @@
 "postpred.help.input.grid.step3" = "แตะไอคอนโพสต์เพื่อยืนยันและเปิดใช้การเปิดเผย";
 "postpred.help.input.ocr.label" = "OCR — กล้อง";
 "postpred.help.input.covert.label" = "การพิมพ์แบบลับ";
-"postpred.help.input.covert.step1" = "เปิดใช้ **การพิมพ์แบบลับ** ในการตั้งค่าและกำหนดคำปกปิด — สิ่งที่ผู้ชมจะเห็นบนหน้าจอ";
+"postpred.help.input.covert.step1" = "บนการ์ดเซ็ตของคุณใน **My Sets** เลือก **Cover Typing** และแตะ **กำหนดค่า** เพื่อกำหนดคำปกปิด — สิ่งที่ผู้ชมจะเห็นบนหน้าจอ";
 "postpred.help.input.covert.step2" = "พิมพ์คำของผู้ชมในช่องค้นหา Explore ผู้ชมเห็นคำปกปิด แอปบันทึกคำจริงอย่างเงียบๆ";
 "postpred.help.input.covert.step3" = "เมื่อเสร็จแล้ว กด **Space หนึ่งครั้ง** Space จะหายไปจากช่อง — เป็นเรื่องปกติ การสั่นเบาๆ ยืนยันว่าคำถูกจับได้และการเปิดเผยถูกเรียกใช้งานแล้ว";
 "postpred.help.input.url.label" = "URL SCHEME / ระบบอัตโนมัติ";
@@ -559,7 +559,7 @@
 "postpred.help.settype.number.desc" = "**10 สล็อต (0–9) × N แบงก์** แต่ละแบงก์เปิดเผยตัวเลขหนึ่งตัว แบงก์ 1 = หลักที่ 1, แบงก์ 2 = หลักที่ 2";
 "postpred.help.settype.custom.desc" = "**ภาพที่กำหนดเอง 1–100 ภาพ 1 แบงก์** ปัด 1–3 หลักเพื่อเลือกหมายเลขสล็อต (1–100) เหมาะสำหรับผลการแข่งขัน ไพ่ทาโร่ หรือทางเลือกแบบภาพ";
 "postpred.help.settype.card.desc" = "**52 สล็อต (A–K × ♠♥♣♦) 1 แบงก์** ปัด 2–3 หลักเพื่อเลือกไพ่ ดอก: 1=♠ 2=♥ 3=♣ 4=♦ เช่น: 4→2 = 4♥ · 1→1→1 = J♠";
-"postpred.help.input.ocr.step1" = "เปิดใช้ **OCR** ในการตั้งค่า Post Prediction";
+"postpred.help.input.ocr.step1" = "บนการ์ดเซ็ตของคุณใน **My Sets** เลือก **OCR** เป็นวิธีการป้อนข้อมูล แล้วแตะ **กำหนดค่า** เพื่อตั้งค่ากล้องและภาษา";
 "postpred.help.input.ocr.step2" = "ชี้กล้องไปที่คำที่เขียนด้วยมือหรือพิมพ์ แอปอ่านโดยอัตโนมัติและเปิดใช้การเปิดเผยที่ตรงกัน";
 "postpred.help.input.url.label" = "URL สคีม";
 "postpred.help.input.url.step1" = "เปิดใช้ **URL Scheme** ในการตั้งค่า Post Prediction";
@@ -567,8 +567,8 @@
 "postpred.help.before.1" = "สร้าง**เซต**ในส่วน Sets เลือก Word Reveal, Number Reveal, Custom Set หรือ Playing Cards เลือกเทมเพลตภาพหรืออัพโหลดภาพของคุณเอง";
 "postpred.help.before.2" = "อัพโหลดภาพและรอให้**เก็บถาวรโดยอัตโนมัติ** อาจใช้เวลาหลายชั่วโมง";
 "postpred.help.before.3" = "ระหว่างการอัพโหลด **อย่าใช้แอป** อย่าเปลี่ยนเครือข่าย และอย่าหยุดกระบวนการ";
-"postpred.help.before.4" = "ตั้งเซตที่อัพโหลดแล้วเป็น**ใช้งาน**ในการตั้งค่า Post Prediction";
-"postpred.help.before.5" = "เปิดใช้อย่างน้อยหนึ่ง**วิธีการป้อนข้อมูล**: กริด, OCR หรือ URL สคีม";
+"postpred.help.before.4" = "ใน **My Sets** แตะที่เซ็ตที่คุณอัปโหลด ทำเครื่องหมายว่า **ใช้งานอยู่** และเลือก **วิธีการป้อนข้อมูล** โดยตรงจากการ์ดเซ็ต";
+"postpred.help.before.5" = "แต่ละเซ็ตมีตัวเลือก**วิธีการป้อนข้อมูล**ของตัวเองบนการ์ด ไม่จำเป็นต้องสลับแยกต่างหาก — เพียงเลือกวิธีที่เหมาะกับการแสดงของคุณ";
 "postpred.help.during.step.invite" = "การเลือกอย่างอิสระ";
 "postpred.help.during.invite.action" = "ขอให้ผู้ชมคิดคำ ตัวเลข หรือตัวอักษรอย่างอิสระ อย่าแนะนำอะไรทั้งนั้น";
 "postpred.help.during.invite.dialogue" = "คิดคำใดก็ได้ หรือตัวเลขใดก็ได้ บางอย่างที่เป็นส่วนตัว ยังไม่ต้องบอก";
@@ -622,7 +622,7 @@
 "postpred.help.input.covert.label" = "การพิมพ์แบบลับ";
 "postpred.help.input.api.label" = "API เปิดเผยอัตโนมัติ";
 "postpred.help.input.api.intro" = "เชื่อมต่อ Inject (11z.co) หรือ API แบบกำหนดเอง เปิด Performance ก่อน — แอปตรวจสอบทุก 2 วินาทีในเบื้องหลัง ทันทีที่ผู้ชมส่งการเลือก การเปิดเผยจะเกิดขึ้นอัตโนมัติพร้อมสั่นสะเทือนสามครั้ง";
-"postpred.help.input.api.step1" = "ใน การตั้งค่า → Post Prediction ตั้ง Auto Input เป็น **API** และเลือกแหล่งที่มา (Inject หรือ API แบบกำหนดเอง)";
+"postpred.help.input.api.step1" = "บนการ์ดเซ็ตของคุณใน **My Sets** เลือก **API** เป็นวิธีการป้อนข้อมูล และแตะ **กำหนดค่า** เพื่อเลือกแหล่งที่มาของคุณ (Inject หรือ Custom API)";
 "postpred.help.input.api.step2" = "เปิดหน้า Performance บนอุปกรณ์ก่อนเริ่มการแสดง";
 "postpred.help.input.api.step3" = "ขอให้ผู้ชมเลือกผ่านลิงก์ Inject หรือฟอร์มแบบกำหนดเองของคุณ";
 "postpred.help.input.api.step4" = "ภายใน 2 วินาที แอปตรวจพบค่าใหม่ เปิดเผยรูปภาพที่ตรงกัน และสั่นสะเทือนสามครั้งเพื่อยืนยัน";
@@ -902,12 +902,12 @@
 "limits.help.table.col.action" = "ฟีเจอร์";
 "limits.help.table.col.first" = "ครั้งแรก";
 "limits.help.table.col.again" = "ซ้ำ";
-"limits.help.table.row.performance" = "เปิด Performance (โปรไฟล์ + แคชพื้นหลัง)";
+"limits.help.table.row.performance" = "เปิด Performance";
 "limits.help.table.row.followers" = "รายการผู้ติดตาม";
 "limits.help.table.row.profile.new" = "โปรไฟล์ผู้ติดตามใหม่";
 "limits.help.table.row.sa" = "Sync & Archive (ต่อภาพ)";
 "limits.help.table.row.upload" = "อัปโหลด (ต่อภาพ)";
-"limits.help.table.row.autoupload" = "อัปโหลดอัตโนมัติต่อรูป (อัปโหลด + จัดเก็บ)";
+"limits.help.table.row.autoupload" = "รอบการอัปโหลดอัตโนมัติเต็มรูปแบบ (ต่อรูป)";
 "limits.help.table.row.reveal" = "เปิดเผย (ต่อตัวอักษร/ภาพ)";
 "limits.help.table.row.notebio" = "เปลี่ยนโน้ตหรือ bio";
 "limits.help.table.row.explore" = "สำรวจ / ค้นหา";
@@ -947,7 +947,11 @@
 "guide.fakehome.help.what.title" = "What is Fake Home Screen?";
 "guide.fakehome.help.what.body" = "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally.";
 "guide.fakehome.help.how.title" = "How to use it";
-"guide.fakehome.help.how.body" = "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.\n\n2. Upload it in Settings › Other › Fake Home Screen.\n\n3. Enable the toggle.\n\n4. Next time you open Performance, that screenshot appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile.";
+"guide.fakehome.help.how.body" = "1. ถ่ายภาพหน้าจอจริงของหน้าจอหลัก iPhone โดยให้ไอคอน Instagram มองเห็นได้
+
+2. อัปโหลดในการตั้งค่า › ข้อมูล › Fake Home Screen
+
+3. เมื่อโหลดภาพหน้าจอแล้ว หน้าจอหลักปลอมจะเปิดใช้งานโดยอัตโนมัติ ครั้งถัดไปที่คุณเปิด Performance มันจะปรากฏเต็มหน้าจอ — แตะที่ใดก็ได้ (แนะนำที่ไอคอน Instagram) เพื่อเปิดเผยโปรไฟล์ของคุณ";
 "guide.fakehome.help.why.title" = "Why use it?";
 "guide.fakehome.help.why.body" = "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears.";
 "guide.lockscreen.title" = "Lockscreen Input";
@@ -957,7 +961,7 @@
 "guide.lockscreen.help.how.title" = "How to enter your secret number";
 "guide.lockscreen.help.how.body" = "1. Tap the digits of your secret number on the numpad — they register silently.\n\n2. Tap anywhere outside the numpad to lock those digits in place.\n\n3. Fill the remaining dots by tapping any digits — they are ignored.\n\n4. Once all 4 dots are filled the lockscreen dismisses and Performance opens.";
 "guide.lockscreen.help.wallpaper.title" = "Wallpaper";
-"guide.lockscreen.help.wallpaper.body" = "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Without a wallpaper the lockscreen input cannot be enabled.";
+"guide.lockscreen.help.wallpaper.body" = "อัปโหลดวอลล์เปเปอร์เดียวกับที่ใช้บนหน้าจอล็อกจริงเพื่อให้หน้าปลอมดูเหมือนกัน จากนั้นเลือก **หน้าจอล็อก** เป็นวิธีการป้อนข้อมูลบนการ์ดเซ็ตของคุณใน My Sets";
 "guide.lockscreen.help.why.title" = "Why use it?";
 "guide.lockscreen.help.why.body" = "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram.";
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
@@ -1163,30 +1167,41 @@
 "lockscreen.enter_passcode" = "ใส่รหัสผ่าน";
 "lockscreen.emergency" = "ฉุกเฉิน";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "สไวป์แบบบลายด์";
+"postpred.help.input.clockinput.intro" = "เมื่อ Performance เปิด หน้าจอจะกลายเป็น**สีดำ**สนิท — จำลองว่าโทรศัพท์ปิดอยู่ คุณปัดลับๆ เพื่อกรอกตัวเลข ผู้ชมไม่เห็นอะไรเลย";
+"postpred.help.input.clockinput.encoding.title" = "การเข้ารหัสตัวเลข  (แต่ละตัวเลข = 2 การปัด)";
+"postpred.help.input.clockinput.examples.title" = "ตัวอย่าง";
+"postpred.help.input.clockinput.example5.note" = "กรอก 05 → ตัวเลข 0 (↑↑) แล้ว ตัวเลข 5 (↓→) — รวม 4 การปัด";
+"postpred.help.input.clockinput.example37.note" = "ตัวเลข 3 (→→) แล้ว ตัวเลข 7 (↓←) — รวม 4 การปัด";
+"postpred.help.input.clockinput.example100.note" = "ตัวเลข 1 (↑→) แล้ว 0 สองครั้ง (↑↑ แต่ละครั้ง) — รวม 6 การปัด";
+"postpred.help.input.clockinput.haptic.title" = "การสั่นสะเทือน";
+"postpred.help.input.clockinput.haptic.light" = "แตะเบา — บันทึกการปัดแต่ละครั้ง";
+"postpred.help.input.clockinput.haptic.medium" = "สั่นกลาง — ตัวเลขสมบูรณ์ (2 การปัด)";
+"postpred.help.input.clockinput.haptic.success" = "สั่นสองครั้งแรง — เปิดเผยสำเร็จ";
+"postpred.help.input.clockinput.haptic.error" = "สั่นผิดพลาด + หน้าจอกะพริบ — คู่ไม่ถูกต้อง รีเซ็ต";
+"postpred.help.input.clockinput.dismiss" = "หลังจากเปิดเผยแล้ว **กดค้าง 1 วินาที** บนหน้าจอดำเพื่อปิด โปรไฟล์ Instagram ปลอมที่อัปเดตแล้วจะปรากฏทันที";
+
+// MARK: - Set Input Picker
 "set.input.label" = "อินพุต";
 "set.input.configure" = "ตั้งค่า";
-"set.input.covertyping.help" = "ปิดบังสิ่งที่คุณพิมพ์ในสำรวจ เพื่อให้ผู้ชมเห็นคำอื่น กด SPACE เพื่อเปิดเผย";
-"set.input.covertyping.maskmode" = "โหมดมาสก์";
-"set.input.api.help" = "ตรวจสอบแหล่งข้อมูลออนไลน์ทุก 2 วินาทีขณะเปิด Performance และเปิดเผยอัตโนมัติเมื่อมีค่าใหม่";
+"set.input.covertyping.help" = "ซ่อนสิ่งที่คุณพิมพ์ใน Explore เพื่อให้ผู้ชมเห็นคำอื่น กด SPACE เพื่อเปิดเผย";
+"set.input.covertyping.maskmode" = "โหมดซ่อน";
+"set.input.api.help" = "สอบถามแหล่งข้อมูลออนไลน์ทุก 2 วินาทีขณะที่ Performance เปิดอยู่ และเปิดเผยอัตโนมัติเมื่อมีค่าใหม่";
 "set.input.api.source" = "แหล่ง API";
-"set.input.api.endpoint_hint" = "ตั้งค่าปลายทาง API ใน การตั้งค่า → การเชื่อมต่อ";
-"set.input.ocr.help" = "กล้องจะเริ่มทำงานแบบเงียบเมื่อเปิด Performance กดเพิ่มเสียงเพื่อสแกน ข้อความที่รู้จักจะถูกเปิดเผยอัตโนมัติ";
+"set.input.api.endpoint_hint" = "ตั้งค่า API endpoints ใน การตั้งค่า → การผสานรวม";
+"set.input.ocr.help" = "กล้องเปิดเงียบๆ เมื่อ Performance เปิด กดเพิ่มเสียงเพื่อสแกน ข้อความที่รู้จักจะเปิดเผยอัตโนมัติ";
 "set.input.ocr.camera" = "กล้อง";
 "set.input.ocr.language" = "ภาษา";
-"set.input.lockscreen.help" = "แสดงหน้าจอล็อกปลอมเมื่อเปิด Performance เพื่อให้คุณป้อนค่าแบบลับๆ ตั้งวอลเปเปอร์ด้านล่าง";
-"set.input.digitgrid.help" = "ปัดซ้ายหรือขวาบนกริดเพื่อสร้างค่า แล้วแตะไอคอนโพสต์เพื่อเปิดเผย";
-"set.input.digitgrid.noconfig" = "ไม่ต้องตั้งค่า";
-"postpred.perset_note" = "ตอนนี้ตั้งวิธีอินพุตบนการ์ดแต่ละชุดใน ชุดของฉัน เปิดชุดเพื่อเลือกอินพุต";
-"postpred.no_active_set" = "ไม่มีชุดที่ใช้งาน ไปที่ ชุดของฉัน แล้วเปิดใช้งานหนึ่งชุด";
+"set.input.lockscreen.help" = "แสดงหน้าจอล็อกปลอมเมื่อ Performance เปิด เพื่อกรอกค่าแบบลับ ตั้งวอลเปเปอร์ด้านล่าง";
+"set.input.digitgrid.help" = "ปัดซ้ายหรือขวาบนตาราง เพื่อสร้างค่า แล้วแตะไอคอน Posts เพื่อเปิดเผย";
+"set.input.digitgrid.noconfig" = "ไม่ต้องการการตั้งค่า";
+"set.input.clockinput.help" = "แสดงหน้าจอดำสนิทเมื่อ Performance เปิด ใส่ตัวเลข 1–100 ด้วยคู่การปัดตามทิศทาง กดค้างเพื่อปิดหลังเปิดเผย";
+"set.input.clockinput.noconfig" = "ไม่ต้องการการตั้งค่า";
 
-/* Auto-active inputs (no toggle) */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
 "fakehome.autoactive.title" = "เปิดใช้งานอัตโนมัติ";
 "fakehome.autoactive.body" = "แสดงเมื่อเปิด Performance หากตั้งค่าภาพหน้าจอไว้ แตะที่ใดก็ได้เพื่อเปิดเผยโปรไฟล์ของคุณ";
-"lockscreen.perset_note" = "เปิดใช้งานเมื่อคุณเลือกหน้าจอล็อกเป็นอินพุตของชุดใน ชุดของฉัน";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
+"lockscreen.perset_note" = "เปิดใช้งานเมื่อคุณเลือกหน้าจอล็อคเป็นวิธีการป้อนข้อมูลสำหรับเซ็ตใน My Sets";
 "postpred.goto_sets.title" = "ไปที่ Sets เพื่อตั้งค่า";
-"postpred.goto_sets.body" = "เลือก set ที่ใช้งานอยู่และเลือกวิธีการป้อนข้อมูลได้จากการ์ดแต่ละชุดโดยตรง";
-"set.url_scheme.copy" = "คัดลอก";
-"set.url_scheme.copied" = "คัดลอกแล้ว!";
+"postpred.goto_sets.body" = "เลือกเซ็ตที่ใช้งานอยู่และเลือกวิธีการป้อนข้อมูลโดยตรงบนการ์ดเซ็ตแต่ละใบ";

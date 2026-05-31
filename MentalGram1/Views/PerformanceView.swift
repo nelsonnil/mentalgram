@@ -21,26 +21,27 @@ struct PerformanceView: View {
     // OCR
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
+    @AppStorage("ppTopInputMode")   private var ppTopInputMode:   String = "off"
     // Text templates — user-defined wrappers with {word} token
     @AppStorage("note_template")   private var noteTemplate:  String = ""
-    // Bio template slots (4 independent templates, active one used for performance)
-    @AppStorage("bio_template")    private var bioTemplate:   String = ""
+    @AppStorage("bio_template")    private var bioTemplate1:  String = ""
     @AppStorage("bio_template_2")  private var bioTemplate2:  String = ""
     @AppStorage("bio_template_3")  private var bioTemplate3:  String = ""
     @AppStorage("bio_template_4")  private var bioTemplate4:  String = ""
     @AppStorage("bio_active_slot") private var bioActiveSlot: Int = 0
 
-    private var activeBioTemplate: String {
+    private var bioTemplate: String {
         switch bioActiveSlot {
-        case 1: return bioTemplate2
-        case 2: return bioTemplate3
-        case 3: return bioTemplate4
-        default: return bioTemplate
+        case 1:  return bioTemplate2
+        case 2:  return bioTemplate3
+        case 3:  return bioTemplate4
+        default: return bioTemplate1
         }
     }
     // Optimistic note state — @AppStorage triggers instant re-render on write
     @AppStorage("last_note_text")           private var lastNoteText: String = ""
     @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
+    @ObservedObject private var forceRevealSettings = ForceNumberRevealSettings.shared
     @ObservedObject private var followingMagic = FollowingMagicSettings.shared
     @ObservedObject private var volumeMonitor  = VolumeButtonMonitor.shared
     @ObservedObject private var amnesiaSettings = AmnesiaCarouselSettings.shared
@@ -62,6 +63,7 @@ struct PerformanceView: View {
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
     @State private var showingLockdownSheet = false   // For long-press lockdown details
+    @State private var showDigitGridAlert = false
     @State private var performanceRemoteCallsAllowed = true
     @State private var performanceEntryRecorded = false
     /// Seconds remaining in the safety-gate pause. Non-zero only when blocked with no cache.
@@ -92,6 +94,7 @@ struct PerformanceView: View {
     @State private var taggedLoadedOnce = false
 
     // MARK: - Fake Home Screen illusion
+    @AppStorage("fakeHomeScreenEnabled") private var fakeHomeScreenEnabled = false
     @ObservedObject private var illusionService = HomeScreenIllusionService.shared
     @State private var showingHomeScreenIllusion = false
 
@@ -100,6 +103,21 @@ struct PerformanceView: View {
     /// Prevents re-presenting the lockscreen when onAppear re-fires after the
     /// fullScreenCover is dismissed (which happens on every iOS version).
     @State private var lockscreenWasShown = false
+
+    // MARK: - Clock Input input
+    @State private var showingClockInput = false
+    /// Prevents re-presenting the black screen when onAppear re-fires after dismiss.
+    @State private var clockInputWasShown = false
+
+    /// True when Clock Input should show on Performance open:
+    /// either the global PP mode is set to clockInput, or the active number/custom set uses it.
+    private var isClockInputActive: Bool {
+        if ppTopInputMode == "clockInput" { return true }
+        guard let activeId = ActiveSetSettings.shared.activeSetId,
+              let activeType = ActiveSetSettings.shared.activeSetType,
+              activeType == .number || activeType == .custom else { return false }
+        return DataManager.shared.sets.first { $0.id == activeId }?.resolvedInputMethod == .clockInput
+    }
 
     // MARK: - Spectator profile overlay
     @State private var selectedSpectator: InstagramFollower? = nil
@@ -167,7 +185,7 @@ struct PerformanceView: View {
     private var performanceRoot: some View {
         ZStack(alignment: .bottom) {
             // Full-screen white base (status bar + home indicator area)
-            Color.white.ignoresSafeArea()
+            Color(UIColor.systemBackground).ignoresSafeArea()
             // profileContent fills the entire screen — the scroll view's internal
             // bottom spacer (94 pt) ensures the last grid row scrolls above the pill.
             // No external bottom padding here so the grid extends all the way down
@@ -179,7 +197,7 @@ struct PerformanceView: View {
 
     @ViewBuilder private var profileContent: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
+            Color(UIColor.systemBackground).ignoresSafeArea()
             if let profile = profile {
                 instagramProfileView(profile: profile)
             } else {
@@ -244,7 +262,7 @@ struct PerformanceView: View {
 
     @ViewBuilder private var spectatorOverlay: some View {
         if isLoadingSpectator {
-            Color.white.ignoresSafeArea()
+            Color(UIColor.systemBackground).ignoresSafeArea()
                 .overlay(
                     VStack(spacing: 12) {
                         ProgressView().scaleEffect(1.2)
@@ -660,7 +678,7 @@ struct PerformanceView: View {
                 // OCR is active when any slot has .ocr as its source, OR legacy OCR mode is set
                 let noteOcr     = integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr"
                 let bioOcr      = integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr"
-                let postPredOcr = DataManager.shared.isActiveInput(.ocr)
+                let postPredOcr = ppTopInputMode == "ocr"
                 guard noteOcr || bioOcr || postPredOcr else { return }
                 if ocrCoordinator.isRunning {
                     ocrCoordinator.stop()
@@ -694,7 +712,7 @@ struct PerformanceView: View {
                     // Active when legacy OCR mode is set OR any slot has .ocr as its source
                     let hasBio  = bioTopInputMode  == "ocr" || integrations.ocrSlot(for: "bio")  != nil
                     let hasNote = noteTopInputMode == "ocr" || integrations.ocrSlot(for: "note") != nil
-                    let hasPost = DataManager.shared.isActiveInput(.ocr)
+                    let hasPost = ppTopInputMode == "ocr"
 
                     if hasBio {
                         print("📷 [OCR] Step 1/3 — applying to biography")
@@ -730,11 +748,10 @@ struct PerformanceView: View {
             // cache first, then one getProfileInfo() call if needed. The 90-second
             // "Getting ready" overlay (FullLoadOverlayView) is no longer rendered.
         }
-            .background(Color.white.ignoresSafeArea())
+            .background(Color(UIColor.systemBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .tabBar)
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarHidden(true)
-            .preferredColorScheme(.light)
         .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
             .alert("Error", isPresented: Binding(
                 get: { spectatorLoadError != nil },
@@ -744,13 +761,18 @@ struct PerformanceView: View {
             } message: {
                 Text(spectatorLoadError ?? "")
             }
+            .alert("Digit Grid Disabled", isPresented: $showDigitGridAlert) {
+                Button("Enable") { ForceNumberRevealSettings.shared.gridSwipeEnabled = true }
+                Button("Dismiss", role: .cancel) { }
+            } message: {
+                Text("You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid.")
+            }
             // Spectator profile: bound to selectedSpectator to avoid the nil→item race
             // condition that caused stale profiles when tapping a second follower.
             .fullScreenCover(item: $selectedSpectator) { follower in
                 SpectatorProfileCover(follower: follower, onClose: {
                     selectedSpectator = nil
                 })
-                .preferredColorScheme(.light)
             }
             .fullScreenCover(isPresented: $showingLockscreen) {
                 LockscreenInputView { digits in
@@ -758,11 +780,21 @@ struct PerformanceView: View {
                     if !digits.isEmpty {
                         pendingLockscreenDigits = digits
                     }
-                    // If a fake home screen screenshot is set, show it next.
-                    if illusionService.hasImage {
+                    // If fake home screen is also enabled, show it next
+                    if fakeHomeScreenEnabled && illusionService.hasImage {
                         showingHomeScreenIllusion = true
                     }
                 }
+            }
+            .fullScreenCover(isPresented: $showingClockInput) {
+                ClockInputView(
+                    onReveal: { digits in
+                        pendingLockscreenDigits = digits
+                    },
+                    onDismiss: {
+                        showingClockInput = false
+                    }
+                )
             }
         // selectedSpectator drives fullScreenCover directly — no extra onChange needed.
         // When Explore closes, reset digit buffer (InstagramProfileView's onChange clears followingOverride)
@@ -871,15 +903,19 @@ struct PerformanceView: View {
             // Show fake lockscreen for secret digit entry (one-shot per session).
             // Guard required: onAppear re-fires when fullScreenCover is dismissed,
             // which would instantly re-present the lockscreen in an infinite loop.
-            if !lockscreenWasShown
-                && LockscreenInputSettings.shared.hasWallpaper
-                && DataManager.shared.isActiveInput(.lockscreen) {
+            if !lockscreenWasShown && LockscreenInputSettings.shared.isReady {
                 lockscreenWasShown = true
                 showingLockscreen = true
                 print("🔒 [LOCKSCREEN] Showing fake lockscreen for secret input")
             }
+            // Show clock input black screen if mode is active (and lockscreen isn't)
+            else if !clockInputWasShown && !lockscreenWasShown && isClockInputActive {
+                clockInputWasShown = true
+                showingClockInput = true
+                print("🖤 [CLOCK-INPUT] Showing black screen for swipe digit input")
+            }
             // Show fake home screen if enabled and image is available
-            else if illusionService.hasImage && !showingLockscreen {
+            else if fakeHomeScreenEnabled && illusionService.hasImage && !showingLockscreen && !showingClockInput {
                 showingHomeScreenIllusion = true
                 print("🏠 [ILLUSION] Fake home screen active — tap to reveal profile")
             }
@@ -909,7 +945,7 @@ struct PerformanceView: View {
             let needsVolume = FollowingMagicSettings.shared.isEnabled
                 || noteTopInputMode == "ocr"
                 || bioTopInputMode  == "ocr"
-                || DataManager.shared.isActiveInput(.ocr)
+                || ppTopInputMode == "ocr"
             if needsVolume {
                 VolumeButtonMonitor.shared.prepareVolume()
                 VolumeButtonMonitor.shared.startMonitoring()
@@ -1105,7 +1141,7 @@ struct PerformanceView: View {
                     if action.mode.hasPrefix("profilepic") {
                         await applyURLProfilePicAction(mode: action.mode, data: action.text)
                     } else {
-                        await applyURLAction(mode: action.mode, text: action.text, values: action.values, setName: action.setName)
+                        await applyURLAction(mode: action.mode, text: action.text, values: action.values)
                     }
                 } else if clipboardAutoMode != "" {
                     await applyClipboardAutoMode()
@@ -1113,6 +1149,21 @@ struct PerformanceView: View {
             }
             ocrUsedInSession = false
 
+            // Show a nudge if Post Prediction is enabled with an active number set
+            // but Digit Grid input is off — and this is NOT a URL scheme reveal
+            // (URL reveals supply the word directly so no grid is needed).
+            let hasNumberSet = ActiveSetSettings.shared.activeNumberSetId != nil
+            let isURLReveal  = urlAction.pendingMode == "reveal"
+                            || urlAction.pendingMode == "reveal_slot"
+                            || urlAction.pendingMode == "reveal_card"
+            if forceRevealSettings.isEnabled,
+               !forceRevealSettings.gridSwipeEnabled,
+               hasNumberSet,
+               !isURLReveal {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    showDigitGridAlert = true
+                }
+            }
         }
         .onChange(of: scenePhase) { phase in
             // Pause / resume full-profile pre-loader with app lifecycle.
@@ -1172,7 +1223,7 @@ struct PerformanceView: View {
                 if action.mode.hasPrefix("profilepic") {
                     await applyURLProfilePicAction(mode: action.mode, data: action.text)
                 } else {
-                    await applyURLAction(mode: action.mode, text: action.text, values: action.values, setName: action.setName)
+                    await applyURLAction(mode: action.mode, text: action.text, values: action.values)
                 }
             }
         }
@@ -1506,48 +1557,21 @@ struct PerformanceView: View {
 
     // MARK: - URL Scheme Action
 
-    /// Resolves and activates the set matching `setName` (case-insensitive) if provided.
-    /// Returns the resolved set, or nil if resolution failed (logs a warning).
-    @MainActor
-    private func resolveAndActivateSet(name: String, expectedType: SetType) -> PhotoSet? {
-        guard !name.isEmpty else {
-            // No name specified — fall back to currently active set.
-            switch expectedType {
-            case .word:   return DataManager.shared.sets.first { $0.id == ActiveSetSettings.shared.activeWordSetId   && $0.type == .word }
-            case .custom: return DataManager.shared.sets.first { $0.id == ActiveSetSettings.shared.activeCustomSetId && $0.type == .custom }
-            case .card:   return DataManager.shared.sets.first { $0.id == ActiveSetSettings.shared.activeCardSetId   && $0.type == .card }
-            case .number: return nil
-            }
-        }
-        let lower = name.lowercased()
-        guard let match = DataManager.shared.sets.first(where: {
-            $0.type == expectedType && $0.name.lowercased() == lower
-        }) else {
-            print("🚫 [URL] No \(expectedType.rawValue) set named '\(name)' found")
-            LogManager.shared.warning("URL reveal: set '\(name)' not found (\(expectedType.rawValue))", category: .general)
-            return nil
-        }
-        ActiveSetSettings.shared.setActive(match.id, for: match.type)
-        print("📲 [URL] Auto-activated set '\(match.name)' (\(match.type.rawValue))")
-        LogManager.shared.info("URL reveal: auto-activated set '\(match.name)'", category: .general)
-        return match
-    }
-
-    private func applyURLAction(mode: String, text: String, values: [String: String] = [:], setName: String = "") async {
+    private func applyURLAction(mode: String, text: String, values: [String: String] = [:]) async {
         guard !instagram.isLocked else {
             print("🚫 [URL] Lockdown active — skipping URL action")
             return
         }
-        print("📲 [URL] Executing action=\(mode), text=\"\(text.prefix(40))\" set=\"\(setName)\"")
+        print("📲 [URL] Executing action=\(mode), text=\"\(text.prefix(40))\"")
         LogManager.shared.info("URL scheme action: \(mode) — \"\(text.prefix(40))\"", category: .general)
 
         // ── Word reveal via vault://reveal?word= ─────────────────────────────
         if mode == "reveal" {
             let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !word.isEmpty else { return }
-            guard await MainActor.run(body: { resolveAndActivateSet(name: setName, expectedType: .word) }) != nil || setName.isEmpty else { return }
             print("📲 [URL] Reveal word: \"\(word)\"")
             LogManager.shared.info("URL reveal → word: \"\(word)\"", category: .general)
+            // Mark as URL-triggered so the OCR handler skips the ocrEnabled guard
             await MainActor.run {
                 ForceNumberRevealSettings.shared.urlRevealActive = true
                 pendingOCRWord = word
@@ -1561,9 +1585,10 @@ struct PerformanceView: View {
                 print("⚠️ [URL] Invalid slot value: \"\(text)\"")
                 return
             }
-            guard let activeSet = await MainActor.run(body: { resolveAndActivateSet(name: setName, expectedType: .custom) }) else {
-                print("🚫 [URL] Custom slot reveal: no matching custom set")
-                LogManager.shared.warning("URL custom reveal: no matching custom set '\(setName)'", category: .general)
+            guard let activeId = ActiveSetSettings.shared.activeCustomSetId,
+                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) else {
+                print("🚫 [URL] Custom slot reveal: no active custom set")
+                LogManager.shared.warning("URL custom reveal: no active custom set", category: .general)
                 return
             }
             if UploadManager.shared.isActive && !didAutoPauseUpload {
@@ -1580,13 +1605,14 @@ struct PerformanceView: View {
         if mode == "reveal_card" {
             let symbol = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !symbol.isEmpty else { return }
-            guard SetType.cardSlotLabels.contains(symbol) else {
-                print("⚠️ [URL] Card reveal: '\(symbol)' is not a valid card symbol")
+            guard let activeId = ActiveSetSettings.shared.activeCardSetId,
+                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) else {
+                print("🚫 [URL] Card reveal: no active card set")
+                LogManager.shared.warning("URL card reveal: no active card set", category: .general)
                 return
             }
-            guard let activeSet = await MainActor.run(body: { resolveAndActivateSet(name: setName, expectedType: .card) }) else {
-                print("🚫 [URL] Card reveal: no matching card set")
-                LogManager.shared.warning("URL card reveal: no matching card set '\(setName)'", category: .general)
+            guard SetType.cardSlotLabels.contains(symbol) else {
+                print("⚠️ [URL] Card reveal: '\(symbol)' is not a valid card symbol")
                 return
             }
             if UploadManager.shared.isActive && !didAutoPauseUpload {
@@ -1604,7 +1630,7 @@ struct PerformanceView: View {
             let effectiveValues: [String: String] = values.isEmpty ? ["text1": text] : values
 
             // Apply text template ({text1}/{text2}/{text3}/{word} → URL-scheme values)
-            let tpl = mode == "note" ? noteTemplate : activeBioTemplate
+            let tpl = mode == "note" ? noteTemplate : bioTemplate
             let composed = tpl.isEmpty ? expandEscapes(text) : applyTemplate(effectiveValues, template: tpl)
 
             if mode == "note" {
@@ -1712,7 +1738,7 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let composed = applyTemplate(text, template: activeBioTemplate)
+                let composed = applyTemplate(text, template: bioTemplate)
                 let final = truncateAtWordBoundary(composed, limit: 150)
                 if final.count < composed.count {
                     print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(composed.count)→\(final.count) chars")
@@ -1828,7 +1854,7 @@ struct PerformanceView: View {
         LogManager.shared.info("Magic API → \(target): \(values.map { "\($0.key)=\($0.value.prefix(20))" }.joined(separator: ", "))", category: .general)
 
         // Apply text template ({text1}/{text2}/{text3}/{word} → fetched values)
-        let tpl = target == "note" ? noteTemplate : activeBioTemplate
+        let tpl = target == "note" ? noteTemplate : bioTemplate
         let composed = applyTemplate(values, template: tpl)
         if !tpl.isEmpty {
             print("⚡ [API AUTO] Template applied (\(target)): \"\(composed.prefix(60))\"")
@@ -1900,7 +1926,7 @@ struct PerformanceView: View {
         // .ocr sources are event-driven and excluded via isPolled.
         let bioActive  = integrations.bioText1Source.isPolled  || integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioApiSource.isPolled
         let noteActive = integrations.noteText1Source.isPolled || integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteApiSource.isPolled
-        let ppActive   = integrations.ppApiSource   != .none && DataManager.shared.isActiveInput(.api)
+        let ppActive   = integrations.ppApiSource   != .none && ppTopInputMode   == "api"
         guard bioActive || noteActive || ppActive else { return }
         guard apiPollingTask == nil else { return }
 
@@ -1944,7 +1970,7 @@ struct PerformanceView: View {
                 }
 
                 // ── Post Prediction word reveal ───────────────────────────────
-                guard integrations.ppApiSource != .none, DataManager.shared.isActiveInput(.api) else { continue }
+                guard integrations.ppApiSource != .none, ppTopInputMode == "api" else { continue }
                 guard let ppPayload = await integrations.fetchPayload(for: integrations.ppApiSource) else { continue }
                 let ppValue = ppPayload.value.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !ppValue.isEmpty else { continue }
@@ -2034,7 +2060,7 @@ struct PerformanceView: View {
         let ocrValues: [String: String] = [slotKey: trimmed]
 
         // Apply text template: OCR fills the configured slot; other slots are resolved from their APIs
-        let tpl = target == "note" ? noteTemplate : activeBioTemplate
+        let tpl = target == "note" ? noteTemplate : bioTemplate
         // Fetch any non-OCR API sources in parallel
         var resolvedValues = await integrations.fetchTemplatePlaceholders(for: target, ocrValues: ocrValues)
         // OCR value always wins for its assigned slot
@@ -3731,6 +3757,11 @@ struct InstagramProfileView: View {
     // Reset to false when PerformanceView appears (new trick session).
     @AppStorage("postPredRevealRingActive") private var postPredRevealRingActive: Bool = false
 
+    // Post Prediction input mode — shared key with PerformanceView so both structs
+    // read the same UserDefaults value without needing a binding.
+    // "off" | "api" | "ocr"
+    @AppStorage("ppTopInputMode") private var ppTopInputMode: String = "off"
+
     // Error alert for when reveal fails (e.g. set not uploaded)
     @State private var revealErrorTitle: String = ""
     @State private var revealErrorMessage: String = ""
@@ -3878,7 +3909,7 @@ struct InstagramProfileView: View {
             .refreshable {
                 await Task { await onAsyncRefresh() }.value
             }
-            .background(Color.white)
+            .background(Color(UIColor.systemBackground))
         // Race-condition fix for URL-scheme reveals:
         // When vault://reveal?word=X arrives while PerformanceView is loading,
         // pendingOCRWord may be set BEFORE InstagramProfileView enters the hierarchy.
@@ -3936,8 +3967,8 @@ struct InstagramProfileView: View {
             pendingOCRWord = nil  // consume immediately
             let fromURL = ForceNumberRevealSettings.shared.urlRevealActive
             ForceNumberRevealSettings.shared.urlRevealActive = false  // reset immediately
-            // URL reveals bypass the per-set gate — they only need the URL trigger.
-            guard DataManager.shared.isActiveInput(.ocr) || fromURL else { return }
+            // URL reveals bypass the ocrEnabled guard — they only need the master switch
+            guard ppTopInputMode == "ocr" || fromURL else { return }
             guard !UploadManager.shared.isActive else {
                 print("⚠️ [OCR-PP] Reveal blocked: upload is active")
                 return
@@ -4155,7 +4186,7 @@ struct InstagramProfileView: View {
                                         .frame(width: picSize + 8, height: picSize + 8)
                                     // White gap between gradient ring and photo
                                     Circle()
-                                        .fill(Color.white)
+                                        .fill(Color(UIColor.systemBackground))
                                         .frame(width: picSize + 4, height: picSize + 4)
                                 }
                                 if let image = cachedImages[profile.profilePicURL] {
@@ -4216,7 +4247,7 @@ struct InstagramProfileView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(profile.fullName)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(Color(UIColor.label))
                         .lineLimit(1)
 
                         HStack(spacing: 0) {
@@ -4256,7 +4287,7 @@ struct InstagramProfileView: View {
                         if !profile.biography.isEmpty {
                             Text(profile.biography)
                                 .font(.system(size: 14))
-                        .foregroundColor(.black)
+                        .foregroundColor(Color(UIColor.label))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         if let url = profile.externalUrl {
@@ -4284,20 +4315,20 @@ struct InstagramProfileView: View {
                     Text("ig.edit_profile")
                         .font(.system(size: seAdapt(13, 14), weight: .semibold))
                         .frame(maxWidth: .infinity).frame(height: btnH)
-                        .background(Color(red: 0.898, green: 0.898, blue: 0.918))
-                        .foregroundColor(.black).cornerRadius(8)
+                        .background(Color(UIColor.systemGray6))
+                        .foregroundColor(Color(UIColor.label)).cornerRadius(8)
                 }
                         Button(action: {}) {
                     Text("ig.share_profile")
                         .font(.system(size: seAdapt(13, 14), weight: .semibold))
                         .frame(maxWidth: .infinity).frame(height: btnH)
-                        .background(Color(red: 0.898, green: 0.898, blue: 0.918))
-                        .foregroundColor(.black).cornerRadius(8)
+                        .background(Color(UIColor.systemGray6))
+                        .foregroundColor(Color(UIColor.label)).cornerRadius(8)
                 }
                         Button(action: {}) {
                     IGIcon(asset: "instagram_follow", fallback: "person.badge.plus", size: seAdapt(14, 16))
                         .frame(width: btnH, height: btnH)
-                        .background(Color(red: 0.898, green: 0.898, blue: 0.918))
+                        .background(Color(UIColor.systemGray6))
                                 .cornerRadius(8)
                         }
                     }
@@ -4310,10 +4341,10 @@ struct InstagramProfileView: View {
                                 Circle()
                                     .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                             .frame(width: storySize, height: storySize)
-                            .overlay(Image(systemName: "plus").foregroundColor(.black))
+                            .overlay(Image(systemName: "plus").foregroundColor(Color(UIColor.label)))
                         Text("ig.new")
                             .font(.system(size: seAdapt(10, 12)))
-                            .foregroundColor(.black)
+                            .foregroundColor(Color(UIColor.label))
                     }
                     if profile.cachedHighlights.isEmpty {
                             ForEach(0..<4, id: \.self) { _ in
@@ -4341,7 +4372,8 @@ struct InstagramProfileView: View {
     @ViewBuilder private var tabBarSection: some View {
                 HStack(spacing: 0) {
             TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
-                if DataManager.shared.isActiveInput(.digitGrid),
+                if ForceNumberRevealSettings.shared.isEnabled,
+                   ForceNumberRevealSettings.shared.gridSwipeEnabled,
                    secretManager.hasDigits,
                    let activeId = ActiveSetSettings.shared.activeNumberSetId,
                    let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
@@ -4361,7 +4393,8 @@ struct InstagramProfileView: View {
                         Task { await revealByDigits(digits, fromSet: activeSet) }
                     }
 
-                } else if DataManager.shared.isActiveInput(.digitGrid),
+                } else if ForceNumberRevealSettings.shared.isEnabled,
+                          ForceNumberRevealSettings.shared.gridSwipeEnabled,
                           secretManager.hasDigits,
                           let activeId = ActiveSetSettings.shared.activeCustomSetId,
                           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
@@ -4380,7 +4413,8 @@ struct InstagramProfileView: View {
                         Task { await revealByCustomSlot(slot, fromSet: activeSet) }
                     }
 
-                } else if DataManager.shared.isActiveInput(.digitGrid),
+                } else if ForceNumberRevealSettings.shared.isEnabled,
+                          ForceNumberRevealSettings.shared.gridSwipeEnabled,
                           secretManager.hasDigits,
                           let activeId = ActiveSetSettings.shared.activeCardSetId,
                           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {
@@ -4533,7 +4567,6 @@ struct InstagramProfileView: View {
                 onClose: { showFollowersList = false },
                 mode: .followers
             )
-            .preferredColorScheme(.light)
         }
         .fullScreenCover(isPresented: $showFollowingList, onDismiss: {
             onFollowersListDismiss?()
@@ -4545,7 +4578,6 @@ struct InstagramProfileView: View {
                 onClose: { showFollowingList = false },
                 mode: .following
             )
-            .preferredColorScheme(.light)
         }
     }
 
@@ -5370,7 +5402,7 @@ struct InstagramHeaderView: View {
                 }
                 Text(username)
                     .font(.system(size: 21, weight: .semibold))
-                    .foregroundColor(.black)
+                    .foregroundColor(Color(UIColor.label))
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
                 IGIcon(asset: "instagram_chevron_down", fallback: "chevron.down", size: 12)
@@ -5390,7 +5422,7 @@ struct InstagramHeaderView: View {
         }
         .responsiveHorizontalPadding()
         .frame(height: 44)
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
         .onAppear {
             guard !didLogLayout else { return }
             didLogLayout = true
@@ -5423,11 +5455,11 @@ struct StatView: View {
         VStack(alignment: .leading, spacing: 1) {
             Text(overrideText ?? formatCount(number))
                 .font(.system(size: seAdapt(15, 17), weight: .semibold))
-                .foregroundColor(.black)
+                .foregroundColor(Color(UIColor.label))
                 .monospacedDigit()
             Text(overrideLabel ?? label)
                 .font(.system(size: seAdapt(12, 14)))
-                .foregroundColor(.black)
+                .foregroundColor(Color(UIColor.label))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -5589,50 +5621,50 @@ struct AutoFollowedByView: View {
         }
                             .frame(width: 20, height: 20)
                             .clipShape(Circle())
-        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+        .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 2))
     }
 
     @ViewBuilder private var textArea: some View {
         if isLoading && visible.isEmpty {
             Text("ig.capturing_followers")
-                .font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                .font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if visible.isEmpty {
             Text("ig.followed_by")
-                .font(.system(size: 12)).foregroundColor(Color(white: 0.56))
+                .font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if visible.count >= 3 {
             HStack(spacing: 0) {
-                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).fixedSize()
                     .onTapGesture { openProfile(userId: visible[0].userId, username: visible[0].username) }
-                Text(", ").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visible[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text(", ").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visible[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).fixedSize()
                     .onTapGesture { openProfile(userId: visible[1].userId, username: visible[1].username) }
-                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visible[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visible[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail)
                     .onTapGesture { openProfile(userId: visible[2].userId, username: visible[2].username) }
             }
             .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
         } else if visible.count == 2 {
             HStack(spacing: 0) {
-                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).fixedSize()
                     .onTapGesture { openProfile(userId: visible[0].userId, username: visible[0].username) }
-                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visible[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visible[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail)
                     .onTapGesture { openProfile(userId: visible[1].userId, username: visible[1].username) }
             }
             .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
         } else {
             HStack(spacing: 0) {
-                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail)
                     .onTapGesture { openProfile(userId: visible[0].userId, username: visible[0].username) }
             }
@@ -5666,31 +5698,31 @@ struct FollowedByView: View {
     @ViewBuilder private var namesArea: some View {
         if visibleFollowers.count >= 3 {
             HStack(spacing: 0) {
-                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).fixedSize().onTapGesture { onFollowerTap?(visibleFollowers[0]) }
-                Text(", ").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text(", ").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).fixedSize().onTapGesture { onFollowerTap?(visibleFollowers[1]) }
-                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visibleFollowers[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visibleFollowers[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[2]) }
             }
             .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
         } else if visibleFollowers.count == 2 {
             HStack(spacing: 0) {
-                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).fixedSize().onTapGesture { onFollowerTap?(visibleFollowers[0]) }
-                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[1]) }
             }
             .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
         } else if visibleFollowers.count == 1 {
             HStack(spacing: 0) {
-                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(white: 0.56)).fixedSize()
-                Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(.black)
+                Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
+                Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[0]) }
             }
             .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
@@ -5715,7 +5747,7 @@ struct FollowedByView: View {
         }
         .frame(width: 20, height: 20)
         .clipShape(Circle())
-        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+        .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 2))
     }
 }
 
@@ -5752,12 +5784,12 @@ struct TabButton: View {
                 .font(.system(size: 24))
                 }
             }
-            .foregroundColor(isSelected ? .black : Color(white: 0.56))
+            .foregroundColor(isSelected ? Color(UIColor.label) : Color(UIColor.secondaryLabel))
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .overlay(
                     Rectangle()
-                    .fill(isSelected ? Color.black : Color.clear)
+                    .fill(isSelected ? Color(UIColor.label) : Color.clear)
                         .frame(height: 1),
                     alignment: .bottom
                 )
@@ -5855,16 +5887,16 @@ struct TaggedEmptyStateView: View {
 
                 Image(systemName: "person.crop.rectangle")
                     .font(.system(size: 28, weight: .medium))
-                    .foregroundColor(.black)
+                    .foregroundColor(Color(UIColor.label))
             }
 
             Text("ig.tagged_empty_title")
                 .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.black)
+                .foregroundColor(Color(UIColor.label))
 
             Text("ig.tagged_empty_subtitle")
                 .font(.system(size: 15))
-                .foregroundColor(Color(white: 0.48))
+                .foregroundColor(Color(UIColor.tertiaryLabel))
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
                 .padding(.horizontal, 42)
@@ -5872,7 +5904,7 @@ struct TaggedEmptyStateView: View {
             Spacer(minLength: 160)
         }
         .frame(maxWidth: .infinity)
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
     }
 }
 
@@ -5933,7 +5965,7 @@ struct PostScrollView: View {
                                 )
                                 .id(postID(index))
                                 .accessibilityIdentifier(isForcedPostURL(url) ? "forced_post_card" : "")
-                                Divider().background(Color(white: 0.9))
+                                Divider().background(Color(UIColor.separator))
                             }
                         }
                     }
@@ -5965,7 +5997,7 @@ struct PostScrollView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
-                            .foregroundColor(.black)
+                            .foregroundColor(Color(UIColor.label))
                             .fontWeight(.semibold)
                     }
                 }
@@ -5979,7 +6011,7 @@ struct PostScrollView: View {
                     }
                 }
             }
-            .background(Color.white)
+            .background(Color(UIColor.systemBackground))
         }
         .navigationViewStyle(.stack)
     }
@@ -6084,7 +6116,7 @@ private struct PostCardView: View {
             if let date = item?.takenAt {
                 Text(date, style: .date)
                     .font(.system(size: 11))
-                    .foregroundColor(Color(white: 0.45))
+                    .foregroundColor(Color(UIColor.tertiaryLabel))
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
             } else {
@@ -6185,7 +6217,7 @@ private struct PostCardView: View {
             if let c = count, c > 0 {
                 Text(formatted(c))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.black)
+                    .foregroundColor(Color(UIColor.label))
             }
         }
     }
@@ -6197,7 +6229,7 @@ private struct PostCardView: View {
         Text(attributed)
             .font(.system(size: 13))
             .lineLimit(3)
-            .foregroundColor(.black)
+            .foregroundColor(Color(UIColor.label))
     }
 
     private func attributedCaption(_ caption: String) -> AttributedString {
@@ -6230,19 +6262,22 @@ private extension View {
     ///          specular highlights, maximum transparency over photo content.
     /// iOS 16–25: ultraThinMaterial + white tint fallback.
     @ViewBuilder
-    func igGlassPill() -> some View {
+    func igGlassPill(isDark: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
-            // Tint at 0.82 neutralises dark grid photos so the pill looks
-            // the same light grey as it does over Explore's white background.
-            self.glassEffect(.regular.tint(.white.opacity(0.82)), in: .capsule)
+            // In light mode tint at 0.82 neutralises dark grid photos.
+            // In dark mode skip the white tint so the pill stays dark.
+            let tint: Color = isDark ? Color.clear : Color.white.opacity(0.82)
+            self.glassEffect(.regular.tint(tint), in: .capsule)
         } else {
+            let tintOverlay:  Color = isDark ? Color.clear         : Color.white.opacity(0.62)
+            let strokeOverlay: Color = isDark ? Color.white.opacity(0.20) : Color.white.opacity(0.90)
             self.background(
                 Capsule(style: .continuous)
                     .fill(.ultraThinMaterial)
-                    .overlay(Capsule(style: .continuous).fill(Color.white.opacity(0.62)))
-                    .overlay(Capsule(style: .continuous).strokeBorder(Color.white.opacity(0.90), lineWidth: 0.7))
-                    .shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 6)
-                    .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
+                    .overlay(Capsule(style: .continuous).fill(tintOverlay))
+                    .overlay(Capsule(style: .continuous).strokeBorder(strokeOverlay, lineWidth: 0.7))
+                    .shadow(color: .black.opacity(isDark ? 0.4 : 0.08), radius: 20, x: 0, y: 6)
+                    .shadow(color: .black.opacity(isDark ? 0.2 : 0.04), radius: 4, x: 0, y: 1)
             )
         }
     }
@@ -6263,6 +6298,8 @@ struct InstagramBottomBar: View {
     /// When true, replaces the default black border with an orange gradient ring —
     /// visual confirmation that Post Prediction revealed a photo on Instagram.
     var showRevealRing: Bool = false
+
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Reactive budget observer — drives the red-dot visibility on the paper plane.
     /// Shared singleton so the dot updates in real time in both Performance and Explore.
@@ -6321,7 +6358,7 @@ struct InstagramBottomBar: View {
         }
         .frame(height: 46)          // fixed content height → pill height = 66 pt
         .padding(.vertical, 10)
-        .igGlassPill()
+        .igGlassPill(isDark: colorScheme == .dark)
         .padding(.horizontal, 26)
         .padding(.bottom, 14)
     }
@@ -6347,7 +6384,7 @@ struct InstagramBottomBar: View {
                             .fill(Color(red: 1.0, green: 0.18, blue: 0.18))
                             .frame(width: 8, height: 8)
                             // White ring separates the dot from any dark background
-                            .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                            .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 1.5))
                             .offset(x: 4, y: 4)
                     }
                 }
@@ -6373,7 +6410,7 @@ struct InstagramBottomBar: View {
                 }
                 // White gap between ring and photo (Instagram-style)
                 Circle()
-                    .fill(Color.white)
+                    .fill(Color(UIColor.systemBackground))
                     .frame(width: showRevealRing ? 29 : 28, height: showRevealRing ? 29 : 28)
                 // Profile picture
                 Image(uiImage: image)
@@ -6383,13 +6420,13 @@ struct InstagramBottomBar: View {
                     .clipShape(Circle())
                     .overlay(
                         Circle()
-                            .stroke(showRevealRing ? Color.clear : Color.black, lineWidth: 1.5)
+                            .stroke(showRevealRing ? Color.clear : Color(UIColor.label), lineWidth: 1.5)
                     )
             }
         } else {
             Image(systemName: "person.crop.circle")
                 .font(.system(size: 26))
-                .foregroundColor(.black)
+                .foregroundColor(Color(UIColor.label))
         }
     }
 }
@@ -6434,7 +6471,7 @@ struct NotesBubbleView: View {
             // ── Capsule bubble — width hugs the text, no fixed frame ──────
             Text(text)
                 .font(.system(size: 11, weight: .regular))
-                .foregroundColor(.black)
+                .foregroundColor(Color(UIColor.label))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -6443,7 +6480,7 @@ struct NotesBubbleView: View {
                 .frame(minWidth: 42, maxWidth: 110)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white)
+                        .fill(Color(UIColor.secondarySystemBackground))
                         .shadow(color: .black.opacity(0.14), radius: 4, x: 0, y: 1)
                 )
                 .zIndex(1)
@@ -6451,7 +6488,7 @@ struct NotesBubbleView: View {
             // ── Tiny curved tail, overlaps bubble bottom by 2 pt ─────────
             // No stroke — pure white fill seamlessly joins the capsule.
             NotesTailShape()
-                .fill(Color.white)
+                .fill(Color(UIColor.secondarySystemBackground))
                 .frame(width: tailW, height: tailH)
                 .padding(.leading, tailX)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -6460,7 +6497,7 @@ struct NotesBubbleView: View {
 
             // ── Small separate dot — mirrors Instagram's speech-bubble ────
             Circle()
-                .fill(Color.white)
+                .fill(Color(UIColor.secondarySystemBackground))
                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                 .frame(width: dotD, height: dotD)
                 .padding(.leading, tailX + tailW * 0.5 - dotD * 0.5)
@@ -6489,7 +6526,7 @@ struct SpectatorProfileCover: View {
                 UserProfileView(profile: profile, onClose: onClose)
                     .id(profile.userId)
             } else if isLoading {
-                Color.white.ignoresSafeArea()
+                Color(UIColor.systemBackground).ignoresSafeArea()
                     .overlay(
                         VStack(spacing: 12) {
                             ProgressView().scaleEffect(1.2)
@@ -6499,7 +6536,7 @@ struct SpectatorProfileCover: View {
                         }
                     )
             } else {
-                Color.white.ignoresSafeArea()
+                Color(UIColor.systemBackground).ignoresSafeArea()
                     .overlay(
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
@@ -6560,7 +6597,7 @@ struct FullLoadOverlayView: View {
 
     var body: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
+            Color(UIColor.systemBackground).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()
@@ -6583,17 +6620,17 @@ struct FullLoadOverlayView: View {
                     if loader.phase == .warmingUp && loader.warmupSecondsRemaining > 0 {
                         Circle()
                             .trim(from: 0, to: CGFloat(loader.warmupSecondsRemaining) / 90.0)
-                            .stroke(Color.black, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            .stroke(Color(UIColor.label), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                             .frame(width: 72, height: 72)
                             .rotationEffect(.degrees(-90))
                             .animation(.linear(duration: 1), value: loader.warmupSecondsRemaining)
 
                         Text("\(loader.warmupSecondsRemaining)")
                             .font(.system(size: 20, weight: .semibold, design: .rounded))
-                            .foregroundColor(.black)
+                            .foregroundColor(Color(UIColor.label))
                     } else {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color(UIColor.label)))
                             .scaleEffect(1.4)
                     }
                 }
@@ -6601,7 +6638,7 @@ struct FullLoadOverlayView: View {
 
                 Text(loader.progressDescription)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.black)
+                    .foregroundColor(Color(UIColor.label))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                     .animation(.easeInOut, value: loader.phase)

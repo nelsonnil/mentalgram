@@ -547,7 +547,7 @@
 "postpred.help.input.grid.step3" = "पोस्ट आइकन टैप करके पुष्टि करें और प्रकटीकरण शुरू करें।";
 "postpred.help.input.ocr.label" = "OCR — कैमरा";
 "postpred.help.input.covert.label" = "गुप्त टाइपिंग";
-"postpred.help.input.covert.step1" = "सेटिंग्स में **गुप्त टाइपिंग** सक्षम करें और कवर शब्द सेट करें — जो दर्शक स्क्रीन पर देखेगा।";
+"postpred.help.input.covert.step1" = "**मेरे सेट** में अपने सेट कार्ड पर, **Cover Typing** चुनें और कवर शब्द (जो दर्शक स्क्रीन पर देखेगा) परिभाषित करने के लिए **कॉन्फ़िगर करें** टैप करें।";
 "postpred.help.input.covert.step2" = "Explore के सर्च फील्ड में दर्शक का शब्द टाइप करें। दर्शक को कवर शब्द दिखता है; ऐप असली शब्द चुपचाप रिकॉर्ड करती है।";
 "postpred.help.input.covert.step3" = "पूरा होने पर **एक बार स्पेस** दबाएं। स्पेस फील्ड से गायब हो जाता है — यह सामान्य है। हल्की वाइब्रेशन पुष्टि करती है कि शब्द कैप्चर हो गया और रिवील शुरू हो गया।";
 "postpred.help.input.url.label" = "URL स्कीम / स्वचालन";
@@ -559,7 +559,7 @@
 "postpred.help.settype.number.desc" = "**10 स्लॉट (0–9) × N बैंक।** प्रत्येक बैंक एक अंक प्रकट करता है। बैंक 1 = 1वां अंक, बैंक 2 = 2रा अंक।";
 "postpred.help.settype.custom.desc" = "**1–100 कस्टम छवियाँ, 1 बैंक।** स्लॉट नंबर (1–100) चुनने के लिए 1–3 अंक स्वाइप करें। मैच परिणाम, टैरो या दृश्य विकल्प के लिए आदर्श।";
 "postpred.help.settype.card.desc" = "**52 स्लॉट (A–K × ♠♥♣♦), 1 बैंक।** कार्ड चुनने के लिए 2–3 अंक स्वाइप करें। सूट: 1=♠ 2=♥ 3=♣ 4=♦। जैसे: 4→2 = 4♥ · 1→1→1 = J♠।";
-"postpred.help.input.ocr.step1" = "Post Prediction सेटिंग्स में **OCR** सक्षम करें।";
+"postpred.help.input.ocr.step1" = "**मेरे सेट** में अपने सेट कार्ड पर, इनपुट विधि के रूप में **OCR** चुनें, फिर कैमरा और भाषा सेट करने के लिए **कॉन्फ़िगर करें** टैप करें।";
 "postpred.help.input.ocr.step2" = "कैमरा किसी हस्तलिखित या मुद्रित शब्द की ओर करें। ऐप स्वचालित रूप से पढ़ती है।";
 "postpred.help.input.url.label" = "URL स्कीम";
 "postpred.help.input.url.step1" = "Post Prediction सेटिंग्स में **URL Scheme** सक्षम करें।";
@@ -567,8 +567,8 @@
 "postpred.help.before.1" = "Sets सेक्शन में एक **सेट** बनाएं। Word Reveal, Number Reveal, Custom Set या Playing Cards चुनें। इमेज टेम्पलेट चुनें या अपनी फोटो अपलोड करें।";
 "postpred.help.before.2" = "इमेज अपलोड करें और **स्वचालित रूप से संग्रहित** होने की प्रतीक्षा करें। इसमें कई घंटे लग सकते हैं।";
 "postpred.help.before.3" = "अपलोड के दौरान **ऐप का उपयोग न करें**, नेटवर्क न बदलें, प्रक्रिया बाधित न करें।";
-"postpred.help.before.4" = "अपलोड किए गए सेट को Post Prediction सेटिंग्स में **सक्रिय** के रूप में सेट करें।";
-"postpred.help.before.5" = "कम से कम एक **इनपुट विधि** सक्षम करें: ग्रिड, OCR या URL स्कीम।";
+"postpred.help.before.4" = "**मेरे सेट** में, अपलोड किए गए सेट को टैप करें, इसे **सक्रिय** के रूप में चिह्नित करें और सेट कार्ड से सीधे इसकी **इनपुट विधि** चुनें।";
+"postpred.help.before.5" = "प्रत्येक सेट के कार्ड पर उसका अपना **इनपुट विधि** सेलेक्टर होता है। कोई अलग टॉगल की जरूरत नहीं — बस अपने प्रदर्शन के लिए उपयुक्त विधि चुनें।";
 "postpred.help.during.step.invite" = "स्वतंत्र पसंद";
 "postpred.help.during.invite.action" = "दर्शक से स्वतंत्र रूप से एक शब्द, संख्या या अक्षर सोचने को कहें।";
 "postpred.help.during.invite.dialogue" = "कोई भी शब्द सोचें या कोई भी संख्या। कुछ व्यक्तिगत। अभी मत बोलिए।";
@@ -622,7 +622,7 @@
 "postpred.help.input.covert.label" = "गुप्त टाइपिंग";
 "postpred.help.input.api.label" = "API ऑटो रिवील";
 "postpred.help.input.api.intro" = "Inject (11z.co) या कस्टम API कनेक्ट करें। पहले Performance खोलें — ऐप बैकग्राउंड में हर 2 सेकंड में चेक करता है। जैसे ही दर्शक अपना चुनाव सबमिट करता है, ट्रिपल वाइब्रेशन के साथ रिवील अपने आप होता है।";
-"postpred.help.input.api.step1" = "Settings → Post Prediction में Auto Input को **API** पर सेट करें और अपना सोर्स चुनें (Inject या Custom API)।";
+"postpred.help.input.api.step1" = "**मेरे सेट** में अपने सेट कार्ड पर, इनपुट विधि के रूप में **API** चुनें और अपना स्रोत (Inject या Custom API) चुनने के लिए **कॉन्फ़िगर करें** टैप करें।";
 "postpred.help.input.api.step2" = "प्रेजेंटेशन शुरू करने से पहले अपने डिवाइस पर Performance व्यू खोलें।";
 "postpred.help.input.api.step3" = "दर्शक से कहें कि वे Inject लिंक या आपके कस्टम फॉर्म में अपना चुनाव करें।";
 "postpred.help.input.api.step4" = "2 सेकंड के अंदर ऐप नई वैल्यू डिटेक्ट करता है, संबंधित फ़ोटो रिवील करता है और तीन बार वाइब्रेट करके पुष्टि करता है।";
@@ -902,12 +902,12 @@
 "limits.help.table.col.action" = "फ़ीचर";
 "limits.help.table.col.first" = "पहली बार";
 "limits.help.table.col.again" = "दोबारा";
-"limits.help.table.row.performance" = "Performance खोलें (प्रोफ़ाइल + बैकग्राउंड कैश)";
+"limits.help.table.row.performance" = "Performance खोलें";
 "limits.help.table.row.followers" = "फॉलोअर्स लिस्ट";
 "limits.help.table.row.profile.new" = "नया फॉलोअर प्रोफ़ाइल";
 "limits.help.table.row.sa" = "Sync & Archive (प्रति फ़ोटो)";
 "limits.help.table.row.upload" = "अपलोड (प्रति फ़ोटो)";
-"limits.help.table.row.autoupload" = "प्रति फ़ोटो ऑटो-अपलोड (अपलोड + आर्काइव)";
+"limits.help.table.row.autoupload" = "ऑटो-अपलोड पूरा चक्र (प्रति फ़ोटो)";
 "limits.help.table.row.reveal" = "रिवील (प्रति अक्षर/फ़ोटो)";
 "limits.help.table.row.notebio" = "नोट या बायो बदलें";
 "limits.help.table.row.explore" = "एक्सप्लोर / सर्च";
@@ -947,7 +947,11 @@
 "guide.fakehome.help.what.title" = "नकली होम स्क्रीन क्या है?";
 "guide.fakehome.help.what.body" = "Performance खोलने पर सीधे प्रोफाइल पर जाने की बजाय ऐप पहले आपके असली iPhone होम स्क्रीन का स्क्रीनशॉट दिखाता है। दर्शक को लगेगा कि आप सामान्य रूप से Instagram खोल रहे हैं।";
 "guide.fakehome.help.how.title" = "इसका उपयोग कैसे करें";
-"guide.fakehome.help.how.body" = "1. Instagram आइकन दिखाई देने के साथ होम स्क्रीन का असली स्क्रीनशॉट लें।\n\n2. Settings › Other › Fake Home Screen में अपलोड करें।\n\n3. टॉगल चालू करें।\n\n4. अगली बार Performance खोलने पर वह स्क्रीनशॉट पूरी स्क्रीन पर आएगा — अपना प्रोफाइल दिखाने के लिए कहीं भी टैप करें (Instagram आइकन पर टैप करना आदर्श है)।";
+"guide.fakehome.help.how.body" = "1. Instagram आइकन दिखाई दे इसका ध्यान रखते हुए अपनी iPhone होम स्क्रीन का एक असली स्क्रीनशॉट लें।
+
+2. इसे सेटिंग्स › डेटा › Fake Home Screen में अपलोड करें।
+
+3. स्क्रीनशॉट लोड होने के बाद, नकली होम स्क्रीन स्वतः सक्रिय हो जाती है। अगली बार जब आप Performance खोलेंगे, तो यह पूर्ण स्क्रीन पर दिखेगी — अपना प्रोफ़ाइल प्रकट करने के लिए कहीं भी टैप करें (आदर्श रूप से Instagram आइकन पर)।";
 "guide.fakehome.help.why.title" = "इसका उपयोग क्यों करें?";
 "guide.fakehome.help.why.body" = "यह भ्रम पैदा करता है कि आप बस असली Instagram ऐप खोल रहे हैं। आपकी स्क्रीन देखने वाले किसी भी व्यक्ति को आपका प्रोफाइल दिखने से पहले केवल सामान्य होम स्क्रीन दिखेगी।";
 "guide.lockscreen.title" = "लॉकस्क्रीन इनपुट";
@@ -957,7 +961,7 @@
 "guide.lockscreen.help.how.title" = "अपना गुप्त नंबर कैसे दर्ज करें";
 "guide.lockscreen.help.how.body" = "1. नंबर पैड पर अपने गुप्त नंबर के अंक टैप करें — वे चुपचाप दर्ज होते हैं।\n\n2. उन अंकों को लॉक करने के लिए नंबर पैड के बाहर टैप करें।\n\n3. बचे हुए बिंदुओं को किसी भी अंक से भरें — उन्हें अनदेखा किया जाता है।\n\n4. सभी 4 बिंदु भर जाने पर लॉकस्क्रीन बंद हो जाती है और Performance खुलता है।";
 "guide.lockscreen.help.wallpaper.title" = "वॉलपेपर";
-"guide.lockscreen.help.wallpaper.body" = "नकली लॉकस्क्रीन को असली जैसा दिखाने के लिए अपनी असली लॉक स्क्रीन का वही वॉलपेपर अपलोड करें। वॉलपेपर के बिना लॉकस्क्रीन इनपुट सक्षम नहीं किया जा सकता।";
+"guide.lockscreen.help.wallpaper.body" = "नकली वाला असली जैसा दिखे इसके लिए वही वॉलपेपर अपलोड करें जो आप अपनी असली लॉक स्क्रीन पर उपयोग करते हैं। फिर मेरे सेट में अपने सेट कार्ड पर इनपुट विधि के रूप में **लॉक स्क्रीन** चुनें।";
 "guide.lockscreen.help.why.title" = "इसका उपयोग क्यों करें?";
 "guide.lockscreen.help.why.body" = "गुप्त नंबर दर्ज करने को सामान्य फोन अनलॉक के रूप में छिपाता है। नकली होम स्क्रीन के साथ मिलाने पर पूरा क्रम इस तरह दिखता है: फोन अनलॉक → होम स्क्रीन → Instagram खोलना।";
 "guide.lockscreen.help.tricks.title" = "वही गुप्त नंबर — कई ट्रिक्स";
@@ -1163,30 +1167,41 @@
 "lockscreen.enter_passcode" = "पासकोड दर्ज करें";
 "lockscreen.emergency" = "आपातकाल";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "स्वाइप ब्लाइंड";
+"postpred.help.input.clockinput.intro" = "Performance खुलने पर स्क्रीन पूरी तरह **काली** हो जाती है — फोन बंद होने का अनुकरण। आप गुप्त रूप से नंबर दर्ज करने के लिए स्वाइप करते हैं; दर्शक को कुछ नहीं दिखता।";
+"postpred.help.input.clockinput.encoding.title" = "अंक कोडिंग  (प्रत्येक अंक = 2 स्वाइप)";
+"postpred.help.input.clockinput.examples.title" = "उदाहरण";
+"postpred.help.input.clockinput.example5.note" = "05 दर्ज करें → अंक 0 (↑↑) फिर अंक 5 (↓→) — कुल 4 स्वाइप";
+"postpred.help.input.clockinput.example37.note" = "अंक 3 (→→) फिर अंक 7 (↓←) — कुल 4 स्वाइप";
+"postpred.help.input.clockinput.example100.note" = "अंक 1 (↑→) फिर दो 0 (↑↑ प्रत्येक) — कुल 6 स्वाइप";
+"postpred.help.input.clockinput.haptic.title" = "हैप्टिक फ़ीडबैक";
+"postpred.help.input.clockinput.haptic.light" = "हल्का टैप — प्रत्येक स्वाइप दर्ज";
+"postpred.help.input.clockinput.haptic.medium" = "मध्यम पल्स — अंक पूर्ण (2 स्वाइप)";
+"postpred.help.input.clockinput.haptic.success" = "दोहरा तेज़ कंपन — रिवील सफल";
+"postpred.help.input.clockinput.haptic.error" = "त्रुटि बज + स्क्रीन फ्लैश — अमान्य जोड़ी, रीसेट";
+"postpred.help.input.clockinput.dismiss" = "रिवील के बाद, काली स्क्रीन बंद करने के लिए **1 सेकंड दबाए रखें**। अपडेटेड फेक Instagram प्रोफाइल तुरंत दिखाई देता है।";
+
+// MARK: - Set Input Picker
 "set.input.label" = "इनपुट";
 "set.input.configure" = "कॉन्फ़िगर करें";
-"set.input.covertyping.help" = "एक्सप्लोर में आप जो टाइप करते हैं उसे छुपाता है ताकि दर्शकों को अलग शब्द दिखे। प्रकट करने के लिए SPACE दबाएँ।";
+"set.input.covertyping.help" = "Explore में आप जो टाइप करते हैं उसे मास्क करता है ताकि दर्शकों को अलग शब्द दिखे। रिवील के लिए SPACE दबाएं।";
 "set.input.covertyping.maskmode" = "मास्क मोड";
-"set.input.api.help" = "Performance खुला रहने पर हर 2 सेकंड में ऑनलाइन स्रोत जांचता है और नया मान आते ही स्वतः प्रकट करता है।";
+"set.input.api.help" = "Performance खुला रहने पर हर 2 सेकंड में ऑनलाइन स्रोत को पोल करता है और नया मान आने पर स्वतः रिवील करता है।";
 "set.input.api.source" = "API स्रोत";
-"set.input.api.endpoint_hint" = "API एंडपॉइंट सेटिंग्स → इंटीग्रेशन में कॉन्फ़िगर करें।";
-"set.input.ocr.help" = "Performance खोलने पर कैमरा चुपचाप शुरू होता है। स्कैन करने के लिए वॉल्यूम अप दबाएँ; पहचाना गया टेक्स्ट स्वतः प्रकट होता है।";
+"set.input.api.endpoint_hint" = "सेटिंग्स → इंटीग्रेशन में API एंडपॉइंट कॉन्फ़िगर करें।";
+"set.input.ocr.help" = "Performance खुलने पर कैमरा चुपचाप शुरू होता है। स्कैन के लिए Volume+ दबाएं; पहचाना गया टेक्स्ट स्वतः रिवील होता है।";
 "set.input.ocr.camera" = "कैमरा";
 "set.input.ocr.language" = "भाषा";
-"set.input.lockscreen.help" = "Performance खोलने पर एक नकली लॉक स्क्रीन दिखाता है ताकि आप गुप्त रूप से मान दर्ज कर सकें। नीचे वॉलपेपर सेट करें।";
-"set.input.digitgrid.help" = "मान बनाने के लिए ग्रिड पर बाएँ या दाएँ स्वाइप करें, फिर प्रकट करने के लिए पोस्ट आइकन टैप करें।";
-"set.input.digitgrid.noconfig" = "किसी सेटअप की आवश्यकता नहीं।";
-"postpred.perset_note" = "इनपुट विधियाँ अब मेरे सेट में प्रत्येक सेट कार्ड पर सेट होती हैं। इनपुट चुनने के लिए सेट खोलें।";
-"postpred.no_active_set" = "कोई सक्रिय सेट नहीं। मेरे सेट में जाएँ और एक सक्रिय करें।";
+"set.input.lockscreen.help" = "Performance खुलने पर नकली लॉक स्क्रीन दिखाता है ताकि आप गुप्त रूप से मान दर्ज कर सकें। नीचे वॉलपेपर सेट करें।";
+"set.input.digitgrid.help" = "ग्रिड पर बाएं या दाएं स्वाइप करके मान बनाएं, फिर रिवील के लिए Posts आइकन टैप करें।";
+"set.input.digitgrid.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
+"set.input.clockinput.help" = "Performance खुलने पर पूरी तरह काली स्क्रीन दिखाता है। दिशात्मक स्वाइप जोड़ों से 1–100 नंबर दर्ज करें। रिवील के बाद बंद करने के लिए लंबे दबाएं।";
+"set.input.clockinput.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
 
-/* Auto-active inputs (no toggle) */
-"fakehome.autoactive.title" = "स्वतः सक्रिय होता है";
-"fakehome.autoactive.body" = "यदि स्क्रीनशॉट सेट है तो Performance खोलने पर दिखता है। प्रोफ़ाइल प्रकट करने के लिए कहीं भी टैप करें।";
-"lockscreen.perset_note" = "जब आप मेरे सेट में किसी सेट के इनपुट के रूप में लॉक स्क्रीन चुनते हैं तो सक्रिय होता है।";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
-"postpred.goto_sets.title" = "Sets में जाकर कॉन्फ़िगर करें";
-"postpred.goto_sets.body" = "प्रत्येक सेट कार्ड से सीधे एक सक्रिय सेट चुनें और उसकी इनपुट विधि चुनें।";
-"set.url_scheme.copy" = "कॉपी करें";
-"set.url_scheme.copied" = "कॉपी हो गया!";
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
+"fakehome.autoactive.title" = "स्वचालित रूप से सक्रिय";
+"fakehome.autoactive.body" = "स्क्रीनशॉट सेट होने पर Performance खोलने पर दिखाई देता है। अपना प्रोफ़ाइल दिखाने के लिए कहीं भी टैप करें।";
+"lockscreen.perset_note" = "जब आप My Sets में किसी set के लिए Lockscreen इनपुट विधि चुनते हैं तो सक्रिय होता है।";
+"postpred.goto_sets.title" = "कॉन्फ़िगर करने के लिए Sets पर जाएं";
+"postpred.goto_sets.body" = "एक सक्रिय set चुनें और प्रत्येक set कार्ड पर सीधे इनपुट विधि चुनें।";

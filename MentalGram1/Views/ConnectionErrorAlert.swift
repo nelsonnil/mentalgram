@@ -5,14 +5,13 @@ struct ConnectionErrorAlert: ViewModifier {
     @Binding var isPresented: Bool
     let error: InstagramError?
     @State private var showingTechnicalDetails = false
-    
+
     func body(content: Content) -> some View {
         content
             .alert("No Connection", isPresented: $isPresented) {
                 Button("OK") {
                     isPresented = false
                 }
-                
                 Button("Info") {
                     showingTechnicalDetails = true
                 }
@@ -23,7 +22,6 @@ struct ConnectionErrorAlert: ViewModifier {
                 Button("Copy Log") {
                     copyErrorDetails()
                 }
-                
                 Button("Close", role: .cancel) {
                     showingTechnicalDetails = false
                 }
@@ -31,164 +29,83 @@ struct ConnectionErrorAlert: ViewModifier {
                 Text(getTechnicalDetails())
             }
     }
-    
+
     private func getTechnicalDetails() -> String {
-        guard let error = error else {
-            return "Unknown error"
-        }
-        
-        var details: String
-        
+        guard let error = error else { return "Unknown error" }
+
         switch error {
         case .challengeRequired:
-            details = """
-            Type: Challenge Required
-            
-            Instagram requires security verification.
-            
-            Steps to follow:
-            
+            return """
+            Type: Verification Required
+
+            Instagram requires a security check.
+
             1. Open the official Instagram app
-            2. Complete the verification it asks for
-               (could be CAPTCHA, SMS, email, etc.)
-            3. Wait 10-15 minutes
+            2. Complete the verification (CAPTCHA, SMS, email…)
+            3. Wait 10–15 minutes
             4. Restart this app
-            
-            Probable cause:
-            - Too many actions in a row
-            - Fast follow/unfollow
-            - Behavior detected as bot
-            
-            Recommendation:
-            Wait longer between follow/unfollow actions
-            and simulate human behavior (scroll, pauses, etc.)
             """
-            
+
         case .sessionExpired:
-            details = """
+            return """
             Type: Session Expired
-            
-            The session has expired.
-            
-            Steps to follow:
-            
+
+            Your session has ended.
+
             1. Go to Settings
-            2. Log out
-            3. Log in again
-            
-            This usually happens after:
-            - Changing your password
-            - Long time without using the app
-            - Suspicious activity detected
+            2. Log out and log back in
             """
-            
-        case .apiError(let message):
-            details = """
-            Type: API Error
-            
-            Message: \(message)
-            
-            Possible causes:
-            - Rate limit exceeded
-            - Action not allowed
-            - Account restrictions
-            
-            Wait a few minutes and try again.
+
+        case .apiError:
+            return """
+            Type: Service Unavailable
+
+            Instagram is temporarily unavailable.
+            Please wait a moment and try again.
             """
-            
+
         case .invalidResponse, .invalidURL:
-            details = """
-            Type: Technical Error
-            
-            Communication problem with the server.
-            
-            Check your real Internet connection
-            and try again.
+            return """
+            Type: Connection Error
+
+            Could not reach the server.
+            Check your internet connection and try again.
             """
-            
+
         case .uploadFailed:
-            details = """
+            return """
             Type: Upload Error
-            
-            Could not upload content.
-            
-            Possible causes:
-            - File too large
-            - Unsupported format
-            - Connection problem
-            
+
+            Could not upload the content.
             Try again or use a different file.
             """
-            
+
         case .notLoggedIn:
-            details = """
+            return """
             Type: Not Logged In
-            
-            You are not logged in.
-            
-            Steps to follow:
-            
-            1. Go to Settings
-            2. Long press on version number
-            3. Connect your account
-            
-            If you already logged in, try closing
-            the app completely and reopening it.
+
+            Go to Settings and connect your account.
             """
-            
-        case .networkError(let message):
-            details = """
+
+        case .networkError:
+            return """
             Type: Network Error
-            
-            Connection problem: \(message)
-            
-            Steps to follow:
-            
-            1. Check your WiFi/Mobile Data
-            2. Try again in a few seconds
-            
-            This error is temporary and safe to retry.
+
+            Check your Wi-Fi or mobile data and try again.
             """
-            
-        case .botDetected(let message):
-            details = """
-            Type: Security Detection
-            
-            Reason: \(message)
-            
-            IMPORTANT - Do NOT take any action:
-            
-            1. Do NOT open Instagram
-            2. Do NOT retry any action in this app
-            3. WAIT for the time shown on screen
-            4. After unlocking, wait 5-10 more minutes
-            
-            Unusual activity was detected.
-            Please follow these instructions carefully.
-            
-            ⚠️ IF YOU ARE PERFORMING A TRICK:
-            STOP IMMEDIATELY. Do not reveal/hide more photos.
-            End the trick naturally without continuing.
+
+        case .botDetected:
+            return """
+            Type: Safety Pause
+
+            A brief pause is active to protect your account.
+            Wait for the countdown to finish, then continue.
             """
         }
-        
-        // Add additional context if message contains specific keywords
-        let errorDesc = error.errorDescription ?? ""
-        if errorDesc.lowercased().contains("please wait") {
-            details += """
-            
-            
-            💡 This is a cooldown error, not a connection issue.
-            Wait the specified time before retrying.
-            """
-        }
-        
-        return details
     }
-    
+
     private func copyErrorDetails() {
-        let details = getTechnicalDetails()
-        UIPasteboard.general.string = details
+        UIPasteboard.general.string = getTechnicalDetails()
         print("📋 [ALERT] Error details copied to clipboard")
     }
 }

@@ -210,17 +210,17 @@ struct LimitsHelpView: View {
                 VStack(spacing: 0) {
                     tableHeaderRow
                     Divider().background(Color.white.opacity(0.08))
-                    tableDataRow("limits.help.table.row.performance", first: "3–8", again: "3")
+                    tableDataRow("limits.help.table.row.performance", first: "3",   again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.followers",   first: "1",   again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
-                    tableDataRow("limits.help.table.row.profile.new", first: "3–5", again: "0 ✓")
+                    tableDataRow("limits.help.table.row.profile.new", first: "3–4", again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.sa",          first: "2",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.upload",      first: "1",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
-                    tableDataRow("limits.help.table.row.autoupload",  first: "2",   again: "—")
+                    tableDataRow("limits.help.table.row.autoupload",  first: "3",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.reveal",      first: "1",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
@@ -244,6 +244,13 @@ struct LimitsHelpView: View {
                     iconColor: Color(hex: "FF9F0A"),
                     text: "limits.help.table.cache.lost",
                     bgColor: Color(hex: "FF9F0A")
+                )
+
+                infoBox(
+                    icon: "square.stack.3d.up.fill",
+                    iconColor: Color(hex: "FF6B35"),
+                    text: "limits.help.table.batch.note",
+                    bgColor: Color(hex: "FF6B35")
                 )
             }
         }

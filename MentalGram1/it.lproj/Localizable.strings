@@ -734,7 +734,7 @@
 "postpred.help.input.grid.step3" = "Tocca l'icona Posts per confermare e attivare la rivelazione.";
 "postpred.help.input.ocr.label" = "OCR — FOTOCAMERA";
 "postpred.help.input.covert.label" = "DIGITAZIONE NASCOSTA";
-"postpred.help.input.covert.step1" = "Attiva **Digitazione Nascosta** nelle impostazioni e definisci una parola di copertura — ciò che il pubblico vedrà a schermo.";
+"postpred.help.input.covert.step1" = "Sulla scheda set in **I miei set**, seleziona **Cover Typing** e tocca **Configura** per definire una parola di copertura — ciò che lo spettatore vedrà sullo schermo.";
 "postpred.help.input.covert.step2" = "Digita la parola dello spettatore nel campo di ricerca di Explore. Lo spettatore vede la parola di copertura; l'app registra silenziosamente quella reale.";
 "postpred.help.input.covert.step3" = "Premi **Spazio una sola volta** quando hai finito. Lo spazio scompare dal campo — è normale. Una leggera vibrazione conferma che la parola è stata catturata e la rivelazione attivata.";
 "postpred.help.input.url.label" = "URL SCHEME / AUTOMAZIONE";
@@ -746,7 +746,7 @@
 "postpred.help.settype.number.desc" = "**10 slot (0–9) × N banche.** Ogni banca rivela una cifra. Banca 1 = 1a cifra, Banca 2 = 2a cifra.";
 "postpred.help.settype.custom.desc" = "**1–100 immagini personalizzate, 1 banca.** Scorri 1–3 cifre per selezionare il numero di slot (1–100). Ideale per risultati sportivi, tarocchi o qualsiasi scelta visiva.";
 "postpred.help.settype.card.desc" = "**52 slot (A–K × ♠♥♣♦), 1 banca.** Scorri 2 o 3 cifre per selezionare una carta. Semi: 1=♠ 2=♥ 3=♣ 4=♦. Es: 4→2 = 4♥ · 1→1→1 = J♠.";
-"postpred.help.input.ocr.step1" = "Abilita **OCR** nelle impostazioni di Post Prediction.";
+"postpred.help.input.ocr.step1" = "Sulla scheda set in **I miei set**, seleziona **OCR** come metodo di input, poi tocca **Configura** per impostare la fotocamera e la lingua.";
 "postpred.help.input.ocr.step2" = "Punta la fotocamera su una parola scritta a mano o stampata. L'app la legge automaticamente e attiva la rivelazione corrispondente.";
 "postpred.help.input.url.label" = "SCHEMA URL";
 "postpred.help.input.url.step1" = "Abilita **URL Scheme** nelle impostazioni di Post Prediction.";
@@ -754,8 +754,8 @@
 "postpred.help.before.1" = "Crea un **Set** nella sezione Sets. Scegli Word Reveal, Number Reveal, Custom Set o Playing Cards. Seleziona un modello di immagine o carica le tue foto.";
 "postpred.help.before.2" = "Carica le immagini e aspetta che vengano **archiviate automaticamente**. Questo puo richiedere diverse ore, lascia l'app attiva tutta la notte se necessario.";
 "postpred.help.before.3" = "Durante il caricamento, **non usare l'app**, non cambiare rete e non interrompere il processo. Lo schermo rimane acceso automaticamente. Una notifica ti invita a tornare tra un caricamento e l'altro.";
-"postpred.help.before.4" = "Imposta il Set caricato come **attivo** nelle impostazioni di Post Prediction.";
-"postpred.help.before.5" = "Abilita almeno un **metodo di input**: Griglia, OCR o URL Scheme.";
+"postpred.help.before.4" = "In **I miei set**, tocca il set caricato, contrassegnalo come **attivo** e seleziona il suo **metodo di input** direttamente dalla scheda del set.";
+"postpred.help.before.5" = "Ogni set ha il proprio selettore di **metodo di input** sulla sua scheda. Non è necessario un toggle separato — scegli semplicemente il metodo più adatto alla tua esibizione.";
 "postpred.help.during.step.invite" = "LA SCELTA LIBERA";
 "postpred.help.during.invite.action" = "Chiedi allo spettatore di pensare liberamente a una parola, un numero o una lettera. Non suggerire nulla.";
 "postpred.help.during.invite.dialogue" = "Pensa a qualsiasi parola, o qualsiasi numero. Qualcosa di personale, qualcosa che solo tu conosci. Non dirlo ancora.";
@@ -803,7 +803,7 @@
 "postpred.help.input.covert.label" = "DIGITAZIONE NASCOSTA";
 "postpred.help.input.api.label" = "RIVELAZIONE AUTOMATICA API";
 "postpred.help.input.api.intro" = "Collega Inject (11z.co) o un'API personalizzata. Apri Performance prima — l'app interroga ogni 2 s in background. Non appena lo spettatore invia la sua selezione, la rivelazione si attiva automaticamente con una tripla vibrazione.";
-"postpred.help.input.api.step1" = "In Impostazioni → Post Prediction, imposta Auto Input su **API** e scegli la tua fonte (Inject o API personalizzata).";
+"postpred.help.input.api.step1" = "Sulla scheda set in **I miei set**, seleziona **API** come metodo di input e tocca **Configura** per scegliere la tua fonte (Inject o API personalizzata).";
 "postpred.help.input.api.step2" = "Apri la vista Performance sul tuo dispositivo prima di iniziare la presentazione.";
 "postpred.help.input.api.step3" = "Chiedi allo spettatore di fare la sua selezione nel link Inject o nel tuo modulo personalizzato.";
 "postpred.help.input.api.step4" = "In meno di 2 secondi l'app rileva il nuovo valore, rivela le foto corrispondenti e vibra tre volte per confermare.";
@@ -1445,12 +1445,12 @@
 "limits.help.table.col.action" = "Funzionalità";
 "limits.help.table.col.first" = "1ª volta";
 "limits.help.table.col.again" = "Di nuovo";
-"limits.help.table.row.performance" = "Apri Performance (profilo + cache in background)";
+"limits.help.table.row.performance" = "Apri Performance";
 "limits.help.table.row.followers" = "Lista follower";
 "limits.help.table.row.profile.new" = "Nuovo profilo follower";
 "limits.help.table.row.sa" = "Sync & Archive (per foto)";
 "limits.help.table.row.upload" = "Caricamento (per foto)";
-"limits.help.table.row.autoupload" = "Auto-upload per foto (carica + archivia)";
+"limits.help.table.row.autoupload" = "Ciclo completo di auto-upload (per foto)";
 "limits.help.table.row.reveal" = "Rivela (per lettera/foto)";
 "limits.help.table.row.notebio" = "Cambia nota o bio";
 "limits.help.table.row.explore" = "Esplora / Cerca";
@@ -1480,7 +1480,11 @@
 "guide.fakehome.help.what.title" = "Cos'è la schermata home falsa?";
 "guide.fakehome.help.what.body" = "Aprendo Performance, invece di andare direttamente al profilo, l'app mostra prima uno screenshot della tua vera schermata home iPhone. Per un osservatore sembrerà che tu stia semplicemente aprendo Instagram.";
 "guide.fakehome.help.how.title" = "Come usarla";
-"guide.fakehome.help.how.body" = "1. Fai uno screenshot reale della tua schermata home con l'icona Instagram visibile.\n\n2. Caricalo in Impostazioni › Altro › Schermata Home Falsa.\n\n3. Attiva l'interruttore.\n\n4. La prossima volta che apri Performance, quello screenshot appare a schermo intero — tocca ovunque (idealmente sull'icona Instagram) per rivelare il tuo profilo.";
+"guide.fakehome.help.how.body" = "1. Scatta un vero screenshot della schermata iniziale del tuo iPhone assicurandoti che l'icona Instagram sia visibile.
+
+2. Caricalo in Impostazioni › Dati › Fake Home Screen.
+
+3. Una volta caricato lo screenshot, la schermata iniziale falsa si attiva automaticamente. La prossima volta che apri Performance, appare a schermo intero — tocca ovunque (idealmente sull'icona Instagram) per rivelare il tuo profilo.";
 "guide.fakehome.help.why.title" = "Perché usarla?";
 "guide.fakehome.help.why.body" = "Crea l'illusione che tu stia semplicemente aprendo la vera app Instagram. Chiunque guardi il tuo schermo vedrà solo la normale schermata home prima che appaia il tuo profilo.";
 "guide.lockscreen.title" = "Inserimento tramite schermata di blocco";
@@ -1490,7 +1494,7 @@
 "guide.lockscreen.help.how.title" = "Come inserire il tuo numero segreto";
 "guide.lockscreen.help.how.body" = "1. Tocca le cifre del tuo numero segreto sul tastierino — vengono registrate in silenzio.\n\n2. Tocca fuori dal tastierino per bloccare quelle cifre.\n\n3. Riempi i punti rimanenti con qualsiasi cifra — vengono ignorati.\n\n4. Una volta riempiti tutti e 4 i punti, la schermata di blocco si chiude e si apre Performance.";
 "guide.lockscreen.help.wallpaper.title" = "Sfondo";
-"guide.lockscreen.help.wallpaper.body" = "Carica lo stesso sfondo che usi sulla tua vera schermata di blocco per renderla identica. Senza sfondo l'inserimento tramite schermata di blocco non può essere attivato.";
+"guide.lockscreen.help.wallpaper.body" = "Carica lo stesso sfondo che usi sul tuo vero schermo di blocco in modo che quello falso sembri identico. Poi seleziona **Schermata di blocco** come metodo di input nella tua scheda set in I miei set.";
 "guide.lockscreen.help.why.title" = "Perché usarla?";
 "guide.lockscreen.help.why.body" = "Maschera l'inserimento di un numero segreto come normale sblocco del telefono. Combinato con la schermata home falsa, la sequenza completa sembra: sblocca → home → apri Instagram.";
 "guide.lockscreen.help.tricks.title" = "Lo stesso numero segreto — tanti trucchi";
@@ -1696,30 +1700,41 @@
 "lockscreen.enter_passcode" = "Inserisci codice";
 "lockscreen.emergency" = "Emergenza";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "SCORRIMENTO CIECO";
+"postpred.help.input.clockinput.intro" = "All'apertura di Performance, lo schermo diventa completamente **nero** — simulando che il telefono sia spento. Scorri di nascosto per inserire un numero; lo spettatore non vede nulla.";
+"postpred.help.input.clockinput.encoding.title" = "CODIFICA DELLE CIFRE  (ogni cifra = 2 scorrimenti)";
+"postpred.help.input.clockinput.examples.title" = "ESEMPI";
+"postpred.help.input.clockinput.example5.note" = "Inserire 05 → cifra 0 (↑↑) poi cifra 5 (↓→) — 4 scorrimenti in totale";
+"postpred.help.input.clockinput.example37.note" = "Cifra 3 (→→) poi cifra 7 (↓←) — 4 scorrimenti in totale";
+"postpred.help.input.clockinput.example100.note" = "Cifra 1 (↑→) poi due 0 (↑↑ ciascuno) — 6 scorrimenti in totale";
+"postpred.help.input.clockinput.haptic.title" = "FEEDBACK APTICO";
+"postpred.help.input.clockinput.haptic.light" = "Tocco leggero — ogni scorrimento registrato";
+"postpred.help.input.clockinput.haptic.medium" = "Impulso medio — cifra completata (2 scorrimenti)";
+"postpred.help.input.clockinput.haptic.success" = "Doppia vibrazione forte — rivelazione riuscita";
+"postpred.help.input.clockinput.haptic.error" = "Vibrazione errore + flash schermo — coppia non valida, ripristino";
+"postpred.help.input.clockinput.dismiss" = "Dopo la rivelazione, **tieni premuto 1 secondo** sullo schermo nero per chiuderlo. Il profilo Instagram falso aggiornato appare immediatamente.";
+
+// MARK: - Set Input Picker
 "set.input.label" = "Inserimento";
 "set.input.configure" = "Configura";
-"set.input.covertyping.help" = "Maschera ciò che digiti in Esplora così gli spettatori vedono un'altra parola. Premi SPAZIO per rivelare.";
+"set.input.covertyping.help" = "Maschera ciò che digiti in Esplora in modo che gli spettatori vedano un'altra parola. Premi SPAZIO per rivelare.";
 "set.input.covertyping.maskmode" = "Modalità maschera";
-"set.input.api.help" = "Interroga una fonte online ogni 2 s mentre Performance è aperto e rivela automaticamente all'arrivo di un nuovo valore.";
+"set.input.api.help" = "Interroga una fonte online ogni 2 s mentre Performance è aperto e rivela automaticamente quando arriva un nuovo valore.";
 "set.input.api.source" = "Fonte API";
 "set.input.api.endpoint_hint" = "Configura gli endpoint API in Impostazioni → Integrazioni.";
-"set.input.ocr.help" = "La fotocamera si avvia in silenzio all'apertura di Performance. Premi Volume Su per scansionare; il testo riconosciuto rivela automaticamente.";
+"set.input.ocr.help" = "La fotocamera si avvia silenziosamente quando si apre Performance. Premi Volume+ per scansionare; il testo riconosciuto rivela automaticamente.";
 "set.input.ocr.camera" = "Fotocamera";
 "set.input.ocr.language" = "Lingua";
-"set.input.lockscreen.help" = "Mostra una schermata di blocco falsa all'apertura di Performance per inserire il valore in segreto. Imposta uno sfondo qui sotto.";
-"set.input.digitgrid.help" = "Scorri a sinistra o destra sulla griglia per comporre il valore, poi tocca l'icona Post per rivelare.";
-"set.input.digitgrid.noconfig" = "Nessuna configurazione necessaria.";
-"postpred.perset_note" = "I metodi di inserimento ora si impostano su ogni scheda set in I miei set. Apri un set per scegliere il suo inserimento.";
-"postpred.no_active_set" = "Nessun set attivo. Vai su I miei set e attivane uno.";
+"set.input.lockscreen.help" = "Mostra una falsa schermata di blocco all'apertura di Performance per inserire il valore in segreto. Imposta uno sfondo sotto.";
+"set.input.digitgrid.help" = "Scorri a sinistra o destra sulla griglia per costruire il valore, poi tocca l'icona Post per rivelare.";
+"set.input.digitgrid.noconfig" = "Nessuna configurazione richiesta.";
+"set.input.clockinput.help" = "Mostra uno schermo completamente nero all'apertura di Performance. Inserisci un numero da 1 a 100 con coppie di scorrimenti direzionali. Premi a lungo per chiudere dopo la rivelazione.";
+"set.input.clockinput.noconfig" = "Nessuna configurazione richiesta.";
 
-/* Auto-active inputs (no toggle) */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
 "fakehome.autoactive.title" = "Si attiva automaticamente";
 "fakehome.autoactive.body" = "Mostrato all'apertura di Performance se è impostato uno screenshot. Tocca ovunque per rivelare il tuo profilo.";
-"lockscreen.perset_note" = "Si attiva quando scegli Schermata di blocco come inserimento di un set in I miei set.";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
-"postpred.goto_sets.title" = "Vai a Set per configurare";
-"postpred.goto_sets.body" = "Seleziona un set attivo e scegli il metodo di input direttamente da ogni scheda set.";
-"set.url_scheme.copy" = "Copia";
-"set.url_scheme.copied" = "Copiato!";
+"lockscreen.perset_note" = "Si attiva quando scegli Schermata di blocco come metodo di input per un set in I miei set.";
+"postpred.goto_sets.title" = "Vai a Sets per configurare";
+"postpred.goto_sets.body" = "Seleziona un set attivo e scegli il metodo di input direttamente su ogni scheda set.";

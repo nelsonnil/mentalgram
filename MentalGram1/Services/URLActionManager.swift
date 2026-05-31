@@ -8,12 +8,9 @@ import Combine
 ///   vault://note?text1=<v>&text2=<v>&text3=<v>          → multi-placeholder Note
 ///   vault://bio?text=<encoded text>                      → update Instagram Biography (legacy)
 ///   vault://bio?text1=<v>&text2=<v>&text3=<v>           → multi-placeholder Biography
-///   vault://reveal?word=<encoded word>&set=<name>  → Word Reveal: activate set by name and unarchive letters
-///   vault://reveal?slot=<number>&set=<name>        → Custom Set Reveal: activate set by name, slot 1–100
-///   vault://reveal?card=<symbol>&set=<name>        → Playing Card Reveal: activate set by name + card
-///
-/// The &set= parameter is optional for backward compatibility. When present, the named set is
-/// automatically activated before the reveal so any set can be targeted without manually switching.
+///   vault://reveal?word=<encoded word>  → Word Reveal: unarchive letter photos for the given word
+///   vault://reveal?slot=<number>        → Custom Set Reveal: unarchive the photo at slot 1–100
+///   vault://reveal?card=<symbol>        → Playing Card Reveal: unarchive a card (e.g. J♠, 10♥, K♦)
 ///
 /// Line breaks in note/bio text — supported encodings (any of these work):
 ///   %0A          — standard URL-encoded newline  (vault://bio?text=Line1%0ALine2)
@@ -36,8 +33,6 @@ class URLActionManager: ObservableObject {
     @Published private(set) var pendingText: String = ""
     /// Multi-placeholder values keyed by "text1", "text2", "text3".
     @Published private(set) var pendingValues: [String: String] = [:]
-    /// Set name from &set= parameter in vault://reveal URLs. Empty string when not specified.
-    @Published private(set) var pendingSetName: String = ""
 
     // MARK: - URL Parsing
 
@@ -81,45 +76,31 @@ class URLActionManager: ObservableObject {
         // ── Reveal variants: word / custom slot / playing card ───────────────
         if host == "reveal" {
             let items = components?.queryItems ?? []
-            let setName = items.first(where: { $0.name == "set" })?.value?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-            // vault://reveal?word=COCHE&set=MiSet  (Word Reveal)
+            // vault://reveal?word=COCHE  (Word Reveal)
             if let raw = items.first(where: { $0.name == "word" })?.value,
                !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("📲 [URL] vault://reveal?word received: \"\(word.prefix(40))\" set=\"\(setName)\"")
-                DispatchQueue.main.async {
-                    self.pendingSetName = setName
-                    self.pendingMode    = "reveal"
-                    self.pendingText    = word
-                }
+                print("📲 [URL] vault://reveal?word received: \"\(word.prefix(40))\"")
+                DispatchQueue.main.async { self.pendingMode = "reveal";      self.pendingText = word }
                 return true
             }
 
-            // vault://reveal?slot=15&set=MiSet  (Custom Set Reveal, slot 1–100)
+            // vault://reveal?slot=15  (Custom Set Reveal, slot 1–100)
             if let raw = items.first(where: { $0.name == "slot" })?.value,
                let slot = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
                (1...100).contains(slot) {
-                print("📲 [URL] vault://reveal?slot received: \(slot) set=\"\(setName)\"")
-                DispatchQueue.main.async {
-                    self.pendingSetName = setName
-                    self.pendingMode    = "reveal_slot"
-                    self.pendingText    = "\(slot)"
-                }
+                print("📲 [URL] vault://reveal?slot received: \(slot)")
+                DispatchQueue.main.async { self.pendingMode = "reveal_slot"; self.pendingText = "\(slot)" }
                 return true
             }
 
-            // vault://reveal?card=J%E2%99%A0&set=MiSet  (Playing Card Reveal, e.g. J♠ 10♥ K♦)
+            // vault://reveal?card=J%E2%99%A0  (Playing Card Reveal, e.g. J♠ 10♥ K♦)
             if let raw = items.first(where: { $0.name == "card" })?.value,
                !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let symbol = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("📲 [URL] vault://reveal?card received: \"\(symbol)\" set=\"\(setName)\"")
-                DispatchQueue.main.async {
-                    self.pendingSetName = setName
-                    self.pendingMode    = "reveal_card"
-                    self.pendingText    = symbol
-                }
+                print("📲 [URL] vault://reveal?card received: \"\(symbol)\"")
+                DispatchQueue.main.async { self.pendingMode = "reveal_card"; self.pendingText = symbol }
                 return true
             }
 
@@ -177,15 +158,15 @@ class URLActionManager: ObservableObject {
     // MARK: - Consumption
 
     /// Called by PerformanceView to retrieve and clear the pending action.
-    /// Returns `(mode, text, values, setName)` where `values` contains keyed placeholders.
-    /// `setName` is non-empty only for vault://reveal URLs that include the &set= parameter.
-    func consume() -> (mode: String, text: String, values: [String: String], setName: String)? {
+    /// Returns `(mode, text, values)` where `values` contains keyed placeholders ("text1", "text2", "text3").
+    /// `text` is the legacy primary value (= values["text1"] if present).
+    /// Note: pendingText may be empty for modes that carry no payload (e.g. profilepic_last).
+    func consume() -> (mode: String, text: String, values: [String: String])? {
         guard !pendingMode.isEmpty else { return nil }
-        let result = (mode: pendingMode, text: pendingText, values: pendingValues, setName: pendingSetName)
-        pendingMode    = ""
-        pendingText    = ""
-        pendingValues  = [:]
-        pendingSetName = ""
+        let result = (mode: pendingMode, text: pendingText, values: pendingValues)
+        pendingMode   = ""
+        pendingText   = ""
+        pendingValues = [:]
         return result
     }
 
@@ -212,30 +193,24 @@ class URLActionManager: ObservableObject {
 
     // MARK: - Reveal URL builders
 
-    /// vault://reveal?word=COCHE&set=MiSet  — Word Reveal: activate set by name and unarchive letters.
-    static func revealURL(word: String, setName: String = "") -> String {
+    /// vault://reveal?word=COCHE  — Word Reveal: unarchive letter photos for `word`.
+    static func revealURL(word: String) -> String {
         var c = URLComponents(); c.scheme = "vault"; c.host = "reveal"
-        var items = [URLQueryItem(name: "word", value: word)]
-        if !setName.isEmpty { items.append(URLQueryItem(name: "set", value: setName)) }
-        c.queryItems = items
+        c.queryItems = [URLQueryItem(name: "word", value: word)]
         return c.url?.absoluteString ?? "vault://reveal?word=\(word)"
     }
 
-    /// vault://reveal?slot=15&set=MiSet  — Custom Set Reveal: activate set by name, slot 1–100.
-    static func revealCustomSlotURL(slot: Int, setName: String = "") -> String {
+    /// vault://reveal?slot=15  — Custom Set Reveal: unarchive the photo at slot 1–100.
+    static func revealCustomSlotURL(slot: Int) -> String {
         var c = URLComponents(); c.scheme = "vault"; c.host = "reveal"
-        var items = [URLQueryItem(name: "slot", value: "\(slot)")]
-        if !setName.isEmpty { items.append(URLQueryItem(name: "set", value: setName)) }
-        c.queryItems = items
+        c.queryItems = [URLQueryItem(name: "slot", value: "\(slot)")]
         return c.url?.absoluteString ?? "vault://reveal?slot=\(slot)"
     }
 
-    /// vault://reveal?card=J%E2%99%A0&set=MiSet  — Playing Card Reveal: activate set by name + card.
-    static func revealCardURL(symbol: String, setName: String = "") -> String {
+    /// vault://reveal?card=J%E2%99%A0  — Playing Card Reveal: unarchive a card photo (e.g. J♠, 10♥, K♦).
+    static func revealCardURL(symbol: String) -> String {
         var c = URLComponents(); c.scheme = "vault"; c.host = "reveal"
-        var items = [URLQueryItem(name: "card", value: symbol)]
-        if !setName.isEmpty { items.append(URLQueryItem(name: "set", value: setName)) }
-        c.queryItems = items
+        c.queryItems = [URLQueryItem(name: "card", value: symbol)]
         return c.url?.absoluteString ?? "vault://reveal?card=\(symbol)"
     }
 

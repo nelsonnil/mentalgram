@@ -250,10 +250,10 @@
 "postpred.help.input.grid.case.card" = "2 digits: [value + suit]. 3 digits: [tens + units + suit]. Suits: 1=♠  2=♥  3=♣  4=♦. E.g. 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step3" = "Tap the Posts icon to confirm and trigger the reveal.";
 "postpred.help.input.ocr.label" = "OCR — CAMERA";
-"postpred.help.input.ocr.step1" = "Enable **OCR** in Post Prediction settings.";
+"postpred.help.input.ocr.step1" = "On your set card in **My Sets**, select **OCR** as the input method, then tap **Configure** to set the camera and language.";
 "postpred.help.input.ocr.step2" = "Press the volume up button to start the camera silently. Point at any handwritten or printed word — the app reads it and triggers the matching reveal automatically.";
 "postpred.help.input.covert.label" = "COVERT TYPING";
-"postpred.help.input.covert.step1" = "Enable **Covert Typing** in Post Prediction settings and define a cover word — what the spectator will see.";
+"postpred.help.input.covert.step1" = "On your set card in **My Sets**, select **Cover Typing** and tap **Configure** to define a cover word — what the spectator will see on screen.";
 "postpred.help.input.covert.step2" = "Type the spectator's word in the Explore search field. The spectator sees the cover word; the app silently records the real one.";
 "postpred.help.input.covert.step3" = "Press **Space once** when done. The space vanishes from the field — this is intentional. A subtle vibration confirms the word was captured and the reveal is triggered.";
 "postpred.help.input.url.label" = "URL SCHEME / AUTOMATION";
@@ -264,8 +264,8 @@
 "postpred.help.before.1" = "Create a **Set** in the Sets section. Choose Word Reveal, Number Reveal, Custom Set, or Playing Cards. Select an image template or upload your own photos.";
 "postpred.help.before.2" = "Upload the images and wait for them to be **automatically archived**. This can take several hours — leave the app running overnight if needed.";
 "postpred.help.before.3" = "During upload, **do not use the app**, change networks, or interrupt the process. The screen stays awake automatically. A notification will prompt you to return between uploads.";
-"postpred.help.before.4" = "Set the uploaded Set as **active** in Post Prediction settings.";
-"postpred.help.before.5" = "Enable at least one **input method**: Grid Input, OCR, or URL Scheme.";
+"postpred.help.before.4" = "In **My Sets**, tap the set you uploaded, mark it as **active**, and select its **input method** directly from the set card.";
+"postpred.help.before.5" = "Each set has its own **input method** selector on its card. No separate toggle needed — just pick the method that fits your performance.";
 "postpred.help.during.step.invite" = "THE FREE CHOICE";
 "postpred.help.during.invite.action" = "Ask the spectator to freely think of a word, number, or letter. Do not suggest anything.";
 "postpred.help.during.invite.dialogue" = "\"Think of any word — or any number. Something personal, something only you know. Don't say it yet.\"";
@@ -289,7 +289,7 @@
 "postpred.help.inputs.group.universal" = "UNIVERSAL — ALL SET TYPES";
 "postpred.help.input.api.label" = "API AUTO REVEAL";
 "postpred.help.input.api.intro" = "Connect Inject (11z.co) or a custom API. Open Performance first — the app polls every 2 s in the background. The moment the spectator submits their selection, the reveal fires automatically with a triple vibration.";
-"postpred.help.input.api.step1" = "In Settings → Post Prediction, set Auto Input to **API** and choose your source (Inject or Custom API).";
+"postpred.help.input.api.step1" = "On your set card in **My Sets**, select **API** as the input method and tap **Configure** to choose your source (Inject or Custom API).";
 "postpred.help.input.api.step2" = "Open Performance view on your device before starting the presentation.";
 "postpred.help.input.api.step3" = "Ask the spectator to make their selection in the Inject link or your custom form.";
 "postpred.help.input.api.step4" = "Within 2 seconds the app detects the new value, reveals the matching photos, and vibrates three times to confirm.";
@@ -835,7 +835,7 @@
 "limits.help.rehearsal.body" = "Most bot detections happen during testing, not during shows. A few simple habits eliminate 90% of the risk:";
 "limits.help.rehearsal.tip1" = "Open the same follower's profile once → it's cached for days. Rehearse Counter Glitch as many times as you want with the same person at zero cost.";
 "limits.help.rehearsal.tip2" = "Spread Sync & Archive and photo uploads across different hours — don't stack them all before a show.";
-"limits.help.rehearsal.avoid1" = "Don't open 4–5 different follower profiles in a row during rehearsal. Each new profile costs ~4 API calls.";
+"limits.help.rehearsal.avoid1" = "Don't open 3–4 different follower profiles in a row during rehearsal. Each new profile costs 3–4 actions.";
 "limits.help.rehearsal.avoid2" = "Don't restart the app repeatedly while testing — every restart triggers a session check.";
 "limits.help.rehearsal.tip" = "The safest rehearsal: open the exact follower you'll use, do the effect once, go back. Repeat that same sequence → it's completely free from the second time onwards.";
 
@@ -885,7 +885,7 @@
 "limits.help.table.col.action" = "Feature";
 "limits.help.table.col.first" = "1st time";
 "limits.help.table.col.again" = "Repeat";
-"limits.help.table.row.performance" = "Open Performance (profile + background cache)";
+"limits.help.table.row.performance" = "Open Performance";
 "limits.help.table.row.followers" = "Followers list";
 "limits.help.table.row.profile.new" = "New follower profile";
 "limits.help.table.row.sa" = "Sync & Archive (per photo)";
@@ -895,10 +895,11 @@
 "limits.help.table.row.notebio" = "Note or bio change";
 "limits.help.table.row.explore" = "Explore / Search";
 "limits.help.sa.auto" = "After a full performance with reveals and profile visits, the app automatically adds a short waiting period before Sync & Archive. This is normal — it protects your session.";
-"limits.help.table.cache.lost" = "Opening Performance uses 3 actions for the profile, plus up to 5 more to pre-cache Reels and Tagged in the background. Repeat entries refresh every ~90 s (3 actions). Failed or retried calls no longer count toward your budget.";
+"limits.help.table.cache.lost" = "Performance cache loads at zero cost on repeat visits. Cache may be lost on: fresh install, account switch, clearing app data, or restoring to a new device — in those cases the first entry costs 3 actions.";
+"limits.help.table.batch.note" = "Per-photo costs multiply. Sync & Archive on 4 photos = 8 actions total. Uploading 4 photos = 9 total (1 setup call + 2 per photo). The table shows the cost per photo — not the total for your whole set.";
 
 "limits.help.profiles.title" = "Visiting profiles — the most expensive action";
-"limits.help.profiles.body" = "Opening a new follower profile costs 4–5 actions every time. The second visit to the same profile is free (loaded from cache). This is why opening 3–4 different profiles in quick succession can exhaust the budget and trigger bot detection.";
+"limits.help.profiles.body" = "Opening a new follower profile costs 3–4 actions every time. The second visit to the same profile is free (loaded from cache). This is why opening 3–4 different profiles in quick succession can exhaust the budget and trigger bot detection.";
 "limits.help.profiles.max" = "Recommended: open at most 2 new profiles per session. Avoid visiting new profiles right before Sync & Archive.";
 "limits.help.reddot.title" = "The red dot";
 "limits.help.reddot.body" = "When fewer than 8 actions remain, a small red dot appears on the icon in the followers list header. Only you will see it — it is not visible during the performance itself.";
@@ -924,7 +925,11 @@
 "guide.fakehome.help.what.title" = "What is Fake Home Screen?";
 "guide.fakehome.help.what.body" = "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally.";
 "guide.fakehome.help.how.title" = "How to use it";
-"guide.fakehome.help.how.body" = "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.\n\n2. Upload it in Settings › Other › Fake Home Screen.\n\n3. Enable the toggle.\n\n4. Next time you open Performance, that screenshot appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile.";
+"guide.fakehome.help.how.body" = "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.
+
+2. Upload it in Settings › Data › Fake Home Screen.
+
+3. Once a screenshot is loaded, the fake home screen activates automatically. Next time you open Performance, it appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile.";
 "guide.fakehome.help.why.title" = "Why use it?";
 "guide.fakehome.help.why.body" = "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears, making the experience look completely natural.";
 
@@ -935,7 +940,7 @@
 "guide.lockscreen.help.how.title" = "How to enter your secret number";
 "guide.lockscreen.help.how.body" = "1. Tap the digits of your secret number on the numpad — they register silently.\n\n2. Tap anywhere outside the numpad to lock those digits in place.\n\n3. Fill the remaining dots by tapping any digits — they are ignored.\n\n4. Once all 4 dots are filled the lockscreen dismisses and Performance opens.";
 "guide.lockscreen.help.wallpaper.title" = "Wallpaper";
-"guide.lockscreen.help.wallpaper.body" = "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Without a wallpaper the lockscreen input cannot be enabled.";
+"guide.lockscreen.help.wallpaper.body" = "Upload the same wallpaper you use on your real lock screen so the fake one looks identical. Then select **Lockscreen** as the input method on your set card in My Sets.";
 "guide.lockscreen.help.why.title" = "Why use it?";
 "guide.lockscreen.help.why.body" = "It disguises the act of entering a secret number as a normal phone unlock. Combined with Fake Home Screen, the full sequence looks like: unlock phone → home screen → open Instagram — completely natural to any observer.";
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
@@ -1147,30 +1152,41 @@
 "lockscreen.enter_passcode" = "Enter Passcode";
 "lockscreen.emergency" = "Emergency";
 
-/* Per-set input selector */
+// MARK: - Post Prediction Help — Swipe Blind Input
+"postpred.help.input.clockinput.label" = "CLOCK INPUT";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. You secretly swipe to enter a number; the spectator sees nothing.";
+"postpred.help.input.clockinput.encoding.title" = "DIGIT ENCODING  (each digit = 2 swipes)";
+"postpred.help.input.clockinput.examples.title" = "EXAMPLES";
+"postpred.help.input.clockinput.example5.note" = "Enter 05 → digit 0 (↑↑) then digit 5 (↓→) — 4 swipes total";
+"postpred.help.input.clockinput.example37.note" = "Digit 3 (→→) then digit 7 (↓←) — 4 swipes total";
+"postpred.help.input.clockinput.example100.note" = "Digit 1 (↑→) then two 0s (↑↑ each) — 6 swipes total";
+"postpred.help.input.clockinput.haptic.title" = "HAPTIC FEEDBACK";
+"postpred.help.input.clockinput.haptic.light" = "Light tap — each individual swipe registered";
+"postpred.help.input.clockinput.haptic.medium" = "Medium pulse — digit completed (2 swipes)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — reveal successful";
+"postpred.help.input.clockinput.haptic.error" = "Error buzz + screen flash — invalid swipe pair, resets";
+"postpred.help.input.clockinput.dismiss" = "After the reveal, **long-press 1 second** anywhere on the black screen to dismiss it. The updated fake Instagram profile (with unarchived photos) appears instantly.";
+
+// MARK: - Set Input Picker
 "set.input.label" = "Input";
 "set.input.configure" = "Configure";
-"set.input.covertyping.help" = "Masks what you type in Explore so spectators see a different word. Press SPACE to trigger the reveal.";
-"set.input.covertyping.maskmode" = "Mask Mode";
+"set.input.covertyping.help" = "Masks what you type in Explore so spectators see a different word. Press SPACE to reveal.";
+"set.input.covertyping.maskmode" = "Mask mode";
 "set.input.api.help" = "Polls an online source every 2 s while Performance is open and reveals automatically when a new value arrives.";
 "set.input.api.source" = "API Source";
-"set.input.api.endpoint_hint" = "Configure the API endpoints in Settings → Integrations.";
-"set.input.ocr.help" = "The camera starts silently when Performance opens. Press Volume Up to scan; recognized text reveals automatically.";
+"set.input.api.endpoint_hint" = "Configure API endpoints in Settings → Integrations.";
+"set.input.ocr.help" = "Camera starts silently when Performance opens. Press Volume Up to scan; recognised text reveals automatically.";
 "set.input.ocr.camera" = "Camera";
 "set.input.ocr.language" = "Language";
-"set.input.lockscreen.help" = "Shows a fake lock screen when Performance opens so you can secretly enter the value. Set a wallpaper below.";
-"set.input.digitgrid.help" = "Swipe left or right on the photo grid to build the value, then tap the Posts icon to reveal.";
-"set.input.digitgrid.noconfig" = "No setup needed.";
-"postpred.perset_note" = "Input methods are now set on each set card in My Sets. Open a set to choose its input.";
-"postpred.no_active_set" = "No active set. Go to My Sets and mark one as active.";
+"set.input.lockscreen.help" = "Shows a fake lock screen when Performance opens so you can enter the value secretly. Set a wallpaper below.";
+"set.input.digitgrid.help" = "Swipe left or right across the grid to build the value, then tap the Posts icon to reveal.";
+"set.input.digitgrid.noconfig" = "No configuration required.";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Enter a number 1–100 using directional swipe pairs. Long-press to dismiss after the reveal.";
+"set.input.clockinput.noconfig" = "No configuration required.";
 
-/* Auto-active inputs (no toggle) */
-"fakehome.autoactive.title" = "Activates automatically";
-"fakehome.autoactive.body" = "Shown when Performance opens if a screenshot is set. Tap anywhere to reveal your profile.";
-"lockscreen.perset_note" = "Activates when you choose Lock Screen as a set's input in My Sets.";
-
-/* Post Prediction: Go to Sets + URL Scheme copy */
+// MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
+"fakehome.autoactive.title" = "Auto-activates";
+"fakehome.autoactive.body" = "Shown when opening Performance if a screenshot is set. Tap anywhere to reveal your profile.";
+"lockscreen.perset_note" = "Activates when you choose Lockscreen as the input method for a set in My Sets.";
 "postpred.goto_sets.title" = "Go to Sets to configure";
-"postpred.goto_sets.body" = "Select an active set and choose its input method directly from each set card.";
-"set.url_scheme.copy" = "Copy";
-"set.url_scheme.copied" = "Copied!";
+"postpred.goto_sets.body" = "Select an active set and choose the input method directly on each set card.";
