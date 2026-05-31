@@ -23,8 +23,22 @@ struct PerformanceView: View {
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
     @AppStorage("ppTopInputMode")   private var ppTopInputMode:   String = "off"
     // Text templates — user-defined wrappers with {word} token
-    @AppStorage("note_template") private var noteTemplate: String = ""
-    @AppStorage("bio_template")  private var bioTemplate:  String = ""
+    @AppStorage("note_template")   private var noteTemplate:  String = ""
+    // Bio template slots (4 independent templates, active one used for performance)
+    @AppStorage("bio_template")    private var bioTemplate:   String = ""
+    @AppStorage("bio_template_2")  private var bioTemplate2:  String = ""
+    @AppStorage("bio_template_3")  private var bioTemplate3:  String = ""
+    @AppStorage("bio_template_4")  private var bioTemplate4:  String = ""
+    @AppStorage("bio_active_slot") private var bioActiveSlot: Int = 0
+
+    private var activeBioTemplate: String {
+        switch bioActiveSlot {
+        case 1: return bioTemplate2
+        case 2: return bioTemplate3
+        case 3: return bioTemplate4
+        default: return bioTemplate
+        }
+    }
     // Optimistic note state — @AppStorage triggers instant re-render on write
     @AppStorage("last_note_text")           private var lastNoteText: String = ""
     @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
@@ -66,6 +80,9 @@ struct PerformanceView: View {
     @State private var mediaItemsByURL: [String: InstagramMediaItem] = [:]
     @State private var revealDates: [String: Date] = [:]
     @State private var nextMaxId: String? = nil
+    /// Prevents a double vibration when loadProfile() later clears pendingProfilePic
+    /// after the auto-pic flow already vibrated on POST success.
+    @State private var profilePicVibratedAlready = false
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
     /// True while a DispatchQueue retry has already been scheduled.
@@ -235,7 +252,7 @@ struct PerformanceView: View {
                 .overlay(
                     VStack(spacing: 12) {
                         ProgressView().scaleEffect(1.2)
-                        Text("Loading profile…")
+                        Text("ig.loading_profile")
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                     }
@@ -315,6 +332,31 @@ struct PerformanceView: View {
                     if let image = item.image { cachedImages[item.pseudoURL] = image }
                     insertRevealURL(item.pseudoURL)
                 }
+
+                // For video slots: seed mediaItemsByURL with a pseudo InstagramMediaItem so that
+                // the PostCardView can show the video player immediately (using the CDN videoURL
+                // stored in SetPhoto), without waiting for the silent refresh to complete.
+                var hasVideoReveal = false
+                for mediaId in revealedIds {
+                    let allPhotos = DataManager.shared.sets.flatMap { $0.photos }
+                    guard let setPhoto = allPhotos.first(where: { $0.mediaId == mediaId }),
+                          setPhoto.isVideo,
+                          let videoURL = setPhoto.videoURL else { continue }
+                    hasVideoReveal = true
+                    let pseudoURL = "reveal://\(mediaId)"
+                    let pseudoItem = InstagramMediaItem(
+                        id: mediaId, mediaId: mediaId,
+                        imageURL: pseudoURL, videoURL: videoURL,
+                        caption: nil,
+                        takenAt: setPhoto.uploadDate,
+                        likeCount: nil, commentCount: nil,
+                        mediaType: .video,
+                        videoAspectRatio: setPhoto.videoAspectRatio
+                    )
+                    mediaItemsByURL[pseudoURL] = pseudoItem
+                    print("🎬 [VIDEO REVEAL] Seeded mediaItemsByURL for reveal://\(mediaId) ratio=\(setPhoto.videoAspectRatio?.description ?? "nil")")
+                }
+
                 if !revealedPhotos.isEmpty {
                     print("⚡️ [PERF] \(revealedPhotos.count) photo(s) inserted from local storage")
                     LogManager.shared.info("Grid updated from local images: \(revealedPhotos.count) photo(s)", category: .general)
@@ -331,7 +373,20 @@ struct PerformanceView: View {
                         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
                     }
                 }
-                Task { await refreshMediaGridSilently() }
+                // Videos need extended retries: Instagram takes longer to make them available
+                // in the profile grid after unarchiving. Retry at 5s, 25s and 55s.
+                // Photos only need the standard single refresh at ~5s.
+                if hasVideoReveal {
+                    print("🎬 [VIDEO REVEAL] Scheduling extended grid refresh retries (video takes longer to process)")
+                    for delaySeconds: UInt64 in [5, 25, 55] {
+                        Task {
+                            try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
+                            await refreshMediaGridSilently()
+                        }
+                    }
+                } else {
+                    Task { await refreshMediaGridSilently() }
+                }
             },
             onAmnesiaSwapComplete: {
                 // InstagramProfileView completed a swap — refresh the grid after a
@@ -437,6 +492,40 @@ struct PerformanceView: View {
                 print("🏷️ [BG] Auto-preloading tagged in background…")
                 taggedLoadedOnce = true
                 await fetchTaggedIfNeeded(for: current2)
+            }
+            // Fetch story highlights if not yet cached (1 GET — /highlights/tray/)
+            guard let current3 = profile, current3.cachedHighlights.isEmpty else { return }
+            guard !instagram.isLocked, !instagram.isSessionChallenged else { return }
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_200_000_000...2_000_000_000))
+            guard !instagram.isLocked, !instagram.isSessionChallenged else { return }
+            print("🌟 [BG] Auto-preloading story highlights in background…")
+            if let fetched = try? await instagram.getUserHighlights(userId: current3.userId),
+               !fetched.isEmpty,
+               let latest = profile {
+                let updated = InstagramProfile(
+                    userId: latest.userId, username: latest.username,
+                    fullName: latest.fullName, biography: latest.biography,
+                    externalUrl: latest.externalUrl, profilePicURL: latest.profilePicURL,
+                    isVerified: latest.isVerified, isPrivate: latest.isPrivate,
+                    followerCount: latest.followerCount, followingCount: latest.followingCount,
+                    mediaCount: latest.mediaCount, followedBy: latest.followedBy,
+                    isFollowing: latest.isFollowing, isFollowRequested: latest.isFollowRequested,
+                    cachedAt: latest.cachedAt, cachedMediaURLs: latest.cachedMediaURLs,
+                    cachedReelURLs: latest.cachedReelURLs, cachedTaggedURLs: latest.cachedTaggedURLs,
+                    cachedHighlights: fetched,
+                    cachedMediaItems: latest.cachedMediaItems, cachedReelItems: latest.cachedReelItems,
+                    cachedNextMaxId: latest.cachedNextMaxId
+                )
+                profile = updated
+                ProfileCacheService.shared.saveProfile(updated)
+                print("🌟 [BG] Highlights loaded: \(fetched.count) — downloading cover images…")
+                for h in fetched {
+                    if let img = await downloadImage(from: h.coverImageURL) {
+                        cachedImages[h.coverImageURL] = img
+                        ProfileCacheService.shared.saveImage(img, forURL: h.coverImageURL)
+                    }
+                }
+                print("🌟 [BG] Highlight covers downloaded (\(fetched.count))")
             }
         }
     }
@@ -572,8 +661,9 @@ struct PerformanceView: View {
                     print("📷 [OCR] Blocked — already used once in this Performance session")
                     return
                 }
-                let noteOcr     = noteTopInputMode == "ocr"
-                let bioOcr      = bioTopInputMode  == "ocr"
+                // OCR is active when any slot has .ocr as its source, OR legacy OCR mode is set
+                let noteOcr     = integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr"
+                let bioOcr      = integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr"
                 let postPredOcr = ppTopInputMode == "ocr"
                 guard noteOcr || bioOcr || postPredOcr else { return }
                 if ocrCoordinator.isRunning {
@@ -605,8 +695,9 @@ struct PerformanceView: View {
                 // Execute all active OCR targets sequentially (bio → note → post prediction)
                 // to avoid concurrent API calls that could trigger bot detection.
                 Task {
-                    let hasBio  = bioTopInputMode  == "ocr"
-                    let hasNote = noteTopInputMode == "ocr"
+                    // Active when legacy OCR mode is set OR any slot has .ocr as its source
+                    let hasBio  = bioTopInputMode  == "ocr" || integrations.ocrSlot(for: "bio")  != nil
+                    let hasNote = noteTopInputMode == "ocr" || integrations.ocrSlot(for: "note") != nil
                     let hasPost = ppTopInputMode == "ocr"
 
                     if hasBio {
@@ -702,11 +793,16 @@ struct PerformanceView: View {
                 print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
                 LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
             } else {
-                // pendingProfilePic cleared → Instagram CDN confirmed the new picture.
-                // Same double full-system vibration as Note and Biography confirmations.
-                fireDoubleConfirmationVibration()
-                print("📳 [PERF] Double vibration: profile pic confirmed live on Instagram CDN")
-                LogManager.shared.info("Profile pic confirmed live on Instagram (double vibration fired)", category: .general)
+                // pendingProfilePic cleared (loadProfile migrated the pic to the new CDN URL).
+                // Vibrate only if the auto-pic flow didn't already vibrate on POST success.
+                if profilePicVibratedAlready {
+                    profilePicVibratedAlready = false
+                    print("📳 [PERF] Profile pic CDN migration complete — vibration already fired, skipping duplicate")
+                } else {
+                    fireDoubleConfirmationVibration()
+                    print("📳 [PERF] Double vibration: profile pic confirmed live on Instagram CDN")
+                    LogManager.shared.info("Profile pic confirmed live on Instagram (double vibration fired)", category: .general)
+                }
             }
         }
         // Instantly reflect a biography update in the fake Instagram profile view.
@@ -1017,7 +1113,7 @@ struct PerformanceView: View {
                     if action.mode.hasPrefix("profilepic") {
                         await applyURLProfilePicAction(mode: action.mode, data: action.text)
                     } else {
-                        await applyURLAction(mode: action.mode, text: action.text)
+                        await applyURLAction(mode: action.mode, text: action.text, values: action.values)
                     }
                 } else if clipboardAutoMode != "" {
                     await applyClipboardAutoMode()
@@ -1099,7 +1195,7 @@ struct PerformanceView: View {
                 if action.mode.hasPrefix("profilepic") {
                     await applyURLProfilePicAction(mode: action.mode, data: action.text)
                 } else {
-                    await applyURLAction(mode: action.mode, text: action.text)
+                    await applyURLAction(mode: action.mode, text: action.text, values: action.values)
                 }
             }
         }
@@ -1406,20 +1502,34 @@ struct PerformanceView: View {
             .replacingOccurrences(of: "\\n",  with: "\n")
     }
 
-    /// Replaces `{word}` in `template` with the detected/fetched word, then expands
-    /// `\n` / `{newline}` escapes into real line-breaks so multi-line bios/notes work.
-    /// Returns `word` (with escapes expanded) when the template is empty or has no token.
-    private func applyTemplate(_ word: String, template: String) -> String {
+    /// Replaces `{text1}`, `{text2}`, `{text3}` (and the legacy alias `{word}` = `{text1}`)
+    /// in `template` with the provided value map, then expands `\n` escapes.
+    /// Returns `values["text1"] ?? ""` (with escapes expanded) when template is empty.
+    private func applyTemplate(_ values: [String: String], template: String) -> String {
         let t = template.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.isEmpty || !t.contains("{word}") {
-            return expandEscapes(word)
+        guard !t.isEmpty else {
+            return expandEscapes(values["text1"] ?? "")
         }
-        return expandEscapes(t.replacingOccurrences(of: "{word}", with: word))
+        var result = t
+        // {word} is a legacy alias for {text1}
+        if let v1 = values["text1"] {
+            result = result
+                .replacingOccurrences(of: "{word}", with: v1)
+                .replacingOccurrences(of: "{text1}", with: v1)
+        }
+        if let v2 = values["text2"] { result = result.replacingOccurrences(of: "{text2}", with: v2) }
+        if let v3 = values["text3"] { result = result.replacingOccurrences(of: "{text3}", with: v3) }
+        return expandEscapes(result)
+    }
+
+    /// Legacy single-word overload — maps `word` to `{text1}`.
+    private func applyTemplate(_ word: String, template: String) -> String {
+        applyTemplate(["text1": word], template: template)
     }
 
     // MARK: - URL Scheme Action
 
-    private func applyURLAction(mode: String, text: String) async {
+    private func applyURLAction(mode: String, text: String, values: [String: String] = [:]) async {
         guard !instagram.isLocked else {
             print("🚫 [URL] Lockdown active — skipping URL action")
             return
@@ -1488,12 +1598,17 @@ struct PerformanceView: View {
         }
 
         do {
-            // Expand \n / {newline} escapes so line breaks work from URL schemes too
-            let expanded = expandEscapes(text)
+            // Build effective value dict: use URL-scheme values when provided, else fall back to `text`
+            let effectiveValues: [String: String] = values.isEmpty ? ["text1": text] : values
+
+            // Apply text template ({text1}/{text2}/{text3}/{word} → URL-scheme values)
+            let tpl = mode == "note" ? noteTemplate : activeBioTemplate
+            let composed = tpl.isEmpty ? expandEscapes(text) : applyTemplate(effectiveValues, template: tpl)
+
             if mode == "note" {
-                let final = truncateAtWordBoundary(expanded, limit: 60)
-                if final.count < expanded.count {
-                    print("✂️ [URL] Note truncated: \(expanded.count)→\(final.count) chars")
+                let final = truncateAtWordBoundary(composed, limit: 60)
+                if final.count < composed.count {
+                    print("✂️ [URL] Note truncated: \(composed.count)→\(final.count) chars")
                 }
                 // Optimistic: show note bubble immediately
                 await MainActor.run { lastNoteText = final }
@@ -1505,9 +1620,9 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else if mode == "bio" {
-                let final = truncateAtWordBoundary(expanded, limit: 150)
-                if final.count < expanded.count {
-                    print("✂️ [URL] Bio truncated: \(expanded.count)→\(final.count) chars")
+                let final = truncateAtWordBoundary(composed, limit: 150)
+                if final.count < composed.count {
+                    print("✂️ [URL] Bio truncated: \(composed.count)→\(final.count) chars")
                 }
                 // Optimistic: show bio immediately
                 await MainActor.run {
@@ -1595,7 +1710,7 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let composed = applyTemplate(text, template: bioTemplate)
+                let composed = applyTemplate(text, template: activeBioTemplate)
                 let final = truncateAtWordBoundary(composed, limit: 150)
                 if final.count < composed.count {
                     print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(composed.count)→\(final.count) chars")
@@ -1653,46 +1768,67 @@ struct PerformanceView: View {
             guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         }
 
-        let source = target == "note" ? integrations.noteApiSource : integrations.bioApiSource
-        guard source != .none else { return }
+        // Determine primary source (text1) — falls back to legacy single source
+        let primarySource = target == "note"
+            ? (integrations.noteText1Source != .none ? integrations.noteText1Source : integrations.noteApiSource)
+            : (integrations.bioText1Source  != .none ? integrations.bioText1Source  : integrations.bioApiSource)
+        guard primarySource != .none || integrations.hasTemplateSources(for: target) else { return }
 
-        let text: String
+        // ── Fetch primary (text1) value ──
+        let primaryText: String
         if let preloaded = preloadedValue, !preloaded.isEmpty {
-            text = preloaded
-            print("⚡ [API AUTO] Using preloaded value for target=\(target): \"\(text.prefix(40))\"")
-        } else {
-            print("⚡ [API AUTO] Fetching from \(source.displayName) for target=\(target)…")
-            guard let fetched = await integrations.fetchValue(for: source), !fetched.isEmpty else {
-                print("⚠️ [API AUTO] No value received from \(source.displayName)")
-                LogManager.shared.warning("Magic API returned no value (\(source.displayName))", category: .general)
+            primaryText = preloaded
+            print("⚡ [API AUTO] Using preloaded value for target=\(target): \"\(primaryText.prefix(40))\"")
+        } else if primarySource != .none {
+            print("⚡ [API AUTO] Fetching from \(primarySource.displayName) for target=\(target)…")
+            guard let fetched = await integrations.fetchValue(for: primarySource), !fetched.isEmpty else {
+                print("⚠️ [API AUTO] No value received from \(primarySource.displayName)")
+                LogManager.shared.warning("Magic API returned no value (\(primarySource.displayName))", category: .general)
                 return
             }
-            text = fetched
+            primaryText = fetched
+        } else {
+            primaryText = ""
         }
 
-        // Skip if same value was already sent within 2 hours — avoids Instagram duplicate spam rejection
+        // Skip if same primary value was already sent within 2 hours — avoids Instagram duplicate spam rejection
         let ud = UserDefaults.standard
         let lastKey   = target == "note" ? "last_note_auto_input"      : "last_biography_text"
         let dateKey   = target == "note" ? "last_note_auto_sent_date"  : "last_biography_sent_date"
-        let trimmed   = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
+        let trimmed   = primaryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
             let sentDate   = ud.object(forKey: dateKey) as? Date ?? .distantPast
             let hoursSince = Date().timeIntervalSince(sentDate) / 3600
             if hoursSince < 2 {
-                print("⏭️ [API AUTO] Dedup: same text sent \(String(format: "%.0f", hoursSince * 60))m ago — skipping (\"\(text.prefix(30))\")")
+                print("⏭️ [API AUTO] Dedup: same text sent \(String(format: "%.0f", hoursSince * 60))m ago — skipping (\"\(primaryText.prefix(30))\")")
                 return
             }
             print("⏭️ [API AUTO] Dedup expired (\(String(format: "%.1f", hoursSince))h) — allowing re-send")
             ud.removeObject(forKey: lastKey)
         }
 
-        print("⚡ [API AUTO] Got value: \"\(text.prefix(40))\" — applying to \(target)")
-        LogManager.shared.info("Magic API (\(source.displayName)) → \(target): \"\(text.prefix(40))\"", category: .general)
+        // ── Fetch text2 / text3 in parallel (if configured) ──
+        var values: [String: String] = [:]
+        if !primaryText.isEmpty { values["text1"] = primaryText }
 
-        // Apply text template ({word} → fetched word)
-        let tpl = target == "note" ? noteTemplate : bioTemplate
-        let composed = applyTemplate(text, template: tpl)
-        if tpl.contains("{word}") {
+        let src2 = target == "note" ? integrations.noteText2Source : integrations.bioText2Source
+        let src3 = target == "note" ? integrations.noteText3Source : integrations.bioText3Source
+        if src2 != .none || src3 != .none {
+            async let v2 = src2 != .none ? integrations.fetchValue(for: src2) : nil
+            async let v3 = src3 != .none ? integrations.fetchValue(for: src3) : nil
+            let (r2, r3) = await (v2, v3)
+            if let r2 { values["text2"] = r2 }
+            if let r3 { values["text3"] = r3 }
+        }
+
+        let text = primaryText.isEmpty ? (values["text2"] ?? values["text3"] ?? "") : primaryText
+        print("⚡ [API AUTO] Values for \(target): \(values.map { "\($0.key)=\($0.value.prefix(20))" }.joined(separator: ", "))")
+        LogManager.shared.info("Magic API → \(target): \(values.map { "\($0.key)=\($0.value.prefix(20))" }.joined(separator: ", "))", category: .general)
+
+        // Apply text template ({text1}/{text2}/{text3}/{word} → fetched values)
+        let tpl = target == "note" ? noteTemplate : activeBioTemplate
+        let composed = applyTemplate(values, template: tpl)
+        if !tpl.isEmpty {
             print("⚡ [API AUTO] Template applied (\(target)): \"\(composed.prefix(60))\"")
         }
 
@@ -1757,8 +1893,11 @@ struct PerformanceView: View {
     /// Triggers bio/note update + vibration, and Post Prediction word reveal, the moment
     /// a new value arrives from the spectator.
     private func startApiPollingIfNeeded() {
-        let bioActive  = integrations.bioApiSource  != .none && bioTopInputMode  == "api"
-        let noteActive = integrations.noteApiSource != .none && noteTopInputMode == "api"
+        // Bio/Note active if any polled placeholder source is configured — no mode gate needed,
+        // the source selection itself determines whether polling should run.
+        // .ocr sources are event-driven and excluded via isPolled.
+        let bioActive  = integrations.bioText1Source.isPolled  || integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioApiSource.isPolled
+        let noteActive = integrations.noteText1Source.isPolled || integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteApiSource.isPolled
         let ppActive   = integrations.ppApiSource   != .none && ppTopInputMode   == "api"
         guard bioActive || noteActive || ppActive else { return }
         guard apiPollingTask == nil else { return }
@@ -1774,9 +1913,14 @@ struct PerformanceView: View {
 
                 // ── bio / note ────────────────────────────────────────────────
                 for target in ["bio", "note"] {
-                    let source = target == "note" ? integrations.noteApiSource : integrations.bioApiSource
-                    let mode   = target == "note" ? noteTopInputMode : bioTopInputMode
-                    guard source != .none, mode == "api" else { continue }
+                    // Use first polled text1 source as the primary poll trigger
+                    let text1src  = target == "note" ? integrations.noteText1Source  : integrations.bioText1Source
+                    let legacySrc = target == "note" ? integrations.noteApiSource    : integrations.bioApiSource
+                    let source    = text1src.isPolled ? text1src : (legacySrc.isPolled ? legacySrc : .none)
+                    let hasPolledSrc = source.isPolled
+                        || (target == "note" ? integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled
+                                             : integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled)
+                    guard hasPolledSrc else { continue }
 
                     guard let payload = await integrations.fetchPayload(for: source) else { continue }
                     let newValue = payload.value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1825,9 +1969,9 @@ struct PerformanceView: View {
 
     private func seedApiPollingBaselines(bioActive: Bool, noteActive: Bool, ppActive: Bool) async {
         let targets: [(key: String, source: ApiSource)] = [
-            noteActive ? ("note", integrations.noteApiSource) : nil,
-            bioActive ? ("bio", integrations.bioApiSource) : nil,
-            ppActive ? ("pp", integrations.ppApiSource) : nil
+            noteActive ? ("note", integrations.noteText1Source != .none ? integrations.noteText1Source : integrations.noteApiSource) : nil,
+            bioActive  ? ("bio",  integrations.bioText1Source  != .none ? integrations.bioText1Source  : integrations.bioApiSource)  : nil,
+            ppActive   ? ("pp",   integrations.ppApiSource) : nil
         ].compactMap { $0 }
 
         for target in targets where target.source != .none {
@@ -1882,12 +2026,20 @@ struct PerformanceView: View {
             ud.removeObject(forKey: lastKey)
         }
 
-        // Apply text template ({word} → detected word)
-        let tpl = target == "note" ? noteTemplate : bioTemplate
-        let composed = applyTemplate(trimmed, template: tpl)
-        if tpl.contains("{word}") {
-            print("📷 [OCR] Template applied (\(target)): \"\(composed.prefix(60))\"")
-        }
+        // Determine which slot the OCR word goes into (the one configured as .ocr, default text1)
+        let ocrSlot = integrations.ocrSlot(for: target) ?? 1
+        let slotKey = "text\(ocrSlot)"
+        let ocrValues: [String: String] = [slotKey: trimmed]
+
+        // Apply text template: OCR fills the configured slot; other slots are resolved from their APIs
+        let tpl = target == "note" ? noteTemplate : activeBioTemplate
+        // Fetch any non-OCR API sources in parallel
+        var resolvedValues = await integrations.fetchTemplatePlaceholders(for: target, ocrValues: ocrValues)
+        // OCR value always wins for its assigned slot
+        resolvedValues[slotKey] = trimmed
+        let composed = tpl.isEmpty ? trimmed : applyTemplate(resolvedValues, template: tpl)
+        print("📷 [OCR] Template applied (\(target), slot=\(slotKey)): \"\(composed.prefix(60))\"")
+
 
         print("📷 [OCR] Applying to \(target): \"\(trimmed.prefix(40))\"")
         LogManager.shared.info("OCR → \(target): \"\(composed.prefix(40))\"", category: .general)
@@ -2285,9 +2437,36 @@ struct PerformanceView: View {
                 mediaItemsByURL.removeAll()
                 revealDates.removeAll()
                 // Keep cachedImages so existing thumbnails stay visible during transition
-                
+
+                // ── Bridge CDN URL rotation for the profile pic ────────────────────
+                // Instagram rotates CDN query-string tokens on every profile fetch.
+                // Copy the cached image to the new URL key BEFORE updating self.profile
+                // so the header never flashes a blank/placeholder between the two URLs.
+                let oldPicURL = self.profile?.profilePicURL ?? ""
+                let newPicURL = fetchedProfile.profilePicURL
+                if !newPicURL.isEmpty, newPicURL != oldPicURL {
+                    let bridged = cachedImages[oldPicURL]
+                        ?? ProfileCacheService.shared.loadImage(forURL: oldPicURL)
+                    if let img = bridged {
+                        cachedImages[newPicURL] = img
+                        print("⚡️ [PERF] Profile pic bridged old→new CDN URL — no blank frame")
+                    }
+                }
+
                         self.profile = fetchedProfile
-                self.allMediaURLs = fetchedProfile.cachedMediaURLs
+                // ── Preserve pagination tail — don't collapse the grid ─────────────
+                // loadProfile returns only page-1 items (typically 12). If the grid
+                // already shows 24 items (from cache + silent refresh + pagination),
+                // overwriting with 12 would cause a visible collapse and then re-grow.
+                // Keep the tail items from the previous allMediaURLs; they use old CDN
+                // URL tokens that remain valid within the session.
+                let newFirst = fetchedProfile.cachedMediaURLs
+                if allMediaURLs.count > newFirst.count {
+                    let tail = Array(allMediaURLs.suffix(allMediaURLs.count - newFirst.count))
+                    self.allMediaURLs = newFirst + tail
+                } else {
+                    self.allMediaURLs = newFirst
+                }
                 // Seed the pagination cursor so the first scroll-triggered call
                 // fetches page 2 directly instead of re-loading page 1.
                 if self.nextMaxId == nil {
@@ -2441,41 +2620,60 @@ struct PerformanceView: View {
     
     private func downloadAndCacheImages(profile: InstagramProfile) {
         Task {
-            // Download profile pic
-            print("🖼️ [CACHE] Downloading profile pic: \(String(profile.profilePicURL.prefix(80)))...")
-            if let image = await downloadImage(from: profile.profilePicURL) {
-                await MainActor.run {
-                    cachedImages[profile.profilePicURL] = image
-                    ProfileCacheService.shared.saveImage(image, forURL: profile.profilePicURL)
-                    print("✅ [CACHE] Profile pic downloaded and cached")
-                }
+            // Profile pic — skip if already in memory (bridged from old CDN URL or
+            // loaded from disk). The bridge in loadProfile covers CDN-URL-rotation;
+            // the download below is only needed when the actual image changed.
+            let picAlreadyCached = await MainActor.run { cachedImages[profile.profilePicURL] != nil }
+            if picAlreadyCached {
+                print("✅ [CACHE] Profile pic already in memory — download skipped")
             } else {
-                print("❌ [CACHE] Failed to download profile pic")
-            }
-            
-            // Download media thumbnails
-            print("🖼️ [CACHE] Downloading \(profile.cachedMediaURLs.count) media thumbnails...")
-            for (index, url) in profile.cachedMediaURLs.enumerated() {
-                if let image = await downloadImage(from: url) {
+                print("🖼️ [CACHE] Downloading profile pic: \(String(profile.profilePicURL.prefix(80)))...")
+                if let image = await downloadImage(from: profile.profilePicURL) {
                     await MainActor.run {
-                        cachedImages[url] = image
-                        ProfileCacheService.shared.saveImage(image, forURL: url)
+                        cachedImages[profile.profilePicURL] = image
+                        ProfileCacheService.shared.saveImage(image, forURL: profile.profilePicURL)
+                        print("✅ [CACHE] Profile pic downloaded and cached")
                     }
-                    print("✅ [CACHE] Media \(index + 1)/\(profile.cachedMediaURLs.count) downloaded")
                 } else {
-                    print("❌ [CACHE] Failed to download media \(index + 1)")
+                    print("❌ [CACHE] Failed to download profile pic")
                 }
             }
-            
-            // Download followed by profile pics
-            print("🖼️ [CACHE] Downloading \(profile.followedBy.count) follower profile pics...")
-            for (index, follower) in profile.followedBy.enumerated() {
-                if let picURL = follower.profilePicURL {
-                    if let image = await downloadImage(from: picURL) {
+
+            // Media thumbnails — skip URLs already in memory to avoid redundant
+            // network requests when loadCachedImages already populated the dict.
+            let missingMedia = await MainActor.run {
+                profile.cachedMediaURLs.filter { cachedImages[$0] == nil }
+            }
+            if missingMedia.isEmpty {
+                print("✅ [CACHE] All \(profile.cachedMediaURLs.count) media thumbnails already in memory — skipped")
+            } else {
+                print("🖼️ [CACHE] Downloading \(missingMedia.count)/\(profile.cachedMediaURLs.count) media thumbnails…")
+                for (index, url) in missingMedia.enumerated() {
+                    if let image = await downloadImage(from: url) {
                         await MainActor.run {
-                            cachedImages[picURL] = image
-                            ProfileCacheService.shared.saveImage(image, forURL: picURL)
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
                         }
+                        print("✅ [CACHE] Media \(index + 1)/\(missingMedia.count) downloaded")
+                    } else {
+                        print("❌ [CACHE] Failed to download media \(index + 1)")
+                    }
+                }
+            }
+
+            // Follower profile pics — skip those already cached
+            let missingFollower = await MainActor.run {
+                profile.followedBy.compactMap { f -> String? in
+                    guard let u = f.profilePicURL, !u.isEmpty, cachedImages[u] == nil else { return nil }
+                    return u
+                }
+            }
+            print("🖼️ [CACHE] Downloading \(missingFollower.count)/\(profile.followedBy.count) follower profile pics...")
+            for picURL in missingFollower {
+                if let image = await downloadImage(from: picURL) {
+                    await MainActor.run {
+                        cachedImages[picURL] = image
+                        ProfileCacheService.shared.saveImage(image, forURL: picURL)
                     }
                 }
             }
@@ -3278,10 +3476,27 @@ struct PerformanceView: View {
             LogManager.shared.warning("Auto profile pic skipped: session recently challenged", category: .general)
             return
         }
-        guard !isLoading else {
-            print("📷 [AUTO PIC] Skipped — profile refresh is in progress (anti-bot)")
-            LogManager.shared.warning("Auto profile pic skipped: profile refresh active", category: .general)
-            return
+        if isLoading {
+            // Profile refresh is running concurrently — wait for it to finish (max 60 s)
+            // instead of abandoning the upload entirely.
+            print("📷 [AUTO PIC] Profile refresh in progress — waiting up to 60s before upload…")
+            LogManager.shared.info("Auto profile pic deferred — waiting for profile refresh", category: .general)
+            for _ in 0..<60 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if !isLoading { break }
+            }
+            guard !isLoading else {
+                print("📷 [AUTO PIC] Skipped — profile refresh still active after 60s timeout")
+                LogManager.shared.warning("Auto profile pic skipped: profile refresh timed out", category: .general)
+                return
+            }
+            // Re-check safety flags after the wait — state may have changed.
+            guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                print("📷 [AUTO PIC] Skipped after wait — locked or challenged")
+                return
+            }
+            // Small anti-bot gap after a concurrent refresh.
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 2_000_000_000...3_000_000_000))
         }
 
         print("📷 [AUTO PIC] Uploading new profile picture (\(imageData.count / 1024) KB)…")
@@ -3294,25 +3509,20 @@ struct PerformanceView: View {
                 UserDefaults.standard.set(assetId, forKey: Self.lastUploadedAssetKey)
                 UserDefaults.standard.set(hash,    forKey: Self.lastUploadedHashKey)
 
-                // Show new image in the fake profile immediately — under the current CDN key.
-                // pendingProfilePic keeps the image alive so loadProfile() can migrate it to
-                // the new CDN URL later; clearing pendingProfilePic triggers the double vibration
-                // that confirms the picture is live on Instagram (same as Post Prediction).
+                // Show new image instantly under the current CDN key.
                 let picURL = profile?.profilePicURL ?? "autoPic_pending"
                 cachedImages[picURL] = uiImage
                 ProfileCacheService.shared.saveImage(uiImage, forURL: picURL)
+                // pendingProfilePic keeps the image alive so loadProfile() can migrate it
+                // to the new CDN URL when it next runs (no visual glitch at that point).
+                profilePicVibratedAlready = true
                 ProfileCacheService.shared.pendingProfilePic = uiImage
 
-                print("📷 [AUTO PIC] ✅ Profile picture updated — showing instantly, vibration pending CDN confirm")
-                // If the silent refresh was skipped during upload (anti-bot guard),
-                // nextMaxId may still be nil. Schedule a deferred silent refresh
-                // so the first pagination doesn't waste a request re-fetching page 1.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    if self.nextMaxId == nil {
-                        print("📷 [AUTO PIC] Silent refresh deferred — triggering to capture nextMaxId")
-                        Task { await self.refreshMediaGridSilently() }
-                    }
-                }
+                // The POST to /accounts/change_profile_picture/ succeeded — the picture IS
+                // live on Instagram. Vibrate immediately; do NOT schedule a silent refresh
+                // which would cause the post grid to flicker during a performance.
+                fireDoubleConfirmationVibration()
+                print("📷 [AUTO PIC] ✅ Profile picture updated — shown instantly, vibration fired")
             }
         } catch {
             print("📷 [AUTO PIC] Upload skipped: \(error.localizedDescription)")
@@ -4226,6 +4436,7 @@ struct InstagramProfileView: View {
                 PhotosGridView(
                     mediaURLs: urlsToShow,
                     cachedImages: cachedImages,
+                    mediaItemsByURL: mediaItemsByURL,
                     onMediaAppear: onMediaAppear,
                     onTapIndex: { index in
                         lastPostViewerIndex = index
@@ -4249,6 +4460,7 @@ struct InstagramProfileView: View {
                     PhotosGridView(
                         mediaURLs: profile.cachedTaggedURLs,
                         cachedImages: cachedImages,
+                        mediaItemsByURL: mediaItemsByURL,
                         onTapIndex: { index in
                             activeViewer = .tagged(index: index)
                         }
@@ -5388,7 +5600,7 @@ struct AutoFollowedByView: View {
 
     @ViewBuilder private var textArea: some View {
         if isLoading && visible.isEmpty {
-            Text("Capturing followers…")
+            Text("ig.capturing_followers")
                 .font(.system(size: 12)).foregroundColor(Color(white: 0.56))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if visible.isEmpty {
@@ -5564,18 +5776,20 @@ struct TabButton: View {
 struct PhotosGridView: View {
     let mediaURLs: [String]
     let cachedImages: [String: UIImage]
+    /// Optional: used to detect horizontal-video cells and letterbox them instead of crop.
+    var mediaItemsByURL: [String: InstagramMediaItem] = [:]
     var onMediaAppear: ((String) -> Void)? = nil
     var onTapIndex: ((Int) -> Void)? = nil
     /// Always render at least this many cells so swipe digit-detection works
     /// even on tabs with few or no photos. 12 = 4 rows (row 4 maps to digit 0).
     var minCells: Int = 12
-    
+
     let columns = [
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1)
     ]
-    
+
     var body: some View {
         let placeholderCount = max(0, minCells - mediaURLs.count)
         LazyVGrid(columns: columns, spacing: 1) {
@@ -5585,18 +5799,8 @@ struct PhotosGridView: View {
             ForEach(Array(mediaURLs.enumerated()), id: \.element) { index, url in
                 Color.clear
                     .aspectRatio(1, contentMode: .fit)
-                    .overlay(
-                        Group {
-                if let image = cachedImages[url] {
-                    Image(uiImage: image)
-                        .resizable()
-                                    .scaledToFill()
-                            } else {
-                                Rectangle().fill(Color.gray.opacity(0.3))
-                            }
-                        }
-                    )
-                        .clipped()
+                    .overlay(gridCell(for: url))
+                    .clipped()
                     .onAppear { onMediaAppear?(url) }
                     .onTapGesture { onTapIndex?(index) }
             }
@@ -5609,6 +5813,36 @@ struct PhotosGridView: View {
                         .clipped()
                 }
             }
+        }
+    }
+
+    /// Builds the thumbnail for a single grid cell.
+    /// Horizontal videos are letterboxed (black bars) to match Instagram's behaviour.
+    /// Everything else (photos, vertical videos, carousels) is cropped to fill the square.
+    @ViewBuilder
+    private func gridCell(for url: String) -> some View {
+        let item = mediaItemsByURL[url]
+        let isHorizontalVideo: Bool = {
+            guard let item, item.mediaType == .video else { return false }
+            return (item.videoAspectRatio ?? 0) > 1.0
+        }()
+
+        if let image = cachedImages[url] {
+            if isHorizontalVideo {
+                // Letterbox: black background + image scaled to fit (no crop).
+                ZStack {
+                    Color.black
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                }
+            } else {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            }
+        } else {
+            Rectangle().fill(Color.gray.opacity(0.3))
         }
     }
 }
@@ -5630,11 +5864,11 @@ struct TaggedEmptyStateView: View {
                     .foregroundColor(.black)
             }
 
-            Text("Photos and videos of you")
+            Text("ig.tagged_empty_title")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.black)
 
-            Text("When people tag you in photos and videos, they'll appear here.")
+            Text("ig.tagged_empty_subtitle")
                 .font(.system(size: 15))
                 .foregroundColor(Color(white: 0.48))
                 .multilineTextAlignment(.center)
@@ -5892,21 +6126,21 @@ private struct PostCardView: View {
                   item.mediaType == .video,
                   let videoURL = item.videoURL,
                   !videoURL.isEmpty {
-            // Inline video playback for feed-style posts/reels. The poster is
-            // the cached thumbnail so we never see a black flash while AVPlayer
-            // loads its first frame. Plays with sound like the real Instagram
-            // feed; LazyVStack ensures the player is destroyed once the cell
-            // scrolls off screen.
-            Color.clear
-                .aspectRatio(4.0/5.0, contentMode: .fit)
+            // Inline video playback for feed-style posts/reels.
+            // fillMode: false → resizeAspect (no crop, black bars if needed).
+            // Aspect ratio drives the container: real w÷h when known, otherwise
+            // Instagram's standard 4:5 portrait as fallback.
+            let ratio: CGFloat = item.videoAspectRatio ?? (4.0 / 5.0)
+            Color.black
+                .aspectRatio(ratio, contentMode: .fit)
                 .overlay(
                     GridVideoPlayer(
                         videoURL: videoURL,
                         muted: false,
+                        fillMode: false,
                         posterImage: cachedImages[url]
                     )
                 )
-                .clipped()
                 .frame(maxWidth: .infinity)
         } else if let image = cachedImages[url] {
             Image(uiImage: image)
@@ -6265,7 +6499,7 @@ struct SpectatorProfileCover: View {
                     .overlay(
                         VStack(spacing: 12) {
                             ProgressView().scaleEffect(1.2)
-                            Text("Loading profile…")
+                            Text("ig.loading_profile")
                                 .font(.system(size: 13))
                                 .foregroundColor(.secondary)
                         }
@@ -6277,12 +6511,12 @@ struct SpectatorProfileCover: View {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 32))
                                 .foregroundColor(.secondary)
-                            Text(errorMessage ?? "Could not load profile")
+                            Text(errorMessage ?? String(localized: "ig.loading_profile"))
                                 .font(.system(size: 14))
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 32)
-                            Button("Close", action: onClose)
+                            Button("action.close", action: onClose)
                                 .font(.system(size: 14, weight: .semibold))
                         }
                     )
@@ -6379,7 +6613,7 @@ struct FullLoadOverlayView: View {
                     .animation(.easeInOut, value: loader.phase)
 
                 if loader.phase == .grid && loader.gridItemsLoaded > 0 {
-                    Text("\(loader.gridItemsLoaded) posts")
+                    Text(String(format: String(localized: "ig.posts_count"), loader.gridItemsLoaded))
                         .font(.system(size: 13))
                         .foregroundColor(Color.black.opacity(0.45))
                         .padding(.top, 6)

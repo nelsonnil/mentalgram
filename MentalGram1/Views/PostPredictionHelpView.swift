@@ -28,6 +28,12 @@ struct PostPredictionHelpView: View {
 
                         divider
 
+                        HelpSection(icon: "film.fill", iconColor: Color(hex: "06B6D4"), title: "postpred.help.section.video") {
+                            videoSlotsSection
+                        }
+
+                        divider
+
                         HelpSection(icon: "hand.tap.fill", iconColor: VaultTheme.Colors.secondary, title: "postpred.help.section.inputs") {
                             inputMethods
                         }
@@ -345,6 +351,95 @@ struct PostPredictionHelpView: View {
     }
 
     // MARK: - Tips
+
+    // MARK: - Video Slots Section
+
+    private var videoSlotsSection: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.lg) {
+            PPBodyText("postpred.help.video.intro")
+
+            // Compatible set types
+            HStack(spacing: 8) {
+                PPBadge(item: PPBadgeItem(label: "Playing Cards", color: Color(hex: "16A34A")))
+                PPBadge(item: PPBadgeItem(label: "Custom",        color: Color(hex: "F97316")))
+            }
+
+            // Step 1
+            videoStep(
+                number: "1",
+                icon: "arrow.up.to.line.circle.fill",
+                color: Color(hex: "0095F6"),
+                title: "postpred.help.video.step1.title",
+                body:  "postpred.help.video.step1.body"
+            )
+            // Step 2
+            videoStep(
+                number: "2",
+                icon: "archivebox.fill",
+                color: Color(hex: "06B6D4"),
+                title: "postpred.help.video.step2.title",
+                body:  "postpred.help.video.step2.body"
+            )
+            // Step 3
+            videoStep(
+                number: "3",
+                icon: "play.circle.fill",
+                color: Color(hex: "34D399"),
+                title: "postpred.help.video.step3.title",
+                body:  "postpred.help.video.step3.body"
+            )
+
+            // Tip box
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(hex: "06B6D4"))
+                    .padding(.top, 1)
+                Text(LocalizedStringKey("postpred.help.video.tip"))
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(Color(hex: "06B6D4").opacity(0.07))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color(hex: "06B6D4").opacity(0.25), lineWidth: 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func videoStep(number: String, icon: String, color: Color, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.15))
+                    .frame(width: 32, height: 32)
+                Text(number)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(color)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.system(size: 12))
+                        .foregroundColor(color)
+                    Text(LocalizedStringKey(title))
+                        .font(VaultTheme.Typography.caption().bold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                }
+                Text(LocalizedStringKey(body))
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(VaultTheme.Colors.cardBorder.opacity(0.2))
+        .cornerRadius(10)
+    }
 
     private var tipsSection: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {

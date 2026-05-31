@@ -366,7 +366,7 @@ struct UserProfileView: View {
                             .disabled(isFollowActionLoading)
                             
                             Button(action: {}) {
-                                Text("Message")
+                                Text("ig.message")
                                     .font(.system(size: 14, weight: .semibold))
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 32)

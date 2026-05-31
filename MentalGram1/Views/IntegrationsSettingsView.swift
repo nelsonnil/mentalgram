@@ -38,19 +38,25 @@ struct IntegrationsSettingsView: View {
                 // MARK: - Custom APIs
                 sectionLabel("CUSTOM APIs", icon: "link")
                 card {
-                    cardHeader(icon: "link", iconColor: .cyan, title: "Custom API 1")
+                    cardHeader(icon: "link", iconColor: .cyan,
+                               title: LocalizedStringKey(settings.customApi1Name.isEmpty ? "Custom API 1" : settings.customApi1Name))
+                    nameField(name: $settings.customApi1Name, placeholder: "Custom API 1")
                     customApiFields(url: $settings.customApi1Url,
                                     field: $settings.customApi1Field,
                                     source: .custom1)
                 }
                 card {
-                    cardHeader(icon: "link", iconColor: .teal, title: "Custom API 2")
+                    cardHeader(icon: "link", iconColor: .teal,
+                               title: LocalizedStringKey(settings.customApi2Name.isEmpty ? "Custom API 2" : settings.customApi2Name))
+                    nameField(name: $settings.customApi2Name, placeholder: "Custom API 2")
                     customApiFields(url: $settings.customApi2Url,
                                     field: $settings.customApi2Field,
                                     source: .custom2)
                 }
                 card {
-                    cardHeader(icon: "link", iconColor: .mint, title: "Custom API 3")
+                    cardHeader(icon: "link", iconColor: .mint,
+                               title: LocalizedStringKey(settings.customApi3Name.isEmpty ? "Custom API 3" : settings.customApi3Name))
+                    nameField(name: $settings.customApi3Name, placeholder: "Custom API 3")
                     customApiFields(url: $settings.customApi3Url,
                                     field: $settings.customApi3Field,
                                     source: .custom3)
@@ -70,6 +76,24 @@ struct IntegrationsSettingsView: View {
             Button("OK") {}
         } message: {
             Text(alertMessage)
+        }
+    }
+
+    // MARK: - Name Field
+
+    @ViewBuilder
+    private func nameField(name: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Name (shown in pickers)")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+            TextField(placeholder, text: name)
+                .font(VaultTheme.Typography.body())
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+                .padding(10)
+                .background(Color(hex: "#2C2C2E"))
+                .cornerRadius(8)
+                .autocorrectionDisabled()
         }
     }
 

@@ -1445,12 +1445,12 @@
 "limits.help.table.col.action" = "Funzionalità";
 "limits.help.table.col.first" = "1ª volta";
 "limits.help.table.col.again" = "Di nuovo";
-"limits.help.table.row.performance" = "Apri Performance";
+"limits.help.table.row.performance" = "Apri Performance (profilo + cache in background)";
 "limits.help.table.row.followers" = "Lista follower";
 "limits.help.table.row.profile.new" = "Nuovo profilo follower";
 "limits.help.table.row.sa" = "Sync & Archive (per foto)";
 "limits.help.table.row.upload" = "Caricamento (per foto)";
-"limits.help.table.row.autoupload" = "Ciclo completo di auto-upload (per foto)";
+"limits.help.table.row.autoupload" = "Auto-upload per foto (carica + archivia)";
 "limits.help.table.row.reveal" = "Rivela (per lettera/foto)";
 "limits.help.table.row.notebio" = "Cambia nota o bio";
 "limits.help.table.row.explore" = "Esplora / Cerca";
@@ -1674,3 +1674,24 @@
 "dfh.mockup.following_tab" = "Seguiti";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Rimuovi";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Usare video come slot";
+"postpred.help.video.intro" = "I set Playing Cards e Custom supportano i video come contenuto degli slot, perfetto per rivelare la carta scelta o una previsione come breve clip.";
+"postpred.help.video.step1.title" = "Carica tramite Instagram reale";
+"postpred.help.video.step1.body" = "Apri Instagram, registra o carica il video normalmente. Archivialo in modo che rimanga nascosto fino all'esibizione.";
+"postpred.help.video.step2.title" = "Mappa il video su uno slot";
+"postpred.help.video.step2.body" = "Nel tuo set, tocca uno slot, poi scegli Da Archiviati e seleziona il video. L'app salva la miniatura e collega il video automaticamente.";
+"postpred.help.video.step3.title" = "Rivela in Performance";
+"postpred.help.video.step3.body" = "Quando desarchivia quello slot in Performance, il video viene riprodotto nelle dimensioni originali senza ritagli.";
+"postpred.help.video.tip" = "I video orizzontali appaiono con barre nere nella griglia del profilo, esattamente come Instagram. Nel visualizzatore post vengono riprodotti a tutta larghezza.";
+
+"notif.archive_ready.title" = "Pronto per archiviare";
+"notif.archive_ready.body" = "Puoi ora archiviare nuovamente le tue foto in tutta sicurezza.";
+"ig.message" = "Messaggio";
+"ig.tagged_empty_title" = "Foto e video di te";
+"ig.tagged_empty_subtitle" = "Quando le persone ti taggano in foto e video, appariranno qui.";
+"ig.posts_count" = "%d post";
+"lockscreen.enter_passcode" = "Inserisci codice";
+"lockscreen.emergency" = "Emergenza";

@@ -1445,12 +1445,12 @@
 "limits.help.table.col.action" = "Funktion";
 "limits.help.table.col.first" = "1. Mal";
 "limits.help.table.col.again" = "Wiederholt";
-"limits.help.table.row.performance" = "Performance öffnen";
+"limits.help.table.row.performance" = "Performance öffnen (Profil + Hintergrundcache)";
 "limits.help.table.row.followers" = "Follower-Liste";
 "limits.help.table.row.profile.new" = "Neues Follower-Profil";
 "limits.help.table.row.sa" = "Sync & Archive (pro Foto)";
 "limits.help.table.row.upload" = "Upload (pro Foto)";
-"limits.help.table.row.autoupload" = "Vollständiger Auto-Upload-Zyklus (pro Foto)";
+"limits.help.table.row.autoupload" = "Auto-Upload pro Foto (Upload + Archivierung)";
 "limits.help.table.row.reveal" = "Enthüllen (pro Buchstabe/Foto)";
 "limits.help.table.row.notebio" = "Notiz oder Bio ändern";
 "limits.help.table.row.explore" = "Erkunden / Suchen";
@@ -1674,3 +1674,24 @@
 "dfh.mockup.following_tab" = "Folge ich";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Entfernen";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Videos als Slots verwenden";
+"postpred.help.video.intro" = "Playing Cards- und Custom-Sets unterstuetzen Videos als Slot-Inhalt, ideal um die gewaehlte Karte oder Vorhersage als kurzen Clip zu enthuellen.";
+"postpred.help.video.step1.title" = "Ueber echtes Instagram hochladen";
+"postpred.help.video.step1.body" = "Oeffne Instagram, nimm das Video auf oder lade es hoch. Archiviere es, damit es bis zur Vorstellung verborgen bleibt.";
+"postpred.help.video.step2.title" = "Video einem Slot zuweisen";
+"postpred.help.video.step2.body" = "Tippe im Set auf einen Slot, dann waehle Aus Archiv und waehle das Video. Die App speichert das Thumbnail und verknuepft das Video automatisch.";
+"postpred.help.video.step3.title" = "In der Vorstellung enthuellen";
+"postpred.help.video.step3.body" = "Beim Entarchivieren dieses Slots in der Vorstellung wird das Video in voller nativer Groesse ohne Zuschnitt abgespielt.";
+"postpred.help.video.tip" = "Horizontale Videos erscheinen im Profilraster mit schwarzen Balken, genau wie im echten Instagram. Im Beitrags-Viewer spielen sie in voller Breite ab.";
+
+"notif.archive_ready.title" = "Archivieren möglich";
+"notif.archive_ready.body" = "Du kannst deine Fotos jetzt wieder sicher archivieren.";
+"ig.message" = "Nachricht";
+"ig.tagged_empty_title" = "Fotos und Videos von dir";
+"ig.tagged_empty_subtitle" = "Wenn dich jemand in Fotos und Videos markiert, erscheinen sie hier.";
+"ig.posts_count" = "%d Beiträge";
+"lockscreen.enter_passcode" = "Code eingeben";
+"lockscreen.emergency" = "Notruf";

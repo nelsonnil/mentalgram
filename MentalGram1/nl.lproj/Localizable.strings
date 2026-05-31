@@ -1262,12 +1262,12 @@
 "limits.help.table.col.action" = "Functie";
 "limits.help.table.col.first" = "1e keer";
 "limits.help.table.col.again" = "Herhalen";
-"limits.help.table.row.performance" = "Performance openen";
+"limits.help.table.row.performance" = "Performance openen (profiel + achtergrondcache)";
 "limits.help.table.row.followers" = "Volgerslijst";
 "limits.help.table.row.profile.new" = "Nieuw volgersprofiel";
 "limits.help.table.row.sa" = "Sync & Archive (per foto)";
 "limits.help.table.row.upload" = "Upload (per foto)";
-"limits.help.table.row.autoupload" = "Volledige automatische uploadcyclus (per foto)";
+"limits.help.table.row.autoupload" = "Auto-upload per foto (upload + archief)";
 "limits.help.table.row.reveal" = "Onthullen (per letter/foto)";
 "limits.help.table.row.notebio" = "Notitie of bio wijzigen";
 "limits.help.table.row.explore" = "Verkennen / Zoeken";
@@ -1491,3 +1491,24 @@
 "dfh.mockup.following_tab" = "Volgend";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Verwijderen";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Videos als slots gebruiken";
+"postpred.help.video.intro" = "Playing Cards- en Custom-sets ondersteunen videos als slotinhoud, ideaal om de gekozen kaart of voorspelling als een korte clip te onthullen.";
+"postpred.help.video.step1.title" = "Upload via echte Instagram";
+"postpred.help.video.step1.body" = "Open Instagram, neem de video op of upload hem normaal. Archiveer hem zodat hij verborgen blijft tot de voorstelling.";
+"postpred.help.video.step2.title" = "Koppel de video aan een slot";
+"postpred.help.video.step2.body" = "Tik in je set op een slot, kies dan Uit Archief en selecteer de video. De app slaat de thumbnail op en koppelt de video automatisch.";
+"postpred.help.video.step3.title" = "Onthullen in Performance";
+"postpred.help.video.step3.body" = "Bij het de-archiveren van dat slot in Performance speelt de video op zijn volledige formaat af zonder bijsnijden.";
+"postpred.help.video.tip" = "Horizontale videos verschijnen met zwarte balken in het profielraster, precies als het echte Instagram. In de postviewer spelen ze op volledige breedte af.";
+
+"notif.archive_ready.title" = "Klaar om te archiveren";
+"notif.archive_ready.body" = "Je kunt je foto's nu veilig weer archiveren.";
+"ig.message" = "Bericht";
+"ig.tagged_empty_title" = "Foto's en video's van jou";
+"ig.tagged_empty_subtitle" = "Wanneer mensen je taggen in foto's en video's, verschijnen ze hier.";
+"ig.posts_count" = "%d berichten";
+"lockscreen.enter_passcode" = "Voer toegangscode in";
+"lockscreen.emergency" = "Noodoproep";

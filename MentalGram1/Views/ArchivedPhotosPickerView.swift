@@ -7,6 +7,9 @@ struct ArchivedPhoto: Identifiable {
     let imageURL: String
     let timestamp: Date?
     var thumbnailImage: UIImage? = nil
+    var isVideo: Bool = false
+    var videoURL: String? = nil
+    var videoAspectRatio: CGFloat? = nil
 }
 
 // MARK: - Archived Photos Cache
@@ -214,7 +217,8 @@ struct ArchivedPhotosPickerView: View {
                 // data cache is also bypassed (not just the thumbnail cache)
                 let raw = try await instagram.getAllArchivedPhotos(forceRefresh: forceRefresh)
                 var photos = raw.map {
-                    ArchivedPhoto(mediaId: $0.mediaId, imageURL: $0.imageURL, timestamp: $0.timestamp)
+                    ArchivedPhoto(mediaId: $0.mediaId, imageURL: $0.imageURL, timestamp: $0.timestamp,
+                                  isVideo: $0.isVideo, videoURL: $0.videoURL, videoAspectRatio: $0.videoAspectRatio)
                 }
                 let scanCompleted = instagram.lastArchiveScanCompleted
                 let stopReason = instagram.lastArchiveScanStopReason
@@ -296,12 +300,31 @@ struct ArchivedPhotoCell: View {
                 Rectangle()
                     .fill(VaultTheme.Colors.primary.opacity(0.3))
                     .frame(width: 110, height: 110)
-                
+
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 30))
                     .foregroundColor(VaultTheme.Colors.primary)
             }
-            
+
+            // Video badge (top-left) — indicates this is a video, not a photo
+            if photo.isVideo {
+                VStack {
+                    HStack {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 3)
+                            .background(Color.black.opacity(0.65))
+                            .cornerRadius(4)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .frame(width: 110, height: 110)
+                .padding(5)
+            }
+
             // Date overlay
             if let timestamp = photo.timestamp {
                 VStack {

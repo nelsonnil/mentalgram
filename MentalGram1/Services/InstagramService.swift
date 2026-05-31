@@ -4,6 +4,7 @@ import Combine
 import CryptoKit
 import Network
 import WebKit
+import UserNotifications
 
 /// Instagram Private API client - Pure Swift, no Python needed.
 /// Replicates what instagrapi does: HTTP requests to Instagram's private API.
@@ -193,7 +194,7 @@ class InstagramService: ObservableObject {
     // MARK: - Archive Scan Cache
     /// In-memory cache for the last archive scan result. Avoids re-scanning hundreds of
     /// photos every session. Invalidated automatically after unarchive/archive operations.
-    private var archivedPhotoCache: [(mediaId: String, imageURL: String, timestamp: Date?)]? = nil
+    private var archivedPhotoCache: [(mediaId: String, imageURL: String, timestamp: Date?, isVideo: Bool, videoURL: String?, videoAspectRatio: CGFloat?)]? = nil
     private var archivedPhotoCacheDate: Date? = nil
     private let archivedPhotoCacheTTL: TimeInterval = 600 // 10 minutes
     private(set) var lastArchiveScanCompleted: Bool = true
@@ -1861,8 +1862,10 @@ class InstagramService: ObservableObject {
             request.httpBody = (components.percentEncodedQuery ?? "").data(using: .utf8)
         }
         
-        // Track this action for rate limiting
-        trackAction()
+        // SafetyGate pacing — must happen before the request so the gate can
+        // enforce its minimum inter-request gap. Budget tracking (trackAction)
+        // is deferred to after a successful 200 so that network errors and
+        // Instagram soft-blocks don't silently consume hourly credits.
         InstagramSafetyGate.shared.recordApiRequest(method: method, path: path)
 
         // Log the request with timing info
@@ -1946,8 +1949,9 @@ class InstagramService: ObservableObject {
         // Auth: refresh CSRF token if Instagram rotated it (prevents POST failures)
         extractAndUpdateCSRF(from: response)
 
-        // ANTI-BOT: Reset consecutive errors on success
+        // ANTI-BOT: Reset consecutive errors on success; count budget only on 200
         if httpResponse.statusCode == 200 {
+            trackAction()   // Only successful requests consume hourly budget
             consecutiveErrors = 0
             consecutiveBotSignalErrors = 0
             challengeRequiredStreak = 0
@@ -3972,16 +3976,22 @@ class InstagramService: ObservableObject {
             imageURL = url
         }
         
-        // For videos/reels, also get video URL
+        // For videos/reels, also get video URL and aspect ratio
         var videoURL: String? = nil
+        var videoAspectRatio: CGFloat? = nil
         if mediaType == 2 {
             if let videoVersions = media["video_versions"] as? [[String: Any]],
                let first = videoVersions.first,
                let url = first["url"] as? String {
                 videoURL = url
             }
+            // Derive aspect ratio from original dimensions (Instagram returns these at media root)
+            if let w = media["original_width"] as? Int,
+               let h = media["original_height"] as? Int, h > 0 {
+                videoAspectRatio = CGFloat(w) / CGFloat(h)
+            }
         }
-        
+
         guard !imageURL.isEmpty else { return nil }
         
         // Extract media ID
@@ -4009,7 +4019,8 @@ class InstagramService: ObservableObject {
             commentCount: media["comment_count"] as? Int,
             mediaType: mediaType == 2 ? .video : (mediaType == 8 ? .carousel : .photo),
             carouselImageURLs: carouselURLs,
-            ownerUsername: ownerUsername
+            ownerUsername: ownerUsername,
+            videoAspectRatio: videoAspectRatio
         )
     }
 
@@ -5503,10 +5514,16 @@ class InstagramService: ObservableObject {
             throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before sending another note.")
         }
         
-        // ANTI-BOT: Detect duplicate text (prevent spam)
+        // ANTI-BOT: Detect duplicate text (prevent spam).
+        // Only block within 24 h — notes expire after 24 h so resending the same text
+        // after that is legitimate (e.g. performing the same trick in a new show).
         if let lastNote = UserDefaults.standard.string(forKey: "last_note_text"),
            lastNote == text {
-            throw InstagramError.apiError("You already sent this note. Instagram may flag duplicate notes as spam.\n\nPlease write something different.")
+            let lastSent = UserDefaults.standard.double(forKey: "last_note_sent_timestamp")
+            let elapsed  = lastSent > 0 ? Date().timeIntervalSince1970 - lastSent : 0
+            if elapsed < 86400 {   // 24 h window — same as note expiry on Instagram
+                throw InstagramError.apiError("You already sent this note. Instagram may flag duplicate notes as spam.\n\nPlease write something different.")
+            }
         }
 
         let noteSafety = InstagramSafetyGate.shared.decision(for: .note)
@@ -5838,13 +5855,32 @@ class InstagramService: ObservableObject {
         }
         
         // Convert to JPEG if needed (Instagram requires JPEG)
-        guard let uiImage = UIImage(data: imageData),
-              let jpegData = uiImage.jpegData(compressionQuality: 0.9) else {
+        guard let uiImage = UIImage(data: imageData) else {
+            print("❌ [PROFILE PIC] Failed to decode image")
+            throw InstagramError.apiError("Failed to process image")
+        }
+
+        // Instagram profile pictures must be square (1:1).
+        // Center-crop any aspect ratio and resize to ≤1080 px using UIGraphicsImageRenderer
+        // which handles all EXIF orientations transparently.
+        let srcW = uiImage.size.width
+        let srcH = uiImage.size.height
+        let side = min(srcW, srcH)
+        let targetSide = min(side, 1080)
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: targetSide, height: targetSide))
+        let squareImage = renderer.image { _ in
+            let scale = targetSide / side
+            let drawX = -((srcW - side) / 2) * scale
+            let drawY = -((srcH - side) / 2) * scale
+            uiImage.draw(in: CGRect(x: drawX, y: drawY, width: srcW * scale, height: srcH * scale))
+        }
+
+        guard let jpegData = squareImage.jpegData(compressionQuality: 0.9) else {
             print("❌ [PROFILE PIC] Failed to convert image to JPEG")
             throw InstagramError.apiError("Failed to process image")
         }
-        
-        print("   Image size: \(jpegData.count / 1024) KB")
+
+        print("   Image size: \(jpegData.count / 1024) KB (cropped to \(Int(targetSide))×\(Int(targetSide))px square)")
         print("   Image hash: \(String(imageHash.prefix(16)))...")
         
         // ANTI-BOT: Human delay before upload (2-4 seconds)
@@ -6526,7 +6562,7 @@ class InstagramService: ObservableObject {
     /// - Aborts immediately if session expires or lockdown activates mid-scan.
     ///
     /// - Parameter forceRefresh: When true, bypass the cache and do a fresh network scan.
-    func getAllArchivedPhotos(forceRefresh: Bool = false) async throws -> [(mediaId: String, imageURL: String, timestamp: Date?)] {
+    func getAllArchivedPhotos(forceRefresh: Bool = false) async throws -> [(mediaId: String, imageURL: String, timestamp: Date?, isVideo: Bool, videoURL: String?, videoAspectRatio: CGFloat?)] {
         // ANTI-BOT: Do not start a full archive scan while a Sync & Archive or
         // upload operation is active. Running /feed/only_me_feed/ in parallel
         // with POST /media/.../only_me/ requests from the same session doubles
@@ -6554,7 +6590,7 @@ class InstagramService: ObservableObject {
             return cached
         }
 
-        var allPhotos: [(mediaId: String, imageURL: String, timestamp: Date?)] = []
+        var allPhotos: [(mediaId: String, imageURL: String, timestamp: Date?, isVideo: Bool, videoURL: String?, videoAspectRatio: CGFloat?)] = []
         var nextMaxId: String? = nil
         let maxPages = 50  // ≈1000 photos max — increased to reach older archives
         var scanWasAborted = false  // Track if scan ended early (rate limit / session)
@@ -6659,7 +6695,25 @@ class InstagramService: ObservableObject {
                     takenAt = nil
                 }
 
-                allPhotos.append((mediaId: mediaId, imageURL: imageURL, timestamp: takenAt))
+                // Parse video info (media_type 2 = video)
+                let itemMediaType = mediaItem["media_type"] as? Int ?? 1
+                let isVideo = itemMediaType == 2
+                var itemVideoURL: String? = nil
+                var itemVideoAspectRatio: CGFloat? = nil
+                if isVideo {
+                    if let vv = mediaItem["video_versions"] as? [[String: Any]],
+                       let url = vv.first?["url"] as? String {
+                        itemVideoURL = url
+                    }
+                    if let w = mediaItem["original_width"] as? Int,
+                       let h = mediaItem["original_height"] as? Int, h > 0 {
+                        itemVideoAspectRatio = CGFloat(w) / CGFloat(h)
+                    }
+                }
+
+                allPhotos.append((mediaId: mediaId, imageURL: imageURL, timestamp: takenAt,
+                                  isVideo: isVideo, videoURL: itemVideoURL,
+                                  videoAspectRatio: itemVideoAspectRatio))
             }
 
             print("📦 [ARCHIVE] Page \(page + 1): \(items.count) items (total: \(allPhotos.count))")
@@ -7211,6 +7265,29 @@ final class InstagramSafetyGate {
         defaults.set(now + holdSeconds, forKey: key("post_reveal_protected_until"))
         defaults.set(Array(Set(mediaIds)), forKey: key("post_reveal_media_ids"))
         LogManager.shared.info("SAFETY: post-reveal protection active for \(mediaIds.count) media item(s)", category: .api)
+        scheduleArchiveReadyNotification(after: holdSeconds)
+    }
+
+    // Schedules a local notification reminding the user they can re-archive photos.
+    // Cancelled automatically if called again (new reveal resets the timer).
+    private func scheduleArchiveReadyNotification(after delay: TimeInterval) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["archiveReady"])
+
+        let content = UNMutableNotificationContent()
+        content.title = NSLocalizedString("notif.archive_ready.title", value: "Ready to archive", comment: "")
+        content.body  = NSLocalizedString("notif.archive_ready.body",  value: "You can now safely archive your photos again.", comment: "")
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, delay), repeats: false)
+        let request  = UNNotificationRequest(identifier: "archiveReady", content: content, trigger: trigger)
+        center.add(request) { error in
+            if let error {
+                print("⚠️ [NOTIF] Failed to schedule archive-ready notification: \(error.localizedDescription)")
+            } else {
+                print("🔔 [NOTIF] Archive-ready notification scheduled in \(Int(delay))s")
+            }
+        }
     }
 
     func canArchive(mediaId: String) -> Decision {

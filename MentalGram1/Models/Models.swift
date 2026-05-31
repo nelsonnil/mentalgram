@@ -173,7 +173,10 @@ struct InstagramMediaItem: Identifiable, Codable {
     var carouselImageURLs: [String] = []
     /// Username of the post/reel owner, populated from the API when available.
     var ownerUsername: String? = nil
-    
+    /// Width ÷ Height of the video (e.g. 1.78 for 16:9, 0.5625 for 9:16 portrait).
+    /// Nil for photos/carousels; also nil when the API didn't return dimensions.
+    var videoAspectRatio: CGFloat? = nil
+
     enum MediaType: String, Codable {
         case photo = "photo"
         case video = "video"
@@ -536,6 +539,13 @@ struct SetPhoto: Identifiable, Codable {
     var lastCommentId: String?
     var uploadStatus: PhotoUploadStatus
     var errorMessage: String?
+    /// True when this slot was mapped from an Instagram video (not a photo).
+    var isVideo: Bool = false
+    /// Direct CDN URL of the video file. Only set for video slots.
+    var videoURL: String? = nil
+    /// Width ÷ Height of the video (e.g. 1.78 for 16:9 landscape, 0.5625 for 9:16 portrait).
+    /// Nil when unknown; the player falls back to Instagram's standard 4:5 portrait ratio.
+    var videoAspectRatio: CGFloat? = nil
     
     // OLD property for backward compatibility during migration - NOT saved to UserDefaults anymore
     private var _legacyImageData: Data?
@@ -555,7 +565,11 @@ struct SetPhoto: Identifiable, Codable {
         }
     }
     
-    init(id: UUID, setId: UUID, bankId: UUID? = nil, symbol: String, filename: String, imageData: Data? = nil, mediaId: String? = nil, isArchived: Bool = false, uploadDate: Date? = nil, lastCommentId: String? = nil, uploadStatus: PhotoUploadStatus = .pending, errorMessage: String? = nil) {
+    init(id: UUID, setId: UUID, bankId: UUID? = nil, symbol: String, filename: String,
+         imageData: Data? = nil, mediaId: String? = nil, isArchived: Bool = false,
+         uploadDate: Date? = nil, lastCommentId: String? = nil,
+         uploadStatus: PhotoUploadStatus = .pending, errorMessage: String? = nil,
+         isVideo: Bool = false, videoURL: String? = nil, videoAspectRatio: CGFloat? = nil) {
         self.id = id
         self.setId = setId
         self.bankId = bankId
@@ -568,7 +582,10 @@ struct SetPhoto: Identifiable, Codable {
         self.uploadStatus = uploadStatus
         self.errorMessage = errorMessage
         self._legacyImageData = nil
-        
+        self.isVideo = isVideo
+        self.videoURL = videoURL
+        self.videoAspectRatio = videoAspectRatio
+
         // Save imageData to filesystem if provided
         if let data = imageData {
             let path = "photos/\(setId.uuidString)/\(id.uuidString).jpg"

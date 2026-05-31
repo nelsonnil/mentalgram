@@ -1496,3 +1496,24 @@
 "dfh.mockup.following_tab" = "팔로잉";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "삭제";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "슬롯으로 동영상 사용하기";
+"postpred.help.video.intro" = "Playing Cards 및 Custom 세트는 슬롯 콘텐츠로 동영상을 지원합니다. 선택한 카드나 예언을 짧은 클립으로 공개하기에 완벽합니다.";
+"postpred.help.video.step1.title" = "실제 Instagram으로 업로드";
+"postpred.help.video.step1.body" = "Instagram을 열고 동영상을 녹화하거나 업로드합니다. 공연 전까지 프로필에 보이지 않도록 아카이브합니다.";
+"postpred.help.video.step2.title" = "슬롯에 동영상 매핑";
+"postpred.help.video.step2.body" = "세트에서 슬롯을 탭한 다음 아카이브에서를 선택하고 동영상을 고릅니다. 앱이 썸네일을 저장하고 자동으로 연결합니다.";
+"postpred.help.video.step3.title" = "Performance에서 공개";
+"postpred.help.video.step3.body" = "Performance에서 해당 슬롯을 아카이브 해제하면 동영상이 잘리지 않고 원본 크기로 재생됩니다.";
+"postpred.help.video.tip" = "가로 동영상은 프로필 그리드에서 검은 막대로 표시됩니다. 실제 Instagram과 동일합니다. 게시물 뷰어에서는 전체 너비로 재생됩니다.";
+
+"notif.archive_ready.title" = "보관 가능";
+"notif.archive_ready.body" = "이제 사진을 다시 안전하게 보관할 수 있습니다.";
+"ig.message" = "메시지";
+"ig.tagged_empty_title" = "나의 사진과 동영상";
+"ig.tagged_empty_subtitle" = "사람들이 사진과 동영상에서 나를 태그하면 여기에 표시됩니다.";
+"ig.posts_count" = "게시물 %d개";
+"lockscreen.enter_passcode" = "암호 입력";
+"lockscreen.emergency" = "긴급전화";

@@ -1444,12 +1444,12 @@
 "limits.help.table.col.action" = "Recurso";
 "limits.help.table.col.first" = "1ª vez";
 "limits.help.table.col.again" = "Repetir";
-"limits.help.table.row.performance" = "Abrir Performance";
+"limits.help.table.row.performance" = "Abrir Performance (perfil + cache em segundo plano)";
 "limits.help.table.row.followers" = "Lista de seguidores";
 "limits.help.table.row.profile.new" = "Novo perfil de seguidor";
 "limits.help.table.row.sa" = "Sync & Archive (por foto)";
 "limits.help.table.row.upload" = "Upload (por foto)";
-"limits.help.table.row.autoupload" = "Ciclo completo de upload automático (por foto)";
+"limits.help.table.row.autoupload" = "Auto-upload por foto (envia + arquiva)";
 "limits.help.table.row.reveal" = "Revelar (por letra/foto)";
 "limits.help.table.row.notebio" = "Alterar nota ou bio";
 "limits.help.table.row.explore" = "Explorar / Pesquisar";
@@ -1673,3 +1673,24 @@
 "dfh.mockup.following_tab" = "Seguindo";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Remover";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Usar videos como slots";
+"postpred.help.video.intro" = "Sets de Playing Cards e Custom suportam videos como conteudo de slot, ideal para revelar a carta escolhida ou uma previsao como um clipe curto.";
+"postpred.help.video.step1.title" = "Faca upload pelo Instagram real";
+"postpred.help.video.step1.body" = "Abra o Instagram, grave ou faca upload do video normalmente. Arquive-o para que fique oculto ate a apresentacao.";
+"postpred.help.video.step2.title" = "Mapeie o video para um slot";
+"postpred.help.video.step2.body" = "No seu set, toque em um slot, depois escolha Do Arquivo e selecione o video. O app salva a miniatura e vincula o video automaticamente.";
+"postpred.help.video.step3.title" = "Revele em Performance";
+"postpred.help.video.step3.body" = "Ao desarquivar esse slot em Performance, o video e reproduzido no tamanho nativo completo sem cortes.";
+"postpred.help.video.tip" = "Videos horizontais aparecem com barras pretas na grade do perfil, exatamente como o Instagram real. No visualizador de posts sao reproduzidos em largura total.";
+
+"notif.archive_ready.title" = "Pronto para arquivar";
+"notif.archive_ready.body" = "Você já pode arquivar suas fotos novamente com segurança.";
+"ig.message" = "Mensagem";
+"ig.tagged_empty_title" = "Fotos e vídeos de você";
+"ig.tagged_empty_subtitle" = "Quando as pessoas marcarem você em fotos e vídeos, elas aparecerão aqui.";
+"ig.posts_count" = "%d publicações";
+"lockscreen.enter_passcode" = "Digite o código";
+"lockscreen.emergency" = "Emergência";

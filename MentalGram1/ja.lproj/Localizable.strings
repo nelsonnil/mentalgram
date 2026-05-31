@@ -1492,3 +1492,24 @@
 "dfh.mockup.following_tab" = "フォロー中";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "削除";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "動画をスロットとして使う";
+"postpred.help.video.intro" = "Playing CardsとCustomセットはスロットのコンテンツとして動画をサポートしています。選んだカードや予言を短い動画クリップで明かすのに最適です。";
+"postpred.help.video.step1.title" = "本物のInstagramでアップロード";
+"postpred.help.video.step1.body" = "Instagramを開き、動画を録画または通常通りアップロードします。パフォーマンスまでプロフィールに表示されないようにアーカイブします。";
+"postpred.help.video.step2.title" = "動画をスロットにマッピング";
+"postpred.help.video.step2.body" = "セットのスロットをタップし、アーカイブからを選んで動画を選択します。アプリがサムネイルを保存し自動的にリンクします。";
+"postpred.help.video.step3.title" = "パフォーマンスで公開";
+"postpred.help.video.step3.body" = "パフォーマンスでそのスロットをアーカイブ解除すると、動画がクロップなしのネイティブサイズで再生されます。";
+"postpred.help.video.tip" = "横向き動画はプロフィールグリッドで黒帯付きで表示されます。本物のInstagramと同じです。投稿ビューアーでは全幅で再生されます。";
+
+"notif.archive_ready.title" = "アーカイブ可能";
+"notif.archive_ready.body" = "写真を再びアーカイブできます。";
+"ig.message" = "メッセージ";
+"ig.tagged_empty_title" = "あなたの写真と動画";
+"ig.tagged_empty_subtitle" = "あなたがタグ付けされた写真や動画がここに表示されます。";
+"ig.posts_count" = "%d件の投稿";
+"lockscreen.enter_passcode" = "パスコードを入力";
+"lockscreen.emergency" = "緊急";

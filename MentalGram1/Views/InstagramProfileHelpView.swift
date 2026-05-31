@@ -415,7 +415,7 @@ struct NoteHelpView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 IPHBullet(icon: "link", iconColor: accent,
-                          text: "Trigger the note from any automation app using vault://note?text=<your text>. Works even if Performance is already open — no need to reopen the app.")
+                          text: "Trigger the note from any automation app using vault://note?text1=<your text>. Use multiple placeholders for more complex predictions: vault://note?text1=silla&text2=rojo")
             }
 
             iphDivider
@@ -453,6 +453,10 @@ struct NoteHelpView: View {
                       text: "A cooldown prevents double-sending. If the button is disabled, wait a few seconds and try again.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
                       text: "Use the URL Scheme method with Apple Shortcuts so the note posts the moment you open the app — zero visible interaction.")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Use the Text Template field to wrap the word in a sentence. Type {text1} where the detected word should appear — e.g. \"My prediction is: {text1}\".")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Need two values in one note? Use {text1} and {text2} in your template, each sourced from a different API.")
         }
     }
 }
@@ -542,6 +546,7 @@ struct BiographyHelpView: View {
                 IPHMethodPill(label: "API", color: Color(hex: "0A84FF"))
                 IPHMethodPill(label: "URL Scheme", color: accent)
                 IPHMethodPill(label: "OCR", color: Color(hex: "A78BFA"))
+                IPHMethodPill(label: "Presets", color: Color(hex: "30D158"))
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -550,6 +555,8 @@ struct BiographyHelpView: View {
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 IPHBullet(icon: "network", iconColor: Color(hex: "0A84FF"),
                           text: "Open Performance first, then ask the spectator to make their selection in Inject or your custom API. The app polls every 2 s and updates the bio automatically when a new value arrives — triple vibration confirms success.")
+                IPHBullet(icon: "network", iconColor: Color(hex: "0A84FF"),
+                          text: "Use the Text Template field with {text1}, {text2}, {text3} to combine values from different APIs into one bio — e.g. \"I knew you'd pick {text1} and the color {text2}\".")
             }
 
             iphDivider
@@ -559,9 +566,9 @@ struct BiographyHelpView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
                 IPHBullet(icon: "link", iconColor: accent,
-                          text: "Trigger the biography update using vault://bio?text=<your text>. Works even if Performance is already open — no need to reopen the app.")
+                          text: "Trigger the biography update using vault://bio?text1=<your text>. Use multiple values for complex predictions: vault://bio?text1=silla&text2=rojo")
                 IPHBullet(icon: "link", iconColor: accent,
-                          text: "You can also use URL schemes from other apps (Tasker, NFC tags, Focus Mode automations) to update the bio at the right moment.")
+                          text: "Works from any app — Tasker, NFC tags, Apple Shortcuts, Focus Mode automations — even while Performance is already open.")
             }
 
             iphDivider
@@ -574,6 +581,18 @@ struct BiographyHelpView: View {
                           text: "Covertly scan text the spectator has written — the word or phrase is captured without any manual typing and is used to update your biography instantly.")
                 IPHOCRBox()
             }
+
+            iphDivider
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Bio Presets")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "tray.full.fill", iconColor: Color(hex: "30D158"),
+                          text: "Save multiple biography texts as named presets. Tap any preset to load it into the bio field instantly — great for recurring shows where you reuse the same reveals.")
+                IPHBullet(icon: "tray.full.fill", iconColor: Color(hex: "30D158"),
+                          text: "To save a preset: type your bio text, then tap \"Bio Presets\" → \"Save current bio as preset\". Give it a name (optional) and tap Save.")
+            }
         }
     }
 
@@ -582,7 +601,7 @@ struct BiographyHelpView: View {
             IPHBullet(icon: "1.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Have the spectator write or choose a word / phrase beforehand (up to 150 characters).")
             IPHBullet(icon: "2.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Capture it via OCR, load it via API, or type it manually before the performance.")
+                      text: "Capture it via OCR, load it via API, or type it manually — or load a saved preset in one tap.")
             IPHBullet(icon: "3.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Open Performance (or trigger the URL Scheme) — the biography updates in the fake profile instantly.")
             IPHBullet(icon: "4.circle.fill", iconColor: VaultTheme.Colors.warning,
@@ -594,11 +613,15 @@ struct BiographyHelpView: View {
     private var tips: some View {
         VStack(alignment: .leading, spacing: 8) {
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
-                      text: "Pre-write a \"normal\" bio and update it back after the show to avoid leaving the prediction bio permanently.")
+                      text: "Save your \"normal\" bio as a preset so you can restore it in one tap after the show.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
                       text: "The biography works for any text — not just single words. You can reveal a sentence, a date, or a full phrase.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Press Return inside the bio field to add line breaks — the formatting is preserved when sent to Instagram.")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
                       text: "Combine with the Profile Picture method: update both the photo and the bio to make an even stronger double reveal.")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Use {text1}, {text2}, {text3} placeholders in your template and assign each to a different API source for multi-value predictions.")
         }
     }
 }

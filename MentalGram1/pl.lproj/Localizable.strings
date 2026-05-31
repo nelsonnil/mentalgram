@@ -1261,12 +1261,12 @@
 "limits.help.table.col.action" = "Funkcja";
 "limits.help.table.col.first" = "1. raz";
 "limits.help.table.col.again" = "Ponownie";
-"limits.help.table.row.performance" = "Otwórz Performance";
+"limits.help.table.row.performance" = "Otwórz Performance (profil + cache w tle)";
 "limits.help.table.row.followers" = "Lista obserwujących";
 "limits.help.table.row.profile.new" = "Nowy profil obserwującego";
 "limits.help.table.row.sa" = "Sync & Archive (na zdjęcie)";
 "limits.help.table.row.upload" = "Przesyłanie (na zdjęcie)";
-"limits.help.table.row.autoupload" = "Pełny cykl automatycznego przesyłania (na zdjęcie)";
+"limits.help.table.row.autoupload" = "Auto-przesyłanie na zdjęcie (upload + archiwum)";
 "limits.help.table.row.reveal" = "Ujawnianie (na literę/zdjęcie)";
 "limits.help.table.row.notebio" = "Zmiana notatki lub bio";
 "limits.help.table.row.explore" = "Eksploruj / Szukaj";
@@ -1490,3 +1490,24 @@
 "dfh.mockup.following_tab" = "Obserwowani";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Usuń";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Uzywanie filmow jako slotow";
+"postpred.help.video.intro" = "Sety Playing Cards i Custom obsluguja filmy jako zawartosc slotow, idealne do ujawnienia wybranej karty lub przepowiedni jako krotki klip.";
+"postpred.help.video.step1.title" = "Przeslij przez prawdziwy Instagram";
+"postpred.help.video.step1.body" = "Otworz Instagram, nagraj lub przeslij film normalnie. Zarchiwizuj go, aby pozostal ukryty az do pokazu.";
+"postpred.help.video.step2.title" = "Przypisz film do slotu";
+"postpred.help.video.step2.body" = "W swoim secie dotknij slotu, wybierz Z Archiwum i wybierz film. Aplikacja zapisuje miniature i automatycznie laczy film.";
+"postpred.help.video.step3.title" = "Ujawnij w Performance";
+"postpred.help.video.step3.body" = "Przy dearchiwizacji tego slotu w Performance film odtwarza sie w pelnym natywnym rozmiarze bez przycinania.";
+"postpred.help.video.tip" = "Poziome filmy wyswietlaja sie z czarnymi paskami w siatce profilu, dokladnie jak prawdziwy Instagram. W przegladarce postow odtwarzane sa na pelna szerokosc.";
+
+"notif.archive_ready.title" = "Gotowe do archiwizacji";
+"notif.archive_ready.body" = "Możesz teraz bezpiecznie ponownie zarchiwizować swoje zdjęcia.";
+"ig.message" = "Wiadomość";
+"ig.tagged_empty_title" = "Zdjęcia i filmy z tobą";
+"ig.tagged_empty_subtitle" = "Kiedy ludzie oznaczają cię na zdjęciach i filmach, pojawią się tutaj.";
+"ig.posts_count" = "%d postów";
+"lockscreen.enter_passcode" = "Wprowadź kod";
+"lockscreen.emergency" = "Nagły wypadek";

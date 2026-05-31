@@ -1194,3 +1194,24 @@
 "dfh.mockup.following_tab" = "关注";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "移除";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "将视频用作槽位";
+"postpred.help.video.intro" = "Playing Cards 和 Custom 套装支持将视频作为槽位内容，非常适合以短视频片段揭示所选的牌或预言。";
+"postpred.help.video.step1.title" = "通过真实 Instagram 上传";
+"postpred.help.video.step1.body" = "打开 Instagram，正常录制或上传视频。将其归档，使其在表演前不会出现在个人主页。";
+"postpred.help.video.step2.title" = "将视频映射到槽位";
+"postpred.help.video.step2.body" = "在套装中点击槽位，选择从已归档，然后选择视频。应用会保存缩略图并自动关联视频。";
+"postpred.help.video.step3.title" = "在演出中揭示";
+"postpred.help.video.step3.body" = "在演出中取消归档该槽位时，视频将以原始尺寸播放，无任何裁剪。";
+"postpred.help.video.tip" = "横向视频在个人主页网格中以黑边信箱格式显示，与真实 Instagram 完全相同。在帖子查看器中以全宽播放。";
+
+"notif.archive_ready.title" = "可以归档了";
+"notif.archive_ready.body" = "您现在可以安全地重新归档照片了。";
+"ig.message" = "消息";
+"ig.tagged_empty_title" = "含你的照片和视频";
+"ig.tagged_empty_subtitle" = "当有人在照片和视频中标记你时，它们将显示在这里。";
+"ig.posts_count" = "%d 帖子";
+"lockscreen.enter_passcode" = "输入密码";
+"lockscreen.emergency" = "紧急呼叫";

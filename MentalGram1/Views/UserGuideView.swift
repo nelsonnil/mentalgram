@@ -6,6 +6,7 @@ struct UserGuideView: View {
 
     // Active sheet
     @State private var activeSheet: GuideSheet? = nil
+    @State private var communityPasswordCopied = false
 
     private enum GuideSheet: Identifiable {
         case introduction
@@ -46,10 +47,11 @@ struct UserGuideView: View {
     }
 
     // Colors matching HomeView
-    private let colorProfile = Color(hex: "FF9F0A")
-    private let colorTricks  = Color(hex: "BF5AF2")
-    private let colorStart   = Color(hex: "0A84FF")
-    private let colorData    = Color(hex: "30D158")
+    private let colorProfile   = Color(hex: "FF9F0A")
+    private let colorTricks    = Color(hex: "BF5AF2")
+    private let colorStart     = Color(hex: "0A84FF")
+    private let colorData      = Color(hex: "30D158")
+    private let colorCommunity = Color(hex: "1877F2")
 
     var body: some View {
         ZStack {
@@ -207,6 +209,85 @@ struct UserGuideView: View {
                             subtitle: "guide.lockscreen.subtitle",
                             isFirst: false, isLast: true
                         ) { activeSheet = .lockscreenInput }
+                    }
+
+                    // COMMUNITY
+                    guideSectionLabel("COMMUNITY", icon: "person.3.fill", color: colorCommunity)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(hex: "1C1C1E"))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(colorCommunity.opacity(0.35), lineWidth: 1)
+                            )
+                        VStack(spacing: 14) {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(colorCommunity)
+                                        .frame(width: 38, height: 38)
+                                    Image(systemName: "person.3.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Facebook Group")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    Text("Updates, routines, ideas & community")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Color(hex: "EBEBF599"))
+                                }
+                                Spacer()
+                            }
+                            Text("Join the private group to discover new updates, share your routines, get ideas and connect with other performers using the app.")
+                                .font(.system(size: 13))
+                                .foregroundColor(Color(hex: "EBEBF599"))
+                                .fixedSize(horizontal: false, vertical: true)
+                            // Password row — tap to copy
+                            Button {
+                                UIPasteboard.general.string = "vault67"
+                                withAnimation(.easeInOut(duration: 0.2)) { communityPasswordCopied = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    withAnimation { communityPasswordCopied = false }
+                                }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(colorCommunity)
+                                    Text("Password: ") + Text("vault67").bold()
+                                    Spacer()
+                                    Image(systemName: communityPasswordCopied ? "checkmark.circle.fill" : "doc.on.doc")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(communityPasswordCopied ? .green : Color(hex: "EBEBF599"))
+                                    Text(communityPasswordCopied ? "Copied!" : "Copy")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(communityPasswordCopied ? .green : Color(hex: "EBEBF599"))
+                                }
+                                .font(.system(size: 13))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color(hex: "2C2C2E"))
+                                .cornerRadius(10)
+                            }
+                            .buttonStyle(.plain)
+                            Link(destination: URL(string: "https://www.facebook.com/share/g/1bj4vp4GoX/?mibextid=wwXIfr")!) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "arrow.up.right.circle.fill")
+                                        .font(.system(size: 15))
+                                    Text("Join the Facebook Group")
+                                        .font(.system(size: 15, weight: .semibold))
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(colorCommunity)
+                                .cornerRadius(12)
+                            }
+                        }
+                        .padding(16)
                     }
 
                     Color.clear.frame(height: 30)

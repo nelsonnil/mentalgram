@@ -1445,12 +1445,12 @@
 "limits.help.table.col.action" = "Fonctionnalité";
 "limits.help.table.col.first" = "1ère fois";
 "limits.help.table.col.again" = "Répéter";
-"limits.help.table.row.performance" = "Ouvrir Performance";
+"limits.help.table.row.performance" = "Ouvrir Performance (profil + cache arrière-plan)";
 "limits.help.table.row.followers" = "Liste d'abonnés";
 "limits.help.table.row.profile.new" = "Nouveau profil d'abonné";
 "limits.help.table.row.sa" = "Sync & Archive (par photo)";
 "limits.help.table.row.upload" = "Envoi (par photo)";
-"limits.help.table.row.autoupload" = "Cycle complet d'auto-upload (par photo)";
+"limits.help.table.row.autoupload" = "Auto-upload par photo (upload + archive)";
 "limits.help.table.row.reveal" = "Révéler (par lettre/photo)";
 "limits.help.table.row.notebio" = "Changer note ou bio";
 "limits.help.table.row.explore" = "Explorer / Rechercher";
@@ -1675,3 +1675,24 @@
 "dfh.mockup.following_tab" = "Abonnements";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Supprimer";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Utiliser des videos comme emplacements";
+"postpred.help.video.intro" = "Les sets Playing Cards et Custom supportent les videos comme contenu de slot, ideal pour reveler la carte choisie ou une prediction sous forme de clip.";
+"postpred.help.video.step1.title" = "Uploader via Instagram reel";
+"postpred.help.video.step1.body" = "Ouvrez Instagram, enregistrez ou uploadez la video normalement. Archivez-la pour qu'elle reste cachee jusqu'au spectacle.";
+"postpred.help.video.step2.title" = "Mapper la video sur un emplacement";
+"postpred.help.video.step2.body" = "Dans votre set, touchez un slot, puis choisissez Depuis les Archives et selectionnez la video. L'app enregistre la miniature et lie la video automatiquement.";
+"postpred.help.video.step3.title" = "Reveler dans Performance";
+"postpred.help.video.step3.body" = "Lors du desarchivage de ce slot en Performance, la video se lit en plein format natif, sans recadrage.";
+"postpred.help.video.tip" = "Les videos horizontales s'affichent avec des bandes noires dans la grille du profil, exactement comme Instagram. Dans le lecteur de post elles jouent en pleine largeur.";
+
+"notif.archive_ready.title" = "Prêt à archiver";
+"notif.archive_ready.body" = "Vous pouvez maintenant archiver vos photos en toute sécurité.";
+"ig.message" = "Message";
+"ig.tagged_empty_title" = "Photos et vidéos de vous";
+"ig.tagged_empty_subtitle" = "Quand des personnes vous taguent dans des photos et vidéos, elles apparaissent ici.";
+"ig.posts_count" = "%d publications";
+"lockscreen.enter_passcode" = "Entrer le code";
+"lockscreen.emergency" = "Urgence";

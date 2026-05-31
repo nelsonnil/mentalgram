@@ -73,7 +73,7 @@ struct LockscreenInputView: View {
 
     private var passcodeSection: some View {
         VStack(spacing: 18) {
-            Text("Enter Passcode")
+            Text("lockscreen.enter_passcode")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(.white)
                 .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
@@ -168,7 +168,7 @@ struct LockscreenInputView: View {
 
     private var bottomRow: some View {
         HStack {
-            Text("Emergency")
+            Text("lockscreen.emergency")
                 .font(.system(size: 16, weight: .regular))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,7 +179,7 @@ struct LockscreenInputView: View {
             Button {
                 onDismiss([])
             } label: {
-                Text("Cancel")
+                Text("action.cancel")
                     .font(.system(size: 16, weight: .regular))
                     .foregroundColor(.white)
             }

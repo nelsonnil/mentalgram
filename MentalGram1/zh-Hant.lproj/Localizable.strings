@@ -1151,3 +1151,24 @@
 "dfh.mockup.following_tab" = "追蹤中";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "移除";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "將影片用作插槽";
+"postpred.help.video.intro" = "Playing Cards 和 Custom 套組支援將影片作為插槽內容，非常適合用短片段揭示所選牌或預言。";
+"postpred.help.video.step1.title" = "透過真實 Instagram 上傳";
+"postpred.help.video.step1.body" = "開啟 Instagram，正常錄製或上傳影片。將其封存，使其在表演前不會顯示於個人頁面。";
+"postpred.help.video.step2.title" = "將影片對應至插槽";
+"postpred.help.video.step2.body" = "在套組中點選插槽，選擇從已封存，然後選取影片。應用程式會儲存縮圖並自動連結影片。";
+"postpred.help.video.step3.title" = "在演出中揭示";
+"postpred.help.video.step3.body" = "在演出中取消封存該插槽時，影片將以原始尺寸播放，不會裁切。";
+"postpred.help.video.tip" = "橫向影片在個人頁面網格中以黑邊信箱格式顯示，與真實 Instagram 完全相同。在貼文檢視器中以全寬播放。";
+
+"notif.archive_ready.title" = "可以封存了";
+"notif.archive_ready.body" = "您現在可以安全地重新封存照片了。";
+"ig.message" = "訊息";
+"ig.tagged_empty_title" = "含你的照片和影片";
+"ig.tagged_empty_subtitle" = "當有人在照片和影片中標記你時，它們將顯示在這裡。";
+"ig.posts_count" = "%d 貼文";
+"lockscreen.enter_passcode" = "輸入密碼";
+"lockscreen.emergency" = "緊急電話";

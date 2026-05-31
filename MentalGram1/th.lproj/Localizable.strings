@@ -1141,3 +1141,24 @@
 "dfh.mockup.following_tab" = "กำลังติดตาม";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "ลบ";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "ใช้วิดีโอเป็นสล็อต";
+"postpred.help.video.intro" = "เซต Playing Cards และ Custom รองรับวิดีโอเป็นเนื้อหาสล็อต เหมาะสำหรับการเปิดเผยไพ่ที่เลือกหรือคำทำนายในรูปแบบคลิปสั้น";
+"postpred.help.video.step1.title" = "อัปโหลดผ่าน Instagram จริง";
+"postpred.help.video.step1.body" = "เปิด Instagram บันทึกหรืออัปโหลดวิดีโอตามปกติ จากนั้นเก็บถาวรเพื่อให้ซ่อนอยู่จนกว่าจะถึงเวลาแสดง";
+"postpred.help.video.step2.title" = "แมปวิดีโอกับสล็อต";
+"postpred.help.video.step2.body" = "ในเซตของคุณ แตะสล็อต เลือกจากที่เก็บถาวร แล้วเลือกวิดีโอ แอปจะบันทึกภาพขนาดย่อและลิงก์วิดีโอโดยอัตโนมัติ";
+"postpred.help.video.step3.title" = "เปิดเผยใน Performance";
+"postpred.help.video.step3.body" = "เมื่อยกเลิกการเก็บถาวรสล็อตนั้นใน Performance วิดีโอจะเล่นในขนาดดั้งเดิมโดยไม่มีการตัดทอน";
+"postpred.help.video.tip" = "วิดีโอแนวนอนจะแสดงพร้อมแถบดำในกริดโปรไฟล์ เช่นเดียวกับ Instagram จริง ในโปรแกรมดูโพสต์จะเล่นเต็มความกว้าง";
+
+"notif.archive_ready.title" = "พร้อมเก็บถาวร";
+"notif.archive_ready.body" = "ตอนนี้คุณสามารถเก็บถาวรรูปภาพของคุณได้อีกครั้งอย่างปลอดภัย";
+"ig.message" = "ข้อความ";
+"ig.tagged_empty_title" = "รูปภาพและวิดีโอของคุณ";
+"ig.tagged_empty_subtitle" = "เมื่อผู้คนแท็กคุณในรูปภาพและวิดีโอ จะปรากฏที่นี่";
+"ig.posts_count" = "%d โพสต์";
+"lockscreen.enter_passcode" = "ใส่รหัสผ่าน";
+"lockscreen.emergency" = "ฉุกเฉิน";

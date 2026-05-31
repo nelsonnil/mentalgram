@@ -307,7 +307,11 @@ class DataManager: ObservableObject {
         }
     }
     
-    func updatePhoto(photoId: UUID, mediaId: String? = nil, isArchived: Bool? = nil, commentId: String? = nil, clearComment: Bool = false, uploadStatus: PhotoUploadStatus? = nil, errorMessage: String? = nil, uploadDate: Date? = nil) {
+    func updatePhoto(photoId: UUID, mediaId: String? = nil, isArchived: Bool? = nil,
+                     commentId: String? = nil, clearComment: Bool = false,
+                     uploadStatus: PhotoUploadStatus? = nil, errorMessage: String? = nil,
+                     uploadDate: Date? = nil,
+                     isVideo: Bool? = nil, videoURL: String? = nil, videoAspectRatio: CGFloat? = nil) {
         for setIndex in sets.indices {
             if let photoIndex = sets[setIndex].photos.firstIndex(where: { $0.id == photoId }) {
                 if let mediaId = mediaId {
@@ -338,6 +342,15 @@ class DataManager: ObservableObject {
                 }
                 if let errorMessage = errorMessage {
                     sets[setIndex].photos[photoIndex].errorMessage = errorMessage
+                }
+                if let isVideo = isVideo {
+                    sets[setIndex].photos[photoIndex].isVideo = isVideo
+                }
+                if let videoURL = videoURL {
+                    sets[setIndex].photos[photoIndex].videoURL = videoURL
+                }
+                if let videoAspectRatio = videoAspectRatio {
+                    sets[setIndex].photos[photoIndex].videoAspectRatio = videoAspectRatio
                 }
                 saveSets()
                 return

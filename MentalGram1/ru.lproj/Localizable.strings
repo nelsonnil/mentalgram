@@ -911,12 +911,12 @@
 "limits.help.table.col.action" = "Функция";
 "limits.help.table.col.first" = "1-й раз";
 "limits.help.table.col.again" = "Повторно";
-"limits.help.table.row.performance" = "Открыть Performance";
+"limits.help.table.row.performance" = "Открыть Performance (профиль + фоновый кэш)";
 "limits.help.table.row.followers" = "Список подписчиков";
 "limits.help.table.row.profile.new" = "Новый профиль подписчика";
 "limits.help.table.row.sa" = "Sync & Archive (за фото)";
 "limits.help.table.row.upload" = "Загрузка (за фото)";
-"limits.help.table.row.autoupload" = "Полный цикл авто-загрузки (за фото)";
+"limits.help.table.row.autoupload" = "Авто-загрузка на фото (загрузить + архивировать)";
 "limits.help.table.row.reveal" = "Раскрытие (за букву/фото)";
 "limits.help.table.row.notebio" = "Изменение заметки или bio";
 "limits.help.table.row.explore" = "Поиск / Обзор";
@@ -1150,3 +1150,24 @@
 "dfh.mockup.following_tab" = "Подписки";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Убрать";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Ispolzovanie video kak slotov";
+"postpred.help.video.intro" = "Sety Playing Cards i Custom podderzhivayut video v kachestve soderzhumogo slotov, idealno dlya raskrytiya vybrannoj karty ili predskazaniya v vide korotkogo klipa.";
+"postpred.help.video.step1.title" = "Zagruzit cherez nastoyashchiy Instagram";
+"postpred.help.video.step1.body" = "Otkrojte Instagram, zapishite ili zagruzite video obychnym sposobom. Zaarhivirujte ego, chtoby ono ostalos skrytym do vystupleniya.";
+"postpred.help.video.step2.title" = "Privyazat video k slotu";
+"postpred.help.video.step2.body" = "V nabore nazhmite na slot, vyberte Iz arhiva i vyberte video. Prilozhenie sohranit miniatyuru i avtomaticheski svyazhet video.";
+"postpred.help.video.step3.title" = "Raskryt v Performance";
+"postpred.help.video.step3.body" = "Pri razarhivirovanii slota v Performance video vosproizvoditsya v polnom nativnom razmere bez obrezki.";
+"postpred.help.video.tip" = "Gorizontalnye video otobrazahyutsya s chyornymi polosami v setke profilya, tochno kak v nastoyashchem Instagram. V prosmotrshchike postov vosproizvodyatsya na vsyu shirinu.";
+
+"notif.archive_ready.title" = "Готово к архивированию";
+"notif.archive_ready.body" = "Теперь вы можете безопасно заархивировать фотографии снова.";
+"ig.message" = "Сообщение";
+"ig.tagged_empty_title" = "Фото и видео с тобой";
+"ig.tagged_empty_subtitle" = "Когда люди отмечают тебя на фото и видео, они появятся здесь.";
+"ig.posts_count" = "%d публикаций";
+"lockscreen.enter_passcode" = "Введите пароль";
+"lockscreen.emergency" = "Экстренный вызов";

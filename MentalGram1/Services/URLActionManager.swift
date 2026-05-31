@@ -4,8 +4,10 @@ import Combine
 /// Handles incoming URL scheme actions and stores them for PerformanceView to consume.
 ///
 /// Supported URLs:
-///   vault://note?text=<encoded text>    → send as Instagram Note
-///   vault://bio?text=<encoded text>     → update Instagram Biography
+///   vault://note?text=<encoded text>                     → send as Instagram Note (legacy, maps to text1)
+///   vault://note?text1=<v>&text2=<v>&text3=<v>          → multi-placeholder Note
+///   vault://bio?text=<encoded text>                      → update Instagram Biography (legacy)
+///   vault://bio?text1=<v>&text2=<v>&text3=<v>           → multi-placeholder Biography
 ///   vault://reveal?word=<encoded word>  → Word Reveal: unarchive letter photos for the given word
 ///   vault://reveal?slot=<number>        → Custom Set Reveal: unarchive the photo at slot 1–100
 ///   vault://reveal?card=<symbol>        → Playing Card Reveal: unarchive a card (e.g. J♠, 10♥, K♦)
@@ -27,8 +29,10 @@ class URLActionManager: ObservableObject {
 
     /// The mode of the pending action: "note", "bio", or "" (none).
     @Published private(set) var pendingMode: String = ""
-    /// The text to send when the action is executed.
+    /// Primary text (legacy / text1 value) — kept for backward compat with consumers that only read this.
     @Published private(set) var pendingText: String = ""
+    /// Multi-placeholder values keyed by "text1", "text2", "text3".
+    @Published private(set) var pendingValues: [String: String] = [:]
 
     // MARK: - URL Parsing
 
@@ -110,42 +114,43 @@ class URLActionManager: ObservableObject {
             return false
         }
 
-        // Primary path: URLComponents with automatic percent-decoding.
-        // Fallback: parse from the raw query string directly. Some automation
-        // tools (e.g. iOS Shortcuts "URL" action) do not percent-encode
-        // newlines in variables, which can cause URLComponents to return nil
-        // queryItems while the raw query string still carries the text value.
-        let extractedText: String? = {
-            // 1 – URLComponents (handles %0A → \n automatically)
-            if let v = components?.queryItems?.first(where: { $0.name == "text" })?.value,
+        // Helper: extract a named param from URLComponents or raw query string
+        func extractParam(_ name: String) -> String? {
+            if let v = components?.queryItems?.first(where: { $0.name == name })?.value,
                !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return v.trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            // 2 – Raw query string fallback (handles literal newlines and other
-            //     malformed query strings that URLComponents rejects)
-            guard let rawQuery = url.query ?? url.absoluteString.components(separatedBy: "?").dropFirst().first else {
-                return nil
-            }
+            guard let rawQuery = url.query ?? url.absoluteString.components(separatedBy: "?").dropFirst().first else { return nil }
             for param in rawQuery.components(separatedBy: "&") {
-                guard param.hasPrefix("text=") else { continue }
-                let raw = String(param.dropFirst(5)) // drop "text="
+                guard param.hasPrefix("\(name)=") else { continue }
+                let raw = String(param.dropFirst(name.count + 1))
                 let decoded = raw.removingPercentEncoding ?? raw
                 let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
                 return trimmed.isEmpty ? nil : trimmed
             }
             return nil
-        }()
+        }
 
-        guard let text = extractedText else {
-            print("⚠️ [URL] Missing or empty 'text' parameter in URL: \(url)")
+        // Try multi-placeholder params first (text1, text2, text3), then legacy "text"
+        var values: [String: String] = [:]
+        if let v1 = extractParam("text1") { values["text1"] = v1 }
+        if let v2 = extractParam("text2") { values["text2"] = v2 }
+        if let v3 = extractParam("text3") { values["text3"] = v3 }
+        // Legacy "text" → maps to text1
+        if values.isEmpty, let legacy = extractParam("text") { values["text1"] = legacy }
+
+        guard !values.isEmpty else {
+            print("⚠️ [URL] Missing or empty 'text'/'text1' parameter in URL: \(url)")
             return false
         }
 
-        print("📲 [URL] vault://\(host) received, text=\"\(text.prefix(40))\"")
+        let primaryText = values["text1"] ?? ""
+        print("📲 [URL] vault://\(host) received, values=\(values.map { "\($0.key)=\($0.value.prefix(20))" }.joined(separator: ", "))")
 
         DispatchQueue.main.async {
-            self.pendingMode = host
-            self.pendingText = text
+            self.pendingMode   = host
+            self.pendingText   = primaryText
+            self.pendingValues = values
         }
         return true
     }
@@ -153,25 +158,37 @@ class URLActionManager: ObservableObject {
     // MARK: - Consumption
 
     /// Called by PerformanceView to retrieve and clear the pending action.
+    /// Returns `(mode, text, values)` where `values` contains keyed placeholders ("text1", "text2", "text3").
+    /// `text` is the legacy primary value (= values["text1"] if present).
     /// Note: pendingText may be empty for modes that carry no payload (e.g. profilepic_last).
-    func consume() -> (mode: String, text: String)? {
+    func consume() -> (mode: String, text: String, values: [String: String])? {
         guard !pendingMode.isEmpty else { return nil }
-        let result = (mode: pendingMode, text: pendingText)
-        pendingMode = ""
-        pendingText = ""
+        let result = (mode: pendingMode, text: pendingText, values: pendingValues)
+        pendingMode   = ""
+        pendingText   = ""
+        pendingValues = [:]
         return result
     }
 
     // MARK: - URL Builder
 
-    /// Builds a vault:// URL for the given mode and text, with proper URL encoding.
-    /// The user only needs to provide plain text — spaces, accents, etc. are encoded automatically.
+    /// Builds a vault:// URL for the given mode and text (legacy single-value), with proper URL encoding.
     static func buildURL(mode: String, text: String) -> String {
         var components = URLComponents()
         components.scheme = "vault"
         components.host   = mode
-        components.queryItems = [URLQueryItem(name: "text", value: text)]
-        return components.url?.absoluteString ?? "vault://\(mode)?text=\(text)"
+        components.queryItems = [URLQueryItem(name: "text1", value: text)]
+        return components.url?.absoluteString ?? "vault://\(mode)?text1=\(text)"
+    }
+
+    /// Builds a vault:// URL with multiple placeholder values.
+    static func buildURL(mode: String, values: [String: String]) -> String {
+        var components = URLComponents()
+        components.scheme = "vault"
+        components.host   = mode
+        let orderedKeys = ["text1", "text2", "text3"].filter { values[$0] != nil }
+        components.queryItems = orderedKeys.map { URLQueryItem(name: $0, value: values[$0]!) }
+        return components.url?.absoluteString ?? "vault://\(mode)"
     }
 
     // MARK: - Reveal URL builders

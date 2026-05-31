@@ -366,7 +366,8 @@ struct SetDetailView: View {
     }
 
     @ViewBuilder private var bankManagementSection: some View {
-        if (currentSet.type == .word || currentSet.type == .number) && !uploadManager.isActive {
+        let isThisSetMidUpload = uploadManager.activeSetId == currentSet.id && uploadManager.isUploading
+        if (currentSet.type == .word || currentSet.type == .number) && !isThisSetMidUpload {
             HStack(spacing: 10) {
                 Button { _ = dataManager.addBank(setId: currentSet.id) } label: {
                     HStack(spacing: 6) {
@@ -399,11 +400,19 @@ struct SetDetailView: View {
             guard hasManyBanks else { return false }
             guard let last = currentSet.banks.max(by: { $0.position < $1.position }) else { return false }
             let bankPhotos = currentSet.photos.filter { $0.bankId == last.id }
-            return !bankPhotos.contains(where: { $0.uploadStatus != .pending || $0.imageData != nil })
+            // Allow deleting banks whose photos are still pending (not yet archived on Instagram),
+            // even if imageData is present ("ready for archive" state).
+            return !bankPhotos.contains(where: { $0.uploadStatus != .pending })
         }()
 
         if canDeleteSafely {
-            Button { dataManager.removeLastBank(setId: currentSet.id) } label: {
+            Button {
+                dataManager.removeLastBank(setId: currentSet.id)
+                let newCount = currentSet.banks.count
+                if selectedBankIndex >= newCount {
+                    selectedBankIndex = max(0, newCount - 1)
+                }
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "trash").font(.system(size: 13))
                     Text("Delete last bank").font(.caption)
@@ -427,6 +436,10 @@ struct SetDetailView: View {
             .alert("Remove Extra Bank?", isPresented: $showForceDeleteBankConfirm) {
                 Button("Remove", role: .destructive) {
                     dataManager.removeLastBank(setId: currentSet.id, force: true)
+                    let newCount = currentSet.banks.count
+                    if selectedBankIndex >= newCount {
+                        selectedBankIndex = max(0, newCount - 1)
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -2510,12 +2523,21 @@ struct SetDetailView: View {
     // MARK: - Banks Tabs
     
     @ViewBuilder private var banksTabsWithActions: some View {
-        let showActions = (currentSet.type == .word || currentSet.type == .number) && !uploadManager.isActive
+        // Show + / trash whenever type supports banks AND this set is not mid-upload.
+        // ".paused", ".idle", ".completed", botLockdown, etc. all allow bank management.
+        // Only hide when THIS specific set is actively uploading (counting/archiving/cooldown…).
+        let isThisSetMidUpload = uploadManager.activeSetId == currentSet.id && uploadManager.isUploading
+        let showActions = (currentSet.type == .word || currentSet.type == .number) && !isThisSetMidUpload
+        // A bank is safe to delete when it has more than 1 bank AND the last
+        // bank contains no photos that were already archived on Instagram
+        // (uploadStatus != .pending). Photos that are "ready for archive"
+        // (pending + imageData != nil) have NOT yet been sent to Instagram, so
+        // deleting them is safe and must be allowed.
         let canDelete: Bool = {
             guard currentSet.banks.count > 1 else { return false }
             guard let last = currentSet.banks.max(by: { $0.position < $1.position }) else { return false }
             let bankPhotos = currentSet.photos.filter { $0.bankId == last.id }
-            return !bankPhotos.contains(where: { $0.uploadStatus != .pending || $0.imageData != nil })
+            return !bankPhotos.contains(where: { $0.uploadStatus != .pending })
         }()
 
         if !currentSet.banks.isEmpty || showActions {
@@ -2538,29 +2560,43 @@ struct SetDetailView: View {
                 }
 
                 if showActions {
+                    // Thin separator between tabs and action buttons
+                    Divider()
+                        .frame(height: 24)
+                        .opacity(0.4)
+
                     // Add bank
                     Button {
                         _ = dataManager.addBank(setId: currentSet.id)
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(VaultTheme.Colors.primary)
-                            .frame(width: 32, height: 32)
-                            .background(VaultTheme.Colors.primary.opacity(0.1))
-                            .cornerRadius(8)
+                            .frame(width: 34, height: 34)
+                            .background(VaultTheme.Colors.primary.opacity(0.15))
+                            .cornerRadius(9)
                     }
                     .buttonStyle(.plain)
 
-                    // Delete last bank
+                    // Delete last bank — clamp selectedBankIndex to prevent an
+                    // out-of-bounds crash when the tab that was selected is removed.
                     Button {
                         dataManager.removeLastBank(setId: currentSet.id)
+                        let newCount = currentSet.banks.count  // already decremented by removeLastBank
+                        if selectedBankIndex >= newCount {
+                            selectedBankIndex = max(0, newCount - 1)
+                        }
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(canDelete ? .red : .gray.opacity(0.4))
-                            .frame(width: 32, height: 32)
-                            .background(canDelete ? Color.red.opacity(0.08) : Color.gray.opacity(0.06))
-                            .cornerRadius(8)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(canDelete ? .red : Color(white: 0.5))
+                            .frame(width: 34, height: 34)
+                            .background(canDelete ? Color.red.opacity(0.12) : Color(white: 0.5).opacity(0.12))
+                            .cornerRadius(9)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .strokeBorder(canDelete ? Color.red.opacity(0.25) : Color(white: 0.5).opacity(0.2), lineWidth: 1)
+                            )
                     }
                     .buttonStyle(.plain)
                     .disabled(!canDelete)
@@ -2668,9 +2704,10 @@ struct SetDetailView: View {
     // MARK: - Photos Grid
     
     private var photosGridSection: some View {
-        let photosToShow = currentSet.banks.isEmpty 
-            ? currentSet.photos 
-            : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[selectedBankIndex].id)
+        let safeIdx = min(selectedBankIndex, max(0, currentSet.banks.count - 1))
+        let photosToShow = currentSet.banks.isEmpty
+            ? currentSet.photos
+            : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[safeIdx].id)
         
         if isReorderMode {
             return AnyView(reorderableGrid(photos: photosToShow))
@@ -3098,7 +3135,7 @@ struct SetDetailView: View {
                             newImageData: optimizedImageData
                         )
                         
-                        // Update with archived metadata
+                        // Update with archived metadata (including video info if applicable)
                         if let updatedPhoto = currentSet.photos.first(where: { $0.symbol == symbol }) {
                             dataManager.updatePhoto(
                                 photoId: updatedPhoto.id,
@@ -3106,7 +3143,10 @@ struct SetDetailView: View {
                                 isArchived: true,
                                 uploadStatus: .completed,
                                 errorMessage: nil,
-                                uploadDate: archivedPhoto.timestamp
+                                uploadDate: archivedPhoto.timestamp,
+                                isVideo: archivedPhoto.isVideo,
+                                videoURL: archivedPhoto.videoURL,
+                                videoAspectRatio: archivedPhoto.videoAspectRatio
                             )
                         }
                     } else {
@@ -3120,8 +3160,8 @@ struct SetDetailView: View {
                             imageData: optimizedImageData,
                             position: position
                         )
-                        
-                        // Update with archived metadata
+
+                        // Update with archived metadata (including video info if applicable)
                         if let newPhoto = currentSet.photos.first(where: { $0.symbol == symbol }) {
                             dataManager.updatePhoto(
                                 photoId: newPhoto.id,
@@ -3129,7 +3169,10 @@ struct SetDetailView: View {
                                 isArchived: true,
                                 uploadStatus: .completed,
                                 errorMessage: nil,
-                                uploadDate: archivedPhoto.timestamp
+                                uploadDate: archivedPhoto.timestamp,
+                                isVideo: archivedPhoto.isVideo,
+                                videoURL: archivedPhoto.videoURL,
+                                videoAspectRatio: archivedPhoto.videoAspectRatio
                             )
                         }
                     }
@@ -3244,7 +3287,8 @@ struct SetDetailView: View {
             }
             
             // SWAP: Exchange positions directly (A goes to B, B goes to A)
-            let bankId = currentSet.banks.isEmpty ? nil : currentSet.banks[selectedBankIndex].id
+            let safeBankIdx = min(selectedBankIndex, max(0, currentSet.banks.count - 1))
+            let bankId = currentSet.banks.isEmpty ? nil : currentSet.banks[safeBankIdx].id
             
             withAnimation(.spring(response: 0.3)) {
                 dataManager.swapPhotos(setId: currentSet.id, bankId: bankId, indexA: fromIndex, indexB: index)
@@ -3271,9 +3315,10 @@ struct SetDetailView: View {
     // MARK: - Duplicate Detection
     
     private func checkConsecutiveDuplicates() {
+        let safeCheckIdx = min(selectedBankIndex, max(0, currentSet.banks.count - 1))
         let photosToCheck = currentSet.banks.isEmpty
             ? currentSet.photos
-            : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[selectedBankIndex].id)
+            : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[safeCheckIdx].id)
         
         consecutiveDuplicates.removeAll()
         guard photosToCheck.count >= 2 else { return }

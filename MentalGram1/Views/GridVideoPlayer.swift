@@ -2,38 +2,44 @@ import SwiftUI
 import AVKit
 import Combine
 
-/// Video player for grid cells - auto-plays, loops, fills cell (no black bars).
-/// Set `muted: false` for feed-style playback (with audio) or leave it true for
-/// thumbnail-style background reels.
+/// Video player for grid cells - auto-plays, loops.
+/// - `fillMode: true`  → resizeAspectFill (zoom+crop, used in grid thumbnails / Explore)
+/// - `fillMode: false` → resizeAspect (no crop, letterbox if needed; used in the post feed viewer)
+/// - `muted: false` for feed-style playback (with audio) or leave it true for thumbnail-style.
 struct GridVideoPlayer: View {
     let videoURL: String
     var muted: Bool = true
+    /// When false, the video is never cropped: it scales to fit the container,
+    /// showing black bars for videos whose aspect ratio differs from the container.
+    var fillMode: Bool = true
     /// Show a poster image as background while the AVPlayer warms up.
     /// Avoids the "black flash" while AVPlayer loads its first frame.
     var posterImage: UIImage? = nil
     @StateObject private var playerManager = VideoPlayerManager()
-    
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
+                // Black background — visible as letterbox bars when fillMode is false.
+                Color.black
+
                 // Poster shows the cached thumbnail behind the player. When the
                 // player hasn't drawn its first frame yet (or fails to load) we
                 // still see the photo instead of an empty black rectangle.
                 if let poster = posterImage {
                     Image(uiImage: poster)
                         .resizable()
-                        .scaledToFill()
+                        .aspectRatio(contentMode: fillMode ? .fill : .fit)
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.25))
                 }
 
                 if let player = playerManager.player {
-                    AVPlayerFillView(player: player, videoGravity: playerManager.videoGravity)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
+                    AVPlayerFillView(
+                        player: player,
+                        videoGravity: fillMode ? .resizeAspectFill : .resizeAspect
+                    )
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                 } else if posterImage == nil {
                     ProgressView().scaleEffect(0.8)
                 }
@@ -102,13 +108,14 @@ class VideoPlaybackCoordinator {
     }
 }
 
-/// Manages AVPlayer lifecycle for grid videos
+/// Manages AVPlayer lifecycle for grid videos.
+/// The gravity (fill vs fit) is owned by GridVideoPlayer and passed to AVPlayerFillView
+/// directly — this manager only handles player lifecycle.
 class VideoPlayerManager: ObservableObject {
     @Published var player: AVPlayer?
-    @Published var videoGravity: AVLayerVideoGravity = .resizeAspectFill
     private var loopObserver: Any?
     private var isMuted = true
-    
+
     func setupPlayer(url: String, muted: Bool = true) {
         guard let videoURL = URL(string: url) else {
             print("⚠️ [VIDEO] Invalid URL: \(url.prefix(80))")
@@ -127,19 +134,13 @@ class VideoPlayerManager: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(true, options: [])
 
         let asset = AVURLAsset(url: videoURL)
-        resolveVideoGravity(for: asset)
-
         let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         player.isMuted = muted
 
-        // If unmuted, tell the coordinator — it will pause any other active player.
-        if !muted {
-            VideoPlaybackCoordinator.shared.activate(player)
-        }
+        if !muted { VideoPlaybackCoordinator.shared.activate(player) }
 
         player.play()
-        
-        // Loop video when it ends
+
         loopObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player.currentItem,
@@ -148,49 +149,19 @@ class VideoPlayerManager: ObservableObject {
             player?.seek(to: .zero)
             player?.play()
         }
-        
+
         self.player = player
     }
-    
+
     func cleanup() {
         if let p = player {
             if !isMuted { VideoPlaybackCoordinator.shared.deactivate(p) }
             p.pause()
         }
         player = nil
-        videoGravity = .resizeAspectFill
-        
         if let observer = loopObserver {
             NotificationCenter.default.removeObserver(observer)
             loopObserver = nil
-        }
-    }
-
-    private func resolveVideoGravity(for asset: AVURLAsset) {
-        asset.loadValuesAsynchronously(forKeys: ["tracks"]) { [weak self] in
-            guard let self else { return }
-
-            var error: NSError?
-            let status = asset.statusOfValue(forKey: "tracks", error: &error)
-            guard status == .loaded,
-                  let track = asset.tracks(withMediaType: .video).first else {
-                return
-            }
-
-            let transformedSize = track.naturalSize.applying(track.preferredTransform)
-            let width = abs(transformedSize.width)
-            let height = abs(transformedSize.height)
-            let isHorizontal = width > height * 1.05
-
-            DispatchQueue.main.async {
-                // Always fill+crop the grid cell regardless of video orientation.
-                // This matches Instagram's grid behaviour: horizontal videos are
-                // zoomed/cropped to fill the cell, not letterboxed with black bars.
-                self.videoGravity = .resizeAspectFill
-                if isHorizontal {
-                    print("🎬 [VIDEO] Horizontal reel detected (\(Int(width))x\(Int(height))) — fill+crop (no letterbox)")
-                }
-            }
         }
     }
 }

@@ -1141,3 +1141,24 @@
 "dfh.mockup.following_tab" = "फ़ॉलोइंग";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "हटाएं";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "वीडियो को स्लॉट के रूप में उपयोग करें";
+"postpred.help.video.intro" = "Playing Cards और Custom सेट वीडियो को स्लॉट सामग्री के रूप में समर्थन करते हैं, चुने गए कार्ड या भविष्यवाणी को एक छोटे क्लिप के रूप में प्रकट करने के लिए बढ़िया।";
+"postpred.help.video.step1.title" = "असली Instagram से अपलोड करें";
+"postpred.help.video.step1.body" = "Instagram खोलें, वीडियो रिकॉर्ड करें या सामान्य रूप से अपलोड करें। इसे आर्काइव करें ताकि प्रदर्शन तक प्रोफ़ाइल पर दिखाई न दे।";
+"postpred.help.video.step2.title" = "वीडियो को स्लॉट से मैप करें";
+"postpred.help.video.step2.body" = "अपने सेट में स्लॉट टैप करें, फिर आर्काइव से चुनें और वीडियो चुनें। ऐप थंबनेल सहेजता है और स्वचालित रूप से वीडियो लिंक करता है।";
+"postpred.help.video.step3.title" = "Performance में प्रकट करें";
+"postpred.help.video.step3.body" = "Performance में उस स्लॉट को अनआर्काइव करने पर वीडियो पूर्ण मूल आकार में बिना क्रॉप के चलता है।";
+"postpred.help.video.tip" = "क्षैतिज वीडियो प्रोफ़ाइल ग्रिड में काली पट्टियों के साथ दिखते हैं, बिल्कुल असली Instagram की तरह। पोस्ट व्यूअर में पूरी चौड़ाई में चलते हैं।";
+
+"notif.archive_ready.title" = "संग्रहीत करने के लिए तैयार";
+"notif.archive_ready.body" = "अब आप अपनी फ़ोटो को फिर से सुरक्षित रूप से संग्रहीत कर सकते हैं।";
+"ig.message" = "संदेश";
+"ig.tagged_empty_title" = "आपकी फ़ोटो और वीडियो";
+"ig.tagged_empty_subtitle" = "जब लोग आपको फ़ोटो और वीडियो में टैग करते हैं, तो वे यहाँ दिखाई देंगे।";
+"ig.posts_count" = "%d पोस्ट";
+"lockscreen.enter_passcode" = "पासकोड दर्ज करें";
+"lockscreen.emergency" = "आपातकाल";

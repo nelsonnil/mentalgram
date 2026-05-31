@@ -1487,12 +1487,12 @@
 "limits.help.table.col.action" = "Función";
 "limits.help.table.col.first" = "1ª vez";
 "limits.help.table.col.again" = "Repetir";
-"limits.help.table.row.performance" = "Abrir Performance";
+"limits.help.table.row.performance" = "Abrir Performance (perfil + caché en segundo plano)";
 "limits.help.table.row.followers" = "Lista de seguidores";
 "limits.help.table.row.profile.new" = "Perfil nuevo de seguidor";
 "limits.help.table.row.sa" = "Sync & Archive (por foto)";
 "limits.help.table.row.upload" = "Subida (por foto)";
-"limits.help.table.row.autoupload" = "Ciclo completo de auto-subida (por foto)";
+"limits.help.table.row.autoupload" = "Auto-subida por foto (sube + archiva)";
 "limits.help.table.row.reveal" = "Revelar (por letra/foto)";
 "limits.help.table.row.notebio" = "Cambiar nota o bio";
 "limits.help.table.row.explore" = "Explorar / Buscar";
@@ -1725,3 +1725,24 @@
 "dfh.mockup.following_tab" = "Seguidos";
 "dfh.mockup.follow_too" = "Follow too";
 "dfh.mockup.remove_btn" = "Quitar";
+
+
+// MARK: - Post Prediction Help - Video Slots
+"postpred.help.section.video" = "Usar videos como slots";
+"postpred.help.video.intro" = "Los sets de Playing Cards y Custom admiten videos como contenido de slot — ideal para revelar la carta elegida o una prediccion como un clip corto.";
+"postpred.help.video.step1.title" = "Sube el video desde Instagram real";
+"postpred.help.video.step1.body" = "Abre Instagram, graba o sube el video normalmente. Archivalo para que no se vea en tu perfil hasta la actuacion.";
+"postpred.help.video.step2.title" = "Mapea el video al slot";
+"postpred.help.video.step2.body" = "En tu set, pulsa el slot, luego elige Desde Archivado y selecciona el video. La app guarda la miniatura y enlaza el video automaticamente.";
+"postpred.help.video.step3.title" = "Revela en Actuacion";
+"postpred.help.video.step3.body" = "Al desarchivar ese slot en Actuacion, el video se reproduce en pantalla a su tamano original, sin recortes.";
+"postpred.help.video.tip" = "Los videos horizontales aparecen con bandas negras en la cuadricula del perfil, igual que en Instagram real. En el visor de posts se reproducen a ancho completo.";
+
+"notif.archive_ready.title" = "Listo para archivar";
+"notif.archive_ready.body" = "Ya puedes archivar tus fotos de nuevo con seguridad.";
+"ig.message" = "Mensaje";
+"ig.tagged_empty_title" = "Fotos y videos de ti";
+"ig.tagged_empty_subtitle" = "Cuando alguien te etiquete en fotos y videos, aparecerán aquí.";
+"ig.posts_count" = "%d publicaciones";
+"lockscreen.enter_passcode" = "Introducir código";
+"lockscreen.emergency" = "Emergencia";

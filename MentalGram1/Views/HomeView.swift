@@ -1297,7 +1297,11 @@ struct SettingsView: View {
     // Text templates — user writes "My prediction is {word}" and the app
     // replaces {word} with the detected/fetched word at send time.
     @AppStorage("note_template") private var noteTemplate: String = ""
-    @AppStorage("bio_template")  private var bioTemplate:  String = ""
+    @AppStorage("bio_template")   private var bioTemplate:  String = ""   // template slot 1 (legacy key)
+    @AppStorage("bio_template_2") private var bioTemplate2: String = ""
+    @AppStorage("bio_template_3") private var bioTemplate3: String = ""
+    @AppStorage("bio_template_4") private var bioTemplate4: String = ""
+    @AppStorage("bio_active_slot") private var bioActiveSlot: Int = 0
 
     // OCR configuration (shared between note and bio)
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
@@ -1313,6 +1317,7 @@ struct SettingsView: View {
     // Hidden Login (easter egg)
     @State private var showingLogin = false
     @State private var developerMode = false
+    @State private var communityPasswordCopied = false
     
     // Other Settings — Fake Home Screen & launch behavior
     @AppStorage("launchDirectlyToPerformance") private var launchDirectlyToPerformance = false
@@ -1391,6 +1396,7 @@ struct SettingsView: View {
         tricksSection
         integrationsSection
         otherSection
+        communitySection
         dataSection
     }
 
@@ -1610,6 +1616,87 @@ struct SettingsView: View {
         Spacer().frame(height: 28)
     }
 
+    // MARK: - Section: Community
+
+    @ViewBuilder private var communitySection: some View {
+        settingsSectionLabel("COMMUNITY", icon: "person.3.fill", color: Self.colorCommunity)
+        accentedSection(color: Self.colorCommunity) {
+            modernCard {
+                VStack(spacing: 14) {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Self.colorCommunity)
+                                .frame(width: 36, height: 36)
+                            Image(systemName: "person.3.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Facebook Group")
+                                .font(VaultTheme.Typography.body().weight(.semibold))
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Text("Updates, new tricks, routines & community")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        Spacer()
+                    }
+                    Text("Join the private group to discover new updates, share routines, get ideas and connect with other performers using the app.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // Password row — tap to copy
+                    Button {
+                        UIPasteboard.general.string = "vault67"
+                        withAnimation(.easeInOut(duration: 0.2)) { communityPasswordCopied = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation { communityPasswordCopied = false }
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(Self.colorCommunity)
+                            Text("Password: ")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                            + Text("vault67")
+                                .font(VaultTheme.Typography.caption().weight(.bold))
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Spacer()
+                            Image(systemName: communityPasswordCopied ? "checkmark.circle.fill" : "doc.on.doc")
+                                .font(.system(size: 14))
+                                .foregroundColor(communityPasswordCopied ? .green : VaultTheme.Colors.textSecondary)
+                            Text(communityPasswordCopied ? "Copied!" : "Copy")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(communityPasswordCopied ? .green : VaultTheme.Colors.textSecondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color(hex: "#2C2C2E"))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                    Link(destination: URL(string: "https://www.facebook.com/share/g/1bj4vp4GoX/?mibextid=wwXIfr")!) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.up.right.circle.fill")
+                                .font(.system(size: 16))
+                            Text("Join the Facebook Group")
+                                .font(VaultTheme.Typography.body().weight(.semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Self.colorCommunity)
+                        .cornerRadius(12)
+                    }
+                }
+            }
+        }
+        Spacer().frame(height: 28)
+    }
+
     // MARK: - Section: Other
 
     @ViewBuilder private var otherSection: some View {
@@ -1700,34 +1787,65 @@ struct SettingsView: View {
                         title: "Note", subtitle: "Visible above your profile picture for 24h",
                         isExpanded: $noteExpanded,
                         helpAction: { showNoteHelp = true }) {
-            VStack(alignment: .trailing, spacing: 4) {
-                TextField("Write a note…", text: $noteText)
+            // ── Text field (= template) ──────────────────────────────────────
+            VStack(alignment: .leading, spacing: 6) {
+                TextField("Write a note… or use {text1}", text: $noteTemplate)
                     .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
                     .padding(VaultTheme.Spacing.md)
                     .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
                     .disabled(isSendingNote)
-                    .onChange(of: noteText) { if $0.count > 60 { noteText = String($0.prefix(60)) } }
-                Text("\(noteText.count)/60").font(VaultTheme.Typography.captionSmall())
-                    .foregroundColor(noteText.count > 50 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                    .onChange(of: noteTemplate) { if $0.count > 60 { noteTemplate = String($0.prefix(60)) } }
+
+                // ── Insert buttons + char counter ─────────────────────────────
+                HStack(spacing: 6) {
+                    ForEach(["{text1}", "{text2}", "{text3}"], id: \.self) { token in
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { noteTemplate += token }
+                        } label: {
+                            Text(token)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 7)
+                                .background(noteTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
+                                .cornerRadius(7)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
+                    Text("\(noteTemplate.count)/60")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(noteTemplate.count > 50 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                }
+
+                // ── Per-placeholder source pickers (dynamic) ──────────────────
+                InlineSourcePickerView(target: "note", template: noteTemplate, accentColor: Self.colorProfile)
             }
+
             modernActionButton(title: isSendingNote ? "Sending…" : "Send Note",
                                icon: "paperplane.fill", loading: isSendingNote,
-                               enabled: !noteText.isEmpty && !isSendingNote && !instagram.isLocked && getNoteCooldownSeconds() == 0,
+                               enabled: !noteTemplate.isEmpty && !isSendingNote && !instagram.isLocked && getNoteCooldownSeconds() == 0,
                                action: sendNote)
             if let msg = getNoteCooldownMessage() { modernStatusRow(msg, color: VaultTheme.Colors.warning, icon: "clock.fill") }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
-            autoInputPicker(
-                clipboardKey: "note",
-                topMode: $noteTopInputMode,
-                apiSource: $integrations.noteApiSource,
-                template: $noteTemplate)
-            modernDivider()
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to send a note when Performance opens",
-                         url: noteText.isEmpty ? "vault://note?text=<your text>" : URLActionManager.buildURL(mode: "note", text: noteText))
+                         url: urlSchemeExample(mode: "note", template: noteTemplate))
         })
     }
+
+    // MARK: - Bio template helpers (4 slots)
+
+    private var activeBioBinding: Binding<String> {
+        switch bioActiveSlot {
+        case 1: return $bioTemplate2
+        case 2: return $bioTemplate3
+        case 3: return $bioTemplate4
+        default: return $bioTemplate
+        }
+    }
+
+    private var activeBioText: String { activeBioBinding.wrappedValue }
 
     // MARK: - Biography Card
 
@@ -1737,43 +1855,85 @@ struct SettingsView: View {
                         isExpanded: $bioExpanded,
                         helpAction: { showBioHelp = true }) {
             let currentBio = ProfileCacheService.shared.cachedProfile?.biography ?? ""
-            VStack(alignment: .trailing, spacing: 4) {
+            // ── Template selector ─────────────────────────────────────────────
+            HStack(spacing: 6) {
+                ForEach(0..<4) { i in
+                    Button {
+                        bioFieldFocused = false
+                        bioActiveSlot = i
+                    } label: {
+                        Text("T\(i + 1)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(bioActiveSlot == i ? .white : VaultTheme.Colors.textSecondary)
+                            .padding(.horizontal, 13).padding(.vertical, 7)
+                            .background(bioActiveSlot == i ? Self.colorProfile : Color(hex: "#2C2C2E"))
+                            .cornerRadius(7)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Text("Select template slot")
+                    .font(.system(size: 11))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+            }
+
+            // ── Text editor (= template) ─────────────────────────────────────
+            VStack(alignment: .leading, spacing: 6) {
                 ZStack(alignment: .topLeading) {
-                    if bioText.isEmpty {
+                    if activeBioText.isEmpty {
                         Text(currentBio.isEmpty ? String(localized: "Write your biography…") : currentBio)
                             .font(VaultTheme.Typography.body())
                             .foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.5))
                             .padding(.horizontal, VaultTheme.Spacing.md).padding(.vertical, VaultTheme.Spacing.md)
                             .allowsHitTesting(false)
                     }
-                    TextEditor(text: $bioText)
+                    TextEditor(text: activeBioBinding)
                         .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
                         .frame(minHeight: 80, maxHeight: 120)
                         .padding(.horizontal, VaultTheme.Spacing.sm).padding(.vertical, 4)
                         .scrollContentBackground(.hidden).background(Color.clear)
                         .focused($bioFieldFocused).disabled(isSendingBio)
-                        .onChange(of: bioText) { if $0.count > 150 { bioText = String($0.prefix(150)) } }
+                        .onChange(of: activeBioText) { newVal in
+                            if newVal.count > 150 { activeBioBinding.wrappedValue = String(newVal.prefix(150)) }
+                        }
                 }
                 .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
-                Text("\(bioText.count)/150").font(VaultTheme.Typography.captionSmall())
-                    .foregroundColor(bioText.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+
+                // ── Insert buttons + char counter ─────────────────────────────
+                HStack(spacing: 6) {
+                    ForEach(["{text1}", "{text2}", "{text3}"], id: \.self) { token in
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { activeBioBinding.wrappedValue += token }
+                        } label: {
+                            Text(token)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 7)
+                                .background(activeBioText.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
+                                .cornerRadius(7)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
+                    Text("\(activeBioText.count)/150")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(activeBioText.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                }
+
+                // ── Per-placeholder source pickers (dynamic) ──────────────────
+                InlineSourcePickerView(target: "bio", template: activeBioText, accentColor: Self.colorProfile)
             }
+
             modernActionButton(title: isSendingBio ? "Updating…" : "Update Biography",
                                icon: "checkmark.circle.fill", loading: isSendingBio,
-                               enabled: !bioText.isEmpty && !isSendingBio && !instagram.isLocked) {
+                               enabled: !activeBioText.isEmpty && !isSendingBio && !instagram.isLocked) {
                 bioFieldFocused = false; sendBiography()
             }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
-            autoInputPicker(
-                clipboardKey: "bio",
-                topMode: $bioTopInputMode,
-                apiSource: $integrations.bioApiSource,
-                template: $bioTemplate)
-            modernDivider()
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to update biography when Performance opens",
-                         url: bioText.isEmpty ? "vault://bio?text=<your text>" : URLActionManager.buildURL(mode: "bio", text: bioText))
+                         url: urlSchemeExample(mode: "bio", template: activeBioText))
         })
     }
 
@@ -1783,6 +1943,7 @@ struct SettingsView: View {
     static let colorTricks      = Color(hex: "#BF5AF2")
     static let colorIntegration = Color(hex: "#FFD60A")
     static let colorData        = Color(hex: "#30D158")
+    static let colorCommunity   = Color(hex: "#1877F2")
 
     // MARK: - Modern UI Helpers
 
@@ -1972,8 +2133,7 @@ struct SettingsView: View {
     private func autoInputPicker(
         clipboardKey: String,
         topMode: Binding<String>,
-        apiSource: Binding<ApiSource>,
-        template: Binding<String>
+        apiSource: Binding<ApiSource>
     ) -> some View {
         let currentMode = AutoInputMode(rawValue: topMode.wrappedValue) ?? .off
 
@@ -1981,7 +2141,7 @@ struct SettingsView: View {
             Text("Auto Input")
                                     .font(VaultTheme.Typography.bodyBold())
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
-            Text("Polls every 2 s while Performance is active. Updates automatically when a new value arrives — no need to reopen the app.")
+            Text("API: polls every 2 s while Performance is active. OCR: camera recognises the word when you press the volume-up button. Sources are configured above via {text1}, {text2}, {text3}.")
                                                     .font(VaultTheme.Typography.caption())
                                                     .foregroundColor(VaultTheme.Colors.textSecondary)
 
@@ -1989,13 +2149,11 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 ForEach(AutoInputMode.allCases.filter { $0 != .clipboard }, id: \.rawValue) { mode in
                     let isSelected = currentMode == mode
-                    let isOcr = mode == .ocr
 
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                             topMode.wrappedValue = mode.rawValue
                             if clipboardAutoMode == clipboardKey { clipboardAutoMode = "" }
-                            if mode != .api { apiSource.wrappedValue = .none }
                         }
                     } label: {
                         HStack(spacing: 5) {
@@ -2013,41 +2171,6 @@ struct SettingsView: View {
                     }
                     .contentShape(Rectangle())
                 }
-            }
-
-            // ── API sub-picker (visible only when API mode is active) ─
-            if currentMode == .api {
-                VStack(alignment: .leading, spacing: 6) {
-                    Divider().background(Color(hex: "#3A3A3C"))
-                    Text("API Source")
-                        .font(VaultTheme.Typography.captionSmall())
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
-                        .textCase(.uppercase)
-                    HStack(spacing: 6) {
-                        ForEach(ApiSource.allCases.filter { $0 != .none }, id: \.rawValue) { src in
-                            let isActive = apiSource.wrappedValue == src
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    apiSource.wrappedValue = isActive ? .none : src
-                                }
-                            } label: {
-                                Text(src.displayName.replacingOccurrences(of: "Custom API ", with: "API "))
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(isActive ? .white : VaultTheme.Colors.textSecondary)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 5)
-                                    .background(isActive ? Self.colorIntegration : Color(hex: "#2C2C2E"))
-                                    .cornerRadius(6)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                    }
-                }
-                .padding(.top, 2)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .move(edge: .top)),
-                    removal: .opacity.combined(with: .move(edge: .top))
-                ))
             }
 
             // ── OCR sub-panel (visible only when OCR mode is active) ─
@@ -2144,21 +2267,13 @@ struct SettingsView: View {
                 ))
             }
 
-            // ── Template field (visible when any auto-input mode is active) ──
-            if currentMode != .off {
-                AutoInputTemplateFieldView(
-                    template: template,
-                    limit: clipboardKey == "note" ? 60 : 150,
-                    accentColor: Self.colorProfile
-                )
-            }
         }
     }
 
     // NOTE: Extracted to a standalone View struct to avoid SwiftUI type-complexity
     // stack overflow that occurs when deeply-nested @ViewBuilder closures accumulate
     // too many generic TupleView layers inside a single body computation.
-    // See: AutoInputTemplateFieldView below SettingsView.
+    // See: InlineSourcePickerView below SettingsView.
 
     private func apiSourceRow(target: String, source: Binding<ApiSource>, onSelect: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -2386,28 +2501,52 @@ struct SettingsView: View {
     }
     
     private func sendNote() {
-        guard !noteText.isEmpty else { return }
+        guard !noteTemplate.isEmpty else { return }
         guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
             noteMessage = uploadWriteBlockedMessage
             showingNoteAlert = true
             return
         }
-        
+
         isSendingNote = true
-        let textToSend = noteText
-        
+        let rawTemplate = noteTemplate
+
         Task {
             do {
+                // ANTI-BOT: wait if the app just launched (cold-start window)
+                if InstagramSafetyGate.shared.isInColdStartWindow {
+                    let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+                    LogManager.shared.info("[COLD-START] Note send deferred — \(remaining)s", category: .general)
+                    try await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 2...4)) * 1_000_000_000)
+                    guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                        await MainActor.run { isSendingNote = false }
+                        return
+                    }
+                }
+                // Resolve {text1}/{text2}/{text3} from configured sources before sending
+                var resolved = rawTemplate
+                let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{word}")
+                if hasTokens {
+                    let values = await IntegrationsSettings.shared.fetchTemplatePlaceholders(for: "note")
+                    if !values.isEmpty {
+                        if let v1 = values["text1"] {
+                            resolved = resolved.replacingOccurrences(of: "{word}", with: v1)
+                                               .replacingOccurrences(of: "{text1}", with: v1)
+                        }
+                        if let v2 = values["text2"] { resolved = resolved.replacingOccurrences(of: "{text2}", with: v2) }
+                        if let v3 = values["text3"] { resolved = resolved.replacingOccurrences(of: "{text3}", with: v3) }
+                    }
+                }
+                let textToSend = String(resolved.prefix(60))
                 let success = try await instagram.createNote(text: textToSend)
-                
+
                 await MainActor.run {
                     isSendingNote = false
                     if success {
-                        // Keep last_note_sent_date in sync so auto-mode dedup (2h window) works correctly
                         UserDefaults.standard.set(Date(), forKey: "last_note_sent_date")
                         noteMessage = "✅ Note sent!\n\nYour note \"\(textToSend)\" is now visible above your profile picture in DMs for 24 hours."
                         showingNoteAlert = true
-                        noteText = "" // Clear field
+                        // Don't clear noteTemplate — it's a reusable template
                     }
                 }
             } catch {
@@ -2422,25 +2561,64 @@ struct SettingsView: View {
     
     // MARK: - Biography
 
+    /// Builds a vault:// URL example based on which {textN} tokens are present in the template.
+    private func urlSchemeExample(mode: String, template: String) -> String {
+        let usesText1 = template.contains("{text1}") || template.contains("{word}")
+        let usesText2 = template.contains("{text2}")
+        let usesText3 = template.contains("{text3}")
+        var params: [String] = []
+        if usesText1 || (!usesText2 && !usesText3) { params.append("text1=<value>") }
+        if usesText2 { params.append("text2=<value>") }
+        if usesText3 { params.append("text3=<value>") }
+        return "vault://\(mode)?\(params.joined(separator: "&"))"
+    }
+
     private func sendBiography() {
-        guard !bioText.isEmpty else { return }
+        guard !activeBioText.isEmpty else { return }
         guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
             bioMessage = uploadWriteBlockedMessage
             showingBioAlert = true
             return
         }
         isSendingBio = true
-        let textToSend = bioText
+        let rawTemplate = activeBioText
 
         Task {
             do {
+                // ANTI-BOT: wait if the app just launched (cold-start window)
+                if InstagramSafetyGate.shared.isInColdStartWindow {
+                    let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+                    LogManager.shared.info("[COLD-START] Biography send deferred — \(remaining)s", category: .general)
+                    try await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 2...4)) * 1_000_000_000)
+                    guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                        await MainActor.run { isSendingBio = false }
+                        return
+                    }
+                }
+                // Resolve {text1}/{text2}/{text3} from configured sources before sending
+                var resolved = rawTemplate
+                let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{word}")
+                if hasTokens {
+                    let values = await IntegrationsSettings.shared.fetchTemplatePlaceholders(for: "bio")
+                    if !values.isEmpty {
+                        if let v1 = values["text1"] {
+                            resolved = resolved.replacingOccurrences(of: "{word}", with: v1)
+                                               .replacingOccurrences(of: "{text1}", with: v1)
+                        }
+                        if let v2 = values["text2"] { resolved = resolved.replacingOccurrences(of: "{text2}", with: v2) }
+                        if let v3 = values["text3"] { resolved = resolved.replacingOccurrences(of: "{text3}", with: v3) }
+                    }
+                    // Expand \n escapes
+                    resolved = resolved.replacingOccurrences(of: "\\n", with: "\n")
+                }
+                let textToSend = String(resolved.prefix(150))
                 let success = try await instagram.changeBiography(text: textToSend)
                 await MainActor.run {
                     isSendingBio = false
                     if success {
                         bioMessage = "✅ Biography updated!\n\nYour Instagram profile now shows:\n\"\(textToSend)\""
                         showingBioAlert = true
-                        bioText = ""
+                        // Don't clear — it's a reusable template slot
                     }
                 }
             } catch {
@@ -2516,133 +2694,173 @@ struct SettingsView: View {
     
 }
 
-// MARK: - Auto Input Template Field
-// Extracted as a standalone View to avoid SwiftUI generic-type stack overflows
-// that occur when deeply-nested @ViewBuilder closures create excessively long
-// TupleView type signatures inside a single body computation.
+// MARK: - Inline Source Picker
+// Shows per-placeholder source pickers (Inject / API1 / API2 / API3 / OCR)
+// only for the tokens that are actually present in the template text.
 
-private struct AutoInputTemplateFieldView: View {
-    @Binding var template: String
-    let limit: Int
+private struct InlineSourcePickerView: View {
+    let target: String
+    let template: String
     let accentColor: Color
+    @ObservedObject private var integrations = IntegrationsSettings.shared
+    @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
+    @AppStorage("ocr_camera")   private var ocrCamera:   Int    = 0
 
-    private var hasToken: Bool { template.contains("{word}") }
-    private var previewText: String {
-        hasToken ? template.replacingOccurrences(of: "{word}", with: "alexis") : ""
+    private let allTokens = ["{text1}", "{text2}", "{text3}"]
+
+    private var visibleTokens: [String] {
+        var t = allTokens.filter { template.contains($0) }
+        if template.contains("{word}") && !t.contains("{text1}") { t.insert("{text1}", at: 0) }
+        return t
+    }
+
+    private var hasOCRSlot: Bool {
+        integrations.ocrSlot(for: target) != nil
+    }
+
+    private func sourceBinding(for token: String) -> Binding<ApiSource> {
+        switch token {
+        case "{text2}": return target == "note" ? $integrations.noteText2Source : $integrations.bioText2Source
+        case "{text3}": return target == "note" ? $integrations.noteText3Source : $integrations.bioText3Source
+        default:        return target == "note" ? $integrations.noteText1Source : $integrations.bioText1Source
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider().background(Color(hex: "#3A3A3C"))
-
-            // Header row
-            HStack(spacing: 6) {
-                Image(systemName: "text.cursor")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(accentColor)
-                Text("TEXT TEMPLATE")
+        if !visibleTokens.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Divider().background(Color(hex: "#3A3A3C"))
+                Text("SOURCES")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textSecondary)
-                Spacer()
-                if !template.isEmpty {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { template = "" }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "xmark.circle.fill").font(.system(size: 10))
-                            Text("Clear").font(.system(size: 11))
+
+                // ── Per-token source dropdowns ────────────────────────────────
+                ForEach(visibleTokens, id: \.self) { token in
+                    let label = (token == "{text1}" && template.contains("{word}") && !template.contains("{text1}"))
+                        ? "{word}" : token
+                    let binding = sourceBinding(for: token)
+                    let currentSrc = binding.wrappedValue
+
+                    HStack(spacing: 10) {
+                        Text(label)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(accentColor)
+                            .frame(width: 62, alignment: .leading)
+
+                        Menu {
+                            // "None" option
+                            Button {
+                                withAnimation { binding.wrappedValue = .none }
+                            } label: {
+                                HStack {
+                                    Text("None")
+                                    if currentSrc == .none { Image(systemName: "checkmark") }
+                                }
+                            }
+                            Divider()
+                            ForEach(ApiSource.allCases.filter { $0 != .none }, id: \.rawValue) { src in
+                                Button {
+                                    withAnimation { binding.wrappedValue = src }
+                                } label: {
+                                    HStack {
+                                        if src == .ocr {
+                                            Label(src.displayName, systemImage: "camera.viewfinder")
+                                        } else {
+                                            Text(src.displayName)
+                                        }
+                                        if currentSrc == src { Image(systemName: "checkmark") }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                if currentSrc == .ocr {
+                                    Image(systemName: "camera.viewfinder")
+                                        .font(.system(size: 13))
+                                }
+                                Text(currentSrc == .none ? "No source" : currentSrc.displayName)
+                                    .font(.system(size: 13, weight: .semibold))
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .foregroundColor(currentSrc == .none ? VaultTheme.Colors.textSecondary : .white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(currentSrc == .none ? Color(hex: "#2C2C2E") : accentColor.opacity(0.85))
+                            .cornerRadius(8)
                         }
+                    }
+                }
+
+                // ── OCR settings (visible only when any slot uses OCR) ───────
+                if hasOCRSlot {
+                    Divider().background(Color(hex: "#3A3A3C"))
+                    Text("OCR SETTINGS")
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(VaultTheme.Colors.textSecondary)
+                    HStack(spacing: 10) {
+                        // Language picker
+                        Menu {
+                            ForEach(OCRConfiguration.supportedLanguages, id: \.code) { lang in
+                                Button {
+                                    ocrLanguage = lang.code
+                                } label: {
+                                    HStack {
+                                        Text(lang.display)
+                                        if ocrLanguage == lang.code { Image(systemName: "checkmark") }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "globe").font(.system(size: 11))
+                                Text(OCRConfiguration.displayName(for: ocrLanguage))
+                                    .font(.system(size: 11, weight: .semibold))
+                                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+                            }
+                            .foregroundColor(accentColor)
+                            .padding(.horizontal, 9).padding(.vertical, 6)
+                            .background(Color(hex: "#2C2C2E"))
+                            .cornerRadius(7)
+                        }
+                        // Camera toggle
+                        HStack(spacing: 4) {
+                            ForEach([(0, "Rear"), (1, "Front")], id: \.0) { val, label in
+                                Button {
+                                    ocrCamera = val
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: val == 0 ? "camera.fill" : "camera.rotate.fill")
+                                            .font(.system(size: 10))
+                                        Text(label)
+                                            .font(.system(size: 11, weight: .semibold))
+                                    }
+                                    .foregroundColor(ocrCamera == val ? .white : VaultTheme.Colors.textSecondary)
+                                    .padding(.horizontal, 9).padding(.vertical, 6)
+                                    .background(ocrCamera == val ? accentColor : Color(hex: "#2C2C2E"))
+                                    .cornerRadius(7)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        Spacer()
+                    }
+                    HStack(spacing: 5) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        Text("Press volume UP to recognise. Camera runs silently in background.")
+                            .font(.system(size: 11))
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
                     }
                 }
             }
-
-            // Input row: text field + insert-token buttons
-            HStack(spacing: 8) {
-                TextField("e.g. My prediction is {word}", text: $template)
-                    .font(VaultTheme.Typography.body())
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 9)
-                    .background(Color(hex: "#2C2C2E"))
-                    .cornerRadius(8)
-                    .onChange(of: template) { val in
-                        if val.count > limit { template = String(val.prefix(limit)) }
-                    }
-
-                // Insert {word} token
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        template += "{word}"
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus").font(.system(size: 10, weight: .bold))
-                        Text("{word}").font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 9)
-                    .background(accentColor)
-                    .cornerRadius(8)
-                }
-
-                // Insert \n line-break escape
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        template += "\\n"
-                    }
-                } label: {
-                    Image(systemName: "return")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color(hex: "#3A3A3C"))
-                        .cornerRadius(8)
-                }
-            }
-
-            // Live preview / warning
-            if hasToken {
-                HStack(spacing: 5) {
-                    Image(systemName: "eye.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
-                    // Replace \n escapes with real newlines in the preview
-                    Text(previewText.replacingOccurrences(of: "\\n", with: "\n"))
-                        .font(.system(size: 12))
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
-                        .lineLimit(4)
-                    Spacer()
-                    Text("\(template.count)/\(limit)")
-                        .font(.system(size: 10))
-                        .foregroundColor(
-                            Double(template.count) > Double(limit) * 0.8
-                            ? VaultTheme.Colors.warning
-                            : VaultTheme.Colors.textSecondary
-                        )
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Color(hex: "#1C1C1E"))
-                .cornerRadius(6)
-            } else if !template.isEmpty {
-                HStack(spacing: 5) {
-                    Image(systemName: "info.circle.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(VaultTheme.Colors.warning)
-                    Text("Type {word} where you want the detected word to appear")
-                        .font(.system(size: 11))
-                        .foregroundColor(VaultTheme.Colors.warning)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .move(edge: .top)),
+                removal: .opacity.combined(with: .move(edge: .top))
+            ))
         }
-        .padding(.top, 2)
-        .transition(.asymmetric(
-            insertion: .opacity.combined(with: .move(edge: .top)),
-            removal: .opacity.combined(with: .move(edge: .top))
-        ))
     }
 }
 
@@ -3385,7 +3603,7 @@ private struct PostPredictionInputModeView: View {
                         .font(VaultTheme.Typography.caption())
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                     HStack(spacing: 6) {
-                        ForEach(ApiSource.allCases.filter { $0 != .none }, id: \.rawValue) { src in
+                        ForEach(ApiSource.allCases.filter { $0 != .none && $0 != .ocr }, id: \.rawValue) { src in
                             let isActive = apiSource == src
                             Button {
                                 withAnimation(.easeInOut(duration: 0.2)) {
