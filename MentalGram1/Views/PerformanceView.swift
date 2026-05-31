@@ -5512,11 +5512,30 @@ struct StoryHighlightCell: View {
                         .scaledToFill()
                         .frame(width: innerSize, height: innerSize)
                         .clipShape(Circle())
+                } else if let url = URL(string: highlight.coverImageURL), !highlight.coverImageURL.isEmpty {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img.resizable()
+                                .scaledToFill()
+                                .frame(width: innerSize, height: innerSize)
+                                .clipShape(Circle())
+                        case .failure:
+                            Circle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: innerSize, height: innerSize)
+                        default:
+                            Circle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: innerSize, height: innerSize)
+                                .overlay(ProgressView().scaleEffect(0.6))
+                        }
+                    }
+                    .frame(width: innerSize, height: innerSize)
                 } else {
                     Circle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: innerSize, height: innerSize)
-                        .overlay(ProgressView().scaleEffect(0.6))
                 }
             }
 
