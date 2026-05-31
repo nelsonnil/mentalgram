@@ -421,6 +421,17 @@ enum SetType: String, Codable, CaseIterable {
         }
     }
     
+    /// Whether this type supports the vault://reveal URL scheme.
+    /// The actual URL (including the set name) is built in SetURLSchemeRow via URLActionManager.
+    var revealURLTemplate: String? {
+        switch self {
+        case .word:   return "word"
+        case .number: return nil
+        case .custom: return "slot"
+        case .card:   return "card"
+        }
+    }
+
     /// Expected number of photos per bank (or total for card/custom)
     func expectedPhotoCount(alphabet: AlphabetType?) -> Int {
         switch self {
@@ -439,6 +450,73 @@ enum SetType: String, Codable, CaseIterable {
         case .custom: return []
         case .card:   return SetType.cardSlotLabels
         }
+    }
+}
+
+/// How the magician feeds the secret value to reveal a slot in a set.
+/// Each set stores its own input method; only inputs valid for the set's
+/// type are selectable (see `allowed(for:)`).
+enum InputMethod: String, Codable, CaseIterable, Identifiable {
+    case coverTyping = "cover_typing"
+    case api         = "api"
+    case ocr         = "ocr"
+    case digitGrid   = "digit_grid"
+    case lockscreen  = "lockscreen"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .coverTyping: return String(localized: "Cover Typing")
+        case .api:         return String(localized: "API")
+        case .ocr:         return String(localized: "OCR")
+        case .digitGrid:   return String(localized: "Digit Grid")
+        case .lockscreen:  return String(localized: "Lock Screen")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .coverTyping: return "keyboard"
+        case .api:         return "antenna.radiowaves.left.and.right"
+        case .ocr:         return "camera.viewfinder"
+        case .digitGrid:   return "hand.draw"
+        case .lockscreen:  return "lock.iphone"
+        }
+    }
+
+    var shortDescription: String {
+        switch self {
+        case .coverTyping: return String(localized: "Type the secret in the search bar")
+        case .api:         return String(localized: "Pull the value from an online source")
+        case .ocr:         return String(localized: "Scan the value with the camera")
+        case .digitGrid:   return String(localized: "Swipe digits on the post grid")
+        case .lockscreen:  return String(localized: "Enter it on the fake lock screen")
+        }
+    }
+
+    /// Whether this input needs extra setup before it can be used
+    /// (e.g. lockscreen wallpaper, cover-typing mask, API source, OCR camera).
+    var needsConfig: Bool {
+        switch self {
+        case .digitGrid: return false
+        case .coverTyping, .api, .ocr, .lockscreen: return true
+        }
+    }
+
+    /// Inputs allowed for each set type.
+    static func allowed(for type: SetType) -> [InputMethod] {
+        switch type {
+        case .word:   return [.coverTyping, .api, .ocr]
+        case .number: return [.digitGrid, .lockscreen, .api, .ocr]
+        case .custom: return [.digitGrid, .lockscreen, .api, .ocr]
+        case .card:   return [.lockscreen]
+        }
+    }
+
+    /// Default input for a set type (the first allowed one).
+    static func defaultMethod(for type: SetType) -> InputMethod {
+        allowed(for: type).first ?? .digitGrid
     }
 }
 
@@ -491,7 +569,16 @@ struct PhotoSet: Identifiable, Codable {
     var completedAt: Date?
     var selectedAlphabet: AlphabetType?  // For Word Reveal: which alphabet to use
     var targetBankCount: Int?  // How many banks the user requested at creation time
-    
+    var inputMethod: InputMethod? = nil  // Per-set selected input (nil → type default)
+
+    /// Effective input method: returns the stored value if it is still valid for
+    /// the set's type, otherwise falls back to the type's default. This protects
+    /// against legacy/migrated sets and any stored value not allowed for the type.
+    var resolvedInputMethod: InputMethod {
+        if let m = inputMethod, InputMethod.allowed(for: type).contains(m) { return m }
+        return InputMethod.defaultMethod(for: type)
+    }
+
     var totalPhotos: Int {
         photos.count
     }
@@ -727,9 +814,11 @@ class SecretInputSettings: ObservableObject {
         self.customUsername = UserDefaults.standard.string(forKey: "secretInputCustomUsername") ?? ""
     }
     
-    /// Get the mask text based on current mode. Returns empty string when disabled.
+    /// Get the mask text based on current mode. Returns empty string unless the
+    /// globally-active set is a Word set configured to use the cover-typing input.
+    /// (The old global on/off toggle was replaced by the per-set input selector.)
     func getMaskText(latestFollowerUsername: String?) -> String {
-        guard isEnabled else { return "" }
+        guard DataManager.shared.isActiveInput(.coverTyping) else { return "" }
         switch mode {
         case .latestFollower:
             return latestFollowerUsername?.lowercased() ?? "user"

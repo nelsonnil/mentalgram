@@ -1511,3 +1511,31 @@
 "ig.posts_count" = "%d postów";
 "lockscreen.enter_passcode" = "Wprowadź kod";
 "lockscreen.emergency" = "Nagły wypadek";
+
+/* Per-set input selector */
+"set.input.label" = "Wejście";
+"set.input.configure" = "Konfiguruj";
+"set.input.covertyping.help" = "Maskuje to, co wpisujesz w Eksploruj, aby widzowie widzieli inne słowo. Naciśnij SPACJĘ, aby ujawnić.";
+"set.input.covertyping.maskmode" = "Tryb maski";
+"set.input.api.help" = "Odpytuje źródło online co 2 s, gdy Performance jest otwarty, i ujawnia automatycznie po nadejściu nowej wartości.";
+"set.input.api.source" = "Źródło API";
+"set.input.api.endpoint_hint" = "Skonfiguruj punkty końcowe API w Ustawienia → Integracje.";
+"set.input.ocr.help" = "Aparat uruchamia się cicho po otwarciu Performance. Naciśnij Głośność w górę, aby zeskanować; rozpoznany tekst ujawnia się automatycznie.";
+"set.input.ocr.camera" = "Aparat";
+"set.input.ocr.language" = "Język";
+"set.input.lockscreen.help" = "Pokazuje fałszywy ekran blokady po otwarciu Performance, aby potajemnie wpisać wartość. Ustaw tapetę poniżej.";
+"set.input.digitgrid.help" = "Przesuń w lewo lub w prawo po siatce, aby utworzyć wartość, a następnie dotknij ikony Posty, aby ujawnić.";
+"set.input.digitgrid.noconfig" = "Nie wymaga konfiguracji.";
+"postpred.perset_note" = "Metody wejścia ustawiasz teraz na każdej karcie zestawu w Moje zestawy. Otwórz zestaw, aby wybrać jego wejście.";
+"postpred.no_active_set" = "Brak aktywnego zestawu. Przejdź do Moje zestawy i aktywuj jeden.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Aktywuje się automatycznie";
+"fakehome.autoactive.body" = "Pokazywany po otwarciu Performance, jeśli ustawiono zrzut ekranu. Dotknij w dowolnym miejscu, aby ujawnić profil.";
+"lockscreen.perset_note" = "Aktywuje się, gdy wybierzesz Ekran blokady jako wejście zestawu w Moje zestawy.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Przejdź do Zestawów, aby skonfigurować";
+"postpred.goto_sets.body" = "Wybierz aktywny zestaw i wybierz jego metodę wejścia bezpośrednio z każdej karty zestawu.";
+"set.url_scheme.copy" = "Kopiuj";
+"set.url_scheme.copied" = "Skopiowano!";

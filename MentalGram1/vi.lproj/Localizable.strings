@@ -656,12 +656,12 @@
 "limits.help.table.col.action" = "Tính năng";
 "limits.help.table.col.first" = "Lần đầu";
 "limits.help.table.col.again" = "Lặp lại";
-"limits.help.table.row.performance" = "Mở Trình diễn";
+"limits.help.table.row.performance" = "Mở Trình diễn (hồ sơ + bộ nhớ đệm nền)";
 "limits.help.table.row.followers" = "Danh sách người theo dõi";
 "limits.help.table.row.profile.new" = "Hồ sơ người theo dõi mới";
 "limits.help.table.row.sa" = "Đồng bộ & Lưu trữ (mỗi ảnh)";
 "limits.help.table.row.upload" = "Tải lên (mỗi ảnh)";
-"limits.help.table.row.autoupload" = "Tải lên tự động đầy đủ (mỗi ảnh)";
+"limits.help.table.row.autoupload" = "Tự động tải lên mỗi ảnh (tải + lưu trữ)";
 "limits.help.table.row.reveal" = "Tiết lộ (mỗi chữ cái/ảnh)";
 "limits.help.table.row.notebio" = "Thay đổi ghi chú hoặc tiểu sử";
 "limits.help.table.row.explore" = "Explore / Tìm kiếm";
@@ -697,3 +697,31 @@
 "dfh.mockup.following_tab" = "Đang theo dõi";
 "dfh.mockup.follow_too" = "Theo dõi lại";
 "dfh.mockup.remove_btn" = "Xóa";
+
+/* Per-set input selector */
+"set.input.label" = "Nhập";
+"set.input.configure" = "Cấu hình";
+"set.input.covertyping.help" = "Che những gì bạn gõ trong Khám phá để khán giả thấy một từ khác. Nhấn PHÍM CÁCH để tiết lộ.";
+"set.input.covertyping.maskmode" = "Chế độ mặt nạ";
+"set.input.api.help" = "Thăm dò nguồn trực tuyến mỗi 2 giây khi Performance đang mở và tự động tiết lộ khi có giá trị mới.";
+"set.input.api.source" = "Nguồn API";
+"set.input.api.endpoint_hint" = "Cấu hình điểm cuối API trong Cài đặt → Tích hợp.";
+"set.input.ocr.help" = "Camera khởi động im lặng khi mở Performance. Nhấn Tăng âm lượng để quét; văn bản nhận dạng được tự động tiết lộ.";
+"set.input.ocr.camera" = "Camera";
+"set.input.ocr.language" = "Ngôn ngữ";
+"set.input.lockscreen.help" = "Hiển thị màn hình khóa giả khi mở Performance để bạn nhập giá trị một cách bí mật. Đặt hình nền bên dưới.";
+"set.input.digitgrid.help" = "Vuốt trái hoặc phải trên lưới ảnh để tạo giá trị, rồi chạm biểu tượng Bài viết để tiết lộ.";
+"set.input.digitgrid.noconfig" = "Không cần thiết lập.";
+"postpred.perset_note" = "Phương thức nhập giờ được đặt trên thẻ của từng bộ trong Bộ của tôi. Mở một bộ để chọn phương thức nhập.";
+"postpred.no_active_set" = "Không có bộ nào đang hoạt động. Vào Bộ của tôi và kích hoạt một bộ.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Tự động kích hoạt";
+"fakehome.autoactive.body" = "Hiển thị khi mở Performance nếu đã đặt ảnh chụp màn hình. Chạm vào bất kỳ đâu để tiết lộ hồ sơ của bạn.";
+"lockscreen.perset_note" = "Kích hoạt khi bạn chọn Màn hình khóa làm phương thức nhập của một bộ trong Bộ của tôi.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Đến Sets để cấu hình";
+"postpred.goto_sets.body" = "Chọn một set đang hoạt động và chọn phương thức nhập trực tiếp từ mỗi thẻ set.";
+"set.url_scheme.copy" = "Sao chép";
+"set.url_scheme.copied" = "Đã sao chép!";

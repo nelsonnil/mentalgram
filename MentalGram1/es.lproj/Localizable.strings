@@ -1746,3 +1746,31 @@
 "ig.posts_count" = "%d publicaciones";
 "lockscreen.enter_passcode" = "Introducir código";
 "lockscreen.emergency" = "Emergencia";
+
+/* Per-set input selector */
+"set.input.label" = "Entrada";
+"set.input.configure" = "Configurar";
+"set.input.covertyping.help" = "Enmascara lo que escribes en Explorar para que los espectadores vean otra palabra. Pulsa ESPACIO para revelar.";
+"set.input.covertyping.maskmode" = "Modo de máscara";
+"set.input.api.help" = "Consulta una fuente online cada 2 s mientras Performance está abierto y revela automáticamente cuando llega un nuevo valor.";
+"set.input.api.source" = "Fuente API";
+"set.input.api.endpoint_hint" = "Configura los endpoints de la API en Ajustes → Integraciones.";
+"set.input.ocr.help" = "La cámara se inicia en silencio al abrir Performance. Pulsa Volumen Arriba para escanear; el texto reconocido revela automáticamente.";
+"set.input.ocr.camera" = "Cámara";
+"set.input.ocr.language" = "Idioma";
+"set.input.lockscreen.help" = "Muestra una pantalla de bloqueo falsa al abrir Performance para introducir el valor en secreto. Define un fondo abajo.";
+"set.input.digitgrid.help" = "Desliza a izquierda o derecha en la cuadrícula para formar el valor y toca el icono de Publicaciones para revelar.";
+"set.input.digitgrid.noconfig" = "No requiere configuración.";
+"postpred.perset_note" = "Los métodos de entrada ahora se configuran en cada tarjeta de set en Mis Sets. Abre un set para elegir su entrada.";
+"postpred.no_active_set" = "No hay set activo. Ve a Mis Sets y marca uno como activo.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Se activa automáticamente";
+"fakehome.autoactive.body" = "Se muestra al abrir Performance si hay una captura configurada. Toca en cualquier sitio para revelar tu perfil.";
+"lockscreen.perset_note" = "Se activa cuando eliges Pantalla de bloqueo como entrada de un set en Mis Sets.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Ve a Sets para configurar";
+"postpred.goto_sets.body" = "Selecciona un set activo y elige su método de entrada desde cada tarjeta de set.";
+"set.url_scheme.copy" = "Copiar";
+"set.url_scheme.copied" = "¡Copiado!";

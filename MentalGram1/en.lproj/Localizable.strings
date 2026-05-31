@@ -1146,3 +1146,31 @@
 "ig.posts_count" = "%d posts";
 "lockscreen.enter_passcode" = "Enter Passcode";
 "lockscreen.emergency" = "Emergency";
+
+/* Per-set input selector */
+"set.input.label" = "Input";
+"set.input.configure" = "Configure";
+"set.input.covertyping.help" = "Masks what you type in Explore so spectators see a different word. Press SPACE to trigger the reveal.";
+"set.input.covertyping.maskmode" = "Mask Mode";
+"set.input.api.help" = "Polls an online source every 2 s while Performance is open and reveals automatically when a new value arrives.";
+"set.input.api.source" = "API Source";
+"set.input.api.endpoint_hint" = "Configure the API endpoints in Settings → Integrations.";
+"set.input.ocr.help" = "The camera starts silently when Performance opens. Press Volume Up to scan; recognized text reveals automatically.";
+"set.input.ocr.camera" = "Camera";
+"set.input.ocr.language" = "Language";
+"set.input.lockscreen.help" = "Shows a fake lock screen when Performance opens so you can secretly enter the value. Set a wallpaper below.";
+"set.input.digitgrid.help" = "Swipe left or right on the photo grid to build the value, then tap the Posts icon to reveal.";
+"set.input.digitgrid.noconfig" = "No setup needed.";
+"postpred.perset_note" = "Input methods are now set on each set card in My Sets. Open a set to choose its input.";
+"postpred.no_active_set" = "No active set. Go to My Sets and mark one as active.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Activates automatically";
+"fakehome.autoactive.body" = "Shown when Performance opens if a screenshot is set. Tap anywhere to reveal your profile.";
+"lockscreen.perset_note" = "Activates when you choose Lock Screen as a set's input in My Sets.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Go to Sets to configure";
+"postpred.goto_sets.body" = "Select an active set and choose its input method directly from each set card.";
+"set.url_scheme.copy" = "Copy";
+"set.url_scheme.copied" = "Copied!";

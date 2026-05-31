@@ -1263,12 +1263,12 @@
 "limits.help.table.col.action" = "機能";
 "limits.help.table.col.first" = "初回";
 "limits.help.table.col.again" = "再利用";
-"limits.help.table.row.performance" = "Performanceを開く";
+"limits.help.table.row.performance" = "Performanceを開く（プロフィール＋バックグラウンドキャッシュ）";
 "limits.help.table.row.followers" = "フォロワーリスト";
 "limits.help.table.row.profile.new" = "新規フォロワープロフィール";
 "limits.help.table.row.sa" = "Sync & Archive（写真1枚）";
 "limits.help.table.row.upload" = "アップロード（写真1枚）";
-"limits.help.table.row.autoupload" = "自動アップロード全サイクル（写真1枚あたり）";
+"limits.help.table.row.autoupload" = "自動アップロード（写真1枚：アップ＋アーカイブ）";
 "limits.help.table.row.reveal" = "リビール（文字/写真1つ）";
 "limits.help.table.row.notebio" = "ノートまたはbio変更";
 "limits.help.table.row.explore" = "探索 / 検索";
@@ -1513,3 +1513,31 @@
 "ig.posts_count" = "%d件の投稿";
 "lockscreen.enter_passcode" = "パスコードを入力";
 "lockscreen.emergency" = "緊急";
+
+/* Per-set input selector */
+"set.input.label" = "入力";
+"set.input.configure" = "設定";
+"set.input.covertyping.help" = "探索で入力した内容をマスクし、観客には別の単語が見えます。スペースキーで公開します。";
+"set.input.covertyping.maskmode" = "マスクモード";
+"set.input.api.help" = "Performanceを開いている間、2秒ごとにオンラインソースを確認し、新しい値が届くと自動的に公開します。";
+"set.input.api.source" = "APIソース";
+"set.input.api.endpoint_hint" = "APIのエンドポイントは設定→連携で構成します。";
+"set.input.ocr.help" = "Performanceを開くとカメラが静かに起動します。音量アップでスキャンし、認識したテキストが自動的に公開されます。";
+"set.input.ocr.camera" = "カメラ";
+"set.input.ocr.language" = "言語";
+"set.input.lockscreen.help" = "Performanceを開くと偽のロック画面が表示され、こっそり値を入力できます。下で壁紙を設定してください。";
+"set.input.digitgrid.help" = "グリッドを左右にスワイプして値を作り、投稿アイコンをタップして公開します。";
+"set.input.digitgrid.noconfig" = "設定は不要です。";
+"postpred.perset_note" = "入力方法はマイセットの各セットカードで設定するようになりました。セットを開いて入力を選択してください。";
+"postpred.no_active_set" = "アクティブなセットがありません。マイセットで1つをアクティブにしてください。";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "自動的に有効になります";
+"fakehome.autoactive.body" = "スクリーンショットを設定していると、Performanceを開いたときに表示されます。どこでもタップするとプロフィールが表示されます。";
+"lockscreen.perset_note" = "マイセットでセットの入力としてロック画面を選ぶと有効になります。";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Setsに移動して設定する";
+"postpred.goto_sets.body" = "各セットカードからアクティブなセットを選択し、入力方法を設定してください。";
+"set.url_scheme.copy" = "コピー";
+"set.url_scheme.copied" = "コピー済み！";

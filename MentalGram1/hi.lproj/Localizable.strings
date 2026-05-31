@@ -902,12 +902,12 @@
 "limits.help.table.col.action" = "फ़ीचर";
 "limits.help.table.col.first" = "पहली बार";
 "limits.help.table.col.again" = "दोबारा";
-"limits.help.table.row.performance" = "Performance खोलें";
+"limits.help.table.row.performance" = "Performance खोलें (प्रोफ़ाइल + बैकग्राउंड कैश)";
 "limits.help.table.row.followers" = "फॉलोअर्स लिस्ट";
 "limits.help.table.row.profile.new" = "नया फॉलोअर प्रोफ़ाइल";
 "limits.help.table.row.sa" = "Sync & Archive (प्रति फ़ोटो)";
 "limits.help.table.row.upload" = "अपलोड (प्रति फ़ोटो)";
-"limits.help.table.row.autoupload" = "ऑटो-अपलोड पूरा चक्र (प्रति फ़ोटो)";
+"limits.help.table.row.autoupload" = "प्रति फ़ोटो ऑटो-अपलोड (अपलोड + आर्काइव)";
 "limits.help.table.row.reveal" = "रिवील (प्रति अक्षर/फ़ोटो)";
 "limits.help.table.row.notebio" = "नोट या बायो बदलें";
 "limits.help.table.row.explore" = "एक्सप्लोर / सर्च";
@@ -1162,3 +1162,31 @@
 "ig.posts_count" = "%d पोस्ट";
 "lockscreen.enter_passcode" = "पासकोड दर्ज करें";
 "lockscreen.emergency" = "आपातकाल";
+
+/* Per-set input selector */
+"set.input.label" = "इनपुट";
+"set.input.configure" = "कॉन्फ़िगर करें";
+"set.input.covertyping.help" = "एक्सप्लोर में आप जो टाइप करते हैं उसे छुपाता है ताकि दर्शकों को अलग शब्द दिखे। प्रकट करने के लिए SPACE दबाएँ।";
+"set.input.covertyping.maskmode" = "मास्क मोड";
+"set.input.api.help" = "Performance खुला रहने पर हर 2 सेकंड में ऑनलाइन स्रोत जांचता है और नया मान आते ही स्वतः प्रकट करता है।";
+"set.input.api.source" = "API स्रोत";
+"set.input.api.endpoint_hint" = "API एंडपॉइंट सेटिंग्स → इंटीग्रेशन में कॉन्फ़िगर करें।";
+"set.input.ocr.help" = "Performance खोलने पर कैमरा चुपचाप शुरू होता है। स्कैन करने के लिए वॉल्यूम अप दबाएँ; पहचाना गया टेक्स्ट स्वतः प्रकट होता है।";
+"set.input.ocr.camera" = "कैमरा";
+"set.input.ocr.language" = "भाषा";
+"set.input.lockscreen.help" = "Performance खोलने पर एक नकली लॉक स्क्रीन दिखाता है ताकि आप गुप्त रूप से मान दर्ज कर सकें। नीचे वॉलपेपर सेट करें।";
+"set.input.digitgrid.help" = "मान बनाने के लिए ग्रिड पर बाएँ या दाएँ स्वाइप करें, फिर प्रकट करने के लिए पोस्ट आइकन टैप करें।";
+"set.input.digitgrid.noconfig" = "किसी सेटअप की आवश्यकता नहीं।";
+"postpred.perset_note" = "इनपुट विधियाँ अब मेरे सेट में प्रत्येक सेट कार्ड पर सेट होती हैं। इनपुट चुनने के लिए सेट खोलें।";
+"postpred.no_active_set" = "कोई सक्रिय सेट नहीं। मेरे सेट में जाएँ और एक सक्रिय करें।";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "स्वतः सक्रिय होता है";
+"fakehome.autoactive.body" = "यदि स्क्रीनशॉट सेट है तो Performance खोलने पर दिखता है। प्रोफ़ाइल प्रकट करने के लिए कहीं भी टैप करें।";
+"lockscreen.perset_note" = "जब आप मेरे सेट में किसी सेट के इनपुट के रूप में लॉक स्क्रीन चुनते हैं तो सक्रिय होता है।";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Sets में जाकर कॉन्फ़िगर करें";
+"postpred.goto_sets.body" = "प्रत्येक सेट कार्ड से सीधे एक सक्रिय सेट चुनें और उसकी इनपुट विधि चुनें।";
+"set.url_scheme.copy" = "कॉपी करें";
+"set.url_scheme.copied" = "कॉपी हो गया!";

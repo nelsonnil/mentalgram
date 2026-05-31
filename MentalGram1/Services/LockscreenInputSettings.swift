@@ -23,6 +23,11 @@ class LockscreenInputSettings: ObservableObject {
     /// Feature is only active when enabled AND a wallpaper has been chosen.
     var isReady: Bool { isEnabled && wallpaperData != nil }
 
+    /// True as soon as a wallpaper exists, regardless of the legacy `isEnabled`
+    /// flag. Used by the per-set input system where the lockscreen is enabled by
+    /// selecting it as a set's input, not by a global toggle.
+    var hasWallpaper: Bool { wallpaperData != nil }
+
     private init() {
         self.isEnabled = UserDefaults.standard.bool(forKey: "lockscreenInputEnabled")
         self.wallpaperData = UserDefaults.standard.data(forKey: "lockscreenWallpaperData")

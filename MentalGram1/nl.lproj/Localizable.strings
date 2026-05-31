@@ -1512,3 +1512,31 @@
 "ig.posts_count" = "%d berichten";
 "lockscreen.enter_passcode" = "Voer toegangscode in";
 "lockscreen.emergency" = "Noodoproep";
+
+/* Per-set input selector */
+"set.input.label" = "Invoer";
+"set.input.configure" = "Configureren";
+"set.input.covertyping.help" = "Maskeert wat je in Verkennen typt zodat toeschouwers een ander woord zien. Druk op SPATIE om te onthullen.";
+"set.input.covertyping.maskmode" = "Maskermodus";
+"set.input.api.help" = "Pollt elke 2 s een online bron terwijl Performance open is en onthult automatisch wanneer een nieuwe waarde binnenkomt.";
+"set.input.api.source" = "API-bron";
+"set.input.api.endpoint_hint" = "Configureer de API-eindpunten in Instellingen → Integraties.";
+"set.input.ocr.help" = "De camera start stil wanneer Performance opent. Druk op Volume Omhoog om te scannen; herkende tekst onthult automatisch.";
+"set.input.ocr.camera" = "Camera";
+"set.input.ocr.language" = "Taal";
+"set.input.lockscreen.help" = "Toont een nep-vergrendelscherm wanneer Performance opent zodat je de waarde stiekem kunt invoeren. Stel hieronder een achtergrond in.";
+"set.input.digitgrid.help" = "Veeg links of rechts op het rooster om de waarde te vormen en tik op het Berichten-icoon om te onthullen.";
+"set.input.digitgrid.noconfig" = "Geen instelling nodig.";
+"postpred.perset_note" = "Invoermethoden stel je nu in op elke setkaart in Mijn Sets. Open een set om de invoer te kiezen.";
+"postpred.no_active_set" = "Geen actieve set. Ga naar Mijn Sets en activeer er een.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Wordt automatisch geactiveerd";
+"fakehome.autoactive.body" = "Wordt getoond bij het openen van Performance als er een schermafbeelding is ingesteld. Tik ergens om je profiel te onthullen.";
+"lockscreen.perset_note" = "Wordt geactiveerd wanneer je Vergrendelscherm als invoer van een set kiest in Mijn Sets.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Ga naar Sets om te configureren";
+"postpred.goto_sets.body" = "Selecteer een actieve set en kies de invoermethode direct in elke setkaart.";
+"set.url_scheme.copy" = "Kopiëren";
+"set.url_scheme.copied" = "Gekopieerd!";

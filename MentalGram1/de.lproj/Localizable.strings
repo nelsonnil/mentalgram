@@ -1695,3 +1695,31 @@
 "ig.posts_count" = "%d Beiträge";
 "lockscreen.enter_passcode" = "Code eingeben";
 "lockscreen.emergency" = "Notruf";
+
+/* Per-set input selector */
+"set.input.label" = "Eingabe";
+"set.input.configure" = "Konfigurieren";
+"set.input.covertyping.help" = "Maskiert, was du in Entdecken tippst, sodass Zuschauer ein anderes Wort sehen. Drücke LEERTASTE zum Aufdecken.";
+"set.input.covertyping.maskmode" = "Maskenmodus";
+"set.input.api.help" = "Fragt alle 2 s eine Online-Quelle ab, während Performance geöffnet ist, und deckt automatisch auf, wenn ein neuer Wert eintrifft.";
+"set.input.api.source" = "API-Quelle";
+"set.input.api.endpoint_hint" = "Konfiguriere die API-Endpunkte in Einstellungen → Integrationen.";
+"set.input.ocr.help" = "Die Kamera startet beim Öffnen von Performance lautlos. Drücke Lauter zum Scannen; erkannter Text deckt automatisch auf.";
+"set.input.ocr.camera" = "Kamera";
+"set.input.ocr.language" = "Sprache";
+"set.input.lockscreen.help" = "Zeigt beim Öffnen von Performance einen gefälschten Sperrbildschirm, um den Wert heimlich einzugeben. Lege unten ein Hintergrundbild fest.";
+"set.input.digitgrid.help" = "Wische im Foto-Raster nach links oder rechts, um den Wert zu bilden, und tippe auf das Beiträge-Symbol zum Aufdecken.";
+"set.input.digitgrid.noconfig" = "Keine Einrichtung nötig.";
+"postpred.perset_note" = "Eingabemethoden werden jetzt auf jeder Set-Karte unter Meine Sets festgelegt. Öffne ein Set, um seine Eingabe zu wählen.";
+"postpred.no_active_set" = "Kein aktives Set. Gehe zu Meine Sets und aktiviere eins.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Wird automatisch aktiviert";
+"fakehome.autoactive.body" = "Wird beim Öffnen von Performance angezeigt, wenn ein Screenshot festgelegt ist. Tippe irgendwo, um dein Profil aufzudecken.";
+"lockscreen.perset_note" = "Wird aktiviert, wenn du Sperrbildschirm als Eingabe eines Sets unter Meine Sets wählst.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Zu Sets gehen und konfigurieren";
+"postpred.goto_sets.body" = "Wähle ein aktives Set und lege seine Eingabemethode direkt in jeder Set-Karte fest.";
+"set.url_scheme.copy" = "Kopieren";
+"set.url_scheme.copied" = "Kopiert!";

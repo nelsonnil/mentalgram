@@ -128,6 +128,7 @@
 				hi,
 				Base,
 				vi,
+				pt,
 			);
 			mainGroup = 200E7F272F3893500061C768;
 			minimizedProjectReferenceProxies = 1;

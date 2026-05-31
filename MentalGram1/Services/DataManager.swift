@@ -193,7 +193,8 @@ class DataManager: ObservableObject {
             photos: setPhotos,
             createdAt: Date(),
             selectedAlphabet: selectedAlphabet,
-            targetBankCount: (type == .word || type == .number) ? bankCount : nil
+            targetBankCount: (type == .word || type == .number) ? bankCount : nil,
+            inputMethod: InputMethod.defaultMethod(for: type)
         )
         
         sets.append(newSet)
@@ -495,6 +496,39 @@ class DataManager: ObservableObject {
         print("✅ [SWAP] Swapped position \(indexA + 1) ↔ \(indexB + 1)")
     }
     
+    // MARK: - Input Method (per-set)
+
+    /// The single globally-active set, if any.
+    var activeSet: PhotoSet? {
+        guard let id = ActiveSetSettings.shared.activeSetId else { return nil }
+        return sets.first { $0.id == id }
+    }
+
+    /// The input method of the active set (nil if no set is active).
+    var activeInputMethod: InputMethod? {
+        activeSet?.resolvedInputMethod
+    }
+
+    /// True when the active set uses the given input method. This is the single
+    /// gate used by all runtime reveal triggers (cover typing, digit grid,
+    /// lockscreen, API, OCR) so only one input is ever live at a time.
+    func isActiveInput(_ method: InputMethod) -> Bool {
+        activeInputMethod == method
+    }
+
+    /// Updates the input method for a set, ignoring values not allowed for its type.
+    func setInputMethod(_ method: InputMethod, for setId: UUID) {
+        guard let idx = sets.firstIndex(where: { $0.id == setId }) else { return }
+        guard InputMethod.allowed(for: sets[idx].type).contains(method) else {
+            print("⚠️ [INPUT] \(method.rawValue) not allowed for \(sets[idx].type.rawValue) set — ignored")
+            return
+        }
+        sets[idx].inputMethod = method
+        saveSets()
+        objectWillChange.send()
+        print("🎚️ [INPUT] Set '\(sets[idx].name)' input → \(method.rawValue)")
+    }
+
     func renameSet(id: UUID, newName: String) {
         guard let idx = sets.firstIndex(where: { $0.id == id }) else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespaces)

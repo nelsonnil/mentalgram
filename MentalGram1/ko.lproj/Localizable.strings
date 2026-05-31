@@ -1264,12 +1264,12 @@
 "limits.help.table.col.action" = "기능";
 "limits.help.table.col.first" = "첫 번째";
 "limits.help.table.col.again" = "재사용";
-"limits.help.table.row.performance" = "Performance 열기";
+"limits.help.table.row.performance" = "Performance 열기 (프로필 + 백그라운드 캐시)";
 "limits.help.table.row.followers" = "팔로워 목록";
 "limits.help.table.row.profile.new" = "새 팔로워 프로필";
 "limits.help.table.row.sa" = "Sync & Archive (사진당)";
 "limits.help.table.row.upload" = "업로드 (사진당)";
-"limits.help.table.row.autoupload" = "자동 업로드 전체 사이클 (사진 1장당)";
+"limits.help.table.row.autoupload" = "사진당 자동 업로드 (업로드 + 아카이브)";
 "limits.help.table.row.reveal" = "리빌 (글자/사진당)";
 "limits.help.table.row.notebio" = "노트 또는 bio 변경";
 "limits.help.table.row.explore" = "탐색 / 검색";
@@ -1517,3 +1517,31 @@
 "ig.posts_count" = "게시물 %d개";
 "lockscreen.enter_passcode" = "암호 입력";
 "lockscreen.emergency" = "긴급전화";
+
+/* Per-set input selector */
+"set.input.label" = "입력";
+"set.input.configure" = "설정";
+"set.input.covertyping.help" = "탐색에서 입력한 내용을 가려 관객에게는 다른 단어가 보입니다. 스페이스를 눌러 공개하세요.";
+"set.input.covertyping.maskmode" = "마스크 모드";
+"set.input.api.help" = "Performance가 열려 있는 동안 2초마다 온라인 소스를 확인하고 새 값이 도착하면 자동으로 공개합니다.";
+"set.input.api.source" = "API 소스";
+"set.input.api.endpoint_hint" = "API 엔드포인트는 설정 → 연동에서 구성하세요.";
+"set.input.ocr.help" = "Performance를 열면 카메라가 조용히 시작됩니다. 볼륨 업을 눌러 스캔하면 인식된 텍스트가 자동으로 공개됩니다.";
+"set.input.ocr.camera" = "카메라";
+"set.input.ocr.language" = "언어";
+"set.input.lockscreen.help" = "Performance를 열면 가짜 잠금 화면이 표시되어 값을 몰래 입력할 수 있습니다. 아래에서 배경화면을 설정하세요.";
+"set.input.digitgrid.help" = "그리드를 좌우로 스와이프해 값을 만들고 게시물 아이콘을 눌러 공개하세요.";
+"set.input.digitgrid.noconfig" = "설정이 필요 없습니다.";
+"postpred.perset_note" = "입력 방식은 이제 내 세트의 각 세트 카드에서 설정합니다. 세트를 열어 입력을 선택하세요.";
+"postpred.no_active_set" = "활성 세트가 없습니다. 내 세트에서 하나를 활성화하세요.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "자동으로 활성화됩니다";
+"fakehome.autoactive.body" = "스크린샷이 설정되어 있으면 Performance를 열 때 표시됩니다. 아무 곳이나 탭하면 프로필이 공개됩니다.";
+"lockscreen.perset_note" = "내 세트에서 세트의 입력으로 잠금 화면을 선택하면 활성화됩니다.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Sets에서 설정하세요";
+"postpred.goto_sets.body" = "각 세트 카드에서 활성 세트를 선택하고 입력 방법을 선택하세요.";
+"set.url_scheme.copy" = "복사";
+"set.url_scheme.copied" = "복사됨!";

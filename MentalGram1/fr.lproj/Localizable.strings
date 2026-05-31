@@ -1696,3 +1696,31 @@
 "ig.posts_count" = "%d publications";
 "lockscreen.enter_passcode" = "Entrer le code";
 "lockscreen.emergency" = "Urgence";
+
+/* Per-set input selector */
+"set.input.label" = "Saisie";
+"set.input.configure" = "Configurer";
+"set.input.covertyping.help" = "Masque ce que vous tapez dans Explorer pour que les spectateurs voient un autre mot. Appuyez sur ESPACE pour révéler.";
+"set.input.covertyping.maskmode" = "Mode de masque";
+"set.input.api.help" = "Interroge une source en ligne toutes les 2 s pendant Performance et révèle automatiquement à l'arrivée d'une nouvelle valeur.";
+"set.input.api.source" = "Source API";
+"set.input.api.endpoint_hint" = "Configurez les points de terminaison de l'API dans Réglages → Intégrations.";
+"set.input.ocr.help" = "La caméra démarre en silence à l'ouverture de Performance. Appuyez sur Volume Haut pour scanner ; le texte reconnu révèle automatiquement.";
+"set.input.ocr.camera" = "Caméra";
+"set.input.ocr.language" = "Langue";
+"set.input.lockscreen.help" = "Affiche un faux écran de verrouillage à l'ouverture de Performance pour saisir la valeur en secret. Définissez un fond ci-dessous.";
+"set.input.digitgrid.help" = "Glissez à gauche ou à droite sur la grille pour composer la valeur, puis touchez l'icône Publications pour révéler.";
+"set.input.digitgrid.noconfig" = "Aucune configuration nécessaire.";
+"postpred.perset_note" = "Les méthodes de saisie se configurent désormais sur chaque carte de set dans Mes Sets. Ouvrez un set pour choisir sa saisie.";
+"postpred.no_active_set" = "Aucun set actif. Allez dans Mes Sets et activez-en un.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "S'active automatiquement";
+"fakehome.autoactive.body" = "Affiché à l'ouverture de Performance si une capture est définie. Touchez n'importe où pour révéler votre profil.";
+"lockscreen.perset_note" = "S'active quand vous choisissez Écran de verrouillage comme saisie d'un set dans Mes Sets.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Aller dans Sets pour configurer";
+"postpred.goto_sets.body" = "Sélectionnez un set actif et choisissez sa méthode de saisie directement depuis chaque carte de set.";
+"set.url_scheme.copy" = "Copier";
+"set.url_scheme.copied" = "Copié !";

@@ -538,6 +538,12 @@ struct ExploreView: View {
     // MARK: - Secret Input Logic
     
     private func updateMaskTextCache() {
+        // Cover typing only runs when the active set is a Word set using it.
+        // Bail out early otherwise so we never fire the getLatestFollower() call.
+        guard DataManager.shared.isActiveInput(.coverTyping) else {
+            maskTextCache = ""
+            return
+        }
         // Custom mode — no async needed.
         guard secretInputSettings.mode == .latestFollower else {
             maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)

@@ -902,12 +902,12 @@
 "limits.help.table.col.action" = "ฟีเจอร์";
 "limits.help.table.col.first" = "ครั้งแรก";
 "limits.help.table.col.again" = "ซ้ำ";
-"limits.help.table.row.performance" = "เปิด Performance";
+"limits.help.table.row.performance" = "เปิด Performance (โปรไฟล์ + แคชพื้นหลัง)";
 "limits.help.table.row.followers" = "รายการผู้ติดตาม";
 "limits.help.table.row.profile.new" = "โปรไฟล์ผู้ติดตามใหม่";
 "limits.help.table.row.sa" = "Sync & Archive (ต่อภาพ)";
 "limits.help.table.row.upload" = "อัปโหลด (ต่อภาพ)";
-"limits.help.table.row.autoupload" = "รอบการอัปโหลดอัตโนมัติเต็มรูปแบบ (ต่อรูป)";
+"limits.help.table.row.autoupload" = "อัปโหลดอัตโนมัติต่อรูป (อัปโหลด + จัดเก็บ)";
 "limits.help.table.row.reveal" = "เปิดเผย (ต่อตัวอักษร/ภาพ)";
 "limits.help.table.row.notebio" = "เปลี่ยนโน้ตหรือ bio";
 "limits.help.table.row.explore" = "สำรวจ / ค้นหา";
@@ -1162,3 +1162,31 @@
 "ig.posts_count" = "%d โพสต์";
 "lockscreen.enter_passcode" = "ใส่รหัสผ่าน";
 "lockscreen.emergency" = "ฉุกเฉิน";
+
+/* Per-set input selector */
+"set.input.label" = "อินพุต";
+"set.input.configure" = "ตั้งค่า";
+"set.input.covertyping.help" = "ปิดบังสิ่งที่คุณพิมพ์ในสำรวจ เพื่อให้ผู้ชมเห็นคำอื่น กด SPACE เพื่อเปิดเผย";
+"set.input.covertyping.maskmode" = "โหมดมาสก์";
+"set.input.api.help" = "ตรวจสอบแหล่งข้อมูลออนไลน์ทุก 2 วินาทีขณะเปิด Performance และเปิดเผยอัตโนมัติเมื่อมีค่าใหม่";
+"set.input.api.source" = "แหล่ง API";
+"set.input.api.endpoint_hint" = "ตั้งค่าปลายทาง API ใน การตั้งค่า → การเชื่อมต่อ";
+"set.input.ocr.help" = "กล้องจะเริ่มทำงานแบบเงียบเมื่อเปิด Performance กดเพิ่มเสียงเพื่อสแกน ข้อความที่รู้จักจะถูกเปิดเผยอัตโนมัติ";
+"set.input.ocr.camera" = "กล้อง";
+"set.input.ocr.language" = "ภาษา";
+"set.input.lockscreen.help" = "แสดงหน้าจอล็อกปลอมเมื่อเปิด Performance เพื่อให้คุณป้อนค่าแบบลับๆ ตั้งวอลเปเปอร์ด้านล่าง";
+"set.input.digitgrid.help" = "ปัดซ้ายหรือขวาบนกริดเพื่อสร้างค่า แล้วแตะไอคอนโพสต์เพื่อเปิดเผย";
+"set.input.digitgrid.noconfig" = "ไม่ต้องตั้งค่า";
+"postpred.perset_note" = "ตอนนี้ตั้งวิธีอินพุตบนการ์ดแต่ละชุดใน ชุดของฉัน เปิดชุดเพื่อเลือกอินพุต";
+"postpred.no_active_set" = "ไม่มีชุดที่ใช้งาน ไปที่ ชุดของฉัน แล้วเปิดใช้งานหนึ่งชุด";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "เปิดใช้งานอัตโนมัติ";
+"fakehome.autoactive.body" = "แสดงเมื่อเปิด Performance หากตั้งค่าภาพหน้าจอไว้ แตะที่ใดก็ได้เพื่อเปิดเผยโปรไฟล์ของคุณ";
+"lockscreen.perset_note" = "เปิดใช้งานเมื่อคุณเลือกหน้าจอล็อกเป็นอินพุตของชุดใน ชุดของฉัน";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "ไปที่ Sets เพื่อตั้งค่า";
+"postpred.goto_sets.body" = "เลือก set ที่ใช้งานอยู่และเลือกวิธีการป้อนข้อมูลได้จากการ์ดแต่ละชุดโดยตรง";
+"set.url_scheme.copy" = "คัดลอก";
+"set.url_scheme.copied" = "คัดลอกแล้ว!";

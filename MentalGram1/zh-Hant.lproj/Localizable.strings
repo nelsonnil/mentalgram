@@ -912,12 +912,12 @@
 "limits.help.table.col.action" = "功能";
 "limits.help.table.col.first" = "首次";
 "limits.help.table.col.again" = "再次";
-"limits.help.table.row.performance" = "開啟 Performance";
+"limits.help.table.row.performance" = "開啟 Performance（個人頁面 + 背景快取）";
 "limits.help.table.row.followers" = "追蹤者清單";
 "limits.help.table.row.profile.new" = "新追蹤者資料";
 "limits.help.table.row.sa" = "Sync & Archive（每張照片）";
 "limits.help.table.row.upload" = "上傳（每張照片）";
-"limits.help.table.row.autoupload" = "自動上傳完整週期（每張照片）";
+"limits.help.table.row.autoupload" = "自動上傳（每張照片：上傳 + 封存）";
 "limits.help.table.row.reveal" = "揭示（每個字母/照片）";
 "limits.help.table.row.notebio" = "更改備註或簡介";
 "limits.help.table.row.explore" = "探索 / 搜尋";
@@ -1172,3 +1172,31 @@
 "ig.posts_count" = "%d 貼文";
 "lockscreen.enter_passcode" = "輸入密碼";
 "lockscreen.emergency" = "緊急電話";
+
+/* Per-set input selector */
+"set.input.label" = "輸入";
+"set.input.configure" = "設定";
+"set.input.covertyping.help" = "遮罩你在探索中輸入的內容，讓觀眾看到不同的字。按空白鍵揭示。";
+"set.input.covertyping.maskmode" = "遮罩模式";
+"set.input.api.help" = "Performance 開啟時每 2 秒輪詢一次線上來源，收到新值時自動揭示。";
+"set.input.api.source" = "API 來源";
+"set.input.api.endpoint_hint" = "在設定 → 整合中設定 API 端點。";
+"set.input.ocr.help" = "開啟 Performance 時相機會靜默啟動。按音量加鍵掃描；辨識到的文字會自動揭示。";
+"set.input.ocr.camera" = "相機";
+"set.input.ocr.language" = "語言";
+"set.input.lockscreen.help" = "開啟 Performance 時顯示假鎖定畫面，方便你祕密輸入數值。在下方設定桌布。";
+"set.input.digitgrid.help" = "在照片格線上左右滑動以組成數值，然後點按貼文圖示揭示。";
+"set.input.digitgrid.noconfig" = "無需設定。";
+"postpred.perset_note" = "現在在「我的套牌」中每張套牌卡片上設定輸入方式。開啟套牌以選擇其輸入。";
+"postpred.no_active_set" = "沒有啟用的套牌。前往「我的套牌」並啟用一個。";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "自動啟用";
+"fakehome.autoactive.body" = "設定截圖後，開啟 Performance 時會顯示。點按任意處即可揭示你的個人檔案。";
+"lockscreen.perset_note" = "在「我的套牌」中將鎖定畫面選為某套牌的輸入時即會啟用。";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "前往 Sets 進行設定";
+"postpred.goto_sets.body" = "直接在每張套牌卡片中選擇活躍套牌並選擇其輸入方式。";
+"set.url_scheme.copy" = "複製";
+"set.url_scheme.copied" = "已複製!";

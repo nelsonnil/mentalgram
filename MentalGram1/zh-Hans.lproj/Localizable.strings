@@ -955,12 +955,12 @@
 "limits.help.table.col.action" = "功能";
 "limits.help.table.col.first" = "首次";
 "limits.help.table.col.again" = "再次";
-"limits.help.table.row.performance" = "打开 Performance";
+"limits.help.table.row.performance" = "打开 Performance（个人主页 + 后台缓存）";
 "limits.help.table.row.followers" = "关注者列表";
 "limits.help.table.row.profile.new" = "新关注者资料";
 "limits.help.table.row.sa" = "Sync & Archive（每张照片）";
 "limits.help.table.row.upload" = "上传（每张照片）";
-"limits.help.table.row.autoupload" = "自动上传完整周期（每张照片）";
+"limits.help.table.row.autoupload" = "自动上传（每张照片：上传 + 归档）";
 "limits.help.table.row.reveal" = "揭示（每个字母/照片）";
 "limits.help.table.row.notebio" = "更改备注或简介";
 "limits.help.table.row.explore" = "探索 / 搜索";
@@ -1215,3 +1215,31 @@
 "ig.posts_count" = "%d 帖子";
 "lockscreen.enter_passcode" = "输入密码";
 "lockscreen.emergency" = "紧急呼叫";
+
+/* Per-set input selector */
+"set.input.label" = "输入";
+"set.input.configure" = "配置";
+"set.input.covertyping.help" = "遮罩你在探索中输入的内容，让观众看到不同的词。按空格键揭示。";
+"set.input.covertyping.maskmode" = "遮罩模式";
+"set.input.api.help" = "Performance 打开时每 2 秒轮询一次在线来源，收到新值时自动揭示。";
+"set.input.api.source" = "API 来源";
+"set.input.api.endpoint_hint" = "在设置 → 集成中配置 API 端点。";
+"set.input.ocr.help" = "打开 Performance 时摄像头会静默启动。按音量加键扫描；识别到的文本会自动揭示。";
+"set.input.ocr.camera" = "摄像头";
+"set.input.ocr.language" = "语言";
+"set.input.lockscreen.help" = "打开 Performance 时显示假锁屏，便于你秘密输入数值。在下方设置壁纸。";
+"set.input.digitgrid.help" = "在照片网格上左右滑动以组成数值，然后点按帖子图标揭示。";
+"set.input.digitgrid.noconfig" = "无需设置。";
+"postpred.perset_note" = "现在在“我的套牌”中每个套牌卡片上设置输入方式。打开一个套牌以选择其输入。";
+"postpred.no_active_set" = "没有激活的套牌。前往“我的套牌”并激活一个。";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "自动激活";
+"fakehome.autoactive.body" = "设置截图后，打开 Performance 时会显示。点按任意处即可揭示你的资料页。";
+"lockscreen.perset_note" = "在“我的套牌”中将锁屏选为某套牌的输入时即会激活。";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "前往 Sets 进行配置";
+"postpred.goto_sets.body" = "直接在每张套牌卡片中选择活跃套牌并选择其输入方式。";
+"set.url_scheme.copy" = "复制";
+"set.url_scheme.copied" = "已复制!";

@@ -48,7 +48,8 @@ class CloudBackupService: ObservableObject {
         "secretInputEnabled", "secretInputMode", "secretInputCustomUsername",
         // Misc
         "autoProfilePicOnPerformance", "last_note_text",
-        // Active set IDs
+        // Active set (single global active set + legacy per-type keys)
+        "activeSetId", "activeSetType",
         "activeWordSetId", "activeNumberSetId", "activeCustomSetId", "activeCardSetId",
         // NOTE: Sets JSON (com.vault.sets.*) is backed up separately in syncToCloud()
         // because DataManager uses an account-scoped key: "com.vault.sets.<userId>"

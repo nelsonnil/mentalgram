@@ -1695,3 +1695,31 @@
 "ig.posts_count" = "%d post";
 "lockscreen.enter_passcode" = "Inserisci codice";
 "lockscreen.emergency" = "Emergenza";
+
+/* Per-set input selector */
+"set.input.label" = "Inserimento";
+"set.input.configure" = "Configura";
+"set.input.covertyping.help" = "Maschera ciò che digiti in Esplora così gli spettatori vedono un'altra parola. Premi SPAZIO per rivelare.";
+"set.input.covertyping.maskmode" = "Modalità maschera";
+"set.input.api.help" = "Interroga una fonte online ogni 2 s mentre Performance è aperto e rivela automaticamente all'arrivo di un nuovo valore.";
+"set.input.api.source" = "Fonte API";
+"set.input.api.endpoint_hint" = "Configura gli endpoint API in Impostazioni → Integrazioni.";
+"set.input.ocr.help" = "La fotocamera si avvia in silenzio all'apertura di Performance. Premi Volume Su per scansionare; il testo riconosciuto rivela automaticamente.";
+"set.input.ocr.camera" = "Fotocamera";
+"set.input.ocr.language" = "Lingua";
+"set.input.lockscreen.help" = "Mostra una schermata di blocco falsa all'apertura di Performance per inserire il valore in segreto. Imposta uno sfondo qui sotto.";
+"set.input.digitgrid.help" = "Scorri a sinistra o destra sulla griglia per comporre il valore, poi tocca l'icona Post per rivelare.";
+"set.input.digitgrid.noconfig" = "Nessuna configurazione necessaria.";
+"postpred.perset_note" = "I metodi di inserimento ora si impostano su ogni scheda set in I miei set. Apri un set per scegliere il suo inserimento.";
+"postpred.no_active_set" = "Nessun set attivo. Vai su I miei set e attivane uno.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Si attiva automaticamente";
+"fakehome.autoactive.body" = "Mostrato all'apertura di Performance se è impostato uno screenshot. Tocca ovunque per rivelare il tuo profilo.";
+"lockscreen.perset_note" = "Si attiva quando scegli Schermata di blocco come inserimento di un set in I miei set.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Vai a Set per configurare";
+"postpred.goto_sets.body" = "Seleziona un set attivo e scegli il metodo di input direttamente da ogni scheda set.";
+"set.url_scheme.copy" = "Copia";
+"set.url_scheme.copied" = "Copiato!";

@@ -21,7 +21,6 @@ struct PerformanceView: View {
     // OCR
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
-    @AppStorage("ppTopInputMode")   private var ppTopInputMode:   String = "off"
     // Text templates — user-defined wrappers with {word} token
     @AppStorage("note_template")   private var noteTemplate:  String = ""
     // Bio template slots (4 independent templates, active one used for performance)
@@ -42,7 +41,6 @@ struct PerformanceView: View {
     // Optimistic note state — @AppStorage triggers instant re-render on write
     @AppStorage("last_note_text")           private var lastNoteText: String = ""
     @AppStorage("last_note_sent_timestamp") private var lastNoteSentTimestamp: Double = 0
-    @ObservedObject private var forceRevealSettings = ForceNumberRevealSettings.shared
     @ObservedObject private var followingMagic = FollowingMagicSettings.shared
     @ObservedObject private var volumeMonitor  = VolumeButtonMonitor.shared
     @ObservedObject private var amnesiaSettings = AmnesiaCarouselSettings.shared
@@ -64,7 +62,6 @@ struct PerformanceView: View {
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
     @State private var showingLockdownSheet = false   // For long-press lockdown details
-    @State private var showDigitGridAlert = false
     @State private var performanceRemoteCallsAllowed = true
     @State private var performanceEntryRecorded = false
     /// Seconds remaining in the safety-gate pause. Non-zero only when blocked with no cache.
@@ -95,7 +92,6 @@ struct PerformanceView: View {
     @State private var taggedLoadedOnce = false
 
     // MARK: - Fake Home Screen illusion
-    @AppStorage("fakeHomeScreenEnabled") private var fakeHomeScreenEnabled = false
     @ObservedObject private var illusionService = HomeScreenIllusionService.shared
     @State private var showingHomeScreenIllusion = false
 
@@ -664,7 +660,7 @@ struct PerformanceView: View {
                 // OCR is active when any slot has .ocr as its source, OR legacy OCR mode is set
                 let noteOcr     = integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr"
                 let bioOcr      = integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr"
-                let postPredOcr = ppTopInputMode == "ocr"
+                let postPredOcr = DataManager.shared.isActiveInput(.ocr)
                 guard noteOcr || bioOcr || postPredOcr else { return }
                 if ocrCoordinator.isRunning {
                     ocrCoordinator.stop()
@@ -698,7 +694,7 @@ struct PerformanceView: View {
                     // Active when legacy OCR mode is set OR any slot has .ocr as its source
                     let hasBio  = bioTopInputMode  == "ocr" || integrations.ocrSlot(for: "bio")  != nil
                     let hasNote = noteTopInputMode == "ocr" || integrations.ocrSlot(for: "note") != nil
-                    let hasPost = ppTopInputMode == "ocr"
+                    let hasPost = DataManager.shared.isActiveInput(.ocr)
 
                     if hasBio {
                         print("📷 [OCR] Step 1/3 — applying to biography")
@@ -748,12 +744,6 @@ struct PerformanceView: View {
             } message: {
                 Text(spectatorLoadError ?? "")
             }
-            .alert("Digit Grid Disabled", isPresented: $showDigitGridAlert) {
-                Button("Enable") { ForceNumberRevealSettings.shared.gridSwipeEnabled = true }
-                Button("Dismiss", role: .cancel) { }
-            } message: {
-                Text("You have an active number set but Digit Grid input is off. Enable it to unarchive photos by swiping the grid.")
-            }
             // Spectator profile: bound to selectedSpectator to avoid the nil→item race
             // condition that caused stale profiles when tapping a second follower.
             .fullScreenCover(item: $selectedSpectator) { follower in
@@ -768,8 +758,8 @@ struct PerformanceView: View {
                     if !digits.isEmpty {
                         pendingLockscreenDigits = digits
                     }
-                    // If fake home screen is also enabled, show it next
-                    if fakeHomeScreenEnabled && illusionService.hasImage {
+                    // If a fake home screen screenshot is set, show it next.
+                    if illusionService.hasImage {
                         showingHomeScreenIllusion = true
                     }
                 }
@@ -881,13 +871,15 @@ struct PerformanceView: View {
             // Show fake lockscreen for secret digit entry (one-shot per session).
             // Guard required: onAppear re-fires when fullScreenCover is dismissed,
             // which would instantly re-present the lockscreen in an infinite loop.
-            if !lockscreenWasShown && LockscreenInputSettings.shared.isReady {
+            if !lockscreenWasShown
+                && LockscreenInputSettings.shared.hasWallpaper
+                && DataManager.shared.isActiveInput(.lockscreen) {
                 lockscreenWasShown = true
                 showingLockscreen = true
                 print("🔒 [LOCKSCREEN] Showing fake lockscreen for secret input")
             }
             // Show fake home screen if enabled and image is available
-            else if fakeHomeScreenEnabled && illusionService.hasImage && !showingLockscreen {
+            else if illusionService.hasImage && !showingLockscreen {
                 showingHomeScreenIllusion = true
                 print("🏠 [ILLUSION] Fake home screen active — tap to reveal profile")
             }
@@ -917,7 +909,7 @@ struct PerformanceView: View {
             let needsVolume = FollowingMagicSettings.shared.isEnabled
                 || noteTopInputMode == "ocr"
                 || bioTopInputMode  == "ocr"
-                || ppTopInputMode == "ocr"
+                || DataManager.shared.isActiveInput(.ocr)
             if needsVolume {
                 VolumeButtonMonitor.shared.prepareVolume()
                 VolumeButtonMonitor.shared.startMonitoring()
@@ -1113,7 +1105,7 @@ struct PerformanceView: View {
                     if action.mode.hasPrefix("profilepic") {
                         await applyURLProfilePicAction(mode: action.mode, data: action.text)
                     } else {
-                        await applyURLAction(mode: action.mode, text: action.text, values: action.values)
+                        await applyURLAction(mode: action.mode, text: action.text, values: action.values, setName: action.setName)
                     }
                 } else if clipboardAutoMode != "" {
                     await applyClipboardAutoMode()
@@ -1121,21 +1113,6 @@ struct PerformanceView: View {
             }
             ocrUsedInSession = false
 
-            // Show a nudge if Post Prediction is enabled with an active number set
-            // but Digit Grid input is off — and this is NOT a URL scheme reveal
-            // (URL reveals supply the word directly so no grid is needed).
-            let hasNumberSet = ActiveSetSettings.shared.activeNumberSetId != nil
-            let isURLReveal  = urlAction.pendingMode == "reveal"
-                            || urlAction.pendingMode == "reveal_slot"
-                            || urlAction.pendingMode == "reveal_card"
-            if forceRevealSettings.isEnabled,
-               !forceRevealSettings.gridSwipeEnabled,
-               hasNumberSet,
-               !isURLReveal {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    showDigitGridAlert = true
-                }
-            }
         }
         .onChange(of: scenePhase) { phase in
             // Pause / resume full-profile pre-loader with app lifecycle.
@@ -1195,7 +1172,7 @@ struct PerformanceView: View {
                 if action.mode.hasPrefix("profilepic") {
                     await applyURLProfilePicAction(mode: action.mode, data: action.text)
                 } else {
-                    await applyURLAction(mode: action.mode, text: action.text, values: action.values)
+                    await applyURLAction(mode: action.mode, text: action.text, values: action.values, setName: action.setName)
                 }
             }
         }
@@ -1529,21 +1506,48 @@ struct PerformanceView: View {
 
     // MARK: - URL Scheme Action
 
-    private func applyURLAction(mode: String, text: String, values: [String: String] = [:]) async {
+    /// Resolves and activates the set matching `setName` (case-insensitive) if provided.
+    /// Returns the resolved set, or nil if resolution failed (logs a warning).
+    @MainActor
+    private func resolveAndActivateSet(name: String, expectedType: SetType) -> PhotoSet? {
+        guard !name.isEmpty else {
+            // No name specified — fall back to currently active set.
+            switch expectedType {
+            case .word:   return DataManager.shared.sets.first { $0.id == ActiveSetSettings.shared.activeWordSetId   && $0.type == .word }
+            case .custom: return DataManager.shared.sets.first { $0.id == ActiveSetSettings.shared.activeCustomSetId && $0.type == .custom }
+            case .card:   return DataManager.shared.sets.first { $0.id == ActiveSetSettings.shared.activeCardSetId   && $0.type == .card }
+            case .number: return nil
+            }
+        }
+        let lower = name.lowercased()
+        guard let match = DataManager.shared.sets.first(where: {
+            $0.type == expectedType && $0.name.lowercased() == lower
+        }) else {
+            print("🚫 [URL] No \(expectedType.rawValue) set named '\(name)' found")
+            LogManager.shared.warning("URL reveal: set '\(name)' not found (\(expectedType.rawValue))", category: .general)
+            return nil
+        }
+        ActiveSetSettings.shared.setActive(match.id, for: match.type)
+        print("📲 [URL] Auto-activated set '\(match.name)' (\(match.type.rawValue))")
+        LogManager.shared.info("URL reveal: auto-activated set '\(match.name)'", category: .general)
+        return match
+    }
+
+    private func applyURLAction(mode: String, text: String, values: [String: String] = [:], setName: String = "") async {
         guard !instagram.isLocked else {
             print("🚫 [URL] Lockdown active — skipping URL action")
             return
         }
-        print("📲 [URL] Executing action=\(mode), text=\"\(text.prefix(40))\"")
+        print("📲 [URL] Executing action=\(mode), text=\"\(text.prefix(40))\" set=\"\(setName)\"")
         LogManager.shared.info("URL scheme action: \(mode) — \"\(text.prefix(40))\"", category: .general)
 
         // ── Word reveal via vault://reveal?word= ─────────────────────────────
         if mode == "reveal" {
             let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !word.isEmpty else { return }
+            guard await MainActor.run(body: { resolveAndActivateSet(name: setName, expectedType: .word) }) != nil || setName.isEmpty else { return }
             print("📲 [URL] Reveal word: \"\(word)\"")
             LogManager.shared.info("URL reveal → word: \"\(word)\"", category: .general)
-            // Mark as URL-triggered so the OCR handler skips the ocrEnabled guard
             await MainActor.run {
                 ForceNumberRevealSettings.shared.urlRevealActive = true
                 pendingOCRWord = word
@@ -1557,10 +1561,9 @@ struct PerformanceView: View {
                 print("⚠️ [URL] Invalid slot value: \"\(text)\"")
                 return
             }
-            guard let activeId = ActiveSetSettings.shared.activeCustomSetId,
-                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) else {
-                print("🚫 [URL] Custom slot reveal: no active custom set")
-                LogManager.shared.warning("URL custom reveal: no active custom set", category: .general)
+            guard let activeSet = await MainActor.run(body: { resolveAndActivateSet(name: setName, expectedType: .custom) }) else {
+                print("🚫 [URL] Custom slot reveal: no matching custom set")
+                LogManager.shared.warning("URL custom reveal: no matching custom set '\(setName)'", category: .general)
                 return
             }
             if UploadManager.shared.isActive && !didAutoPauseUpload {
@@ -1577,14 +1580,13 @@ struct PerformanceView: View {
         if mode == "reveal_card" {
             let symbol = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !symbol.isEmpty else { return }
-            guard let activeId = ActiveSetSettings.shared.activeCardSetId,
-                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) else {
-                print("🚫 [URL] Card reveal: no active card set")
-                LogManager.shared.warning("URL card reveal: no active card set", category: .general)
-                return
-            }
             guard SetType.cardSlotLabels.contains(symbol) else {
                 print("⚠️ [URL] Card reveal: '\(symbol)' is not a valid card symbol")
+                return
+            }
+            guard let activeSet = await MainActor.run(body: { resolveAndActivateSet(name: setName, expectedType: .card) }) else {
+                print("🚫 [URL] Card reveal: no matching card set")
+                LogManager.shared.warning("URL card reveal: no matching card set '\(setName)'", category: .general)
                 return
             }
             if UploadManager.shared.isActive && !didAutoPauseUpload {
@@ -1898,7 +1900,7 @@ struct PerformanceView: View {
         // .ocr sources are event-driven and excluded via isPolled.
         let bioActive  = integrations.bioText1Source.isPolled  || integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioApiSource.isPolled
         let noteActive = integrations.noteText1Source.isPolled || integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteApiSource.isPolled
-        let ppActive   = integrations.ppApiSource   != .none && ppTopInputMode   == "api"
+        let ppActive   = integrations.ppApiSource   != .none && DataManager.shared.isActiveInput(.api)
         guard bioActive || noteActive || ppActive else { return }
         guard apiPollingTask == nil else { return }
 
@@ -1942,7 +1944,7 @@ struct PerformanceView: View {
                 }
 
                 // ── Post Prediction word reveal ───────────────────────────────
-                guard integrations.ppApiSource != .none, ppTopInputMode == "api" else { continue }
+                guard integrations.ppApiSource != .none, DataManager.shared.isActiveInput(.api) else { continue }
                 guard let ppPayload = await integrations.fetchPayload(for: integrations.ppApiSource) else { continue }
                 let ppValue = ppPayload.value.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !ppValue.isEmpty else { continue }
@@ -3729,11 +3731,6 @@ struct InstagramProfileView: View {
     // Reset to false when PerformanceView appears (new trick session).
     @AppStorage("postPredRevealRingActive") private var postPredRevealRingActive: Bool = false
 
-    // Post Prediction input mode — shared key with PerformanceView so both structs
-    // read the same UserDefaults value without needing a binding.
-    // "off" | "api" | "ocr"
-    @AppStorage("ppTopInputMode") private var ppTopInputMode: String = "off"
-
     // Error alert for when reveal fails (e.g. set not uploaded)
     @State private var revealErrorTitle: String = ""
     @State private var revealErrorMessage: String = ""
@@ -3939,8 +3936,8 @@ struct InstagramProfileView: View {
             pendingOCRWord = nil  // consume immediately
             let fromURL = ForceNumberRevealSettings.shared.urlRevealActive
             ForceNumberRevealSettings.shared.urlRevealActive = false  // reset immediately
-            // URL reveals bypass the ocrEnabled guard — they only need the master switch
-            guard ppTopInputMode == "ocr" || fromURL else { return }
+            // URL reveals bypass the per-set gate — they only need the URL trigger.
+            guard DataManager.shared.isActiveInput(.ocr) || fromURL else { return }
             guard !UploadManager.shared.isActive else {
                 print("⚠️ [OCR-PP] Reveal blocked: upload is active")
                 return
@@ -4344,8 +4341,7 @@ struct InstagramProfileView: View {
     @ViewBuilder private var tabBarSection: some View {
                 HStack(spacing: 0) {
             TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
-                if ForceNumberRevealSettings.shared.isEnabled,
-                   ForceNumberRevealSettings.shared.gridSwipeEnabled,
+                if DataManager.shared.isActiveInput(.digitGrid),
                    secretManager.hasDigits,
                    let activeId = ActiveSetSettings.shared.activeNumberSetId,
                    let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
@@ -4365,8 +4361,7 @@ struct InstagramProfileView: View {
                         Task { await revealByDigits(digits, fromSet: activeSet) }
                     }
 
-                } else if ForceNumberRevealSettings.shared.isEnabled,
-                          ForceNumberRevealSettings.shared.gridSwipeEnabled,
+                } else if DataManager.shared.isActiveInput(.digitGrid),
                           secretManager.hasDigits,
                           let activeId = ActiveSetSettings.shared.activeCustomSetId,
                           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
@@ -4385,8 +4380,7 @@ struct InstagramProfileView: View {
                         Task { await revealByCustomSlot(slot, fromSet: activeSet) }
                     }
 
-                } else if ForceNumberRevealSettings.shared.isEnabled,
-                          ForceNumberRevealSettings.shared.gridSwipeEnabled,
+                } else if DataManager.shared.isActiveInput(.digitGrid),
                           secretManager.hasDigits,
                           let activeId = ActiveSetSettings.shared.activeCardSetId,
                           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {

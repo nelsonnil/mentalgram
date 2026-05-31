@@ -1171,3 +1171,31 @@
 "ig.posts_count" = "%d публикаций";
 "lockscreen.enter_passcode" = "Введите пароль";
 "lockscreen.emergency" = "Экстренный вызов";
+
+/* Per-set input selector */
+"set.input.label" = "Ввод";
+"set.input.configure" = "Настроить";
+"set.input.covertyping.help" = "Маскирует то, что вы печатаете в Интересном, чтобы зрители видели другое слово. Нажмите ПРОБЕЛ для показа.";
+"set.input.covertyping.maskmode" = "Режим маски";
+"set.input.api.help" = "Опрашивает онлайн-источник каждые 2 с, пока открыт Performance, и автоматически раскрывает при новом значении.";
+"set.input.api.source" = "Источник API";
+"set.input.api.endpoint_hint" = "Настройте конечные точки API в Настройки → Интеграции.";
+"set.input.ocr.help" = "Камера запускается беззвучно при открытии Performance. Нажмите Громкость+, чтобы сканировать; распознанный текст раскрывается автоматически.";
+"set.input.ocr.camera" = "Камера";
+"set.input.ocr.language" = "Язык";
+"set.input.lockscreen.help" = "Показывает поддельный экран блокировки при открытии Performance, чтобы тайно ввести значение. Задайте обои ниже.";
+"set.input.digitgrid.help" = "Проведите влево или вправо по сетке, чтобы набрать значение, затем коснитесь значка Публикации для показа.";
+"set.input.digitgrid.noconfig" = "Настройка не нужна.";
+"postpred.perset_note" = "Способы ввода теперь задаются на карточке каждого набора в Мои наборы. Откройте набор, чтобы выбрать ввод.";
+"postpred.no_active_set" = "Нет активного набора. Откройте Мои наборы и активируйте один.";
+
+/* Auto-active inputs (no toggle) */
+"fakehome.autoactive.title" = "Активируется автоматически";
+"fakehome.autoactive.body" = "Показывается при открытии Performance, если задан скриншот. Коснитесь в любом месте, чтобы раскрыть профиль.";
+"lockscreen.perset_note" = "Активируется, когда вы выбираете Экран блокировки как ввод набора в Мои наборы.";
+
+/* Post Prediction: Go to Sets + URL Scheme copy */
+"postpred.goto_sets.title" = "Перейдите в Наборы для настройки";
+"postpred.goto_sets.body" = "Выберите активный набор и укажите метод ввода прямо в карточке набора.";
+"set.url_scheme.copy" = "Копировать";
+"set.url_scheme.copied" = "Скопировано!";
