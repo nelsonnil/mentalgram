@@ -108,6 +108,10 @@ struct HomeView: View {
                         .ignoresSafeArea()
                 }
             }
+            // Guide is built entirely for a dark theme (fixed dark colors). Pin the
+            // scheme locally via environment so it stays dark without leaking to the
+            // Performance tab (which must follow the device appearance).
+            .environment(\.colorScheme, .dark)
             .tabItem {
                 Label("Guide", systemImage: "book.fill")
             }
@@ -634,6 +638,7 @@ struct SetsListView: View {
                         APIBudgetWidget()
                             .padding(.horizontal, VaultTheme.Spacing.lg)
                             .padding(.vertical, 10)
+                        CooldownWarningBanner()
                         Divider()
                             .background(Color.white.opacity(0.08))
                     }
@@ -766,7 +771,9 @@ struct SetsListView: View {
         } message: {
             Text("Are you sure you want to delete \"\(setToDelete?.name ?? "")\"? This cannot be undone.")
         }
-        .preferredColorScheme(.dark)
+        // Use environment (not preferredColorScheme) so the dark theme stays local to
+        // this tab and does NOT leak to the Performance tab, which must follow the device.
+        .environment(\.colorScheme, .dark)
     }
 
     private var visibleSetPhotosCount: Int {
@@ -1223,6 +1230,132 @@ struct APIBudgetWidget: View {
     }
 }
 
+// MARK: - Cooldown Warning Banner
+
+/// Banner rojo que muestra los cooldowns anti-bot activos (foto, nota, bio)
+/// con un countdown en tiempo real. Se oculta automáticamente cuando expiran.
+struct CooldownWarningBanner: View {
+    @ObservedObject private var instagram = InstagramService.shared
+    @Environment(\.scenePhase) private var scenePhase
+
+    // Estado local para los tiempos restantes
+    @State private var picSeconds: Int  = 0
+    @State private var noteSeconds: Int = 0
+    @State private var bioSeconds: Int  = 0
+    @State private var timer: Timer?    = nil
+
+    private var activeCooldowns: [(icon: String, label: String, seconds: Int)] {
+        var list: [(String, String, Int)] = []
+        if picSeconds  > 0 { list.append(("camera.fill",       "cooldown.photo", picSeconds))  }
+        if noteSeconds > 0 { list.append(("bubble.left.fill",  "cooldown.note",  noteSeconds)) }
+        if bioSeconds  > 0 { list.append(("person.text.rectangle.fill", "cooldown.bio", bioSeconds)) }
+        return list
+    }
+
+    private var hasActive: Bool { !activeCooldowns.isEmpty }
+
+    var body: some View {
+        if hasActive {
+            bannerContent
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .onAppear { refresh(); startTimer() }
+                .onDisappear { stopTimer() }
+                .onChange(of: scenePhase) { phase in
+                    if phase == .active { refresh() }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var bannerContent: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.red)
+                    .padding(.top, 1)
+                cooldownList
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(bannerBackground)
+            .padding(.horizontal, VaultTheme.Spacing.lg)
+            .padding(.bottom, 8)
+        }
+    }
+
+    @ViewBuilder
+    private var cooldownList: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(String(localized: "cooldown.title"))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.red)
+            ForEach(activeCooldowns, id: \.label) { item in
+                CooldownRow(item: item, formatSeconds: formatSeconds)
+            }
+        }
+    }
+
+    private var bannerBackground: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(Color.red.opacity(0.12))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.4), lineWidth: 1))
+    }
+
+    private func formatSeconds(_ s: Int) -> String {
+        let m = s / 60
+        let sec = s % 60
+        if m > 0 { return String(format: "%d:%02d", m, sec) }
+        return "\(sec)s"
+    }
+
+    private func refresh() {
+        let pic  = instagram.isProfilePicOnCooldown()
+        let note = instagram.isNoteOnCooldown()
+        let bio  = instagram.isBiographyOnCooldown()
+        picSeconds  = pic.onCooldown  ? pic.remainingSeconds  : 0
+        noteSeconds = note.onCooldown ? note.remainingSeconds : 0
+        bioSeconds  = bio.onCooldown  ? bio.remainingSeconds  : 0
+    }
+
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            if picSeconds  > 0 { picSeconds  -= 1 }
+            if noteSeconds > 0 { noteSeconds -= 1 }
+            if bioSeconds  > 0 { bioSeconds  -= 1 }
+            // Resync cada 15 s para evitar drift
+            if (picSeconds + noteSeconds + bioSeconds) % 15 == 0 { refresh() }
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
+
+/// Una fila dentro del CooldownWarningBanner
+private struct CooldownRow: View {
+    let item: (icon: String, label: String, seconds: Int)
+    let formatSeconds: (Int) -> String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: item.icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color.red.opacity(0.8))
+            Text(LocalizedStringKey(item.label))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(Color.red.opacity(0.85))
+            Spacer()
+            Text(formatSeconds(item.seconds))
+                .font(.system(size: 12, weight: .bold).monospacedDigit())
+                .foregroundColor(.red)
+        }
+    }
+}
+
 // MARK: - Exit-Performance Budget Sheet
 
 /// Non-blocking sheet shown when the user leaves Performance with < 15 actions remaining.
@@ -1422,7 +1555,9 @@ struct SettingsView: View {
             .toolbarBackground(Color(hex: "#1C1C1E"), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .preferredColorScheme(.dark)
+            // Use environment (not preferredColorScheme) so the dark theme stays local to
+            // this tab and does NOT leak to the Performance tab, which must follow the device.
+            .environment(\.colorScheme, .dark)
             .alert("Logout", isPresented: $showingLogoutAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Logout", role: .destructive) { instagram.logout() }
