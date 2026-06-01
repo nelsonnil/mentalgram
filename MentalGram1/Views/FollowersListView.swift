@@ -92,7 +92,7 @@ struct FollowersListView: View {
                     followersList
                 }
             }
-            .background(Color(UIColor.systemBackground))
+            .background(Color(UIColor.igPageBackground))
             .ignoresSafeArea(edges: .top)
 
             // Loading overlay while fetching profile
@@ -238,7 +238,7 @@ struct FollowersListView: View {
 
     private var navBar: some View {
         ZStack {
-            Color(UIColor.systemBackground)
+            Color(UIColor.igPageBackground)
             VStack(spacing: 0) {
                 Color.clear.frame(height: statusBarHeight)
                 HStack {
@@ -281,7 +281,7 @@ struct FollowersListView: View {
             Circle()
                 .fill(Color.red)
                 .frame(width: 9, height: 9)
-                .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 1.5))
+                .overlay(Circle().stroke(Color(UIColor.igPageBackground), lineWidth: 1.5))
                 .offset(x: 3, y: -3)
                 .transition(.opacity)
         }
@@ -306,7 +306,7 @@ struct FollowersListView: View {
                 TabItem(title: String(localized: "followers.tab.more"), isSelected: false) {}
             }
         }
-        .background(Color(UIColor.systemBackground))
+        .background(Color(UIColor.igPageBackground))
     }
 
     // MARK: - Search bar
@@ -333,11 +333,11 @@ struct FollowersListView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color(UIColor.systemGray6))
+        .background(Color(UIColor.igButtonFill))
         .cornerRadius(10)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color(UIColor.systemBackground))
+        .background(Color(UIColor.igPageBackground))
     }
 
     // MARK: - List
@@ -412,7 +412,7 @@ struct FollowersListView: View {
                 }
             }
         }
-        .background(Color(UIColor.systemBackground))
+        .background(Color(UIColor.igPageBackground))
     }
 
     // MARK: - Load
@@ -544,7 +544,7 @@ private struct FollowerRow: View {
                     .foregroundColor(isFailed ? Color(UIColor.tertiaryLabel) : Color(UIColor.label))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background(Color(UIColor.systemGray6))
+                    .background(Color(UIColor.igButtonFill))
                     .cornerRadius(8)
             }
             .contentShape(Rectangle())
@@ -552,7 +552,7 @@ private struct FollowerRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color(UIColor.systemBackground))
+        .background(Color(UIColor.igPageBackground))
         .opacity(isFailed ? 0.55 : 1.0)
     }
 

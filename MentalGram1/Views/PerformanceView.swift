@@ -185,7 +185,7 @@ struct PerformanceView: View {
     private var performanceRoot: some View {
         ZStack(alignment: .bottom) {
             // Full-screen white base (status bar + home indicator area)
-            Color(UIColor.systemBackground).ignoresSafeArea()
+            Color(UIColor.igPageBackground).ignoresSafeArea()
             // profileContent fills the entire screen — the scroll view's internal
             // bottom spacer (94 pt) ensures the last grid row scrolls above the pill.
             // No external bottom padding here so the grid extends all the way down
@@ -197,7 +197,7 @@ struct PerformanceView: View {
 
     @ViewBuilder private var profileContent: some View {
         ZStack {
-            Color(UIColor.systemBackground).ignoresSafeArea()
+            Color(UIColor.igPageBackground).ignoresSafeArea()
             if let profile = profile {
                 instagramProfileView(profile: profile)
             } else {
@@ -262,7 +262,7 @@ struct PerformanceView: View {
 
     @ViewBuilder private var spectatorOverlay: some View {
         if isLoadingSpectator {
-            Color(UIColor.systemBackground).ignoresSafeArea()
+            Color(UIColor.igPageBackground).ignoresSafeArea()
                 .overlay(
                     VStack(spacing: 12) {
                         ProgressView().scaleEffect(1.2)
@@ -748,7 +748,7 @@ struct PerformanceView: View {
             // cache first, then one getProfileInfo() call if needed. The 90-second
             // "Getting ready" overlay (FullLoadOverlayView) is no longer rendered.
         }
-            .background(Color(UIColor.systemBackground).ignoresSafeArea())
+            .background(Color(UIColor.igPageBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .tabBar)
         .edgesIgnoringSafeArea(.bottom)
         .navigationBarHidden(true)
@@ -3909,7 +3909,7 @@ struct InstagramProfileView: View {
             .refreshable {
                 await Task { await onAsyncRefresh() }.value
             }
-            .background(Color(UIColor.systemBackground))
+            .background(Color(UIColor.igPageBackground))
         // Race-condition fix for URL-scheme reveals:
         // When vault://reveal?word=X arrives while PerformanceView is loading,
         // pendingOCRWord may be set BEFORE InstagramProfileView enters the hierarchy.
@@ -3925,8 +3925,11 @@ struct InstagramProfileView: View {
                 }
             }
         }
-        // Keep following count display in sync with digit buffer
+        // Keep following count display in sync with digit / card buffers
         .onChange(of: secretManager.digitBuffer) { _ in
+            updateFollowingOverride()
+        }
+        .onChange(of: secretManager.cardSwipeBuffer) { _ in
             updateFollowingOverride()
         }
         // Transfer effect: volume UP on own profile inflates count by saved offset
@@ -4186,7 +4189,7 @@ struct InstagramProfileView: View {
                                         .frame(width: picSize + 8, height: picSize + 8)
                                     // White gap between gradient ring and photo
                                     Circle()
-                                        .fill(Color(UIColor.systemBackground))
+                                        .fill(Color(UIColor.igPageBackground))
                                         .frame(width: picSize + 4, height: picSize + 4)
                                 }
                                 if let image = cachedImages[profile.profilePicURL] {
@@ -4315,20 +4318,20 @@ struct InstagramProfileView: View {
                     Text("ig.edit_profile")
                         .font(.system(size: seAdapt(13, 14), weight: .semibold))
                         .frame(maxWidth: .infinity).frame(height: btnH)
-                        .background(Color(UIColor.systemGray6))
+                        .background(Color(UIColor.igButtonFill))
                         .foregroundColor(Color(UIColor.label)).cornerRadius(8)
                 }
                         Button(action: {}) {
                     Text("ig.share_profile")
                         .font(.system(size: seAdapt(13, 14), weight: .semibold))
                         .frame(maxWidth: .infinity).frame(height: btnH)
-                        .background(Color(UIColor.systemGray6))
+                        .background(Color(UIColor.igButtonFill))
                         .foregroundColor(Color(UIColor.label)).cornerRadius(8)
                 }
                         Button(action: {}) {
                     IGIcon(asset: "instagram_follow", fallback: "person.badge.plus", size: seAdapt(14, 16))
                         .frame(width: btnH, height: btnH)
-                        .background(Color(UIColor.systemGray6))
+                        .background(Color(UIColor.igButtonFill))
                                 .cornerRadius(8)
                         }
                     }
@@ -4372,76 +4375,8 @@ struct InstagramProfileView: View {
     @ViewBuilder private var tabBarSection: some View {
                 HStack(spacing: 0) {
             TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
-                if ForceNumberRevealSettings.shared.isEnabled,
-                   ForceNumberRevealSettings.shared.gridSwipeEnabled,
-                   secretManager.hasDigits,
-                   let activeId = ActiveSetSettings.shared.activeNumberSetId,
-                   let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
-                    let digits = secretManager.digitBuffer
-                    let digitLabel = digits.map(String.init).joined()
-                    secretManager.reset()
-                    followingOverride = nil; followerOverride = nil
-
-                    // Block reveal if an upload is active — they share the same hourly rate limit
-                    if UploadManager.shared.isActive {
-                        print("⚠️ [FORCE#] Reveal blocked: upload is active (shared rate limit)")
-                        LogManager.shared.warning("Force reveal blocked: upload in progress — try after upload completes", category: .general)
-                        onUploadConflict?()
-                    } else {
-                        // Show recognized number in "seguidos" immediately while unarchiving
-                        showOCRPeek(number: digitLabel)
-                        Task { await revealByDigits(digits, fromSet: activeSet) }
-                    }
-
-                } else if ForceNumberRevealSettings.shared.isEnabled,
-                          ForceNumberRevealSettings.shared.gridSwipeEnabled,
-                          secretManager.hasDigits,
-                          let activeId = ActiveSetSettings.shared.activeCustomSetId,
-                          let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
-                    // Custom set: all digits form the slot number (1–100)
-                    // e.g. [7] → 7, [1,5] → 15, [1,0,0] → 100
-                    let slot = secretManager.digitBuffer.reduce(0) { $0 * 10 + $1 }
-                    secretManager.reset()
-                    followingOverride = nil; followerOverride = nil
-
-                    if UploadManager.shared.isActive {
-                        print("⚠️ [CUSTOM] Reveal blocked: upload is active")
-                        LogManager.shared.warning("Custom reveal blocked: upload in progress", category: .general)
-                        onUploadConflict?()
-                    } else if slot >= 1 {
-                        showOCRPeek(label: "#\(slot)")
-                        Task { await revealByCustomSlot(slot, fromSet: activeSet) }
-                    }
-
-                } else if ForceNumberRevealSettings.shared.isEnabled,
-                          ForceNumberRevealSettings.shared.gridSwipeEnabled,
-                          secretManager.hasDigits,
-                          let activeId = ActiveSetSettings.shared.activeCardSetId,
-                          let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {
-                    // Card set: decode 2 or 3 digits → card symbol (e.g. "J♠", "10♥")
-                    let digits = secretManager.digitBuffer
-                    secretManager.reset()
-                    followingOverride = nil; followerOverride = nil
-
-                    if UploadManager.shared.isActive {
-                        print("⚠️ [CARD] Reveal blocked: upload is active")
-                        LogManager.shared.warning("Card reveal blocked: upload in progress", category: .general)
-                        onUploadConflict?()
-                    } else if let (value, suit) = decodeCardInput(digits) {
-                        let symbol = cardSymbol(value: value, suit: suit)
-                        showOCRPeek(label: symbol)
-                        Task { await revealByCardSlot(symbol: symbol, fromSet: activeSet) }
-                    } else {
-                        print("⚠️ [CARD] Invalid digit sequence: \(digits) — need [value, suit] or [tens, units, suit]")
-                        LogManager.shared.warning("Card reveal: invalid input \(digits.map(String.init).joined())", category: .general)
-                    }
-
-                } else {
-                    secretManager.reset()
-                    followingOverride = nil; followerOverride = nil
-                }
-                        selectedTab = 0
-                    }
+                commitDigitReveal()
+                selectedTab = 0
             TabButton(icon: "play.rectangle", activeAsset: "instagram_reels_active", inactiveAsset: "instagram_reels_inactive", isSelected: selectedTab == 1) {
                         selectedTab = 1
                 secretManager.reset()
@@ -4502,6 +4437,10 @@ struct InstagramProfileView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 30, coordinateSpace: .named("secretGrid"))
                 .onEnded { value in handleGridSwipe(value) }
+        )
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.7)
+                .onEnded { _ in commitDigitReveal() }
         )
         .fullScreenCover(item: $activeViewer, onDismiss: {
             // Amnesia Carousel trigger fires only when a POSTS viewer is dismissed.
@@ -4583,36 +4522,37 @@ struct InstagramProfileView: View {
 
     // MARK: - Secret number gesture handling
 
+    /// Detect the dominant direction of a drag and feed it into the pair-swipe encoder.
+    /// Horizontal swipes also cycle the visible tab (so the grid visually changes).
     private func handleGridSwipe(_ value: DragGesture.Value) {
-        let dx = value.translation.width
-        let dy = value.translation.height
+        let dx    = value.translation.width
+        let dy    = value.translation.height
         let absDx = abs(dx)
         let absDy = abs(dy)
+        let minDist: CGFloat = 40
 
-        // Require a clearly horizontal gesture: horizontal travel must be
-        // at least 2.5× the vertical drift AND at least 60 pt in total.
-        // This prevents accidental tab switches during vertical scrolling where
-        // the finger drifts slightly sideways (e.g. dx=35/dy=25 no longer qualifies).
-        let isHorizontal = absDx > absDy * 2.5 && absDx > 60
-        let isVertical   = absDy > absDx && absDy > 40
+        let dir: SwipeDir
+        if absDx >= absDy {
+            guard absDx > minDist else { return }
+            dir = dx > 0 ? .right : .left
+        } else {
+            guard absDy > minDist else { return }
+            dir = dy > 0 ? .down : .up
+        }
 
-        guard isHorizontal else { return }
-
-        // Register digit from the row where the swipe started
-        let gridWidth = UIScreen.main.bounds.width
-        let digit = SecretNumberManager.digit(
-            x: value.startLocation.x,
-            y: value.startLocation.y,
-            gridWidth: gridWidth
-        )
-        secretManager.addDigit(digit)
+        // Route to card clock buffer when a card set is active
+        if ActiveSetSettings.shared.activeCardSetId != nil {
+            secretManager.addCardSwipe(dir)
+        } else {
+            secretManager.addSwipe(dir)
+        }
         updateFollowingOverride()
 
-        // Every accepted secret swipe must also change tabs. At the edges,
-        // bounce inward so a right swipe on Posts still moves to Reels instead
-        // of registering a digit while the screen appears unchanged.
-        withAnimation(.easeInOut(duration: 0.18)) {
-            selectedTab = tabAfterSecretSwipe(dx: dx)
+        // Only cycle the tab on horizontal swipes so vertical swipes feel natural.
+        if absDx >= absDy {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                selectedTab = tabAfterSecretSwipe(dx: dx)
+            }
         }
     }
 
@@ -4623,14 +4563,99 @@ struct InstagramProfileView: View {
         return selectedTab > 0 ? selectedTab - 1 : 1
     }
 
+    /// Commit whatever digits are in the buffer — called by long press on the grid.
+    /// Mirrors the reveal logic of the Posts tab button.
+    private func commitDigitReveal() {
+        guard ForceNumberRevealSettings.shared.isEnabled,
+              ForceNumberRevealSettings.shared.gridSwipeEnabled else { return }
+
+        // ── Card Clock Input ──────────────────────────────────────────────────
+        if let activeId = ActiveSetSettings.shared.activeCardSetId,
+           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
+           let cardSym = secretManager.decodedCard {
+            secretManager.reset()
+            followingOverride = nil; followerOverride = nil
+            guard !UploadManager.shared.isActive else {
+                LogManager.shared.warning("Card clock reveal blocked: upload in progress", category: .general)
+                onUploadConflict?(); return
+            }
+            showOCRPeek(label: cardSym)
+            Task { await revealByCardSlot(symbol: cardSym, fromSet: activeSet) }
+            selectedTab = 0
+            return
+        }
+
+        guard secretManager.hasDigits else { return }
+
+        if let activeId = ActiveSetSettings.shared.activeNumberSetId,
+           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
+            let digits     = secretManager.digitBuffer
+            let digitLabel = digits.map(String.init).joined()
+            secretManager.reset()
+            followingOverride = nil; followerOverride = nil
+            guard !UploadManager.shared.isActive else {
+                LogManager.shared.warning("Force reveal blocked: upload in progress", category: .general)
+                onUploadConflict?(); return
+            }
+            showOCRPeek(number: digitLabel)
+            Task { await revealByDigits(digits, fromSet: activeSet) }
+
+        } else if let activeId = ActiveSetSettings.shared.activeCustomSetId,
+                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
+            let slot = secretManager.digitBuffer.reduce(0) { $0 * 10 + $1 }
+            secretManager.reset()
+            followingOverride = nil; followerOverride = nil
+            guard !UploadManager.shared.isActive else {
+                LogManager.shared.warning("Custom reveal blocked: upload in progress", category: .general)
+                onUploadConflict?(); return
+            }
+            guard slot >= 1 else { return }
+            showOCRPeek(label: "#\(slot)")
+            Task { await revealByCustomSlot(slot, fromSet: activeSet) }
+
+        } else if let activeId = ActiveSetSettings.shared.activeCardSetId,
+                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {
+            let digits = secretManager.digitBuffer
+            secretManager.reset()
+            followingOverride = nil; followerOverride = nil
+            guard !UploadManager.shared.isActive else {
+                LogManager.shared.warning("Card reveal blocked: upload in progress", category: .general)
+                onUploadConflict?(); return
+            }
+            guard let (value, suit) = decodeCardInput(digits) else {
+                LogManager.shared.warning("Card reveal: invalid input \(digits.map(String.init).joined())", category: .general)
+                return
+            }
+            let symbol = cardSymbol(value: value, suit: suit)
+            showOCRPeek(label: symbol)
+            Task { await revealByCardSlot(symbol: symbol, fromSet: activeSet) }
+
+        } else {
+            secretManager.reset()
+            followingOverride = nil; followerOverride = nil
+        }
+    }
+
     private func updateFollowingOverride() {
+        // Card clock input takes priority over digit display
+        if let cardText = secretManager.cardDisplayString {
+            if followingMagic.targetFollowers {
+                followingOverride = nil
+                followerOverride  = cardText
+            } else {
+                followerOverride  = nil
+                followingOverride = cardText
+            }
+            return
+        }
+
         if secretManager.digitBuffer.isEmpty {
             followingOverride = nil
             followerOverride  = nil
         } else if followingMagic.targetFollowers {
             followingOverride = nil
             followerOverride  = secretManager.followingDisplayString(originalCount: profile.followerCount)
-                    } else {
+        } else {
             followerOverride  = nil
             followingOverride = secretManager.followingDisplayString(originalCount: profile.followingCount)
         }
@@ -5422,7 +5447,7 @@ struct InstagramHeaderView: View {
         }
         .responsiveHorizontalPadding()
         .frame(height: 44)
-        .background(Color(UIColor.systemBackground))
+        .background(Color(UIColor.igPageBackground))
         .onAppear {
             guard !didLogLayout else { return }
             didLogLayout = true
@@ -5640,7 +5665,7 @@ struct AutoFollowedByView: View {
         }
                             .frame(width: 20, height: 20)
                             .clipShape(Circle())
-        .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 2))
+        .overlay(Circle().stroke(Color(UIColor.igPageBackground), lineWidth: 2))
     }
 
     @ViewBuilder private var textArea: some View {
@@ -5766,7 +5791,7 @@ struct FollowedByView: View {
         }
         .frame(width: 20, height: 20)
         .clipShape(Circle())
-        .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 2))
+        .overlay(Circle().stroke(Color(UIColor.igPageBackground), lineWidth: 2))
     }
 }
 
@@ -5923,7 +5948,7 @@ struct TaggedEmptyStateView: View {
             Spacer(minLength: 160)
         }
         .frame(maxWidth: .infinity)
-        .background(Color(UIColor.systemBackground))
+        .background(Color(UIColor.igPageBackground))
     }
 }
 
@@ -6030,7 +6055,7 @@ struct PostScrollView: View {
                     }
                 }
             }
-            .background(Color(UIColor.systemBackground))
+            .background(Color(UIColor.igPageBackground))
         }
         .navigationViewStyle(.stack)
     }
@@ -6403,7 +6428,7 @@ struct InstagramBottomBar: View {
                             .fill(Color(red: 1.0, green: 0.18, blue: 0.18))
                             .frame(width: 8, height: 8)
                             // White ring separates the dot from any dark background
-                            .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 1.5))
+                            .overlay(Circle().stroke(Color(UIColor.igPageBackground), lineWidth: 1.5))
                             .offset(x: 4, y: 4)
                     }
                 }
@@ -6429,7 +6454,7 @@ struct InstagramBottomBar: View {
                 }
                 // White gap between ring and photo (Instagram-style)
                 Circle()
-                    .fill(Color(UIColor.systemBackground))
+                    .fill(Color(UIColor.igPageBackground))
                     .frame(width: showRevealRing ? 29 : 28, height: showRevealRing ? 29 : 28)
                 // Profile picture
                 Image(uiImage: image)
@@ -6499,7 +6524,7 @@ struct NotesBubbleView: View {
                 .frame(minWidth: 42, maxWidth: 110)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color(UIColor.secondarySystemBackground))
+                        .fill(Color(UIColor.igSecondaryBackground))
                         .shadow(color: .black.opacity(0.14), radius: 4, x: 0, y: 1)
                 )
                 .zIndex(1)
@@ -6507,7 +6532,7 @@ struct NotesBubbleView: View {
             // ── Tiny curved tail, overlaps bubble bottom by 2 pt ─────────
             // No stroke — pure white fill seamlessly joins the capsule.
             NotesTailShape()
-                .fill(Color(UIColor.secondarySystemBackground))
+                .fill(Color(UIColor.igSecondaryBackground))
                 .frame(width: tailW, height: tailH)
                 .padding(.leading, tailX)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -6516,7 +6541,7 @@ struct NotesBubbleView: View {
 
             // ── Small separate dot — mirrors Instagram's speech-bubble ────
             Circle()
-                .fill(Color(UIColor.secondarySystemBackground))
+                .fill(Color(UIColor.igSecondaryBackground))
                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                 .frame(width: dotD, height: dotD)
                 .padding(.leading, tailX + tailW * 0.5 - dotD * 0.5)
@@ -6545,7 +6570,7 @@ struct SpectatorProfileCover: View {
                 UserProfileView(profile: profile, onClose: onClose)
                     .id(profile.userId)
             } else if isLoading {
-                Color(UIColor.systemBackground).ignoresSafeArea()
+                Color(UIColor.igPageBackground).ignoresSafeArea()
                     .overlay(
                         VStack(spacing: 12) {
                             ProgressView().scaleEffect(1.2)
@@ -6555,7 +6580,7 @@ struct SpectatorProfileCover: View {
                         }
                     )
             } else {
-                Color(UIColor.systemBackground).ignoresSafeArea()
+                Color(UIColor.igPageBackground).ignoresSafeArea()
                     .overlay(
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
@@ -6616,7 +6641,7 @@ struct FullLoadOverlayView: View {
 
     var body: some View {
         ZStack {
-            Color(UIColor.systemBackground).ignoresSafeArea()
+            Color(UIColor.igPageBackground).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()

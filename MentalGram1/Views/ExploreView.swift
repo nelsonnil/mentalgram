@@ -47,7 +47,7 @@ struct ExploreView: View {
             // Main Explore view
             ZStack(alignment: .bottom) {
                 // White background covering everything
-                Color(UIColor.systemBackground).ignoresSafeArea()
+                Color(UIColor.igPageBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
                 // Search bar at top
@@ -88,7 +88,7 @@ struct ExploreView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color(uiColor: .systemGray6))
+                    .background(Color(UIColor.igButtonFill))
                     .cornerRadius(10)
                     
                     if isSearchFieldFocused || !searchText.isEmpty {
@@ -111,7 +111,7 @@ struct ExploreView: View {
                 }
                 .responsiveHorizontalPadding()
                 .padding(.vertical, 8)
-                .background(Color(UIColor.systemBackground))
+                .background(Color(UIColor.igPageBackground))
                 
                 // Show search results if searching
                 if !searchText.isEmpty {
@@ -152,7 +152,7 @@ struct ExploreView: View {
                             }
                         }
                     }
-                    .background(Color(UIColor.systemBackground))
+                    .background(Color(UIColor.igPageBackground))
                 } else {
                     // Grid of explore content
                     if exploreManager.isLoading {
@@ -1067,7 +1067,7 @@ struct SearchResultRow: View {
             }
             .responsiveHorizontalPadding()
             .padding(.vertical, 8)
-            .background(Color(UIColor.systemBackground))
+            .background(Color(UIColor.igPageBackground))
         }
         .buttonStyle(PlainButtonStyle())
         .onAppear {

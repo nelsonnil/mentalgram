@@ -194,7 +194,7 @@ struct UserProfileView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color(UIColor.systemBackground).ignoresSafeArea()
+            Color(UIColor.igPageBackground).ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Header (igual que Instagram)
@@ -225,7 +225,7 @@ struct UserProfileView: View {
                 }
                 .responsiveHorizontalPadding()
                 .padding(.vertical, 12)
-                .background(Color(UIColor.systemBackground))
+                .background(Color(UIColor.igPageBackground))
                 
                 // Main content
                 ScrollView {
@@ -328,7 +328,7 @@ struct UserProfileView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 32)
-                                    .background(Color(uiColor: .systemGray5))
+                                    .background(Color(UIColor.igButtonFill))
                                     .cornerRadius(8)
                                 } else if isFollowing {
                                     // Already following - show "Following" with dropdown
@@ -340,7 +340,7 @@ struct UserProfileView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 32)
-                                    .background(Color(uiColor: .systemGray5))
+                                    .background(Color(UIColor.igButtonFill))
                                     .foregroundColor(.primary)
                                     .cornerRadius(8)
                                 } else if isFollowRequested {
@@ -349,7 +349,7 @@ struct UserProfileView: View {
                                         .font(.system(size: 14, weight: .semibold))
                                         .frame(maxWidth: .infinity)
                                         .frame(height: 32)
-                                        .background(Color(uiColor: .systemGray5))
+                                        .background(Color(UIColor.igButtonFill))
                                         .foregroundColor(.primary)
                                         .cornerRadius(8)
                                 } else {
@@ -370,7 +370,7 @@ struct UserProfileView: View {
                                     .font(.system(size: 14, weight: .semibold))
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 32)
-                                    .background(Color(uiColor: .systemGray5))
+                                    .background(Color(UIColor.igButtonFill))
                                     .foregroundColor(.primary)
                                     .cornerRadius(8)
                             }
@@ -381,14 +381,14 @@ struct UserProfileView: View {
                                         .font(.system(size: 16))
                                         .foregroundColor(.primary)
                                         .frame(width: 32, height: 32)
-                                        .background(Color(uiColor: .systemGray5))
+                                        .background(Color(UIColor.igButtonFill))
                                         .cornerRadius(8)
                                     // Red dot: only when API budget is critically low.
                                     if instagram.checkRateLimit().remaining < 8 {
                                         Circle()
                                             .fill(Color.red)
                                             .frame(width: 8, height: 8)
-                                            .overlay(Circle().stroke(Color(uiColor: .systemGray5), lineWidth: 1.5))
+                                            .overlay(Circle().stroke(Color(UIColor.igButtonFill), lineWidth: 1.5))
                                             .offset(x: 3, y: -3)
                                     }
                                 }
@@ -762,6 +762,9 @@ struct UserProfileView: View {
             updateFollowingOverride()
             logVisibleCountState(reason: "digit buffer changed")
         }
+        .onChange(of: secretManager.cardSwipeBuffer) { _ in
+            updateFollowingOverride()
+        }
         .onChange(of: volumeMonitor.upCount) { _ in
             guard followingMagic.pendingOffset > 0 && !isCountingDown && !showGlitch else { return }
             let delay = followingMagic.triggerDelay
@@ -779,27 +782,34 @@ struct UserProfileView: View {
     // MARK: - Secret number gesture handling
 
     private func handleGridSwipe(_ value: DragGesture.Value) {
-        let dx = value.translation.width
+        let dx    = value.translation.width
+        let dy    = value.translation.height
         let absDx = abs(dx)
-        let absDy = abs(value.translation.height)
-        // Require a clearly horizontal gesture: horizontal travel must be
-        // at least 2.5× the vertical drift AND at least 60 pt in total.
-        guard absDx > absDy * 2.5 && absDx > 60 else { return }
+        let absDy = abs(dy)
+        let minDist: CGFloat = 40
 
-        let gridWidth = UIScreen.main.bounds.width
-        let digit = SecretNumberManager.digit(
-            x: value.startLocation.x,
-            y: value.startLocation.y,
-            gridWidth: gridWidth
-        )
-        secretManager.addDigit(digit)
+        let dir: SwipeDir
+        if absDx >= absDy {
+            guard absDx > minDist else { return }
+            dir = dx > 0 ? .right : .left
+        } else {
+            guard absDy > minDist else { return }
+            dir = dy > 0 ? .down : .up
+        }
+
+        // Route to card clock buffer when a card set is active
+        if ActiveSetSettings.shared.activeCardSetId != nil {
+            secretManager.addCardSwipe(dir)
+        } else {
+            secretManager.addSwipe(dir)
+        }
         updateFollowingOverride()
 
-        // Every accepted secret swipe must also change tabs. At the edges,
-        // bounce inward so a right swipe on Posts still moves to Reels instead
-        // of registering a digit while the screen appears unchanged.
-        withAnimation(.easeInOut(duration: 0.18)) {
-            selectedTab = tabAfterSecretSwipe(dx: dx)
+        // Only cycle the tab on horizontal swipes.
+        if absDx >= absDy {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                selectedTab = tabAfterSecretSwipe(dx: dx)
+            }
         }
     }
 
@@ -917,6 +927,13 @@ struct UserProfileView: View {
     }
 
     private func updateFollowingOverride() {
+        // Card clock input takes priority
+        if let cardText = secretManager.cardDisplayString {
+            digitFollowerPreviewText = nil
+            followingOverride = cardText
+            return
+        }
+
         if secretManager.digitBuffer.isEmpty {
             followingOverride = nil
             digitFollowerPreviewText = nil
