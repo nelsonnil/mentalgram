@@ -1,33 +1,13 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Swipe Direction
-
-private enum SwipeDir: Equatable {
-    case up, down, left, right
-}
-
 // MARK: - Digit Encoding
 //
-// Each digit 0-9 is encoded as a pair of directional swipes:
+// SwipeDir and the digit-pair decoding are defined once in SecretNumberManager
+// and shared here, so the encoding stays consistent across the grid input and
+// this fullscreen clock input:
 //   0 = ↑↑   1 = ↑→   2 = →↑   3 = →→   4 = →↓
 //   5 = ↓→   6 = ↓↓   7 = ↓←   8 = ←↓   9 = ←←
-
-private func decodeDigit(_ a: SwipeDir, _ b: SwipeDir) -> Int? {
-    switch (a, b) {
-    case (.up,    .up):    return 0
-    case (.up,    .right): return 1
-    case (.right, .up):    return 2
-    case (.right, .right): return 3
-    case (.right, .down):  return 4
-    case (.down,  .right): return 5
-    case (.down,  .down):  return 6
-    case (.down,  .left):  return 7
-    case (.left,  .down):  return 8
-    case (.left,  .left):  return 9
-    default:               return nil
-    }
-}
 
 // MARK: - ClockInputView
 
@@ -110,7 +90,7 @@ struct ClockInputView: View {
         let a = currentPair[0], b = currentPair[1]
         currentPair = []
 
-        guard let digit = decodeDigit(a, b) else {
+        guard let digit = SecretNumberManager.decodeDigit(a, b) else {
             // Invalid pair: error haptic + flash, reset everything
             triggerErrorReset()
             return
