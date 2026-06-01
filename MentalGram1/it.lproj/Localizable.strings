@@ -725,13 +725,13 @@
 "postpred.help.inputs.body1" = "Lo spettatore pensa liberamente a una parola o un numero. Catturi la sua scelta silenziosamente usando uno dei tre metodi:";
 "postpred.help.inputs.intro" = "Ogni metodo di input è compatibile con tipi di set specifici. Scegli quello più adatto alla tua performance.";
 "postpred.help.input.grid.label" = "INPUT A GRIGLIA";
-"postpred.help.input.grid.intro" = "In Performance, scorri a sinistra o destra sulla griglia foto. I post 1–9 corrispondono alle cifre 1–9; i post 10+ corrispondono alla cifra 0. Accumula fino a 3 cifre, poi tocca l'icona Posts per rivelare.";
+"postpred.help.input.grid.intro" = "In Performance, scorri in una delle quattro direzioni (↑ ↓ ← →) sulla griglia foto. Ogni coppia di swipe consecutivi codifica una cifra — la stessa logica di Clock Input. Inserisci tutte le cifre necessarie, poi premi a lungo ovunque sulla griglia per confermare.";
 "postpred.help.input.grid.case.number" = "Ogni cifra seleziona lo slot nella sua banca — banca 1 → 1a cifra, banca 2 → 2a cifra, ecc.";
-"postpred.help.input.grid.case.custom" = "Tutte le cifre accumulate formano il numero di slot (1–100). Es: scorri 7 poi 2 = slot 72. Scorri 1, 0, 0 = slot 100.";
+"postpred.help.input.grid.case.custom" = "Tutte le cifre accumulate formano il numero dello slot. Es.: codifica 7, 2 → slot 72.";
 "postpred.help.input.grid.case.card" = "2 cifre: [valore + seme]. 3 cifre: [decina + unità + seme]. Semi: 1=♠  2=♥  3=♣  4=♦. Es: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Abilita **Griglia cifre** nelle impostazioni di Post Prediction.";
 "postpred.help.input.grid.step2" = "In Performance, scorri a sinistra o destra sulla griglia foto. I post 1-9 corrispondono alle cifre 1-9. I post 10, 11 e 12 corrispondono alla cifra 0. Un indicatore mostra il numero accumulato.";
-"postpred.help.input.grid.step3" = "Tocca l'icona Posts per confermare e attivare la rivelazione.";
+"postpred.help.input.grid.step3" = "Tieni premuto ovunque sulla griglia per confermare e avviare il reveal.";
 "postpred.help.input.ocr.label" = "OCR — FOTOCAMERA";
 "postpred.help.input.covert.label" = "DIGITAZIONE NASCOSTA";
 "postpred.help.input.covert.step1" = "Sulla scheda set in **I miei set**, seleziona **Cover Typing** e tocca **Configura** per definire una parola di copertura — ciò che lo spettatore vedrà sullo schermo.";
@@ -1738,3 +1738,17 @@
 "lockscreen.perset_note" = "Si attiva quando scegli Schermata di blocco come metodo di input per un set in I miei set.";
 "postpred.goto_sets.title" = "Vai a Sets per configurare";
 "postpred.goto_sets.body" = "Seleziona un set attivo e scegli il metodo di input direttamente su ogni scheda set.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Cooldown Anti-Bot attivo";
+"cooldown.photo" = "Foto profilo";
+"cooldown.note" = "Nota";
+"cooldown.bio" = "Biografia";
+"postpred.help.input.grid.encoding.title" = "Codifica delle cifre  (come Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "In Performance, scorri in qualsiasi direzione sulla griglia. Sempre 4 swipe: prima coppia = valore, seconda coppia = seme. Tieni premuto per confermare.";
+"set.input.cardclock.values" = "Codifica del valore  (quadrante orologio)";
+"set.input.cardclock.suits" = "Codifica del seme  (stessa direzione due volte)";
+"set.input.cardclock.longpress" = "Tieni premuto ovunque sulla griglia per confermare.";
+"set.input.cardclock.noconfig" = "Nessuna configurazione richiesta.";

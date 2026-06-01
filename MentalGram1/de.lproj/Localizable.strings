@@ -725,13 +725,13 @@
 "postpred.help.inputs.body1" = "Der Zuschauer denkt frei an ein Wort oder eine Zahl. Sie erfassen seine Wahl still mit einer von drei Methoden:";
 "postpred.help.inputs.intro" = "Jede Eingabemethode ist mit bestimmten Set-Typen kompatibel. Wählen Sie diejenige, die am besten zu Ihrer Vorstellung passt.";
 "postpred.help.input.grid.label" = "RASTEREINGABE";
-"postpred.help.input.grid.intro" = "Wischen Sie in der Vorstellung links oder rechts über das Fotoraster. Posts 1–9 entsprechen den Ziffern 1–9; Posts 10+ entsprechen der Ziffer 0. Sammeln Sie bis zu 3 Ziffern und tippen Sie auf das Posts-Symbol, um die Enthüllung auszulösen.";
+"postpred.help.input.grid.intro" = "Im Performance-Modus wische in eine der vier Richtungen (↑ ↓ ← →) auf dem Foto-Raster. Je zwei aufeinanderfolgende Wischgesten kodieren eine Ziffer – dieselbe Paarlogik wie beim Clock Input. Gib beliebig viele Ziffern ein und halte dann irgendwo auf dem Raster gedrückt, um zu bestätigen.";
 "postpred.help.input.grid.case.number" = "Jede Ziffer wählt den Slot in ihrer Bank — Bank 1 → 1. Ziffer, Bank 2 → 2. Ziffer usw.";
-"postpred.help.input.grid.case.custom" = "Alle Ziffern zusammen bilden die Slot-Nummer (1–100). Bsp.: Wischen Sie 7 dann 2 = Slot 72. Wischen Sie 1, 0, 0 = Slot 100.";
+"postpred.help.input.grid.case.custom" = "Alle gespeicherten Ziffern bilden die Slot-Nummer. Z. B. kodiere 7, 2 → Slot 72.";
 "postpred.help.input.grid.case.card" = "2 Ziffern: [Wert + Farbe]. 3 Ziffern: [Zehner + Einheit + Farbe]. Farben: 1=♠  2=♥  3=♣  4=♦. Bsp.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Aktivieren Sie **Ziffernraster** in den Post-Prediction-Einstellungen.";
 "postpred.help.input.grid.step2" = "Wischen Sie in Performance links oder rechts uber das Fotoraster. Posts 1-9 entsprechen den Ziffern 1-9. Posts 10, 11 und 12 entsprechen der Ziffer 0. Ein Indikator zeigt die angesammelte Zahl.";
-"postpred.help.input.grid.step3" = "Tippen Sie auf das Posts-Symbol, um die Enthüllung zu bestätigen und auszulösen.";
+"postpred.help.input.grid.step3" = "Halte irgendwo auf dem Foto-Raster gedrückt, um das Reveal zu bestätigen.";
 "postpred.help.input.ocr.label" = "OCR — KAMERA";
 "postpred.help.input.covert.label" = "VERDECKTE EINGABE";
 "postpred.help.input.covert.step1" = "Wähle auf deiner Set-Karte unter **Meine Sets** **Cover Typing** und tippe auf **Konfigurieren**, um ein Tarnwort festzulegen — das, was der Zuschauer auf dem Bildschirm sieht.";
@@ -1738,3 +1738,17 @@
 "lockscreen.perset_note" = "Aktiviert sich, wenn du in Meine Sets den Sperrbildschirm als Eingabemethode für ein Set wählst.";
 "postpred.goto_sets.title" = "Zu Sets wechseln und konfigurieren";
 "postpred.goto_sets.body" = "Wähle ein aktives Set und wähle die Eingabemethode direkt auf jeder Set-Karte.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Anti-Bot-Cooldown aktiv";
+"cooldown.photo" = "Profilbild";
+"cooldown.note" = "Notiz";
+"cooldown.bio" = "Biografie";
+"postpred.help.input.grid.encoding.title" = "Ziffernkodierung  (wie Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "In Performance wischen Sie in beliebiger Richtung auf dem Raster. Immer 4 Wischgesten: erstes Paar = Kartenwert, zweites Paar = Farbe. Lang drücken zum Bestätigen.";
+"set.input.cardclock.values" = "Wertkodierung  (Zifferblatt)";
+"set.input.cardclock.suits" = "Farbkodierung  (dieselbe Richtung zweimal)";
+"set.input.cardclock.longpress" = "Irgendwo auf dem Raster lang drücken, um zu bestätigen.";
+"set.input.cardclock.noconfig" = "Keine Konfiguration erforderlich.";

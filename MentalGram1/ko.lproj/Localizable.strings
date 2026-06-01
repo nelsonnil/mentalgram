@@ -512,13 +512,13 @@
 "postpred.help.inputs.body1" = "관객이 자유롭게 단어나 숫자를 생각합니다. 세 가지 방법 중 하나로 조용히 선택을 캡처합니다:";
 "postpred.help.inputs.intro" = "각 입력 방법은 특정 세트 유형과 호환됩니다. 퍼포먼스에 가장 잘 맞는 방법을 선택하세요.";
 "postpred.help.input.grid.label" = "그리드 입력";
-"postpred.help.input.grid.intro" = "퍼포먼스에서 사진 그리드를 좌우로 스와이프합니다. 게시물 1–9는 숫자 1–9에 해당하고 게시물 10 이상은 숫자 0에 해당합니다. 최대 3자리를 누적한 후 게시물 아이콘을 탭하여 공개합니다.";
+"postpred.help.input.grid.intro" = "Performance에서 포토 그리드 위를 네 방향(↑ ↓ ← →) 중 하나로 스와이프합니다. 연속된 스와이프 2번이 숫자 1자리를 인코딩합니다 — Clock Input과 동일한 방식. 필요한 만큼 숫자를 입력한 뒤 그리드 아무 곳이나 길게 눌러 확인하세요.";
 "postpred.help.input.grid.case.number" = "각 숫자는 해당 뱅크의 슬롯을 선택합니다 — 뱅크 1 → 1번째 숫자, 뱅크 2 → 2번째 숫자, 이하 동일.";
-"postpred.help.input.grid.case.custom" = "누적된 모든 숫자가 슬롯 번호(1–100)를 형성합니다. 예: 7→2 = 슬롯 72. 1→0→0 = 슬롯 100.";
+"postpred.help.input.grid.case.custom" = "입력한 모든 자릿수가 슬롯 번호를 구성합니다. 예: 7, 2 입력 → 슬롯 72.";
 "postpred.help.input.grid.case.card" = "2자리: [숫자 + 문양]. 3자리: [십 + 일 + 문양]. 문양: 1=♠  2=♥  3=♣  4=♦. 예: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Post Prediction 설정에서 **숫자 그리드**를 활성화합니다.";
 "postpred.help.input.grid.step2" = "퍼포먼스에서 사진 그리드를 좌우로 스와이프합니다. 게시물 1-9는 숫자 1-9에 해당합니다. 게시물 10, 11, 12는 숫자 0에 해당합니다.";
-"postpred.help.input.grid.step3" = "게시물 아이콘을 탭하여 확인하고 공개를 트리거합니다.";
+"postpred.help.input.grid.step3" = "그리드 아무 곳이나 길게 눌러 reveal을 확인하고 실행하세요.";
 "postpred.help.input.ocr.label" = "OCR — 카메라";
 "postpred.help.input.covert.label" = "은밀 입력";
 "postpred.help.input.covert.step1" = "**내 세트**의 세트 카드에서 **Cover Typing**을 선택하고 **구성**을 탭하여 커버 단어(관객이 화면에서 볼 내용)를 설정하세요.";
@@ -1560,3 +1560,17 @@
 "lockscreen.perset_note" = "내 Sets에서 세트의 입력 방법으로 잠금 화면을 선택하면 활성화됩니다.";
 "postpred.goto_sets.title" = "구성하려면 Sets로 이동";
 "postpred.goto_sets.body" = "활성 세트를 선택하고 각 세트 카드에서 직접 입력 방법을 선택하세요.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "안티봇 쿨다운 활성";
+"cooldown.photo" = "프로필 사진";
+"cooldown.note" = "노트";
+"cooldown.bio" = "자기소개";
+"postpred.help.input.grid.encoding.title" = "숫자 인코딩  (Clock Input과 동일)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "Performance에서 그리드 위를 임의 방향으로 스와이프하세요. 항상 4번: 첫 쌍 = 카드 값, 둘째 쌍 = 수트. 길게 눌러 확인.";
+"set.input.cardclock.values" = "숫자 인코딩  (시계 문자판)";
+"set.input.cardclock.suits" = "수트 인코딩  (같은 방향 두 번)";
+"set.input.cardclock.longpress" = "그리드 아무 곳이나 길게 눌러 확인하세요.";
+"set.input.cardclock.noconfig" = "구성이 필요 없습니다.";

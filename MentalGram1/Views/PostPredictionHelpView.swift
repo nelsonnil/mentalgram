@@ -213,6 +213,27 @@ struct PostPredictionHelpView: View {
             ) {
                 PPBodyText("postpred.help.input.grid.intro")
                 PPGridInputDemo()
+                // Encoding table
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(String(localized: "postpred.help.input.grid.encoding.title"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                    let pairs = ["0=↑↑","1=↑→","2=→↑","3=→→","4=→↓",
+                                 "5=↓→","6=↓↓","7=↓←","8=←↓","9=←←"]
+                    ForEach([Array(pairs[0..<5]), Array(pairs[5..<10])], id: \.self) { row in
+                        HStack(spacing: 10) {
+                            ForEach(row, id: \.self) { pair in
+                                Text(pair)
+                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(10)
+                .background(VaultTheme.Colors.background.opacity(0.5))
+                .cornerRadius(VaultTheme.CornerRadius.sm)
                 VStack(alignment: .leading, spacing: 10) {
                     PPGridCaseRow(color: Color(hex: "FF9500"), setType: "Number",
                                   detail: "postpred.help.input.grid.case.number")
@@ -918,53 +939,48 @@ private struct PPTipRow: View {
 
 private struct PPGridInputDemo: View {
 
+    // Demo encodes "37": 3=→→  7=↓←
     enum Phase { case swipe, confirm, reveal }
     @State private var phase: Phase = .swipe
 
-    // Tab / section state (0=Posts, 1=Reels, 2=Tagged)
     @State private var activeTab: Int = 0
-
-    // Digit accumulator (shown in "Nº" indicator replacing "Following")
     @State private var accumDigits: [Int] = []
+    @State private var pendingDot: Bool = false     // first swipe of a pair received
     @State private var digitBounce: CGFloat = 1.0
 
-    // Swipe animation
-    @State private var activeSwipeCell: Int? = nil
-    @State private var swipeTrail: CGFloat = 0
+    // Swipe overlay (directional arrow, shown over the whole grid area)
+    @State private var showSwipeArrow: Bool = false
+    @State private var swipeArrowIcon: String = "arrow.right"
+    @State private var swipeArrowOffset: CGFloat = 0  // translation along the swipe axis
+    @State private var swipeArrowOpacity: Double = 0
+
+    // Finger
     @State private var showFinger: Bool = false
     @State private var fingerOffset: CGSize = .zero
 
-    // Confirm (Posts button tap)
-    @State private var postsBtnPulse: Bool = false
-    @State private var postsBtnScale: CGFloat = 1.0
+    // Long-press confirm ring
+    @State private var longPressProgress: CGFloat = 0   // 0→1
+    @State private var showLongPressRing: Bool = false
 
-    // Reveal (new unarchived photo card)
     @State private var showRevealCard: Bool = false
     @State private var phoneGlow: Double = 0
-
     @State private var loopTask: Task<Void, Never>? = nil
 
     private let accent = Color(hex: "A78BFA")
     private let gold   = Color(hex: "F59E0B")
 
-    // Phone geometry
     private let phoneW: CGFloat = 248
     private let phoneH: CGFloat = 492
-
-    // Header: navBar(48) + stats(68) + bio(20) + buttons(48) + tabs(40) = 224
     private let headerH: CGFloat = 224
     private let cellW:   CGFloat = 82
     private let cellH:   CGFloat = 66
 
-    // Swipe 1: Posts cell[0] → digit 3, tab Post→Reels
-    // Swipe 2: Reels cell[6] → digit 7, tab Reels→Tagged
-    private let swipe1CellIdx = 0   // digit shown = 3 via label
-    private let swipe2CellIdx = 6   // digit shown = 7
+    // Grid area center (in ZStack coords relative to phone center)
+    private var gridCenter: CGSize {
+        CGSize(width: 0, height: headerH + cellH * 2 - phoneH / 2)
+    }
 
-    private let cellDigits   = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0]
-    // Override displayed digit for the two demo cells so demo reads "37"
-    private let demoDigit1 = 3
-    private let demoDigit2 = 7
+    private let cellDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0]
 
     // ── Cell center in ZStack coords ─────────────────────────────────────────
     private func cellCenter(_ idx: Int) -> CGSize {
@@ -1005,9 +1021,9 @@ private struct PPGridInputDemo: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 6) {
-                ppPill("1", "Clock",   active: phase == .swipe,   color: accent)
-                ppPill("2", "Confirm", active: phase == .confirm, color: accent)
-                ppPill("3", "Reveal",  active: phase == .reveal,  color: gold)
+                ppPill("1", "Swipe",   active: phase == .swipe,   color: accent)
+                ppPill("2", "Hold",    active: phase == .confirm,  color: accent)
+                ppPill("3", "Reveal",  active: phase == .reveal,   color: gold)
             }
 
             phoneMockup
@@ -1017,11 +1033,11 @@ private struct PPGridInputDemo: View {
             Group {
                 switch phase {
                 case .swipe:
-                    Text("Browsing Posts → Reels → Tagged looks natural while each swipe secretly registers a digit")
+                    Text("Two swipes = one digit  ·  3 = →→  ·  7 = ↓←")
                 case .confirm:
-                    Text("Tap **Posts** to lock in the number and trigger the unarchive")
+                    Text("Long-press anywhere on the grid to confirm and trigger the reveal")
                 case .reveal:
-                    Text("Photo **#37** appears as a new post — unarchived on real Instagram at its original position")
+                    Text("Photo **#37** appears as a new post — unarchived on real Instagram")
                 }
             }
             .font(.system(size: 13, weight: .medium))
@@ -1084,11 +1100,60 @@ private struct PPGridInputDemo: View {
                 igTabBar
                 ZStack {
                     pagedTabContent
+                    // Directional swipe arrow overlay
+                    if showSwipeArrow {
+                        swipeArrowOverlay
+                    }
+                    // Long-press progress ring
+                    if showLongPressRing {
+                        longPressRingOverlay
+                    }
                     if showFinger { fingerView.offset(fingerOffset) }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    private var swipeArrowOverlay: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(accent.opacity(0.08))
+            Image(systemName: swipeArrowIcon)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(accent.opacity(swipeArrowOpacity))
+                .offset(arrowTranslation)
+        }
+        .padding(10)
+    }
+
+    private var arrowTranslation: CGSize {
+        switch swipeArrowIcon {
+        case "arrow.right": return CGSize(width: swipeArrowOffset, height: 0)
+        case "arrow.left":  return CGSize(width: -swipeArrowOffset, height: 0)
+        case "arrow.down":  return CGSize(width: 0, height: swipeArrowOffset)
+        default:            return CGSize(width: 0, height: -swipeArrowOffset)
+        }
+    }
+
+    private var longPressRingOverlay: some View {
+        ZStack {
+            // Background dimmer
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.25))
+            // Progress ring
+            Circle()
+                .trim(from: 0, to: longPressProgress)
+                .stroke(accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .frame(width: 44, height: 44)
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 0.7), value: longPressProgress)
+            // Finger dot in center
+            Circle()
+                .fill(Color.white.opacity(0.85))
+                .frame(width: 14, height: 14)
+        }
+        .padding(10)
     }
 
     private var igNavBar: some View {
@@ -1165,22 +1230,10 @@ private struct PPGridInputDemo: View {
     }
 
     private func igTab(_ icon: String, idx: Int) -> some View {
-        // Posts tab (idx==0) shows pulse ring when being confirmed
-        ZStack {
-            if idx == 0 && postsBtnPulse {
-                Circle().stroke(accent.opacity(0.5), lineWidth: 1.8)
-                    .frame(width: 28, height: 28)
-                    .scaleEffect(postsBtnScale)
-                    .opacity(max(0, 2 - postsBtnScale))
-                    .animation(.easeOut(duration: 0.55), value: postsBtnScale)
-            }
-            Image(systemName: icon).font(.system(size: 17))
-                .foregroundColor(.white.opacity(activeTab == idx ? 1 : 0.28))
-                .scaleEffect(idx == 0 && postsBtnPulse ? 1.25 : 1.0)
-                .animation(.spring(response: 0.22, dampingFraction: 0.5), value: postsBtnPulse)
-        }
-        .frame(maxWidth: .infinity).frame(height: 40)
-        .animation(.easeInOut(duration: 0.25), value: activeTab)
+        Image(systemName: icon).font(.system(size: 17))
+            .foregroundColor(.white.opacity(activeTab == idx ? 1 : 0.28))
+            .frame(maxWidth: .infinity).frame(height: 40)
+            .animation(.easeInOut(duration: 0.25), value: activeTab)
     }
 
     // Three paged panels slide with activeTab
@@ -1216,17 +1269,8 @@ private struct PPGridInputDemo: View {
     }
 
     private func postCell(_ index: Int, tab: Int) -> some View {
-        let isSwipe = activeSwipeCell == index && activeTab == tab
-        // Real digit for this cell; override for demo cells so they show 3 and 7
-        let digit: Int = {
-            if tab == 0 && index == swipe1CellIdx { return demoDigit1 }
-            if tab == 1 && index == swipe2CellIdx { return demoDigit2 }
-            return cellDigits[index % cellDigits.count]
-        }()
-
-        return ZStack {
+        ZStack {
             ppGradients[index % ppGradients.count]
-            // Reel icon for reels tab
             if tab == 1 {
                 Image(systemName: "play.fill").font(.system(size: 16)).foregroundColor(.white.opacity(0.3))
             } else if tab == 2 {
@@ -1238,35 +1282,8 @@ private struct PPGridInputDemo: View {
                 Image(systemName: postIcons[index % postIcons.count])
                     .font(.system(size: 16)).foregroundColor(.white.opacity(0.14))
             }
-            // Corner digit badge
-            VStack { Spacer()
-                HStack { Spacer()
-                    Text("\(digit)")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.25))
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(Capsule().fill(.black.opacity(0.32))).padding(4)
-                }
-            }
-            // Swipe trail
-            if isSwipe {
-                ZStack {
-                    Rectangle().fill(Color.white.opacity(0.09))
-                    VStack { Spacer()
-                        HStack(spacing: 2) {
-                            Capsule().fill(.white.opacity(0.75))
-                                .frame(width: max(1, 28 * swipeTrail), height: 2.5)
-                            Image(systemName: "arrow.left")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(.white.opacity(swipeTrail * 0.85))
-                        }
-                        .padding(.leading, 5).padding(.bottom, 5)
-                    }
-                }
-            }
         }
         .frame(height: cellH)
-        .animation(.easeInOut(duration: 0.12), value: isSwipe)
     }
 
     // MARK: - Reveal scene (Posts grid + new unarchived photo card)
@@ -1354,21 +1371,31 @@ private struct PPGridInputDemo: View {
     private var digitIndicator: some View {
         VStack(spacing: 2) {
             ZStack {
-                if accumDigits.isEmpty {
+                if accumDigits.isEmpty && !pendingDot {
                     Text("_ _")
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundColor(.white.opacity(0.28))
                         .transition(.opacity)
                 } else {
-                    Text(accumDigits.map { "\($0)" }.joined())
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(accent)
-                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    HStack(spacing: 1) {
+                        Text(accumDigits.map { "\($0)" }.joined())
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(accent)
+                        // Pending dot: waiting for 2nd swipe
+                        if pendingDot {
+                            Text("·")
+                                .font(.system(size: 18, weight: .black, design: .monospaced))
+                                .foregroundColor(accent.opacity(0.6))
+                                .transition(.scale(scale: 0.3).combined(with: .opacity))
+                        }
+                    }
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
                 }
             }
             .scaleEffect(digitBounce)
             .animation(.spring(response: 0.26, dampingFraction: 0.45), value: digitBounce)
             .animation(.spring(response: 0.3,  dampingFraction: 0.7),  value: accumDigits)
+            .animation(.easeInOut(duration: 0.18), value: pendingDot)
 
             Text("Nº")
                 .font(.system(size: 10, weight: accumDigits.isEmpty ? .regular : .bold))
@@ -1377,9 +1404,9 @@ private struct PPGridInputDemo: View {
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(accent.opacity(accumDigits.isEmpty ? 0 : 0.6), lineWidth: 1.5)
+                .stroke(accent.opacity(accumDigits.isEmpty && !pendingDot ? 0 : 0.6), lineWidth: 1.5)
                 .background(RoundedRectangle(cornerRadius: 8)
-                    .fill(accent.opacity(accumDigits.isEmpty ? 0 : 0.08)))
+                    .fill(accent.opacity(accumDigits.isEmpty && !pendingDot ? 0 : 0.08)))
                 .animation(.easeInOut(duration: 0.25), value: accumDigits.isEmpty)
         )
     }
@@ -1435,92 +1462,104 @@ private struct PPGridInputDemo: View {
         try? await Task.sleep(nanoseconds: UInt64(s * 1_000_000_000))
     }
 
-    // Swipe on a cell inside a tab, then slide to the next tab — registers a digit
+    /// Animate one directional swipe with an arrow overlay.
+    /// - Parameters:
+    ///   - icon: SF Symbol for the arrow (e.g. "arrow.right")
+    ///   - nextTab: if non-nil, slide the tab after the swipe (horizontal swipes only)
+    ///   - completedDigit: if non-nil, this is the 2nd swipe of a pair → digit appears
     @MainActor
-    private func doTabSwipe(cellIdx: Int, digit: Int, nextTab: Int) async {
-        let c = cellCenter(cellIdx)
+    private func doDirectionalSwipe(icon: String, nextTab: Int?, completedDigit: Int?) async {
+        // Show arrow
         withAnimation(.none) {
-            fingerOffset = CGSize(width: c.width + 22, height: c.height)
-            activeSwipeCell = cellIdx; swipeTrail = 0
+            swipeArrowIcon = icon
+            swipeArrowOffset = 0
+            swipeArrowOpacity = 0
+            showSwipeArrow = true
         }
-        withAnimation(.easeIn(duration: 0.18)) { showFinger = true }
-        await sleep(0.28)
+        withAnimation(.easeIn(duration: 0.15)) { swipeArrowOpacity = 1 }
+        await sleep(0.2)
 
-        // Swipe motion + tab slides mid-swipe
-        withAnimation(.easeIn(duration: 0.12)) { swipeTrail = 1 }
-        withAnimation(.easeOut(duration: 0.50)) {
-            fingerOffset = CGSize(width: c.width - 22, height: c.height)
+        // If this is the 2nd swipe (completing a digit), clear pendingDot first
+        if completedDigit != nil {
+            withAnimation(.easeInOut(duration: 0.1)) { pendingDot = false }
+        }
+
+        // Swipe motion
+        withAnimation(.easeOut(duration: 0.35)) { swipeArrowOffset = 28 }
+        await sleep(0.2)
+        if let tab = nextTab {
+            withAnimation(.easeInOut(duration: 0.32)) { activeTab = tab }
+        }
+        await sleep(0.2)
+
+        withAnimation(.easeOut(duration: 0.18)) { swipeArrowOpacity = 0 }
+        await sleep(0.2)
+        withAnimation(.none) { showSwipeArrow = false; swipeArrowOffset = 0 }
+
+        if let digit = completedDigit {
+            // 2nd swipe → digit committed
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.52)) {
+                accumDigits.append(digit)
+            }
+            digitBounce = 1.5
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.45)) { digitBounce = 1.0 }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        } else {
+            // 1st swipe → show pending dot
+            withAnimation(.easeInOut(duration: 0.18)) { pendingDot = true }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
         await sleep(0.25)
-        withAnimation(.easeInOut(duration: 0.34)) { activeTab = nextTab }
-        await sleep(0.30)
-
-        withAnimation(.easeOut(duration: 0.14)) { swipeTrail = 0; activeSwipeCell = nil }
-
-        // Register digit with bounce in indicator
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.52)) { accumDigits.append(digit) }
-        digitBounce = 1.5
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.45)) { digitBounce = 1.0 }
-
-        await sleep(0.2)
-        withAnimation(.easeOut(duration: 0.14)) { showFinger = false }
-        await sleep(0.18)
     }
 
     @MainActor
     private func animSwipe() async {
         withAnimation(.none) {
-            accumDigits = []; activeTab = 0; showFinger = false; fingerOffset = .zero
-            activeSwipeCell = nil; swipeTrail = 0; digitBounce = 1
-            postsBtnPulse = false; postsBtnScale = 1
+            accumDigits = []; pendingDot = false; activeTab = 0
+            showFinger = false; fingerOffset = .zero
+            showSwipeArrow = false; swipeArrowOffset = 0; swipeArrowOpacity = 0
+            showLongPressRing = false; longPressProgress = 0
+            digitBounce = 1
             showRevealCard = false; phoneGlow = 0
         }
         withAnimation(.easeInOut(duration: 0.3)) { phase = .swipe }
         await sleep(0.9)
 
-        // Swipe 1: Posts cell[0] (digit 3) → tab slides to Reels
-        await doTabSwipe(cellIdx: swipe1CellIdx, digit: demoDigit1, nextTab: 1)
-        await sleep(2.2)   // pause so viewer sees "3" in the indicator clearly
+        // Digit 3 = →→  (two right swipes, tab shifts on each)
+        await doDirectionalSwipe(icon: "arrow.right", nextTab: 1, completedDigit: nil)
+        await sleep(0.6)
+        await doDirectionalSwipe(icon: "arrow.right", nextTab: 0, completedDigit: 3)
+        await sleep(2.0)   // let viewer read "3" in indicator
 
-        // Swipe 2: Reels cell[6] (digit 7) → tab slides to Tagged
-        await doTabSwipe(cellIdx: swipe2CellIdx, digit: demoDigit2, nextTab: 2)
-        await sleep(0.5)
-        withAnimation(.easeOut(duration: 0.2)) { showFinger = false }
-        await sleep(0.4)
+        // Digit 7 = ↓←  (down then left)
+        await doDirectionalSwipe(icon: "arrow.down", nextTab: nil, completedDigit: nil)
+        await sleep(0.6)
+        await doDirectionalSwipe(icon: "arrow.left", nextTab: 1, completedDigit: 7)
+        await sleep(0.6)
     }
 
     @MainActor
     private func animConfirm() async {
         withAnimation(.easeInOut(duration: 0.25)) { phase = .confirm }
-        await sleep(0.4)
-
-        // Move finger from Reels swipe cell to Posts tab button
-        withAnimation(.none) {
-            showFinger = true
-            fingerOffset = cellCenter(swipe2CellIdx)
-        }
-        await sleep(0.08)
-        withAnimation(.easeInOut(duration: 0.5)) { fingerOffset = postsTabCenter }
-        await sleep(0.58)
-
-        // Tap Posts button — pulse ring + scale
-        withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
-            postsBtnPulse = true; postsBtnScale = 1.65
-        }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        await sleep(0.2)
-        withAnimation(.easeOut(duration: 0.3)) { postsBtnScale = 1.0 }
         await sleep(0.5)
-        withAnimation(.easeOut(duration: 0.15)) { showFinger = false }
-        await sleep(0.6)
+
+        // Show long-press ring filling up
+        withAnimation(.none) { longPressProgress = 0 }
+        withAnimation(.easeInOut(duration: 0.2)) { showLongPressRing = true }
+        await sleep(0.1)
+        withAnimation(.linear(duration: 0.7)) { longPressProgress = 1 }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        await sleep(0.8)
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        withAnimation(.easeOut(duration: 0.3)) { showLongPressRing = false }
+        await sleep(0.5)
     }
 
     @MainActor
     private func animReveal() async {
-        withAnimation(.easeInOut(duration: 0.38)) { phase = .reveal; postsBtnPulse = false }
+        withAnimation(.easeInOut(duration: 0.38)) { phase = .reveal }
         await sleep(0.5)
 
-        // New photo pops in with spring + golden glow
         withAnimation(.spring(response: 0.44, dampingFraction: 0.62)) { showRevealCard = true }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         withAnimation(.easeIn(duration: 0.3)) { phoneGlow = 1 }

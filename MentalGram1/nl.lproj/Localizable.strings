@@ -512,13 +512,13 @@
 "postpred.help.inputs.body1" = "De toeschouwer denkt vrij aan een woord of getal. U legt zijn keuze stil vast met een van drie methoden:";
 "postpred.help.inputs.intro" = "Elke invoermethode is compatibel met specifieke set-typen. Kies de methode die het beste past bij uw optreden.";
 "postpred.help.input.grid.label" = "RASTERINVOER";
-"postpred.help.input.grid.intro" = "Veeg in de voorstelling links of rechts over het fotoraster. Posts 1–9 komen overeen met de cijfers 1–9; posts 10+ met het cijfer 0. Verzamel maximaal 3 cijfers en tik op het Posts-pictogram om te onthullen.";
+"postpred.help.input.grid.intro" = "Veeg in Performance in een van de vier richtingen (↑ ↓ ← →) over het fotoraster. Elke twee opeenvolgende veegbewegingen coderen één cijfer — dezelfde logica als Clock Input. Voer zoveel cijfers in als nodig en houd dan ergens op het raster ingedrukt om te bevestigen.";
 "postpred.help.input.grid.case.number" = "Elk cijfer selecteert de slot in zijn bank — bank 1 → 1e cijfer, bank 2 → 2e cijfer, enzovoort.";
-"postpred.help.input.grid.case.custom" = "Alle verzamelde cijfers vormen het slotnummer (1–100). Bijv.: veeg 7 dan 2 = slot 72. Veeg 1, 0, 0 = slot 100.";
+"postpred.help.input.grid.case.custom" = "Alle verzamelde cijfers vormen het slotnummer. Bijv.: codeer 7, 2 → slot 72.";
 "postpred.help.input.grid.case.card" = "2 cijfers: [waarde + kleur]. 3 cijfers: [tiental + eenheid + kleur]. Kleuren: 1=♠  2=♥  3=♣  4=♦. Bijv.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Schakel **Cijferraster** in bij de Post Prediction-instellingen.";
 "postpred.help.input.grid.step2" = "Veeg in Prestaties links of rechts over het fotoraster. Posts 1-9 komen overeen met de cijfers 1-9. Posts 10, 11 en 12 komen overeen met het cijfer 0.";
-"postpred.help.input.grid.step3" = "Tik op het Posts-pictogram om te bevestigen en de onthulling te activeren.";
+"postpred.help.input.grid.step3" = "Houd ergens op het fotoraster ingedrukt om te bevestigen en de reveal te starten.";
 "postpred.help.input.ocr.label" = "OCR — CAMERA";
 "postpred.help.input.covert.label" = "VERBORGEN INVOER";
 "postpred.help.input.covert.step1" = "Selecteer op je setkaart in **Mijn Sets** **Cover Typing** en tik op **Configureren** om een dekkend woord in te stellen — wat de toeschouwer op het scherm ziet.";
@@ -1555,3 +1555,17 @@
 "lockscreen.perset_note" = "Activeert wanneer je Vergrendelscherm kiest als invoermethode voor een set in Mijn Sets.";
 "postpred.goto_sets.title" = "Ga naar Sets om te configureren";
 "postpred.goto_sets.body" = "Selecteer een actieve set en kies de invoermethode direct op elke setkaart.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Anti-Bot-cooldown actief";
+"cooldown.photo" = "Profielfoto";
+"cooldown.note" = "Notitie";
+"cooldown.bio" = "Biografie";
+"postpred.help.input.grid.encoding.title" = "Cijfercodering  (zelfde als Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "In Performance veeg in beliebige richting over het raster. Altijd 4 vegen: eerste paar = waarde, tweede paar = kleur. Houd ingedrukt om te bevestigen.";
+"set.input.cardclock.values" = "Waardecode  (klokwijzerplaat)";
+"set.input.cardclock.suits" = "Kleurcode  (dezelfde richting tweemaal)";
+"set.input.cardclock.longpress" = "Houd ergens op het raster ingedrukt om te bevestigen.";
+"set.input.cardclock.noconfig" = "Geen configuratie vereist.";

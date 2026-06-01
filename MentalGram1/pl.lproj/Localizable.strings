@@ -510,13 +510,13 @@
 "postpred.help.inputs.body1" = "Widz swobodnie mysli o slowie lub liczbie. Przechwycisz jego wybor po cichu jedn. z trzech metod:";
 "postpred.help.inputs.intro" = "Każda metoda wprowadzania jest kompatybilna z określonymi typami zestawów. Wybierz tę, która najlepiej pasuje do Twojego pokazu.";
 "postpred.help.input.grid.label" = "WPROWADZANIE SIATKĄ";
-"postpred.help.input.grid.intro" = "W Pokaz przesuń w lewo lub prawo po siatce zdjęć. Posty 1–9 odpowiadają cyfrom 1–9; posty 10+ odpowiadają cyfrze 0. Zgromadź do 3 cyfr i dotknij ikony Posty, aby ujawnić.";
+"postpred.help.input.grid.intro" = "W trybie Performance przesuń palcem w jednym z czterech kierunków (↑ ↓ ← →) na siatce zdjęć. Każda para kolejnych gestów przesuwa koduje jedną cyfrę — ta sama logika co Clock Input. Wprowadź tyle cyfr ile potrzebujesz, a następnie przytrzymaj w dowolnym miejscu siatki, aby potwierdzić.";
 "postpred.help.input.grid.case.number" = "Każda cyfra wybiera slot w swoim banku — bank 1 → 1. cyfra, bank 2 → 2. cyfra itd.";
-"postpred.help.input.grid.case.custom" = "Wszystkie zgromadzone cyfry tworzą numer slotu (1–100). Np.: przesuń 7 potem 2 = slot 72. Przesuń 1, 0, 0 = slot 100.";
+"postpred.help.input.grid.case.custom" = "Wszystkie skumulowane cyfry tworzą numer slotu. Np. zakoduj 7, 2 → slot 72.";
 "postpred.help.input.grid.case.card" = "2 cyfry: [wartość + kolor]. 3 cyfry: [dziesiąt. + jedn. + kolor]. Kolory: 1=♠  2=♥  3=♣  4=♦. Np.: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Wlacz **Siatk. cyfr** w ustawieniach Post Prediction.";
 "postpred.help.input.grid.step2" = "W Wynikach przesu. w lewo lub prawo po siatce zdj.c. Posty 1-9 odpowiadaj. cyfrom 1-9. Posty 10, 11 i 12 odpowiadaj. cyfrze 0.";
-"postpred.help.input.grid.step3" = "Dotknij ikony Postów, aby potwierdzić i uruchomić ujawnienie.";
+"postpred.help.input.grid.step3" = "Przytrzymaj w dowolnym miejscu siatki, aby potwierdzić i uruchomić reveal.";
 "postpred.help.input.ocr.label" = "OCR — KAMERA";
 "postpred.help.input.covert.label" = "UKRYTE WPROWADZANIE";
 "postpred.help.input.covert.step1" = "Na karcie zestawu w **Moje zestawy** wybierz **Cover Typing** i dotknij **Konfiguruj**, aby zdefiniować słowo maskujące — to, co widz zobaczy na ekranie.";
@@ -1554,3 +1554,17 @@
 "lockscreen.perset_note" = "Aktywuje się, gdy wybierzesz Ekran blokady jako metodę wejścia dla setu w Moje Sety.";
 "postpred.goto_sets.title" = "Przejdź do Sets aby skonfigurować";
 "postpred.goto_sets.body" = "Wybierz aktywny set i wybierz metodę wejścia bezpośrednio na każdej karcie setu.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Cooldown anty-bot aktywny";
+"cooldown.photo" = "Zdjęcie profilowe";
+"cooldown.note" = "Notatka";
+"cooldown.bio" = "Biografia";
+"postpred.help.input.grid.encoding.title" = "Kodowanie cyfr  (jak Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "W Performance przesuń w dowolnym kierunku po siatce. Zawsze 4 gesty: pierwsza para = wartość, druga para = kolor. Przytrzymaj, aby potwierdzić.";
+"set.input.cardclock.values" = "Kodowanie wartości  (tarczа zegara)";
+"set.input.cardclock.suits" = "Kodowanie koloru  (ten sam kierunek dwa razy)";
+"set.input.cardclock.longpress" = "Przytrzymaj w dowolnym miejscu siatki, aby potwierdzić.";
+"set.input.cardclock.noconfig" = "Konfiguracja nie jest wymagana.";

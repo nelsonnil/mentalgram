@@ -549,13 +549,13 @@
 "postpred.help.inputs.body1" = "觀眾自由思考一個單詞或數字。您使用三種方法之一悄悄捕獲他們的選擇：";
 "postpred.help.inputs.intro" = "每種輸入方式與特定類型的合集相容。選擇最適合您表演的方式。";
 "postpred.help.input.grid.label" = "格線輸入";
-"postpred.help.input.grid.intro" = "在表演中，左右滑動照片格線。貼文1–9對應數字1–9；貼文10+對應數字0。最多累積3位數字，然後點選貼文圖示觸發揭示。";
+"postpred.help.input.grid.intro" = "在 Performance 中，於照片格狀圖上向四個方向之一（↑ ↓ ← →）滑動。每兩次連續滑動編碼一個數字——與 Clock Input 相同。輸入所需位數後，在格狀圖任意位置長按以確認。";
 "postpred.help.input.grid.case.number" = "每個數字選擇其庫中的槽位 — 庫1 → 第1位數字，庫2 → 第2位數字，以此類推。";
-"postpred.help.input.grid.case.custom" = "所有累積的數字組成槽位編號（1–100）。例如：滑動7然後2 = 槽位72。滑動1, 0, 0 = 槽位100。";
+"postpred.help.input.grid.case.custom" = "所有累積的數字組成插槽編號。例：輸入 7、2 → 插槽 72。";
 "postpred.help.input.grid.case.card" = "2位數字：[點數 + 花色]。3位數字：[十位 + 個位 + 花色]。花色：1=♠  2=♥  3=♣  4=♦。例：4→2 = 4♥ · 1→1→1 = J♠。";
 "postpred.help.input.grid.step1" = "在貼文預言設定中啟用**數字格線**。";
 "postpred.help.input.grid.step2" = "在表演中，左右滑動照片格線。貼文1-9對應數字1-9。貼文10、11和12對應數字0。指示器顯示累積的數字。";
-"postpred.help.input.grid.step3" = "點選貼文圖示確認並觸發揭示。";
+"postpred.help.input.grid.step3" = "在照片格狀圖任意位置長按，以確認並觸發 reveal。";
 "postpred.help.input.ocr.label" = "OCR — 相機";
 "postpred.help.input.covert.label" = "隱秘輸入";
 "postpred.help.input.covert.step1" = "在**我的套牌**的套牌卡片中，選擇 **Cover Typing** 並點擊**設定**以定義掩護詞——觀眾將在螢幕上看到的內容。";
@@ -1215,3 +1215,17 @@
 "lockscreen.perset_note" = "當您在我的套組中為某個套組選擇鎖定畫面作為輸入方式時啟用。";
 "postpred.goto_sets.title" = "前往套組進行設定";
 "postpred.goto_sets.body" = "選擇一個活躍套組，並直接在每張套組卡上選擇輸入方式。";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "防機器人冷卻中";
+"cooldown.photo" = "大頭貼";
+"cooldown.note" = "備註";
+"cooldown.bio" = "個人簡介";
+"postpred.help.input.grid.encoding.title" = "數字編碼（與 Clock Input 相同）";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "在 Performance 中，在照片格狀圖上向任意方向滑動。始終 4 次滑動：前兩次 = 牌面值，後兩次 = 花色。長按以確認。";
+"set.input.cardclock.values" = "點數編碼  （時鐘錶盤）";
+"set.input.cardclock.suits" = "花色編碼  （同一方向兩次）";
+"set.input.cardclock.longpress" = "在格狀圖任意位置長按以確認並觸發 reveal。";
+"set.input.cardclock.noconfig" = "無需配置。";

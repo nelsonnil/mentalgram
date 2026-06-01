@@ -4541,8 +4541,10 @@ struct InstagramProfileView: View {
             dir = dy > 0 ? .down : .up
         }
 
-        // Route to card clock buffer when a card set is active
-        if ActiveSetSettings.shared.activeCardSetId != nil {
+        // Route to card clock buffer when the active set is a card set using Card Clock input
+        if let activeId = ActiveSetSettings.shared.activeCardSetId,
+           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
+           activeSet.resolvedInputMethod == .cardClock {
             secretManager.addCardSwipe(dir)
         } else {
             secretManager.addSwipe(dir)
@@ -4573,6 +4575,7 @@ struct InstagramProfileView: View {
         // ── Card Clock Input ──────────────────────────────────────────────────
         if let activeId = ActiveSetSettings.shared.activeCardSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
+           activeSet.resolvedInputMethod == .cardClock,
            let cardSym = secretManager.decodedCard {
             secretManager.reset()
             followingOverride = nil; followerOverride = nil

@@ -721,6 +721,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
     case digitGrid   = "digitGrid"    // Number/Custom: swipe hidden digit grid
     case lockscreen  = "lockscreen"   // Number/Custom/Card: fake lockscreen entry
     case clockInput  = "clockInput"   // Number/Custom: black screen swipe digit entry
+    case cardClock   = "cardClock"    // Card: clock-face swipe pairs (4 swipes → value+suit)
 
     var id: String { rawValue }
 
@@ -732,6 +733,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .digitGrid:   return "Digit Grid"
         case .lockscreen:  return "Lockscreen"
         case .clockInput:  return "Clock Input"
+        case .cardClock:   return "Card Clock"
         }
     }
 
@@ -743,6 +745,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .digitGrid:   return "Swipe pattern on a hidden number grid"
         case .lockscreen:  return "Fake lock screen for digit or card entry"
         case .clockInput:  return "Black screen swipe encoding for digit entry"
+        case .cardClock:   return "4 directional swipes encode value + suit"
         }
     }
 
@@ -754,6 +757,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .digitGrid:   return "square.grid.3x3.fill"
         case .lockscreen:  return "lock.fill"
         case .clockInput:  return "hand.draw.fill"
+        case .cardClock:   return "clock.fill"
         }
     }
 
@@ -767,7 +771,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .word:   return [.coverTyping, .api, .ocr]
         case .number: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
         case .custom: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
-        case .card:   return [.lockscreen]
+        case .card:   return [.cardClock, .lockscreen, .api, .ocr]
         }
     }
 
@@ -777,7 +781,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .word:   return .coverTyping
         case .number: return .digitGrid
         case .custom: return .digitGrid
-        case .card:   return .lockscreen
+        case .card:   return .cardClock
         }
     }
 }

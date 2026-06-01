@@ -512,13 +512,13 @@
 "postpred.help.inputs.body1" = "観客は自由に単語や数字を考えます。3つの方法のいずれかで、その選択を静かにキャプチャします。";
 "postpred.help.inputs.intro" = "各入力方法は特定のセットタイプと互換性があります。パフォーマンスに最適な方法を選択してください。";
 "postpred.help.input.grid.label" = "グリッド入力";
-"postpred.help.input.grid.intro" = "パフォーマンスで写真グリッドを左右にスワイプします。投稿1〜9は数字1〜9、投稿10以上は数字0に対応します。最大3桁を蓄積し、投稿アイコンをタップして公開します。";
+"postpred.help.input.grid.intro" = "Performanceでは、フォトグリッド上で4方向（↑ ↓ ← →）のいずれかにスワイプします。2回連続のスワイプで1桁を入力します（Clock Inputと同じ方式）。必要な桁数を入力したら、グリッド上を長押しして確定してください。";
 "postpred.help.input.grid.case.number" = "各桁はそのバンクのスロットを選択します — バンク1 → 1桁目、バンク2 → 2桁目、以下同様。";
-"postpred.help.input.grid.case.custom" = "蓄積した桁がスロット番号(1〜100)になります。例: 7→2 = スロット72。1→0→0 = スロット100。";
+"postpred.help.input.grid.case.custom" = "入力した全桁がスロット番号を構成します。例：7→2 = スロット72。";
 "postpred.help.input.grid.case.card" = "2桁: [数値 + スート]。3桁: [十 + 一 + スート]。スート: 1=♠  2=♥  3=♣  4=♦。例: 4→2 = 4♥ · 1→1→1 = J♠。";
 "postpred.help.input.grid.step1" = "Post Prediction設定で**数字グリッド**を有効にします。";
 "postpred.help.input.grid.step2" = "パフォーマンスで、写真グリッドを左右にスワイプします。投稿1〜9は数字1〜9に対応します。投稿10、11、12は数字0に対応します。";
-"postpred.help.input.grid.step3" = "投稿アイコンをタップして確定し、公開をトリガーします。";
+"postpred.help.input.grid.step3" = "グリッド上を長押しして、リビールを確定・実行します。";
 "postpred.help.input.ocr.label" = "OCR — カメラ";
 "postpred.help.input.covert.label" = "秘密入力";
 "postpred.help.input.covert.step1" = "**マイセット**のセットカードで**Cover Typing**を選択し、**設定**をタップしてカバーワード（観客が画面で見る言葉）を定義してください。";
@@ -1556,3 +1556,17 @@
 "lockscreen.perset_note" = "マイセットのセットで「ロック画面」を入力方法として選択すると有効になります。";
 "postpred.goto_sets.title" = "Setsに移動して設定する";
 "postpred.goto_sets.body" = "アクティブなセットを選択し、各セットカードで直接入力方法を選択します。";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "アンチボットクールダウン中";
+"cooldown.photo" = "プロフィール写真";
+"cooldown.note" = "ノート";
+"cooldown.bio" = "自己紹介";
+"postpred.help.input.grid.encoding.title" = "桁のエンコード（Clock Inputと同じ）";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "Performanceで、フォトグリッド上を任意の方向にスワイプします。常に4スワイプ：最初のペア=カード値、2番目=スート。長押しで確定。";
+"set.input.cardclock.values" = "数値エンコード  （時計の文字盤）";
+"set.input.cardclock.suits" = "スートエンコード  （同じ方向を2回）";
+"set.input.cardclock.longpress" = "グリッド上を長押しして確定・リビールします。";
+"set.input.cardclock.noconfig" = "設定は不要です。";

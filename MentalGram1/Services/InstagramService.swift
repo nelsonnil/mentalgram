@@ -5619,7 +5619,7 @@ class InstagramService: ObservableObject {
     }
     
     /// Check if notes are on cooldown
-    private func isNoteOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
+    func isNoteOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
         guard let cooldownUntil = UserDefaults.standard.object(forKey: "note_cooldown_until") as? Date else {
             return (false, 0)
         }
@@ -6031,6 +6031,19 @@ class InstagramService: ObservableObject {
         
         // Cooldown expired, clear it
         UserDefaults.standard.removeObject(forKey: "profile_pic_cooldown_until")
+        return (false, 0)
+    }
+
+    /// Check if biography editing is on cooldown
+    func isBiographyOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
+        guard let cooldownUntil = UserDefaults.standard.object(forKey: "biography_cooldown_until") as? Date else {
+            return (false, 0)
+        }
+        let remaining = cooldownUntil.timeIntervalSinceNow
+        if remaining > 0 {
+            return (true, Int(remaining))
+        }
+        UserDefaults.standard.removeObject(forKey: "biography_cooldown_until")
         return (false, 0)
     }
     

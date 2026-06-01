@@ -244,11 +244,11 @@
 "postpred.help.metric.banks.desc" = "Each bank = one position in the word or number. Bank 1 → first letter/digit, Bank 2 → second, and so on. The number of banks defines the maximum length of what you can reveal.";
 "postpred.help.inputs.intro" = "Each input method is compatible with specific set types. Choose the one that best fits your performance.";
 "postpred.help.input.grid.label" = "GRID INPUT";
-"postpred.help.input.grid.intro" = "In Performance, swipe left or right across the photo grid. Posts 1–9 map to digits 1–9; posts 10 or higher map to digit 0. Accumulate up to 3 digits, then tap the Posts icon to trigger the reveal.";
+"postpred.help.input.grid.intro" = "In Performance, swipe in any of the four directions (↑ ↓ ← →) on the photo grid. Every two consecutive swipes encode one digit using the same directional pairs as Clock Input. Enter as many digits as needed, then long-press anywhere on the grid to confirm and trigger the reveal.";
 "postpred.help.input.grid.case.number" = "Each digit selects the slot in its bank — bank 1 → 1st digit, bank 2 → 2nd digit, and so on.";
-"postpred.help.input.grid.case.custom" = "All accumulated digits form the slot number (1–100). E.g. swipe 7 then 2 = slot 72. Swipe 1, 0, 0 = slot 100.";
+"postpred.help.input.grid.case.custom" = "All accumulated digits form the slot number. E.g. encode 7, 2 → slot 72.";
 "postpred.help.input.grid.case.card" = "2 digits: [value + suit]. 3 digits: [tens + units + suit]. Suits: 1=♠  2=♥  3=♣  4=♦. E.g. 4→2 = 4♥ · 1→1→1 = J♠.";
-"postpred.help.input.grid.step3" = "Tap the Posts icon to confirm and trigger the reveal.";
+"postpred.help.input.grid.step3" = "Long-press anywhere on the photo grid to confirm and trigger the reveal.";
 "postpred.help.input.ocr.label" = "OCR — CAMERA";
 "postpred.help.input.ocr.step1" = "On your set card in **My Sets**, select **OCR** as the input method, then tap **Configure** to set the camera and language.";
 "postpred.help.input.ocr.step2" = "Press the volume up button to start the camera silently. Point at any handwritten or printed word — the app reads it and triggers the matching reveal automatically.";
@@ -1190,3 +1190,17 @@
 "lockscreen.perset_note" = "Activates when you choose Lockscreen as the input method for a set in My Sets.";
 "postpred.goto_sets.title" = "Go to Sets to configure";
 "postpred.goto_sets.body" = "Select an active set and choose the input method directly on each set card.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Anti-Bot Cooldown Active";
+"cooldown.photo" = "Profile Photo";
+"cooldown.note" = "Note";
+"cooldown.bio" = "Biography";
+"postpred.help.input.grid.encoding.title" = "Digit Encoding  (same as Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "In Performance, swipe in any direction on the photo grid. 4 swipes always: first pair = card value, second pair = suit. Long-press to confirm.";
+"set.input.cardclock.values" = "Value encoding  (clock face)";
+"set.input.cardclock.suits" = "Suit encoding  (same direction twice)";
+"set.input.cardclock.longpress" = "Long-press anywhere on the grid to confirm and reveal.";
+"set.input.cardclock.noconfig" = "No configuration required.";

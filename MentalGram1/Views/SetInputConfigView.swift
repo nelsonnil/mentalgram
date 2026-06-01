@@ -153,6 +153,7 @@ struct SetInputConfigSheet: View {
                     case .lockscreen:  LockscreenConfig(accent: accent)
                     case .digitGrid:   DigitGridConfig()
                     case .clockInput:  ClockInputConfig()
+                    case .cardClock:   CardClockConfig()
                     }
                 }
                 .padding(VaultTheme.Spacing.lg)
@@ -463,6 +464,84 @@ private struct ClockInputConfig: View {
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
             Label("set.input.clockinput.noconfig", systemImage: "checkmark.seal")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textTertiary)
+        }
+    }
+}
+
+// MARK: - Card Clock (no config)
+
+private struct CardClockConfig: View {
+    private let accent = Color(hex: "16A34A")   // card-set green
+
+    private let valueTable: [(String, String)] = [
+        ("A", "↑→"), ("2", "→↑"), ("3", "→→"), ("4", "→↓"),
+        ("5", "↓→"), ("6", "↓↓"), ("7", "↓←"), ("8", "←↓"),
+        ("9", "←←"), ("J", "←↑"), ("Q", "↑←"), ("K", "↑↑"),
+    ]
+    private let suitTable: [(String, String)] = [
+        ("♠", "↑↑"), ("♥", "→→"), ("♣", "↓↓"), ("♦", "←←"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+
+            Label("set.input.cardclock.help", systemImage: "clock.fill")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+
+            // Value table
+            VStack(alignment: .leading, spacing: 6) {
+                Text("set.input.cardclock.values")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4),
+                          spacing: 6) {
+                    ForEach(valueTable, id: \.0) { face, swipes in
+                        HStack(spacing: 3) {
+                            Text(face)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(accent)
+                            Text(swipes)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                        }
+                    }
+                }
+            }
+            .padding(10)
+            .background(VaultTheme.Colors.backgroundSecondary)
+            .cornerRadius(VaultTheme.CornerRadius.sm)
+
+            // Suit table
+            VStack(alignment: .leading, spacing: 6) {
+                Text("set.input.cardclock.suits")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                HStack(spacing: 16) {
+                    ForEach(suitTable, id: \.0) { suit, swipes in
+                        HStack(spacing: 3) {
+                            Text(suit)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(["♥","♦"].contains(suit) ? .red : VaultTheme.Colors.textPrimary)
+                            Text(swipes)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                        }
+                    }
+                    Spacer()
+                }
+            }
+            .padding(10)
+            .background(VaultTheme.Colors.backgroundSecondary)
+            .cornerRadius(VaultTheme.CornerRadius.sm)
+
+            Label("set.input.cardclock.longpress", systemImage: "hand.tap.fill")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+
+            Label("set.input.cardclock.noconfig", systemImage: "checkmark.seal")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.textTertiary)
         }

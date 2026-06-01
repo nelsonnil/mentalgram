@@ -538,13 +538,13 @@
 "postpred.help.inputs.body1" = "ผู้ชมคิดคำหรือตัวเลขได้อย่างอิสระ คุณจับทางเลือกของเขาอย่างเงียบๆ ด้วยหนึ่งในสามวิธี:";
 "postpred.help.inputs.intro" = "วิธีการป้อนข้อมูลแต่ละอย่างเข้ากันได้กับประเภทเซตที่เฉพาะเจาะจง เลือกวิธีที่เหมาะกับการแสดงของคุณมากที่สุด";
 "postpred.help.input.grid.label" = "การป้อนข้อมูลด้วยกริด";
-"postpred.help.input.grid.intro" = "ในการแสดง ปัดซ้ายหรือขวาบนกริดภาพถ่าย โพสต์ 1–9 ตรงกับตัวเลข 1–9; โพสต์ 10+ ตรงกับตัวเลข 0 สะสมได้สูงสุด 3 หลัก จากนั้นแตะไอคอนโพสต์เพื่อเปิดเผย";
+"postpred.help.input.grid.intro" = "ใน Performance ให้ปัดนิ้วในทิศทางใดก็ได้จากสี่ทิศทาง (↑ ↓ ← →) บนกริดรูปภาพ การปัดสองครั้งติดต่อกันจะเข้ารหัสตัวเลขหนึ่งหลัก — ใช้หลักการเดียวกับ Clock Input ป้อนตัวเลขให้ครบแล้วกดค้างที่ใดก็ได้บนกริดเพื่อยืนยัน";
 "postpred.help.input.grid.case.number" = "แต่ละตัวเลขเลือกสล็อตในแบงก์ของตัวเอง — แบงก์ 1 → ตัวเลขที่ 1, แบงก์ 2 → ตัวเลขที่ 2 เป็นต้น";
-"postpred.help.input.grid.case.custom" = "ตัวเลขที่สะสมทั้งหมดก่อให้เกิดหมายเลขสล็อต (1–100) เช่น: ปัด 7 แล้ว 2 = สล็อต 72. ปัด 1, 0, 0 = สล็อต 100.";
+"postpred.help.input.grid.case.custom" = "ตัวเลขที่สะสมทั้งหมดจะรวมกันเป็นหมายเลขสล็อต เช่น: 7, 2 → สล็อต 72";
 "postpred.help.input.grid.case.card" = "2 หลัก: [ค่า + ดอก]. 3 หลัก: [สิบ + หน่วย + ดอก]. ดอก: 1=♠  2=♥  3=♣  4=♦. เช่น: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "เปิดใช้ **กริดตัวเลข** ในการตั้งค่า Post Prediction";
 "postpred.help.input.grid.step2" = "ในหน้าแสดงผล ปัดซ้ายหรือขวาบนกริดภาพถ่าย โพสต์ 1-9 ตรงกับตัวเลข 1-9 โพสต์ 10, 11 และ 12 ตรงกับตัวเลข 0";
-"postpred.help.input.grid.step3" = "แตะไอคอนโพสต์เพื่อยืนยันและเปิดใช้การเปิดเผย";
+"postpred.help.input.grid.step3" = "กดค้างที่ใดก็ได้บนกริดรูปภาพเพื่อยืนยันและเรียก reveal";
 "postpred.help.input.ocr.label" = "OCR — กล้อง";
 "postpred.help.input.covert.label" = "การพิมพ์แบบลับ";
 "postpred.help.input.covert.step1" = "บนการ์ดเซ็ตของคุณใน **My Sets** เลือก **Cover Typing** และแตะ **กำหนดค่า** เพื่อกำหนดคำปกปิด — สิ่งที่ผู้ชมจะเห็นบนหน้าจอ";
@@ -1205,3 +1205,17 @@
 "lockscreen.perset_note" = "เปิดใช้งานเมื่อคุณเลือกหน้าจอล็อคเป็นวิธีการป้อนข้อมูลสำหรับเซ็ตใน My Sets";
 "postpred.goto_sets.title" = "ไปที่ Sets เพื่อตั้งค่า";
 "postpred.goto_sets.body" = "เลือกเซ็ตที่ใช้งานอยู่และเลือกวิธีการป้อนข้อมูลโดยตรงบนการ์ดเซ็ตแต่ละใบ";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "คูลดาวน์แอนตี้บอทใช้งานอยู่";
+"cooldown.photo" = "รูปโปรไฟล์";
+"cooldown.note" = "โน้ต";
+"cooldown.bio" = "ประวัติ";
+"postpred.help.input.grid.encoding.title" = "การเข้ารหัสตัวเลข  (เหมือน Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "ใน Performance ให้ปัดนิ้วในทิศทางใดก็ได้บนกริด เสมอ 4 ครั้ง: คู่แรก = ค่า คู่ที่สอง = ดอกไพ่ กดค้างเพื่อยืนยัน";
+"set.input.cardclock.values" = "การเข้ารหัสค่า  (หน้าปัดนาฬิกา)";
+"set.input.cardclock.suits" = "การเข้ารหัสดอก  (ทิศทางเดียวกันสองครั้ง)";
+"set.input.cardclock.longpress" = "กดค้างที่ใดก็ได้บนกริดเพื่อยืนยัน";
+"set.input.cardclock.noconfig" = "ไม่ต้องตั้งค่า";

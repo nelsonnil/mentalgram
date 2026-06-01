@@ -725,13 +725,13 @@
 "postpred.help.inputs.body1" = "O espectador pensa livremente em uma palavra ou numero. Voce captura a escolha silenciosamente usando um dos tres metodos:";
 "postpred.help.inputs.intro" = "Cada método de entrada é compatível com tipos de set específicos. Escolha o que melhor se adapta à sua performance.";
 "postpred.help.input.grid.label" = "ENTRADA POR GRADE";
-"postpred.help.input.grid.intro" = "Em Performance, deslize para a esquerda ou direita na grade de fotos. Os posts 1–9 correspondem aos dígitos 1–9; os posts 10+ correspondem ao dígito 0. Acumule até 3 dígitos e toque no ícone Posts para revelar.";
+"postpred.help.input.grid.intro" = "Em Performance, deslize em qualquer uma das quatro direções (↑ ↓ ← →) na grelha de fotos. Cada par de deslizamentos consecutivos codifica um dígito — a mesma lógica do Clock Input. Introduza tantos dígitos quantos precisar e, em seguida, prima longamente em qualquer lugar da grelha para confirmar.";
 "postpred.help.input.grid.case.number" = "Cada dígito seleciona o slot no seu banco — banco 1 → 1º dígito, banco 2 → 2º dígito, e assim por diante.";
-"postpred.help.input.grid.case.custom" = "Todos os dígitos acumulados formam o número do slot (1–100). Ex: deslize 7 depois 2 = slot 72. Deslize 1, 0, 0 = slot 100.";
+"postpred.help.input.grid.case.custom" = "Todos os dígitos acumulados formam o número do slot. Ex.: codifique 7, 2 → slot 72.";
 "postpred.help.input.grid.case.card" = "2 dígitos: [valor + naipe]. 3 dígitos: [dezena + unidade + naipe]. Naipes: 1=♠  2=♥  3=♣  4=♦. Ex: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Ative **Grade de digitos** nas configuracoes de Post Prediction.";
 "postpred.help.input.grid.step2" = "Em Performance, deslize para a esquerda ou direita na grade de fotos. Os posts 1-9 correspondem aos digitos 1-9. Os posts 10, 11 e 12 correspondem ao digito 0. Um indicador mostra o numero acumulado.";
-"postpred.help.input.grid.step3" = "Toque no ícone Posts para confirmar e acionar a revelação.";
+"postpred.help.input.grid.step3" = "Prima longamente em qualquer lugar da grelha para confirmar e ativar o reveal.";
 "postpred.help.input.ocr.label" = "OCR — CÂMERA";
 "postpred.help.input.covert.label" = "DIGITAÇÃO ENCOBERTA";
 "postpred.help.input.covert.step1" = "Ative **Digitação Encoberta** nas configurações e defina uma palavra de cobertura — o que o espectador verá na tela.";
@@ -1740,3 +1740,17 @@
 
 "set.input.clockinput.help" = "Mostra um ecrã completamente preto ao abrir o Performance. Introduza um número de 1 a 100 com pares de deslizamentos direcionais. Prima longamente para fechar após a revelação.";
 "set.input.clockinput.noconfig" = "Nenhuma configuração necessária.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Cooldown Anti-Bot ativo";
+"cooldown.photo" = "Foto de perfil";
+"cooldown.note" = "Nota";
+"cooldown.bio" = "Biografia";
+"postpred.help.input.grid.encoding.title" = "Codificação de dígitos  (igual ao Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "Em Performance, deslize em qualquer direção na grelha. Sempre 4 deslizamentos: primeiro par = valor, segundo par = naipe. Prima longa para confirmar.";
+"set.input.cardclock.values" = "Codificação de valor  (mostrador do relógio)";
+"set.input.cardclock.suits" = "Codificação de naipe  (mesma direção duas vezes)";
+"set.input.cardclock.longpress" = "Prima longa em qualquer lugar da grelha para confirmar.";
+"set.input.cardclock.noconfig" = "Nenhuma configuração necessária.";

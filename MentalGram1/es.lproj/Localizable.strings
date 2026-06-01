@@ -771,13 +771,13 @@
 "postpred.help.inputs.body1" = "El espectador piensa libremente en una palabra o numero. Capturas su eleccion en silencio usando uno de tres metodos:";
 "postpred.help.inputs.intro" = "Cada método de entrada es compatible con tipos de set específicos. Elige el que mejor se adapte a tu actuación.";
 "postpred.help.input.grid.label" = "ENTRADA POR CUADRÍCULA";
-"postpred.help.input.grid.intro" = "En Actuación, desliza a izquierda o derecha sobre la cuadrícula de fotos. Los posts 1–9 corresponden a los dígitos 1–9; los posts 10 o más corresponden al dígito 0. Acumula hasta 3 dígitos y pulsa el icono Posts para revelar.";
+"postpred.help.input.grid.intro" = "En Performance, desliza en cualquiera de las cuatro direcciones (↑ ↓ ← →) sobre la cuadrícula de fotos. Cada dos swipes consecutivos codifican un dígito usando los mismos pares que Clock Input. Introduce tantos dígitos como necesites y luego mantén pulsado en cualquier lugar de la cuadrícula para confirmar.";
 "postpred.help.input.grid.case.number" = "Cada dígito selecciona el slot en su banco — banco 1 → 1er dígito, banco 2 → 2º dígito, y así sucesivamente.";
-"postpred.help.input.grid.case.custom" = "Todos los dígitos juntos forman el número de slot (1–100). Ej: desliza 7 y luego 2 = slot 72. Desliza 1, 0, 0 = slot 100.";
+"postpred.help.input.grid.case.custom" = "Todos los dígitos acumulados forman el número de ranura. Ej.: codifica 7, 2 → ranura 72.";
 "postpred.help.input.grid.case.card" = "2 dígitos: [valor + palo]. 3 dígitos: [decena + unidad + palo]. Palos: 1=♠  2=♥  3=♣  4=♦. Ej: 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Activa **Cuadricula de digitos** en los ajustes de Post Prediction.";
 "postpred.help.input.grid.step2" = "En Actuacion, desliza a izquierda o derecha sobre la cuadricula de fotos. Los posts 1-9 corresponden a los digitos 1-9. Los posts 10, 11 y 12 corresponden al digito 0. Un indicador muestra el numero acumulado.";
-"postpred.help.input.grid.step3" = "Pulsa el icono Posts para confirmar y activar la revelación.";
+"postpred.help.input.grid.step3" = "Mantén pulsado en cualquier lugar de la cuadrícula para confirmar y activar el reveal.";
 "postpred.help.input.ocr.label" = "OCR — CÁMARA";
 "postpred.help.input.ocr.step1" = "En la tarjeta de tu set en **Mis Sets**, selecciona **OCR** como método de entrada y toca **Configurar** para ajustar la cámara y el idioma.";
 "postpred.help.input.ocr.step2" = "Pulsa el botón de subir volumen para iniciar la cámara en silencio. Apunta a cualquier palabra escrita a mano o impresa — la app la lee y activa la revelación correspondiente automáticamente.";
@@ -1789,3 +1789,17 @@
 "lockscreen.perset_note" = "Se activa cuando eliges Pantalla de bloqueo como método de entrada de un set en Mis Sets.";
 "postpred.goto_sets.title" = "Ve a Sets para configurar";
 "postpred.goto_sets.body" = "Selecciona un set activo y elige el método de entrada directamente en cada tarjeta de set.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Cooldown Anti-Bot Activo";
+"cooldown.photo" = "Foto de perfil";
+"cooldown.note" = "Nota";
+"cooldown.bio" = "Biografía";
+"postpred.help.input.grid.encoding.title" = "Codificación de dígitos  (igual que Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "En Performance, desliza en cualquier dirección sobre la cuadrícula. Siempre 4 swipes: primer par = valor, segundo par = palo. Mantén pulsado para confirmar.";
+"set.input.cardclock.values" = "Codificación de valor  (cara del reloj)";
+"set.input.cardclock.suits" = "Codificación de palo  (misma dirección dos veces)";
+"set.input.cardclock.longpress" = "Mantén pulsado en cualquier lugar de la cuadrícula para confirmar y revelar.";
+"set.input.cardclock.noconfig" = "No se requiere configuración.";

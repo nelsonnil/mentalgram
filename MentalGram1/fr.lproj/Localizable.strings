@@ -725,13 +725,13 @@
 "postpred.help.inputs.body1" = "Le spectateur pense librement a un mot ou un nombre. Vous capturez son choix silencieusement grace a l'une des trois methodes:";
 "postpred.help.inputs.intro" = "Chaque méthode de saisie est compatible avec des types de set spécifiques. Choisissez celle qui convient le mieux à votre performance.";
 "postpred.help.input.grid.label" = "SAISIE PAR GRILLE";
-"postpred.help.input.grid.intro" = "Dans Performance, faites glisser à gauche ou à droite sur la grille. Les posts 1–9 correspondent aux chiffres 1–9 ; les posts 10+ correspondent au chiffre 0. Cumulez jusqu'à 3 chiffres, puis appuyez sur l'icône Posts pour déclencher la révélation.";
+"postpred.help.input.grid.intro" = "En mode Performance, glissez dans n'importe laquelle des quatre directions (↑ ↓ ← →) sur la grille de photos. Chaque paire de glissements consécutifs encode un chiffre — la même logique que Clock Input. Entrez autant de chiffres que nécessaire, puis appuyez longuement n'importe où sur la grille pour confirmer.";
 "postpred.help.input.grid.case.number" = "Chaque chiffre sélectionne le slot dans sa banque — banque 1 → 1er chiffre, banque 2 → 2e chiffre, etc.";
-"postpred.help.input.grid.case.custom" = "Tous les chiffres cumulés forment le numéro de slot (1–100). Ex : glissez 7 puis 2 = slot 72. Glissez 1, 0, 0 = slot 100.";
+"postpred.help.input.grid.case.custom" = "Tous les chiffres accumulés forment le numéro de slot. Ex. : encodez 7, 2 → slot 72.";
 "postpred.help.input.grid.case.card" = "2 chiffres : [valeur + enseigne]. 3 chiffres : [dizaine + unité + enseigne]. Enseignes : 1=♠  2=♥  3=♣  4=♦. Ex : 4→2 = 4♥ · 1→1→1 = J♠.";
 "postpred.help.input.grid.step1" = "Activez **Grille de chiffres** dans les parametres Post Prediction.";
 "postpred.help.input.grid.step2" = "Dans Performance, faites glisser a gauche ou a droite sur la grille de photos. Les posts 1-9 correspondent aux chiffres 1-9. Les posts 10, 11 et 12 correspondent au chiffre 0. Un indicateur affiche le nombre accumule.";
-"postpred.help.input.grid.step3" = "Appuyez sur l'icône Posts pour confirmer et déclencher la révélation.";
+"postpred.help.input.grid.step3" = "Appuyez longuement n'importe où sur la grille pour confirmer et déclencher le reveal.";
 "postpred.help.input.ocr.label" = "OCR — CAMÉRA";
 "postpred.help.input.covert.label" = "FRAPPE SECRÈTE";
 "postpred.help.input.covert.step1" = "Sur votre carte de set dans **Mes Sets**, sélectionnez **Frappe discrète** et appuyez sur **Configurer** pour définir un mot de couverture — ce que le spectateur verra à l'écran.";
@@ -1739,3 +1739,17 @@
 "lockscreen.perset_note" = "S'active quand tu choisis Écran de verrouillage comme méthode d'entrée pour un set dans Mes Sets.";
 "postpred.goto_sets.title" = "Aller dans Sets pour configurer";
 "postpred.goto_sets.body" = "Sélectionne un set actif et choisis la méthode d'entrée directement sur chaque carte de set.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Délai anti-bot actif";
+"cooldown.photo" = "Photo de profil";
+"cooldown.note" = "Note";
+"cooldown.bio" = "Biographie";
+"postpred.help.input.grid.encoding.title" = "Encodage des chiffres  (identique à Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "En Performance, glissez dans n'importe quelle direction sur la grille. Toujours 4 glissements : premier duo = valeur, second duo = couleur. Appuyez longuement pour confirmer.";
+"set.input.cardclock.values" = "Encodage de la valeur  (cadran d'horloge)";
+"set.input.cardclock.suits" = "Encodage de la couleur  (même direction deux fois)";
+"set.input.cardclock.longpress" = "Appuyez longuement n'importe où sur la grille pour confirmer.";
+"set.input.cardclock.noconfig" = "Aucune configuration requise.";

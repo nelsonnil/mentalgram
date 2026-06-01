@@ -538,13 +538,13 @@
 "postpred.help.inputs.body1" = "दर्शक स्वतंत्र रूप से एक शब्द या संख्या सोचता है। आप तीन विधियों में से एक से उसकी पसंद चुपचाप कैप्चर करते हैं:";
 "postpred.help.inputs.intro" = "प्रत्येक इनपुट विधि विशिष्ट सेट प्रकारों के साथ संगत है। अपने प्रदर्शन के लिए सबसे उपयुक्त विधि चुनें।";
 "postpred.help.input.grid.label" = "ग्रिड इनपुट";
-"postpred.help.input.grid.intro" = "प्रदर्शन में, फोटो ग्रिड पर बाएँ या दाएँ स्वाइप करें। पोस्ट 1–9 अंक 1–9 से मेल खाती हैं; पोस्ट 10+ अंक 0 से। अधिकतम 3 अंक जमा करें, फिर पोस्ट आइकन टैप करें।";
+"postpred.help.input.grid.intro" = "Performance में, फ़ोटो ग्रिड पर चार दिशाओं में से किसी एक (↑ ↓ ← →) में स्वाइप करें। प्रत्येक दो लगातार स्वाइप एक अंक को एन्कोड करते हैं — Clock Input जैसी ही प्रणाली। जितने अंक चाहिए उतने डालें, फिर reveal के लिए ग्रिड पर कहीं भी लंबे समय तक दबाएं।";
 "postpred.help.input.grid.case.number" = "प्रत्येक अंक अपने बैंक में स्लॉट चुनता है — बैंक 1 → 1वां अंक, बैंक 2 → 2रा अंक, आदि।";
-"postpred.help.input.grid.case.custom" = "सभी जमा अंक स्लॉट नंबर (1–100) बनाते हैं। जैसे: 7→2 = स्लॉट 72। 1→0→0 = स्लॉट 100।";
+"postpred.help.input.grid.case.custom" = "सभी संचित अंक मिलकर स्लॉट नंबर बनाते हैं। उदा.: 7, 2 → स्लॉट 72।";
 "postpred.help.input.grid.case.card" = "2 अंक: [मूल्य + सूट]। 3 अंक: [दहाई + इकाई + सूट]। सूट: 1=♠  2=♥  3=♣  4=♦। जैसे: 4→2 = 4♥ · 1→1→1 = J♠।";
 "postpred.help.input.grid.step1" = "Post Prediction सेटिंग्स में **अंक ग्रिड** सक्षम करें।";
 "postpred.help.input.grid.step2" = "परफॉर्मेंस में, फोटो ग्रिड पर बाएँ या दाएँ स्वाइप करें। पोस्ट 1-9 अंक 1-9 से मेल खाती हैं। पोस्ट 10, 11 और 12 अंक 0 से मेल खाती हैं।";
-"postpred.help.input.grid.step3" = "पोस्ट आइकन टैप करके पुष्टि करें और प्रकटीकरण शुरू करें।";
+"postpred.help.input.grid.step3" = "reveal को कन्फर्म करने के लिए ग्रिड पर कहीं भी लंबे समय तक दबाएं।";
 "postpred.help.input.ocr.label" = "OCR — कैमरा";
 "postpred.help.input.covert.label" = "गुप्त टाइपिंग";
 "postpred.help.input.covert.step1" = "**मेरे सेट** में अपने सेट कार्ड पर, **Cover Typing** चुनें और कवर शब्द (जो दर्शक स्क्रीन पर देखेगा) परिभाषित करने के लिए **कॉन्फ़िगर करें** टैप करें।";
@@ -1205,3 +1205,17 @@
 "lockscreen.perset_note" = "जब आप My Sets में किसी set के लिए Lockscreen इनपुट विधि चुनते हैं तो सक्रिय होता है।";
 "postpred.goto_sets.title" = "कॉन्फ़िगर करने के लिए Sets पर जाएं";
 "postpred.goto_sets.body" = "एक सक्रिय set चुनें और प्रत्येक set कार्ड पर सीधे इनपुट विधि चुनें।";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "एंटी-बॉट कूलडाउन सक्रिय";
+"cooldown.photo" = "प्रोफ़ाइल फ़ोटो";
+"cooldown.note" = "नोट";
+"cooldown.bio" = "जीवनी";
+"postpred.help.input.grid.encoding.title" = "अंक एन्कोडिंग  (Clock Input जैसी)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "Performance में, फ़ोटो ग्रिड पर किसी भी दिशा में स्वाइप करें। हमेशा 4 स्वाइप: पहला जोड़ा = मान, दूसरा = सूट। पुष्टि के लिए लंबे समय तक दबाएं।";
+"set.input.cardclock.values" = "मूल्य कोडिंग  (घड़ी की डायल)";
+"set.input.cardclock.suits" = "सूट कोडिंग  (एक ही दिशा दो बार)";
+"set.input.cardclock.longpress" = "पुष्टि के लिए ग्रिड पर कहीं भी लंबे समय तक दबाएं।";
+"set.input.cardclock.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";

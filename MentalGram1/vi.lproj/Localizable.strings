@@ -754,3 +754,20 @@
 
 "set.input.clockinput.help" = "Hiển thị màn hình đen hoàn toàn khi Performance mở. Nhập số từ 1–100 bằng các cặp vuốt theo hướng. Nhấn giữ để đóng sau khi tiết lộ.";
 "set.input.clockinput.noconfig" = "Không cần cấu hình.";
+
+// MARK: - Cooldown Anti-Bot Banner
+"cooldown.title" = "Cooldown chống bot đang hoạt động";
+"cooldown.photo" = "Ảnh đại diện";
+"cooldown.note" = "Ghi chú";
+"cooldown.bio" = "Tiểu sử";
+"postpred.help.input.grid.intro" = "Trong Performance, vuốt theo bất kỳ hướng nào trong bốn hướng (↑ ↓ ← →) trên lưới ảnh. Mỗi hai lần vuốt liên tiếp mã hóa một chữ số — logic tương tự Clock Input. Nhập bao nhiêu chữ số tùy ý, rồi nhấn giữ bất kỳ vị trí nào trên lưới để xác nhận.";
+"postpred.help.input.grid.step3" = "Nhấn giữ bất kỳ vị trí nào trên lưới ảnh để xác nhận và kích hoạt reveal.";
+"postpred.help.input.grid.case.custom" = "Tất cả các chữ số tích lũy tạo thành số slot. VD: nhập 7, 2 → slot 72.";
+"postpred.help.input.grid.encoding.title" = "Mã hóa chữ số  (giống Clock Input)";
+
+// MARK: - Card Clock Input config
+"set.input.cardclock.help" = "Trong Performance, vuốt theo bất kỳ hướng nào trên lưới. Luôn 4 vuốt: cặp đầu = giá trị, cặp sau = chất. Nhấn giữ để xác nhận.";
+"set.input.cardclock.values" = "Mã hóa giá trị  (mặt đồng hồ)";
+"set.input.cardclock.suits" = "Mã hóa chất  (cùng hướng hai lần)";
+"set.input.cardclock.longpress" = "Nhấn giữ bất kỳ vị trí nào trên lưới để xác nhận.";
+"set.input.cardclock.noconfig" = "Không cần cấu hình.";
