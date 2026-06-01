@@ -4377,6 +4377,7 @@ struct InstagramProfileView: View {
             TabButton(icon: "square.grid.3x3", activeAsset: "instagram_grid_active", inactiveAsset: "instagram_grid_inactive", isSelected: selectedTab == 0) {
                 commitDigitReveal()
                 selectedTab = 0
+            }
             TabButton(icon: "play.rectangle", activeAsset: "instagram_reels_active", inactiveAsset: "instagram_reels_inactive", isSelected: selectedTab == 1) {
                         selectedTab = 1
                 secretManager.reset()
