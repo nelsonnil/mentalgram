@@ -126,6 +126,7 @@ struct PostPredictionHelpView: View {
 
     private var howItWorks: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.lg) {
+            PPInfoBox(text: "postpred.help.howitworks.archive_reason")
             PPFlowStep(step: 1, icon: "arrow.up.to.line.circle.fill",
                        color: Color(hex: "A78BFA"),
                        label: "postpred.help.howitworks.step1")
@@ -207,143 +208,39 @@ struct PostPredictionHelpView: View {
 
     private var inputMethods: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.xl) {
-            PPBodyText("postpred.help.inputs.intro")
+            PPBodyText("Input Methods are explained in detail in the dedicated Input Methods guide. Use this section only to decide which capture style fits your Post Prediction.")
 
-            // ── A: Grid Swipe ────────────────────────────────────────────
-            PPInputMethodBlock(
-                label: "postpred.help.input.grid.label",
-                labelColor: VaultTheme.Colors.primary,
-                badges: [
-                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
-                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
-                ]
-            ) {
-                PPBodyText("postpred.help.input.grid.intro")
-                PPGridInputDemo()
-                // Encoding table
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(String(localized: "postpred.help.input.grid.encoding.title"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
-                    let pairs = ["0=↑↑","1=↑→","2=→↑","3=→→","4=→↓",
-                                 "5=↓→","6=↓↓","7=↓←","8=←↓","9=←←"]
-                    ForEach([Array(pairs[0..<5]), Array(pairs[5..<10])], id: \.self) { row in
-                        HStack(spacing: 10) {
-                            ForEach(row, id: \.self) { pair in
-                                Text(pair)
-                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                    .foregroundColor(VaultTheme.Colors.primary)
-                            }
-                            Spacer()
-                        }
-                    }
-                }
-                .padding(10)
-                .background(VaultTheme.Colors.background.opacity(0.5))
-                .cornerRadius(VaultTheme.CornerRadius.sm)
-                VStack(alignment: .leading, spacing: 10) {
-                    PPGridCaseRow(color: Color(hex: "FF9500"), setType: "Number",
-                                  detail: "postpred.help.input.grid.case.number")
-                    PPGridCaseRow(color: Color(hex: "F97316"), setType: "Custom",
-                                  detail: "postpred.help.input.grid.case.custom")
-                }
-                .padding(10)
-                .background(VaultTheme.Colors.background.opacity(0.5))
-                .cornerRadius(VaultTheme.CornerRadius.sm)
-                PPStepBullet("postpred.help.input.grid.step3", color: VaultTheme.Colors.primary)
-            }
+            PPInputMethodSummary(
+                title: "Word predictions",
+                color: Color(hex: "7C3AED"),
+                methods: ["Cover Typing", "Camera (OCR)", "API", "URL Scheme"]
+            )
 
-            // ── B: OCR — Camera ──────────────────────────────────────────
-            PPInputMethodBlock(
-                label: "postpred.help.input.ocr.label",
-                labelColor: VaultTheme.Colors.success,
-                badges: [
-                    PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
-                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
-                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
-                ]
-            ) {
-                PPStepBullet("postpred.help.input.ocr.step1", color: VaultTheme.Colors.success)
-                PPStepBullet("postpred.help.input.ocr.step2", color: VaultTheme.Colors.success)
-            }
+            PPInputMethodSummary(
+                title: "Number / Custom predictions",
+                color: Color(hex: "FF9500"),
+                methods: ["Digit Grid", "Number Clock", "Number Lockscreen", "Camera (OCR)", "API", "URL Scheme"]
+            )
 
-            // ── C: Covert Typing ─────────────────────────────────────────
-            PPInputMethodBlock(
-                label: "postpred.help.input.covert.label",
-                labelColor: Color(hex: "0095F6"),
-                badges: [
-                    PPBadgeItem(label: "Word", color: Color(hex: "7C3AED"))
-                ]
-            ) {
-                PPCovertTypingDemo()
-                PPStepBullet("postpred.help.input.covert.step1", color: Color(hex: "0095F6"))
-                PPStepBullet("postpred.help.input.covert.step2", color: Color(hex: "0095F6"))
-                PPStepBullet("postpred.help.input.covert.step3", color: Color(hex: "0095F6"))
-            }
+            PPInputMethodSummary(
+                title: "Playing Card predictions",
+                color: Color(hex: "16A34A"),
+                methods: ["Card Clock", "Card Lockscreen", "Camera (OCR)", "URL Scheme"]
+            )
 
-            // ── D: URL Scheme / Automation ───────────────────────────────
-            PPInputMethodBlock(
-                label: "postpred.help.input.url.label",
-                labelColor: VaultTheme.Colors.warning,
-                badges: [
-                    PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
-                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
-                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
-                    PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
-                ]
-            ) {
-                PPBodyText("postpred.help.input.url.intro")
-                VStack(alignment: .leading, spacing: 10) {
-                    PPURLExample(url: "vault://reveal?word=COCHE&set=MySet",
-                                 description: "postpred.help.input.url.example.word")
-                    PPURLExample(url: "vault://reveal?slot=15&set=MySet",
-                                 description: "postpred.help.input.url.example.slot")
-                    PPURLExample(url: "vault://reveal?card=J\u{2660}&set=MySet",
-                                 description: "postpred.help.input.url.example.card")
-                }
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color(hex: "FF9F0A"))
+                    .padding(.top, 1)
+                Text("Important: confirmation depends on the input. Digit Grid and Card Clock can be committed from the Instagram grid, while Cover Typing confirms with Space, OCR confirms automatically, and API/URL reveals when the external value arrives.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            // ── E: API Auto Reveal (Inject / Custom API polling) ─────────
-            PPInputMethodBlock(
-                label: "postpred.help.input.api.label",
-                labelColor: Color(hex: "FFD60A"),
-                badges: [
-                    PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
-                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
-                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
-                ]
-            ) {
-                PPBodyText("postpred.help.input.api.intro")
-                VStack(alignment: .leading, spacing: 8) {
-                    PPStepBullet("postpred.help.input.api.step1", color: Color(hex: "FFD60A"))
-                    PPStepBullet("postpred.help.input.api.step2", color: Color(hex: "FFD60A"))
-                    PPStepBullet("postpred.help.input.api.step3", color: Color(hex: "FFD60A"))
-                    PPStepBullet("postpred.help.input.api.step4", color: Color(hex: "FFD60A"))
-                }
-            }
-
-            // ── F: Clock Input — black screen swipe input ────────────────
-            PPInputMethodBlock(
-                label: "postpred.help.input.clockinput.label",
-                labelColor: Color(hex: "94A3B8"),
-                badges: [
-                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
-                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
-                ]
-            ) {
-                PPClockInputDescription()
-            }
-
-            // ── G: Card Clock — 4-swipe playing card encoding ────────────
-            PPInputMethodBlock(
-                label: "postpred.help.input.cardclock.label",
-                labelColor: Color(hex: "16A34A"),
-                badges: [
-                    PPBadgeItem(label: "Cards", color: Color(hex: "16A34A"))
-                ]
-            ) {
-                PPCardClockDescription()
-            }
+            .padding(12)
+            .background(Color(hex: "FF9F0A").opacity(0.07))
+            .cornerRadius(10)
         }
     }
 
@@ -680,6 +577,34 @@ private struct PPInputMethodBlock<Content: View>: View {
         .cornerRadius(VaultTheme.CornerRadius.md)
         .overlay(RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
             .stroke(labelColor.opacity(0.2), lineWidth: 1))
+    }
+}
+
+private struct PPInputMethodSummary: View {
+    let title: String
+    let color: Color
+    let methods: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(color)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: 6)], alignment: .leading, spacing: 6) {
+                ForEach(methods, id: \.self) { method in
+                    PPBadge(item: PPBadgeItem(label: method, color: color))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .padding(VaultTheme.Spacing.md)
+        .background(VaultTheme.Colors.backgroundSecondary)
+        .cornerRadius(VaultTheme.CornerRadius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                .stroke(color.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 

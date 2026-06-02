@@ -21,13 +21,32 @@ class ActiveSetSettings: ObservableObject {
         didSet { UserDefaults.standard.set(activeSetType?.rawValue, forKey: "activeSetType") }
     }
 
+    /// Global Post Prediction switch. When disabled, no set is active and Performance
+    /// will not reveal/unarchive a set. Kept separate from `activeSetId` so the UI can
+    /// clearly explain that Post Prediction itself is off.
+    @Published var isPostPredictionEnabled: Bool {
+        didSet { UserDefaults.standard.set(isPostPredictionEnabled, forKey: "postPredictionEnabled") }
+    }
+
     private init() {
-        activeSetId = ActiveSetSettings.loadId(key: "activeSetId")
+        let loadedActiveSetId = ActiveSetSettings.loadId(key: "activeSetId")
+        let loadedActiveSetType: SetType?
         if let raw = UserDefaults.standard.string(forKey: "activeSetType") {
-            activeSetType = SetType(rawValue: raw)
+            loadedActiveSetType = SetType(rawValue: raw)
         } else {
-            activeSetType = nil
+            loadedActiveSetType = nil
         }
+        let loadedPostPredictionEnabled: Bool
+        if UserDefaults.standard.object(forKey: "postPredictionEnabled") == nil {
+            loadedPostPredictionEnabled = loadedActiveSetId != nil
+        } else {
+            loadedPostPredictionEnabled = UserDefaults.standard.bool(forKey: "postPredictionEnabled")
+        }
+
+        activeSetId = loadedActiveSetId
+        activeSetType = loadedActiveSetType
+        isPostPredictionEnabled = loadedPostPredictionEnabled
+
         migrateFromPerTypeKeysIfNeeded()
     }
 
@@ -50,10 +69,11 @@ class ActiveSetSettings: ObservableObject {
         if let id = id {
             activeSetId = id
             activeSetType = type
+            isPostPredictionEnabled = true
+            saveLastActive(id: id, type: type)
         } else if activeSetType == type {
             // Only clear if the set currently active is of this type.
-            activeSetId = nil
-            activeSetType = nil
+            clearActive()
         }
     }
 
@@ -62,15 +82,45 @@ class ActiveSetSettings: ObservableObject {
         if let set = set {
             activeSetId = set.id
             activeSetType = set.type
+            isPostPredictionEnabled = true
+            saveLastActive(id: set.id, type: set.type)
         } else {
-            activeSetId = nil
-            activeSetType = nil
+            clearActive()
         }
     }
 
     func clearActive() {
+        rememberCurrentActive()
         activeSetId = nil
         activeSetType = nil
+        isPostPredictionEnabled = false
+    }
+
+    func setPostPredictionEnabled(_ enabled: Bool, availableSets: [PhotoSet]) {
+        if enabled {
+            isPostPredictionEnabled = true
+            restoreLastActiveIfNeeded(availableSets: availableSets)
+        } else {
+            clearActive()
+        }
+    }
+
+    private func restoreLastActiveIfNeeded(availableSets: [PhotoSet]) {
+        guard activeSetId == nil,
+              let lastId = ActiveSetSettings.loadId(key: "lastPostPredictionSetId"),
+              let set = availableSets.first(where: { $0.id == lastId }) else { return }
+        activeSetId = set.id
+        activeSetType = set.type
+    }
+
+    private func rememberCurrentActive() {
+        guard let activeSetId, let activeSetType else { return }
+        saveLastActive(id: activeSetId, type: activeSetType)
+    }
+
+    private func saveLastActive(id: UUID, type: SetType) {
+        save(id, key: "lastPostPredictionSetId")
+        UserDefaults.standard.set(type.rawValue, forKey: "lastPostPredictionSetType")
     }
 
     func isActive(_ setId: UUID, type: SetType) -> Bool {

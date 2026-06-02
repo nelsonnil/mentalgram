@@ -24,6 +24,7 @@ struct UserGuideView: View {
         case lockscreenInput
         case amnesiaCarousel
         case faq
+        case inputMethods
 
         var id: Int {
             switch self {
@@ -42,6 +43,7 @@ struct UserGuideView: View {
             case .lockscreenInput: return 12
             case .amnesiaCarousel: return 13
             case .faq:             return 14
+            case .inputMethods:    return 15
             }
         }
     }
@@ -88,6 +90,18 @@ struct UserGuideView: View {
                             subtitle: "API limits, cooldowns, bot detection and how to recover",
                             isFirst: false, isLast: true
                         ) { activeSheet = .limits }
+                    }
+
+                    // INPUT METHODS
+                    guideSectionLabel("input.guide.section.label", icon: "hand.tap.fill", color: Color(hex: "BF5AF2"))
+                    guideCardGroup {
+                        guideRow(
+                            icon: "hand.tap.fill",
+                            iconColor: Color(hex: "BF5AF2"),
+                            title: "input.guide.row.title",
+                            subtitle: "input.guide.row.subtitle",
+                            isFirst: true, isLast: true
+                        ) { activeSheet = .inputMethods }
                     }
 
                     // INSTAGRAM PROFILE
@@ -339,6 +353,8 @@ struct UserGuideView: View {
             AmnesiaCarouselGuideView(onClose: { activeSheet = nil })
         case .faq:
             FAQHelpView(onClose: { activeSheet = nil })
+        case .inputMethods:
+            InputMethodsHelpView(onClose: { activeSheet = nil })
         }
     }
 

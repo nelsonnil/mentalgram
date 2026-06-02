@@ -238,6 +238,7 @@
 "postpred.help.howitworks.step2" = "The spectator freely picks a word, number, image, or card. You capture their choice silently using one of the input methods.";
 "postpred.help.howitworks.step3" = "Trigger the reveal. The matching photo reappears on real Instagram **in its original position, with its original date** — as if it had always been there.";
 "postpred.help.howitworks.info" = "The spectator sees a real post on a real Instagram profile. There is no app involved — just Instagram.";
+"postpred.help.howitworks.archive_reason" = "Instagram does not let you upload a new photo and backdate it. Vault solves this by uploading the prediction images in advance and archiving them immediately. Because Instagram keeps each post's original upload date and grid position, an unarchived prediction later looks like an old post that was already there. The upload and archive are automatic and immediate, so spectators never see the preparation photos on your live profile.";
 "postpred.help.metric.sets" = "Sets";
 "postpred.help.metric.sets.desc" = "Collections of photos (letters A–Z or digits 0–9) uploaded and archived in advance, ready to be revealed.";
 "postpred.help.metric.banks" = "Banks";
@@ -1179,7 +1180,7 @@
 "set.input.ocr.camera" = "Camera";
 "set.input.ocr.language" = "Language";
 "set.input.lockscreen.help" = "Shows a fake lock screen when Performance opens so you can enter the value secretly. Set a wallpaper below.";
-"set.input.digitgrid.help" = "Swipe left or right across the grid to build the value, then tap the Posts icon to reveal.";
+"set.input.digitgrid.help" = "Use the hidden Digit Grid on the fake profile to build the value. Post Prediction commits with the Posts icon or long press; Force Reel locks the value when you open Search/Explore.";
 "set.input.digitgrid.noconfig" = "No configuration required.";
 "set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then long-press to confirm the reveal. A second long-press dismisses the screen.";
 "set.input.clockinput.noconfig" = "No configuration required.";
@@ -1232,3 +1233,91 @@
 "card.suit.clubs" = "clubs";
 "card.suit.diamonds" = "diamonds";
 "card.name.format" = "%@ of %@";
+
+// MARK: - Input Methods Guide
+"input.guide.section.label" = "INPUT METHODS";
+"input.guide.row.title" = "Input Methods";
+"input.guide.row.subtitle" = "How Vault secretly captures the spectator's choice";
+
+"input.guide.title" = "Input Methods";
+"input.guide.subtitle" = "Every way Vault captures what the spectator chose — without them noticing";
+
+"input.guide.intro.title" = "What is an input method?";
+"input.guide.intro.body" = "An input method is the secret interface used to send a word, number, card, photo action, note, biography, profile picture change or automation command into Vault. Some methods are chosen per prediction set, while others belong to Notes, Bio, Profile Picture, Force Reel, Counter Glitch or URL automations.";
+
+"input.guide.compat.title" = "What each input can capture";
+"input.guide.compat.word" = "Word";
+"input.guide.compat.word.methods" = "Cover Typing · Camera (OCR) · API";
+"input.guide.compat.number" = "Number / Custom";
+"input.guide.compat.number.methods" = "Digit Grid · Number Clock · Number Lockscreen · Camera (OCR) · API";
+"input.guide.compat.card" = "Card";
+"input.guide.compat.card.methods" = "Card Clock · Card Lockscreen · Camera (OCR) · API";
+
+// Cover Typing
+"input.guide.covertyping.title" = "Cover Typing";
+"input.guide.covertyping.compat" = "Word sets";
+"input.guide.covertyping.body" = "You secretly type the spectator's chosen word into the Explore search bar. A different decoy word is shown on screen — the app reads only what you type, not what is displayed. The spectator sees a normal Instagram search with no suspicious activity.";
+"input.guide.covertyping.activate" = "Tap the search bar in Explore and type the secret word. A double space confirms it and triggers the reveal. The bar shows a completely different decoy word so the spectator sees nothing unusual.";
+
+// Camera OCR
+"input.guide.ocr.title" = "Camera (OCR)";
+"input.guide.ocr.compat" = "Word · Number · Custom sets";
+"input.guide.ocr.body" = "The rear camera silently reads text in the frame — playing cards, written words, arithmetic results, dates — and sends the result to whatever is currently using OCR: a prediction, Notes, Bio, or any configured placeholder. Nothing appears on screen while it scans, and the camera shutter never fires.";
+"input.guide.ocr.activate" = "Press the physical volume ↑ button once to start scanning. The camera reads automatically and stops on its own after detecting a valid result. No visual feedback is shown to the spectator.";
+"input.guide.ocr.tip" = "OCR works once per performance session (to avoid repeated camera bursts). If you need to re-scan, leave and re-enter Performance.";
+
+// Digit Grid
+"input.guide.digitgrid.title" = "Digit Grid";
+"input.guide.digitgrid.compat" = "Number · Custom sets";
+"input.guide.digitgrid.body" = "The fake Instagram grid acts as a hidden keypad. The visible cells map to 1-9, and the last row acts as 0. Moving naturally between Posts, Reels and Tagged lets you build the value while the following/follower count becomes a private progress indicator.";
+"input.guide.digitgrid.activate" = "While the fake Instagram profile is visible, swipe horizontally across the grid rows to encode each digit. The following count updates with each swipe to confirm what was entered. Long press to confirm.";
+"input.guide.digitgrid.tip" = "The grid gestures are completely invisible to the spectator — they see a normal Instagram profile the whole time.";
+
+// Number Clock
+"input.guide.clock.title" = "Number Clock";
+"input.guide.clock.compat" = "Number · Custom sets";
+"input.guide.clock.body" = "A completely black fullscreen screen — as if the phone is off. Swipe gestures encode digits 0–9 using pairs of directional swipes: each digit requires exactly two swipes in sequence (e.g. ↑↑ = 0, ↑→ = 1, →→ = 3). The captured number can reveal a prediction or fill Notes/Bio placeholders when those are configured for Number Clock.";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Long press to confirm and fire the reveal.";
+"input.guide.clock.tip" = "Same swipe encoding as the Digit Grid: if you know the grid, the clock is identical. The only difference is it works on a completely black screen with no visual grid.";
+
+// Card Clock
+"input.guide.cardclock.title" = "Card Clock";
+"input.guide.cardclock.compat" = "Card sets";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 4 swipes are required: the first 2 encode the card value (A through K), the next 2 encode the suit. The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 + 4 for the suit (same direction twice). Each valid pair gives a distinct vibration. Long press confirms. An error flash (brief dim) signals an invalid pair so you can retry.";
+"input.guide.cardclock.tip" = "The full value → swipe direction table is shown in the set configuration screen under Card Clock. Memorise only the 4–5 cards you use most often.";
+
+// Number Lockscreen
+"input.guide.lockscreen.title" = "Number Lockscreen";
+"input.guide.lockscreen.compat" = "Number · Custom sets";
+"input.guide.lockscreen.body" = "Vault shows a fake iPhone lock screen with a standard PIN keypad. You type the secret number (up to 4 digits) first — then the spectator can type anything they like on the visible keypad. Only your secret sequence is captured; the spectator's taps have no effect. The predict fires when 4 digits are entered.";
+"input.guide.lockscreen.activate" = "Open the lock screen from the Performance tab. Enter your secret digits on the keypad — they appear as filled dots. Tap outside the keypad to mark the end of your secret input. The spectator can then type freely without changing your captured number.";
+"input.guide.lockscreen.tip" = "Add a real wallpaper screenshot to make it indistinguishable from a genuine iOS lock screen. Setup is covered in the Lockscreen guide under Camouflage.";
+
+// Card Lockscreen
+"input.guide.lockscreencard.title" = "Card Lockscreen";
+"input.guide.lockscreencard.compat" = "Card sets";
+"input.guide.lockscreencard.body" = "The same fake lock screen as Number Lockscreen, but the digits are decoded into a playing card: value + suit. Values are A=1, 2-9 as themselves, 10=10, J=11, Q=12, K=13. Suits are 1=♠, 2=♥, 3=♣, 4=♦. The card can reveal a prediction or fill Notes/Bio with the localized card name.";
+"input.guide.lockscreencard.activate" = "Enter the 4-digit code that corresponds to your card (the full table is in the set config). Tap outside to lock in your input. The spectator can type any digits after — only your secret sequence matters.";
+"input.guide.lockscreencard.tip" = "Tip: assign memorable PIN codes to the cards you use most (e.g. your performer number as the PIN for your signature card). Add a wallpaper to complete the illusion.";
+
+// API / Webhook
+"input.guide.api.title" = "API / Webhook";
+"input.guide.api.compat" = "Word · Number · Custom sets";
+"input.guide.api.body" = "A third-party service — such as 11z Inject or any JSON endpoint you control — sends the secret to Vault over the internet. Vault polls it every few seconds and applies the result automatically. Ideal for remote performances or zero-handling situations.";
+"input.guide.api.activate" = "Configure the API URL in Settings → Integrations. Once set, Vault polls it continuously. When new data arrives it is applied to the active set without any action from you.";
+
+// URL Scheme
+"input.guide.urlscheme.title" = "URL Scheme";
+"input.guide.urlscheme.compat" = "All set types · Note · Bio · Profile Picture";
+"input.guide.urlscheme.body" = "iOS Shortcuts or any app can send commands to Vault instantly using the vault:// URL scheme — reveal a specific slot, update your note or biography, or swap your profile picture, all without touching the app.";
+"input.guide.urlscheme.activate" = "Use vault://note, vault://bio, vault://reveal or vault://profilepic from any iOS Shortcut or automation. Vault opens instantly and applies the action. The tab switches to Performance automatically.";
+"input.guide.urlscheme.tip" = "Combine with the Shortcuts app to create invisible triggers: NFC tags, voice commands, widgets, or even AirDrop from a second device.";
+
+// Force animations
+"input.guide.force.title" = "Input → On-Screen Animation";
+"input.guide.force.body" = "Digit Grid, Clock Input and Card Clock do more than reveal a set — the captured number also powers two optional on-screen animations that make the reveal visible and dramatic for the spectator.";
+"input.guide.force.post.title" = "Force Post";
+"input.guide.force.post.body" = "The spectator scrolls freely through the post grid. The feed secretly decelerates on the photo whose position matches the number you entered — they believe the choice was entirely random.";
+"input.guide.force.reel.title" = "Force Reel";
+"input.guide.force.reel.body" = "When the spectator opens Explore, the reel you pre-selected appears at the exact position matching the digit you captured — indistinguishable from a genuine Explore feed.";

@@ -52,7 +52,7 @@ struct ForceReelHelpView: View {
                 Text("🎬").font(.system(size: 40))
             }
             Text("Force the Reel").font(VaultTheme.Typography.title()).foregroundColor(VaultTheme.Colors.textPrimary)
-            Text("In Settings you pick a reel and assign it a position number. The spectator names any number — the magician browses between Posts, Reels and Tagged sections, secretly registering each digit. The forced reel appears at exactly that position in Explore.")
+            Text("In Settings you pick a reel and assign it a position number. The spectator names any number — the magician secretly enters that number with the Digit Grid map explained in Input Methods, then opens Explore. The forced reel appears at exactly that position.")
                 .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center).padding(.horizontal, VaultTheme.Spacing.lg)
         }
@@ -65,13 +65,13 @@ struct ForceReelHelpView: View {
 
     private var howItWorks: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
-            FRHBody("You choose a reel in Settings before the show. During the performance the spectator names any number — the magician browses between Posts, Reels and Tagged sections, secretly registering each digit as they swipe.")
+            FRHBody("You choose a reel in Settings before the show. During the performance the spectator names any number — the magician enters that number invisibly on the fake Instagram grid, then opens Explore.")
             FRHMetric(icon: "play.rectangle.fill", color: Color(hex: "6366F1"), label: "One reel, one number",
                       desc: "The reel and its forced position are set in Settings beforehand. The spectator names a number freely — it always matches.")
             FRHMetric(icon: "square.grid.3x3.fill", color: VaultTheme.Colors.primary, label: "Sections are a secret keypad",
-                      desc: "Swiping between Posts, Reels and Tagged looks like normal browsing. Each swipe secretly registers the digit of the item touched.")
+                      desc: "The same hidden Digit Grid input from the Input Methods guide is used here: the grid maps 1-9 plus the zero row while the profile still looks normal.")
             FRHMetric(icon: "hand.draw.fill", color: VaultTheme.Colors.success, label: "Magician dials it in",
-                      desc: "The magician swipes between sections — one swipe per digit. The 'Following' counter confirms each one silently.")
+                      desc: "The 'Following' counter silently previews the accumulated number so the magician can verify it before opening Explore.")
             FRHMetric(icon: "play.circle.fill", color: VaultTheme.Colors.warning, label: "Reel appears in Explore",
                       desc: "Navigate to Explore. The app counts to that position in the grid — the forced reel is already waiting there.")
             FRHInfoBox("The 'Following' counter shows the accumulated digit in real time — only the magician knows what it means.")
@@ -93,10 +93,10 @@ struct ForceReelHelpView: View {
                         action: "In Performance, navigate to any Instagram profile and open their post grid.",
                         dialogue: "\"Open any profile — a friend, a celebrity, anyone. Look at their posts.\"")
             FRHShowStep(label: "SPECTATOR NAMES A NUMBER", color: VaultTheme.Colors.primary,
-                        action: "Ask the spectator to call out any number freely. While their attention is on the screen, you swipe between sections — Posts, Reels, Tagged — to register each digit.",
+                        action: "Ask the spectator to call out any number freely. While their attention is on the screen, use the hidden Digit Grid input to enter it.",
                         dialogue: "\"Think of any number — say it out loud. Completely your choice.\"")
             FRHShowStep(label: "MAGICIAN DIALS IN SECRET", color: VaultTheme.Colors.warning,
-                        action: "Each swipe between sections looks like normal browsing. What the spectator doesn't know is that each swipe secretly registers the digit of the item touched.",
+                        action: "Moving through Posts, Reels and Tagged looks like normal browsing. What the spectator doesn't know is that the app is building the number in the background.",
                         dialogue: nil)
             FRHShowStep(label: "OPEN EXPLORE", color: VaultTheme.Colors.success,
                         action: "Navigate to Explore. The grid counts to the spectator's number and highlights exactly the reel you placed there in Settings.",
@@ -109,11 +109,11 @@ struct ForceReelHelpView: View {
             FRHTip(icon: "clock.badge.checkmark", color: Color(hex: "6366F1"),
                    text: "**Prepare beforehand.** Select the reel and memorise its position — Settings are not touched during performance.")
             FRHTip(icon: "hand.draw.fill", color: VaultTheme.Colors.primary,
-                   text: "**Swipe naturally.** Browsing between Posts, Reels and Tagged looks completely normal — no one suspects a digit is being registered.")
+                   text: "**Swipe naturally.** The details of the hidden encoding are in Input Methods; during the show it should look like ordinary profile browsing.")
             FRHTip(icon: "number.circle.fill", color: VaultTheme.Colors.success,
                    text: "**More digits = more impressive.** A 3-digit number like 134 feels completely impossible to predict.")
             FRHTip(icon: "checkmark.shield.fill", color: VaultTheme.Colors.warning,
-                   text: "**Confirm before Explore.** Always tap the post icon to lock in the number before navigating.")
+                   text: "**Confirm before Explore.** Open Search/Explore only after the number is visible in the hidden counter preview; that tap locks the pending position.")
         }
     }
 }

@@ -74,8 +74,8 @@ struct CounterGlitchHelpView: View {
     private var howItWorks: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
             CGHBody("La app infla silenciosamente el contador real sumándole el número del espectador. Cuando el glitch termina la cuenta regresiva, el contador vuelve al número real — que el espectador reconoce como \"el de siempre\". La ilusión: los números \"desaparecieron\".")
-            CGHMetric(icon: "hand.point.left.fill", color: Color(hex: "6366F1"), label: "Dígito secreto vía swipe",
-                      desc: "En el grid de posts/reels del perfil, cada swipe izquierda en una celda registra el dígito de esa posición (1–9, luego 0). Igual que Force Reel.")
+            CGHMetric(icon: "hand.point.left.fill", color: Color(hex: "6366F1"), label: "Número secreto vía Digit Grid",
+                      desc: "El número se introduce con el mismo Digit Grid explicado en Input Methods: el mapa visual 1-9 + fila de 0 permite construir el valor mientras el perfil parece normal.")
             CGHMetric(icon: "plus.circle.fill", color: VaultTheme.Colors.primary, label: "Inflado invisible",
                       desc: "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K).")
             CGHMetric(icon: "bolt.fill", color: Color(hex: "F97316"), label: "Glitch + cuenta regresiva",
@@ -93,8 +93,8 @@ struct CounterGlitchHelpView: View {
             CGHStep(n: 1, text: "Activa **Counter Glitch Effect** en Settings. Elige si el contador objetivo es **Followers** o **Following**.")
             CGHStep(n: 2, text: "Opcional: activa **Transfer Effect** si quieres que el número \"robado\" aparezca sumándose a tu propio perfil.")
             CGHStep(n: 3, text: "Configura el **Delay** antes de la cuenta regresiva (0–10 s) para poder hablar antes de que empiecen los números a bajar.")
-            CGHStep(n: 4, text: "Memoriza el mapa de dígitos: fila 1 → 1,2,3 · fila 2 → 4,5,6 · fila 3 → 7,8,9 · fila 4 → 0 (cualquier celda).")
-            CGHStep(n: 5, text: "En Performance, abre el perfil del participante. **Antes** de abrirlo, entra al grid de posts y registra los dígitos con swipes izquierda.")
+            CGHStep(n: 4, text: "Memoriza el Digit Grid desde la sección **Input Methods**: posiciones 1-9 y la última fila como 0, navegando entre Posts, Reels y Tagged de forma natural.")
+            CGHStep(n: 5, text: "En Performance, introduce el número en el grid del perfil y luego abre followers/following o Explore para que la app capture el buffer y prepare el contador.")
         }
     }
 

@@ -8,6 +8,7 @@
 import SwiftUI
 import UserNotifications
 import Combine
+import AVFoundation
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
@@ -32,6 +33,7 @@ struct MentalGram1App: App {
 
     init() {
         requestNotificationPermission()
+        requestCameraPermission()
     }
 
     var body: some Scene {
@@ -141,6 +143,23 @@ struct MentalGram1App: App {
             if granted {
                 print("✅ Notification permission granted")
             }
+        }
+    }
+
+    /// Request camera access at app launch so the system dialog appears on
+    /// first install rather than interrupting the first Performance session.
+    private func requestCameraPermission() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                print(granted
+                      ? "📸 [PERM] Camera access granted at launch"
+                      : "⚠️ [PERM] Camera access denied at launch")
+            }
+        case .authorized:
+            print("📸 [PERM] Camera access already granted")
+        default:
+            break
         }
     }
 }

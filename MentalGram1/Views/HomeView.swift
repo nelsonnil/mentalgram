@@ -604,6 +604,7 @@ private struct PerformanceGateSheet: View {
 struct SetsListView: View {
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject var instagram = InstagramService.shared
+    @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
     @State private var showingCreateSet = false
     @State private var newlyCreatedSet: PhotoSet? = nil
@@ -684,6 +685,9 @@ struct SetsListView: View {
                             pendingArchiveBanner
                                 .padding(.horizontal, VaultTheme.Spacing.lg)
                         }
+
+                        postPredictionToggleCard
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
 
                         if dataManager.sets.isEmpty {
                             EmptyStateView(
@@ -794,6 +798,62 @@ struct SetsListView: View {
 
     private var hasPendingPrePerformanceActions: Bool {
         visibleSetPhotosCount > 0 || hasAmnesiaPendingReset
+    }
+
+    private var activeSetName: String? {
+        guard let activeId = activeSetSettings.activeSetId else { return nil }
+        return dataManager.sets.first(where: { $0.id == activeId })?.name
+    }
+
+    private var postPredictionToggleCard: some View {
+        let isEnabled = activeSetSettings.isPostPredictionEnabled
+        return VaultCard(glowColor: isEnabled ? Color(hex: "7C3AED").opacity(0.25) : Color.orange.opacity(0.20)) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill((isEnabled ? Color(hex: "7C3AED") : Color.orange).opacity(0.16))
+                            .frame(width: 34, height: 34)
+                        Image(systemName: isEnabled ? "wand.and.stars" : "power")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(isEnabled ? Color(hex: "A78BFA") : .orange)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Post Prediction")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Text(isEnabled ? "Enabled for Performance" : "Disabled in Performance")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(isEnabled ? Color.green.opacity(0.9) : Color.orange.opacity(0.95))
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: Binding(
+                        get: { activeSetSettings.isPostPredictionEnabled },
+                        set: { activeSetSettings.setPostPredictionEnabled($0, availableSets: dataManager.sets) }
+                    ))
+                    .labelsHidden()
+                    .tint(Color(hex: "7C3AED"))
+                }
+
+                Text(postPredictionToggleDescription)
+                    .font(.system(size: 12, weight: isEnabled ? .medium : .semibold))
+                    .foregroundColor(isEnabled ? VaultTheme.Colors.textSecondary : .orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var postPredictionToggleDescription: String {
+        if !activeSetSettings.isPostPredictionEnabled {
+            return "Post Prediction is off. No set will unarchive or reveal photos when you enter Performance."
+        }
+        if let activeSetName {
+            return "Active set: \(activeSetName). Turn this off when you want Performance without Post Prediction."
+        }
+        return "Post Prediction is on, but no set is active. Select a set below to enable reveals."
     }
 
     @ViewBuilder
@@ -1247,7 +1307,9 @@ struct CooldownWarningBanner: View {
     @State private var captureBioSeconds: Int   = 0
     @State private var perfPauseSeconds: Int    = 0
     @State private var timer: Timer?            = nil
+    @State private var blinkTimer: Timer?       = nil
     @State private var blink: Bool              = false
+    @State private var refreshTick: Int         = 0
 
     // Interface-capture cooldown duration kept in sync with PerformanceView
     private let captureCooldown: TimeInterval = 90
@@ -1270,21 +1332,26 @@ struct CooldownWarningBanner: View {
     private var hasActive: Bool { !activeCooldowns.isEmpty }
 
     var body: some View {
-        if hasActive {
-            bannerContent
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .onAppear {
-                    refresh()
-                    startTimer()
-                    if shouldBlink { startBlink() }
-                }
-                .onDisappear { stopTimer() }
-                .onChange(of: scenePhase) { phase in
-                    if phase == .active { refresh() }
-                }
-                .onChange(of: shouldBlink) { active in
-                    if active { startBlink() }
-                }
+        // The outer wrapper is always rendered so the timer fires even before
+        // the first cooldown appears (e.g. right after returning from Performance).
+        ZStack {
+            if hasActive {
+                bannerContent
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: hasActive)
+            }
+        }
+        .onAppear {
+            refresh()
+            startTimer()
+            startBlink()
+        }
+        .onDisappear { stopTimer() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { refresh() }
+        }
+        .onChange(of: shouldBlink) { active in
+            if active { startBlink() }
         }
     }
 
@@ -1365,15 +1432,21 @@ struct CooldownWarningBanner: View {
     }
 
     private func startBlink() {
-        // Repite el parpadeo mientras haya un cooldown visible.
-        Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { t in
-            guard shouldBlink else { t.invalidate(); blink = false; return }
-            blink.toggle()
+        guard blinkTimer == nil else { return }   // already running
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { t in
+            if shouldBlink {
+                blink.toggle()
+            } else {
+                blink = false
+                t.invalidate()
+                blinkTimer = nil
+            }
         }
     }
 
     private func startTimer() {
         stopTimer()
+        refreshTick = 0
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             if picSeconds          > 0 { picSeconds          -= 1 }
             if noteSeconds         > 0 { noteSeconds         -= 1 }
@@ -1381,15 +1454,23 @@ struct CooldownWarningBanner: View {
             if captureNoteSeconds  > 0 { captureNoteSeconds  -= 1 }
             if captureBioSeconds   > 0 { captureBioSeconds   -= 1 }
             if perfPauseSeconds    > 0 { perfPauseSeconds    -= 1 }
-            // Resync cada 15 s para evitar drift
-            let total = picSeconds + noteSeconds + bioSeconds + captureNoteSeconds + captureBioSeconds + perfPauseSeconds
-            if total % 15 == 0 { refresh() }
+
+            // Resync every 3 s so new cooldowns from Performance are detected
+            // within seconds of the user navigating back to this view.
+            refreshTick += 1
+            if refreshTick >= 3 {
+                refreshTick = 0
+                refresh()
+                if shouldBlink { startBlink() }
+            }
         }
     }
 
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+        blinkTimer?.invalidate()
+        blinkTimer = nil
     }
 }
 
@@ -1659,7 +1740,8 @@ struct SettingsView: View {
     @State private var isSendingBio = false
     @State private var bioMessage: String?
     @State private var showingBioAlert = false
-    @FocusState private var bioFieldFocused: Bool
+    @FocusState private var bioFieldFocused:  Bool
+    @FocusState private var noteFieldFocused: Bool
     
     // Hidden Login (easter egg)
     @State private var showingLogin = false
@@ -2149,6 +2231,18 @@ struct SettingsView: View {
                     .padding(VaultTheme.Spacing.md)
                     .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
                     .disabled(isSendingNote)
+                    .focused($noteFieldFocused)
+                    .submitLabel(.done)
+                    .onSubmit { noteFieldFocused = false }
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            if noteFieldFocused {
+                                Spacer()
+                                Button("Done") { noteFieldFocused = false }
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                    }
                     .onChange(of: noteTemplate) { if $0.count > 60 { noteTemplate = String($0.prefix(60)) } }
 
                 // ── Insert buttons + char counter ─────────────────────────────
@@ -2236,6 +2330,15 @@ struct SettingsView: View {
                         .padding(.horizontal, VaultTheme.Spacing.sm).padding(.vertical, 4)
                         .scrollContentBackground(.hidden).background(Color.clear)
                         .focused($bioFieldFocused).disabled(isSendingBio)
+                        .toolbar {
+                            ToolbarItemGroup(placement: .keyboard) {
+                                if bioFieldFocused {
+                                    Spacer()
+                                    Button("Done") { bioFieldFocused = false }
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                        }
                         .onChange(of: activeBioBinding.wrappedValue) { if $0.count > 150 { activeBioBinding.wrappedValue = String($0.prefix(150)) } }
                 }
                 .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
@@ -3033,11 +3136,9 @@ private struct InlineSourcePickerView: View {
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
     @AppStorage("ocr_camera")   private var ocrCamera:   Int    = 0
-
-    // Conflict alert state
-    @State private var pendingConflictSource: ApiSource? = nil
-    @State private var pendingConflictToken:  String     = ""
-    @State private var showConflictAlert                 = false
+    @State private var blockedSource: ApiSource? = nil
+    @State private var blockedToken: String = "{text1}"
+    @State private var showBlockedInputAlert = false
 
     private let allTokens = ["{text1}", "{text2}", "{text3}"]
 
@@ -3057,6 +3158,12 @@ private struct InlineSourcePickerView: View {
         case "{text3}": return target == "note" ? $integrations.noteText3Source : $integrations.bioText3Source
         default:        return target == "note" ? $integrations.noteText1Source : $integrations.bioText1Source
         }
+    }
+
+    private func blockedInputMessage(source: ApiSource, token: String) -> String {
+        let locations = integrations.conflictLocations(excludingTarget: target, excludingToken: token)
+        let list = locations.isEmpty ? "another active input" : locations.joined(separator: "\n")
+        return "\(source.displayName) cannot be used together with the currently active physical input:\n\n\(list)\n\nUse this input and deactivate the conflicting selection?"
     }
 
     /// SF Symbol for interface-family sources (camera / lockscreen / clock). nil for API/none.
@@ -3087,16 +3194,6 @@ private struct InlineSourcePickerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(color.opacity(0.10))
         .cornerRadius(8)
-    }
-
-    /// Builds the alert message listing all locations where conflicting inputs are active.
-    private func conflictAlertMessage(for source: ApiSource, token: String) -> String {
-        let locations = integrations.conflictLocations(excludingTarget: target, excludingToken: token)
-        let listStr = locations.map { "• \($0)" }.joined(separator: "\n")
-        return String(
-            format: NSLocalizedString("inputs.conflict.alert.body", comment: ""),
-            source.displayName, listStr
-        )
     }
 
     var body: some View {
@@ -3134,10 +3231,9 @@ private struct InlineSourcePickerView: View {
                                 let isConflict = !integrations.canSelectSource(src, target: target, token: token)
                                 Button {
                                     if isConflict {
-                                        // Store intent and show informative alert
-                                        pendingConflictSource = src
-                                        pendingConflictToken  = token
-                                        showConflictAlert     = true
+                                        blockedSource = src
+                                        blockedToken = token
+                                        showBlockedInputAlert = true
                                     } else {
                                         withAnimation { binding.wrappedValue = src }
                                     }
@@ -3148,15 +3244,9 @@ private struct InlineSourcePickerView: View {
                                         } else {
                                             Text(src.displayName)
                                         }
-                                        // Subtle warning badge for conflicting options
-                                        if isConflict {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .foregroundColor(Color(hex: "FF9F0A"))
-                                        }
                                         if currentSrc == src { Image(systemName: "checkmark") }
                                     }
                                 }
-                                // No .disabled — user can tap and see the explanation
                             }
                         } label: {
                             HStack(spacing: 5) {
@@ -3178,28 +3268,6 @@ private struct InlineSourcePickerView: View {
                         }
                     }
                 }
-                .alert(
-                    Text("inputs.conflict.alert.title"),
-                    isPresented: $showConflictAlert,
-                    actions: {
-                        Button(role: .cancel) { pendingConflictSource = nil } label: {
-                            Text("inputs.conflict.alert.cancel")
-                        }
-                        Button(role: .destructive) {
-                            if let src = pendingConflictSource {
-                                integrations.resolveConflictAndSet(source: src, target: target, token: pendingConflictToken)
-                            }
-                            pendingConflictSource = nil
-                        } label: {
-                            Text("inputs.conflict.alert.continue")
-                        }
-                    },
-                    message: {
-                        if let src = pendingConflictSource {
-                            Text(conflictAlertMessage(for: src, token: pendingConflictToken))
-                        }
-                    }
-                )
 
                 // ── Context banners for interface-based inputs ───────────────
                 let usedKinds = integrations.interfaceKindsInUse()
@@ -3287,6 +3355,21 @@ private struct InlineSourcePickerView: View {
                 insertion: .opacity.combined(with: .move(edge: .top)),
                 removal: .opacity.combined(with: .move(edge: .top))
             ))
+            .alert("Input conflict", isPresented: $showBlockedInputAlert) {
+                Button("Cancel", role: .cancel) { blockedSource = nil }
+                Button("Use this input") {
+                    if let source = blockedSource {
+                        integrations.resolveConflictAndSet(source: source, target: target, token: blockedToken)
+                    }
+                    blockedSource = nil
+                }
+            } message: {
+                if let source = blockedSource {
+                    Text(blockedInputMessage(source: source, token: blockedToken))
+                } else {
+                    Text("This input conflicts with another physical input.")
+                }
+            }
         }
     }
 }

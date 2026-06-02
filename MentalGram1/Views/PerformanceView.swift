@@ -95,8 +95,10 @@ struct PerformanceView: View {
     @State private var paginationRetryScheduled = false
     private let maxPhotosOwnProfile = 100
     // Lazy-tab loading: track whether each secondary tab has been loaded at least once.
-    @State private var reelsLoadedOnce  = false
-    @State private var taggedLoadedOnce = false
+    @State private var reelsLoadedOnce      = false
+    @State private var taggedLoadedOnce     = false
+    // Highlights: once we know the result (empty or not) we hide the placeholder row.
+    @State private var highlightsLoadedOnce = false
 
     // MARK: - Fake Home Screen illusion
     @AppStorage("fakeHomeScreenEnabled") private var fakeHomeScreenEnabled = false
@@ -1165,19 +1167,10 @@ struct PerformanceView: View {
                     print("🚫 [PERF] Auto-actions skipped — session expired")
                     return
                 }
-                // 1. Auto profile pic (POST) — wait for loadProfile to finish first
+                // 1. Auto profile pic. The local fake UI update happens immediately inside
+                // autoUploadLatestGalleryPhoto(); only the real Instagram POST is delayed
+                // by cold-start / profile-refresh safety gates.
                 if autoProfilePicOnPerformance {
-                    // Cold-start guard: defer the POST until the window closes so it
-                    // doesn't stack on top of the entry GETs (POST+GET combos are a
-                    // strong bot signal).
-                    if InstagramSafetyGate.shared.isInColdStartWindow {
-                        let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
-                        print("⏳ [COLD-START] Auto profile pic deferred — \(remaining)s remaining")
-                        LogManager.shared.info("[COLD-START] Auto profile pic deferred — \(remaining)s", category: .general)
-                        try? await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 4...8)) * 1_000_000_000)
-                    } else {
-                        try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    }
                     guard !instagram.isLocked, !instagram.isSessionChallenged else {
                         print("📷 [AUTO PIC] Skipped in serial queue — locked or challenged")
                         return
@@ -1325,8 +1318,34 @@ struct PerformanceView: View {
             guard let mediaItems = note.userInfo?["mediaItems"] as? [InstagramMediaItem],
                   !mediaItems.isEmpty else { return }
             let nextCursor = note.userInfo?["nextMaxId"] as? String
-            guard var current = profile else { return }
+            guard let current = profile else { return }
             let mediaURLs = mediaItems.map { $0.imageURL }
+
+            // ── Bridge CDN URL rotation by mediaId ─────────────────────────────
+            // Instagram rotates CDN tokens per-session. Build a reverse-lookup
+            // from mediaId → cached image using the current mediaItemsByURL so we
+            // can copy already-downloaded images to the new URL keys. This avoids
+            // the flash of gray cells when the first-page arrives with rotated URLs.
+            let oldItemsByMediaId: [String: InstagramMediaItem] = mediaItemsByURL.values.reduce(into: [:]) {
+                $0[$1.mediaId] = $1
+            }
+            for newItem in mediaItems {
+                guard cachedImages[newItem.imageURL] == nil,
+                      let oldItem = oldItemsByMediaId[newItem.mediaId],
+                      let bridgedImage = cachedImages[oldItem.imageURL] else { continue }
+                cachedImages[newItem.imageURL] = bridgedImage
+            }
+
+            // ── Preserve pagination tail ────────────────────────────────────────
+            // The progressive notification only carries page-1 (~12 items).
+            // If the current grid has more items (user had scrolled), keep the
+            // tail so the grid doesn't visibly collapse from e.g. 36→12.
+            let newMediaIds = Set(mediaItems.map { $0.mediaId })
+            let existingTail = allMediaURLs.filter { url -> Bool in
+                guard let item = mediaItemsByURL[url] else { return false }
+                return !newMediaIds.contains(item.mediaId)
+            }
+            let finalURLs = mediaURLs + existingTail
 
             let updated = InstagramProfile(
                 userId: current.userId, username: current.username, fullName: current.fullName,
@@ -1346,16 +1365,16 @@ struct PerformanceView: View {
                 cachedNextMaxId: nextCursor ?? current.cachedNextMaxId
             )
             profile = updated
-            allMediaURLs = mediaURLs
+            allMediaURLs = finalURLs
             if nextMaxId == nil { nextMaxId = nextCursor }
             hasMorePages = true
             // Seed mediaItemsByURL for the post viewer (likes/comments/date).
             for item in mediaItems { mediaItemsByURL[item.imageURL] = item }
             ProfileCacheService.shared.saveProfile(updated)
-            print("⚡ [PERF] Progressive: posts grid painted (\(mediaURLs.count) items)")
+            let tailCount = existingTail.count
+            print("⚡ [PERF] Progressive: posts grid painted (\(mediaURLs.count) fresh + \(tailCount) tail preserved)")
             LogManager.shared.info("Performance painted progressive grid — \(mediaURLs.count) posts before chain finished", category: .general)
             loadCachedImages()
-            _ = current
         }
         // ── Progressive header render ─────────────────────────────────────────
         // `InstagramService.getProfileInfo` posts this for own profile as soon as
@@ -1530,6 +1549,7 @@ struct PerformanceView: View {
                 }
                 print("✅ [URL PIC] Profile picture updated via URL scheme (\(mode))")
                 LogManager.shared.success("Profile pic updated via URL scheme (\(mode))", category: .general)
+                fireDoubleConfirmationVibration()
             }
         } catch {
             print("⚠️ [URL PIC] Upload failed: \(error.localizedDescription)")
@@ -2377,8 +2397,13 @@ struct PerformanceView: View {
     }
 
     private func fireDoubleConfirmationVibration() {
-        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
         Task {
+            await MainActor.run {
+                // Activate orange ring on the profile avatar for every confirmed Instagram update
+                // (note, bio, profile pic, reveal) so the magician always gets visual confirmation.
+                postPredRevealRingActive = true
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             await MainActor.run {
                 AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
@@ -2422,6 +2447,8 @@ struct PerformanceView: View {
             print("📦 [CACHE] Loading profile from cache — \(cached.cachedMediaURLs.count) posts, \(cached.cachedMediaItems.count) items")
 
             self.profile = cached
+            // If highlights are already in cache we know the final state immediately.
+            if !cached.cachedHighlights.isEmpty { highlightsLoadedOnce = true }
             self.allMediaURLs = cached.cachedMediaURLs
             // Keep infinite scroll available, but SafetyGate paces remote pages.
             self.hasMorePages = cached.cachedMediaURLs.count < maxPhotosOwnProfile
@@ -2728,6 +2755,9 @@ struct PerformanceView: View {
                     reelsLoadedOnce = true
                 }
                 if !fetchedProfile.cachedTaggedURLs.isEmpty { taggedLoadedOnce = true }
+                // Highlights come from the background preload, not loadProfile.
+                // Mark as loaded if they were preserved from cache in the fetched profile.
+                if !fetchedProfile.cachedHighlights.isEmpty { highlightsLoadedOnce = true }
                         ProfileCacheService.shared.saveProfile(fetchedProfile)
                 // Migrate the locally-captured pending pic to the new CDN URL key
                 // BEFORE clearing it. Instagram may return a different CDN URL on
@@ -2845,7 +2875,9 @@ struct PerformanceView: View {
                             // Prefer the local pending override for the profile pic
                             if u == profile.profilePicURL,
                                ProfileCacheService.shared.pendingProfilePic != nil { return }
-                            self.cachedImages[u] = i
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                self.cachedImages[u] = i
+                            }
                             ProfileCacheService.shared.saveImage(i, forURL: u)
                         }
                     }
@@ -2873,7 +2905,9 @@ struct PerformanceView: View {
                 print("🖼️ [CACHE] Downloading profile pic: \(String(profile.profilePicURL.prefix(80)))...")
                 if let image = await downloadImage(from: profile.profilePicURL) {
                     await MainActor.run {
-                        cachedImages[profile.profilePicURL] = image
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            cachedImages[profile.profilePicURL] = image
+                        }
                         ProfileCacheService.shared.saveImage(image, forURL: profile.profilePicURL)
                         print("✅ [CACHE] Profile pic downloaded and cached")
                     }
@@ -2894,7 +2928,9 @@ struct PerformanceView: View {
                 for (index, url) in missingMedia.enumerated() {
                     if let image = await downloadImage(from: url) {
                         await MainActor.run {
-                            cachedImages[url] = image
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                cachedImages[url] = image
+                            }
                             ProfileCacheService.shared.saveImage(image, forURL: url)
                         }
                         print("✅ [CACHE] Media \(index + 1)/\(missingMedia.count) downloaded")
@@ -2915,7 +2951,9 @@ struct PerformanceView: View {
             for picURL in missingFollower {
                 if let image = await downloadImage(from: picURL) {
                     await MainActor.run {
-                        cachedImages[picURL] = image
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            cachedImages[picURL] = image
+                        }
                         ProfileCacheService.shared.saveImage(image, forURL: picURL)
                     }
                 }
@@ -3513,7 +3551,9 @@ struct PerformanceView: View {
                         group.addTask {
                             if let image = await self.downloadImage(from: url) {
                                 await MainActor.run {
-                                    self.cachedImages[url] = image
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        self.cachedImages[url] = image
+                                    }
                                     ProfileCacheService.shared.saveImage(image, forURL: url)
                                 }
                             }
@@ -3719,6 +3759,27 @@ struct PerformanceView: View {
             LogManager.shared.warning("Auto profile pic skipped: session recently challenged", category: .general)
             return
         }
+
+        // Optimistic UI: show the chosen gallery image immediately in the fake Instagram
+        // profile. This runs BEFORE cold-start/profile-refresh waits. The orange ring and
+        // vibration still wait for the real Instagram POST to return OK.
+        let picURL = profile?.profilePicURL ?? "autoPic_pending"
+        let previousImage = cachedImages[picURL]
+        let optimisticImage = UIImage(data: imageData)
+        if let optimisticImage {
+            cachedImages[picURL] = optimisticImage
+            ProfileCacheService.shared.pendingProfilePic = optimisticImage
+            print("⚡️ [AUTO PIC] Fake Instagram profile picture updated immediately before safety waits")
+        }
+        func revertOptimisticProfilePic() {
+            if let previousImage {
+                cachedImages[picURL] = previousImage
+            } else {
+                cachedImages.removeValue(forKey: picURL)
+            }
+            ProfileCacheService.shared.pendingProfilePic = nil
+        }
+
         if isLoading {
             // Profile refresh is running concurrently — wait for it to finish (max 60 s)
             // instead of abandoning the upload entirely.
@@ -3729,17 +3790,35 @@ struct PerformanceView: View {
                 if !isLoading { break }
             }
             guard !isLoading else {
+                revertOptimisticProfilePic()
                 print("📷 [AUTO PIC] Skipped — profile refresh still active after 60s timeout")
                 LogManager.shared.warning("Auto profile pic skipped: profile refresh timed out", category: .general)
                 return
             }
             // Re-check safety flags after the wait — state may have changed.
             guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                revertOptimisticProfilePic()
                 print("📷 [AUTO PIC] Skipped after wait — locked or challenged")
                 return
             }
             // Small anti-bot gap after a concurrent refresh.
             try? await Task.sleep(nanoseconds: UInt64.random(in: 2_000_000_000...3_000_000_000))
+        }
+
+        // Cold-start guard: defer only the real POST until the window closes so it
+        // doesn't stack on top of entry GETs. The fake UI has already been updated.
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            print("⏳ [COLD-START] Auto profile pic POST deferred — \(remaining)s remaining")
+            LogManager.shared.info("[COLD-START] Auto profile pic POST deferred — \(remaining)s", category: .general)
+            try? await Task.sleep(nanoseconds: UInt64(remaining + Int.random(in: 4...8)) * 1_000_000_000)
+        } else {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+        guard !instagram.isLocked, !instagram.isSessionChallenged else {
+            revertOptimisticProfilePic()
+            print("📷 [AUTO PIC] Skipped before POST — locked or challenged after safety wait")
+            return
         }
 
         print("📷 [AUTO PIC] Uploading new profile picture (\(imageData.count / 1024) KB)…")
@@ -3752,8 +3831,7 @@ struct PerformanceView: View {
                 UserDefaults.standard.set(assetId, forKey: Self.lastUploadedAssetKey)
                 UserDefaults.standard.set(hash,    forKey: Self.lastUploadedHashKey)
 
-                // Show new image instantly under the current CDN key.
-                let picURL = profile?.profilePicURL ?? "autoPic_pending"
+                // Keep the successful local image under the current CDN key.
                 cachedImages[picURL] = uiImage
                 ProfileCacheService.shared.saveImage(uiImage, forURL: picURL)
                 // pendingProfilePic keeps the image alive so loadProfile() can migrate it
@@ -3766,8 +3844,15 @@ struct PerformanceView: View {
                 // which would cause the post grid to flicker during a performance.
                 fireDoubleConfirmationVibration()
                 print("📷 [AUTO PIC] ✅ Profile picture updated — shown instantly, vibration fired")
+            } else if let previousImage {
+                revertOptimisticProfilePic()
+                print("📷 [AUTO PIC] Upload returned false — reverted optimistic profile picture")
+            } else {
+                revertOptimisticProfilePic()
+                print("📷 [AUTO PIC] Upload returned false — cleared optimistic profile picture")
             }
         } catch {
+            revertOptimisticProfilePic()
             print("📷 [AUTO PIC] Upload skipped: \(error.localizedDescription)")
         }
 
@@ -4450,12 +4535,14 @@ struct InstagramProfileView: View {
                                         .aspectRatio(contentMode: .fill)
                                         .frame(width: picSize, height: picSize)
                                         .clipShape(Circle())
+                                        .transition(.opacity)
                                         .onAppear { print("✅ [UI] Profile pic image displayed") }
                                 } else {
                                     Circle()
                                         .fill(Color.gray.opacity(0.2))
                                         .frame(width: picSize, height: picSize)
                                         .overlay(ProgressView().scaleEffect(0.8))
+                                        .transition(.opacity)
                                         .onAppear {
                                             print("⚠️ [UI] Profile pic not in cache")
                                             print("⚠️ [UI] Looking for URL: \(String(profile.profilePicURL.prefix(80)))")
@@ -4473,6 +4560,7 @@ struct InstagramProfileView: View {
                                         .foregroundColor(.white)
                                 )
                     }
+                    .animation(.easeInOut(duration: 0.25), value: cachedImages[profile.profilePicURL] != nil)
                     .onTapGesture {
                         let username = profile.username
                         if let appURL = URL(string: "instagram://user?username=\(username)"),
@@ -6205,13 +6293,16 @@ struct PhotosGridView: View {
                         .resizable()
                         .scaledToFit()
                 }
+                .transition(.opacity)
             } else {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .transition(.opacity)
             }
         } else {
             Rectangle().fill(Color.gray.opacity(0.3))
+                .transition(.opacity)
         }
     }
 }

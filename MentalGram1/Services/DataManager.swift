@@ -529,6 +529,9 @@ class DataManager: ObservableObject {
             print("🗑️ [DATA] Deleting active upload set \(id) — resetting UploadManager")
             UploadManager.shared.resetAllState()
         }
+        if ActiveSetSettings.shared.isActive(id) {
+            ActiveSetSettings.shared.clearActive()
+        }
         sets.removeAll { $0.id == id }
         saveSets()
         addLog(action: "set_deleted", details: "Deleted set \(id)")

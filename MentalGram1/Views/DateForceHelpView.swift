@@ -1756,9 +1756,9 @@ private struct DFHFollowToMockup: View {
             Image(systemName: icon)
                 .font(.system(size: 12))
                 .foregroundColor(color)
-            Text(label)
+                Text(label)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(color)
+                    .foregroundColor(color)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

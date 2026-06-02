@@ -262,10 +262,7 @@ final class IntegrationsSettings: ObservableObject {
 
     /// Returns true if any placeholder source is configured for the given target (excluding .none).
     func hasTemplateSources(for target: String) -> Bool {
-        if target == "note" {
-            return noteText1Source != .none || noteText2Source != .none || noteText3Source != .none
-        }
-        return bioText1Source != .none || bioText2Source != .none || bioText3Source != .none
+        activeTokenSourceEntries.contains { $0.target == target && $0.source != .none }
     }
 
     /// Returns which slot (1/2/3) is assigned to OCR for the given target, or nil if none.
@@ -273,7 +270,9 @@ final class IntegrationsSettings: ObservableObject {
         let sources = target == "note"
             ? [noteText1Source, noteText2Source, noteText3Source]
             : [bioText1Source,  bioText2Source,  bioText3Source]
-        return sources.firstIndex(of: .ocr).map { $0 + 1 }
+        return sources.enumerated().first { idx, source in
+            source == .ocr && tokenIsUsed(target: target, token: "{text\(idx + 1)}")
+        }.map { $0.offset + 1 }
     }
 
     // MARK: - Interface conflict validation
@@ -298,17 +297,45 @@ final class IntegrationsSettings: ObservableObject {
         }
     }
 
-    /// All (target, token, source) entries for bio + note templates.
+    /// All persisted (target, token, source) entries for bio + note templates.
     private var allTokenSourceEntries: [(target: String, token: String, source: ApiSource)] {
         [("bio",  "{text1}", bioText1Source),  ("bio",  "{text2}", bioText2Source),  ("bio",  "{text3}", bioText3Source),
          ("note", "{text1}", noteText1Source), ("note", "{text2}", noteText2Source), ("note", "{text3}", noteText3Source)]
+    }
+
+    /// Only entries whose token is currently present in the active template.
+    /// This prevents stale hidden slots (e.g. user removed {text2}) from keeping
+    /// Lockscreen/Clock/OCR blocked forever.
+    private var activeTokenSourceEntries: [(target: String, token: String, source: ApiSource)] {
+        allTokenSourceEntries.filter { tokenIsUsed(target: $0.target, token: $0.token) }
+    }
+
+    private func tokenIsUsed(target: String, token: String) -> Bool {
+        let template = target == "note" ? noteTemplate : activeBioTemplate
+        if token == "{text1}" {
+            return template.contains("{text1}") || template.contains("{word}")
+        }
+        return template.contains(token)
+    }
+
+    private var noteTemplate: String {
+        UserDefaults.standard.string(forKey: "note_template") ?? ""
+    }
+
+    private var activeBioTemplate: String {
+        switch UserDefaults.standard.integer(forKey: "bio_active_slot") {
+        case 1:  return UserDefaults.standard.string(forKey: "bio_template_2") ?? ""
+        case 2:  return UserDefaults.standard.string(forKey: "bio_template_3") ?? ""
+        case 3:  return UserDefaults.standard.string(forKey: "bio_template_4") ?? ""
+        default: return UserDefaults.standard.string(forKey: "bio_template") ?? ""
+        }
     }
 
     /// Interface kinds currently in use, optionally excluding one token (the one being edited).
     func interfaceKindsInUse(excludingTarget: String? = nil, excludingToken: String? = nil) -> Set<InterfaceKind> {
         var kinds = Set<InterfaceKind>()
         if let k = activeSetInterfaceKind() { kinds.insert(k) }
-        for e in allTokenSourceEntries {
+        for e in activeTokenSourceEntries {
             if e.target == excludingTarget && e.token == excludingToken { continue }
             if let k = e.source.interfaceKind { kinds.insert(k) }
         }
@@ -316,12 +343,14 @@ final class IntegrationsSettings: ObservableObject {
     }
 
     /// Whether `candidate` can be assigned to (target, token) without an interface conflict.
-    /// Polled / none sources are always allowed. An interface source is allowed only when no
-    /// other (different) interface kind is already in use anywhere.
+    /// Polled / none sources (.inject, .custom1/2/3) are always allowed and can be mixed freely.
+    /// The same interface kind may be reused across set/bio/note because one capture
+    /// feeds all consumers. Different interface kinds conflict (OCR vs Clock, number
+    /// lockscreen vs card lockscreen, number clock vs card clock, etc.).
     func canSelectSource(_ candidate: ApiSource, target: String, token: String) -> Bool {
-        guard let candKind = candidate.interfaceKind else { return true }
+        guard let incomingKind = candidate.interfaceKind else { return true }
         let others = interfaceKindsInUse(excludingTarget: target, excludingToken: token)
-        return others.isEmpty || (others.count == 1 && others.first == candKind)
+        return others.isEmpty || others.allSatisfy { $0 == incomingKind }
     }
 
     /// The interface kind already established elsewhere that blocks different interface
@@ -341,7 +370,7 @@ final class IntegrationsSettings: ObservableObject {
             locations.append("\(name) (\(k.displayName))")
         }
         let targetLabels = ["bio": "Biography", "note": "Notes"]
-        for e in allTokenSourceEntries {
+        for e in activeTokenSourceEntries {
             if e.target == excludingTarget && e.token == excludingToken { continue }
             guard let k = e.source.interfaceKind else { continue }
             let tLabel = targetLabels[e.target] ?? e.target
@@ -359,8 +388,10 @@ final class IntegrationsSettings: ObservableObject {
             setSource(source, target: target, token: token)
             return
         }
-        // Clear any slot whose interface kind differs from incomingKind
-        for e in allTokenSourceEntries {
+        // Clear any active slot whose interface kind differs from incomingKind.
+        // Hidden template slots are ignored so stale removed {textN} sources do not
+        // keep influencing current selections.
+        for e in activeTokenSourceEntries {
             guard let k = e.source.interfaceKind, k != incomingKind else { continue }
             setSource(.none, target: e.target, token: e.token)
         }
