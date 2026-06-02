@@ -1520,18 +1520,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "スワイプブラインド";
-"postpred.help.input.clockinput.intro" = "Performanceを開くと画面が完全に**黒く**なります — 電話がオフのように見せます。秘密のスワイプで数字を入力します。観客には何も見えません。";
-"postpred.help.input.clockinput.encoding.title" = "数字のエンコード  (各数字 = スワイプ2回)";
+"postpred.help.input.clockinput.intro" = "Performanceを開くと画面が完全に**黒く**なります — 電源が切れているように見せかけます。必要な桁数だけスワイプし、長押しで確定してください。観客には何も見えません。";
+"postpred.help.input.clockinput.encoding.title" = "数字のエンコード  (各数字 = 2回のスワイプ)";
 "postpred.help.input.clockinput.examples.title" = "例";
-"postpred.help.input.clockinput.example5.note" = "05を入力 → 数字0 (↑↑) 次に数字5 (↓→) — 合計4スワイプ";
-"postpred.help.input.clockinput.example37.note" = "数字3 (→→) 次に数字7 (↓←) — 合計4スワイプ";
-"postpred.help.input.clockinput.example100.note" = "数字1 (↑→) 次に0を2回 (↑↑ 各1回) — 合計6スワイプ";
-"postpred.help.input.clockinput.haptic.title" = "ハプティクスフィードバック";
-"postpred.help.input.clockinput.haptic.light" = "軽いタップ — スワイプごとに登録";
-"postpred.help.input.clockinput.haptic.medium" = "中程度のパルス — 数字完了（2スワイプ）";
-"postpred.help.input.clockinput.haptic.success" = "強い二重振動 — リベール成功";
-"postpred.help.input.clockinput.haptic.error" = "エラーバズ + 画面フラッシュ — 無効なペア、リセット";
-"postpred.help.input.clockinput.dismiss" = "リベール後、黒い画面を閉じるには**1秒長押し**してください。更新されたフェイクInstagramプロフィールがすぐに表示されます。";
+"postpred.help.input.clockinput.example5.note" = "1桁の5 — 2回スワイプ、長押しで確定";
+"postpred.help.input.clockinput.example37.note" = "2桁: 3 (→→) 次に 7 (↓←) — 4回スワイプ、長押しで確定";
+"postpred.help.input.clockinput.example100.note" = "3桁: 3 (→→)、6 (↓↓)、9 (←←) — 6回スワイプ、長押しで確定";
+"postpred.help.input.clockinput.haptic.title" = "触覚フィードバック";
+"postpred.help.input.clockinput.haptic.light" = "軽いタップ — スワイプ1回ごとに反応";
+"postpred.help.input.clockinput.haptic.medium" = "中程度のパルス — 1桁完成 (2回のスワイプ)";
+"postpred.help.input.clockinput.haptic.success" = "強い二重振動 — 数字が確定 (1回目の長押し)";
+"postpred.help.input.clockinput.haptic.error" = "エラー振動 + フラッシュ — 無効なペア。2回目のスワイプが次のペアの最初になります";
+"postpred.help.input.clockinput.dismiss" = "**1回目の長押し** (1秒) で数字が確定し、リビールが発動します。**2回目の長押し** で黒い画面が閉じ、更新されたフェイクInstagramプロフィールが即座に表示されます。";
 
 // MARK: - Set Input Picker
 "set.input.label" = "入力";
@@ -1547,7 +1547,7 @@
 "set.input.lockscreen.help" = "Performanceを開くと偽のロック画面が表示され、秘密裏に値を入力できます。下で壁紙を設定してください。";
 "set.input.digitgrid.help" = "グリッドを左右にスワイプして値を作成し、投稿アイコンをタップして公開します。";
 "set.input.digitgrid.noconfig" = "設定は必要ありません。";
-"set.input.clockinput.help" = "Performanceを開くと完全に黒い画面が表示されます。方向スワイプペアで1〜100の数字を入力します。公開後は長押しで閉じます。";
+"set.input.clockinput.help" = "Performanceを開くと完全に黒い画面が表示されます。スワイプペアで好きな桁数を入力し、長押しで確定。2回目の長押しで画面を閉じます。";
 "set.input.clockinput.noconfig" = "設定は必要ありません。";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1562,6 +1562,9 @@
 "cooldown.photo" = "プロフィール写真";
 "cooldown.note" = "ノート";
 "cooldown.bio" = "自己紹介";
+"cooldown.capture.note" = "入力キャプチャ（ノート）";
+"cooldown.capture.bio" = "入力キャプチャ（自己紹介）";
+"cooldown.performance" = "パフォーマンス一時停止";
 "postpred.help.input.grid.encoding.title" = "桁のエンコード（Clock Inputと同じ）";
 
 // MARK: - Card Clock Input config
@@ -1570,3 +1573,40 @@
 "set.input.cardclock.suits" = "スートエンコード  （同じ方向を2回）";
 "set.input.cardclock.longpress" = "グリッド上を長押しして確定・リビールします。";
 "set.input.cardclock.noconfig" = "設定は不要です。";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "カードクロック";
+"postpred.help.input.cardclock.guide.intro" = "Instagramの写真グリッド上を任意の方向にスワイプ — 常に4回：最初の2回でカード値（A〜K）、後の2回でスートをエンコード。長押しで確定。";
+"postpred.help.input.cardclock.guide.values" = "数値エンコード  （時計の文字盤）";
+"postpred.help.input.cardclock.guide.suits" = "スートエンコード  （同じ方向を2回）";
+"postpred.help.input.cardclock.guide.examples" = "例";
+"postpred.help.input.cardclock.guide.ex.js" = "スペードのJ: ←↑（J値）＋↑↑（スペード）";
+"postpred.help.input.cardclock.guide.ex.3h" = "ハートの3: →→（3値）＋→→（ハート）";
+"postpred.help.input.cardclock.guide.ex.ad" = "ダイヤのA: ↑→（A値）＋←←（ダイヤ）";
+"postpred.help.input.cardclock.guide.longpress" = "4回目のスワイプ後、グリッド上を長押しして確定。該当カードの写真が自動的にリビールされます。";
+
+"inputs.interface.exclusive.title" = "排他的な入力";
+"inputs.interface.exclusive.body" = "セット・プロフィール・ノートで同時に使える入力インターフェースは1つだけです。これが有効な間、他はロックされます:";
+
+"inputs.conflict.alert.title" = "Non-compatible input";
+
+"inputs.conflict.alert.body" = "\"%@\" wa haitateki na intafeisu o shiyou shite ori, tsugi to douji ni douusa dekimasen:
+
+%@
+
+Setto, profairu, noto de douji ni tsukaeru intafeisu wa hitotsu dake desu. Tsuzukeru to, kyougou suru settei ga muukou ni narimasu.";
+
+"inputs.conflict.alert.cancel" = "Kyanseru";
+
+"inputs.conflict.alert.continue" = "Tsuzukeru";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "エース";
+"card.value.jack" = "ジャック";
+"card.value.queen" = "クイーン";
+"card.value.king" = "キング";
+"card.suit.spades" = "スペード";
+"card.suit.hearts" = "ハート";
+"card.suit.clubs" = "クラブ";
+"card.suit.diamonds" = "ダイヤ";
+"card.name.format" = "%2$@の%1$@";

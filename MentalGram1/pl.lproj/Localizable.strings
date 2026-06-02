@@ -1518,18 +1518,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "ŚLEPY PRZECIĄG";
-"postpred.help.input.clockinput.intro" = "Po otwarciu Performance ekran staje się całkowicie **czarny** — symulując wyłączony telefon. Potajemnie przesuwasz, aby wprowadzić numer; widz nie widzi nic.";
-"postpred.help.input.clockinput.encoding.title" = "KODOWANIE CYFR  (każda cyfra = 2 przeciągnięcia)";
+"postpred.help.input.clockinput.intro" = "Po otwarciu Performance ekran staje się całkowicie **czarny** — jakby telefon był wyłączony. Przesuń tyle cyfr, ile potrzebujesz, a następnie przytrzymaj, aby potwierdzić. Widz nic nie widzi.";
+"postpred.help.input.clockinput.encoding.title" = "KODOWANIE CYFR  (każda cyfra = 2 przesunięcia)";
 "postpred.help.input.clockinput.examples.title" = "PRZYKŁADY";
-"postpred.help.input.clockinput.example5.note" = "Wprowadź 05 → cyfra 0 (↑↑) potem cyfra 5 (↓→) — 4 przeciągnięcia łącznie";
-"postpred.help.input.clockinput.example37.note" = "Cyfra 3 (→→) potem cyfra 7 (↓←) — 4 przeciągnięcia łącznie";
-"postpred.help.input.clockinput.example100.note" = "Cyfra 1 (↑→) potem dwa 0 (↑↑ każde) — 6 przeciągnięć łącznie";
-"postpred.help.input.clockinput.haptic.title" = "SPRZĘŻENIE DOTYKOWE";
-"postpred.help.input.clockinput.haptic.light" = "Lekkie stuknięcie — każde przeciągnięcie zarejestrowane";
-"postpred.help.input.clockinput.haptic.medium" = "Średni impuls — cyfra ukończona (2 przeciągnięcia)";
-"postpred.help.input.clockinput.haptic.success" = "Podwójna silna wibracja — ujawnienie zakończone sukcesem";
-"postpred.help.input.clockinput.haptic.error" = "Brzęczyk błędu + błysk ekranu — nieprawidłowa para, reset";
-"postpred.help.input.clockinput.dismiss" = "Po ujawnieniu **przytrzymaj 1 sekundę** na czarnym ekranie, aby go zamknąć. Zaktualizowany fałszywy profil Instagram pojawi się natychmiast.";
+"postpred.help.input.clockinput.example5.note" = "Pojedyncza cyfra 5 — 2 przesunięcia, potem przytrzymanie";
+"postpred.help.input.clockinput.example37.note" = "Dwie cyfry: 3 (→→) potem 7 (↓←) — 4 przesunięcia, potem przytrzymanie";
+"postpred.help.input.clockinput.example100.note" = "Trzy cyfry: 3 (→→), 6 (↓↓), 9 (←←) — 6 przesunięć, potem przytrzymanie";
+"postpred.help.input.clockinput.haptic.title" = "WIBRACJE";
+"postpred.help.input.clockinput.haptic.light" = "Lekkie wibracje — każde przesunięcie zarejestrowane";
+"postpred.help.input.clockinput.haptic.medium" = "Średnie wibracje — cyfra ukończona (2 przesunięcia)";
+"postpred.help.input.clockinput.haptic.success" = "Podwójne silne wibracje — liczba potwierdzona (1. przytrzymanie)";
+"postpred.help.input.clockinput.haptic.error" = "Wibracje błędu + błysk — nieprawidłowa para; 2. przesunięcie staje się 1. następnej pary";
+"postpred.help.input.clockinput.dismiss" = "**Pierwsze przytrzymanie** (1 s) zatwierdza cyfry i uruchamia ujawnienie. **Drugie przytrzymanie** zamyka czarny ekran — zaktualizowany fałszywy profil Instagram pojawia się natychmiast.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Wejście";
@@ -1545,7 +1545,7 @@
 "set.input.lockscreen.help" = "Wyświetla fałszywy ekran blokady po otwarciu Performance, aby wprowadzić wartość w sekrecie. Ustaw tapetę poniżej.";
 "set.input.digitgrid.help" = "Przesuń w lewo lub prawo po siatce, aby zbudować wartość, a następnie dotknij ikony Posty, aby odsłonić.";
 "set.input.digitgrid.noconfig" = "Konfiguracja nie jest wymagana.";
-"set.input.clockinput.help" = "Po otwarciu Performance wyświetla całkowicie czarny ekran. Wprowadź liczbę od 1 do 100 za pomocą par kierunkowych przeciągnięć. Przytrzymaj, aby zamknąć po ujawnieniu.";
+"set.input.clockinput.help" = "Wyświetla całkowicie czarny ekran po otwarciu Performance. Przesuwaj pary, aby wpisać dowolną liczbę cyfr, następnie przytrzymaj, aby potwierdzić. Drugie przytrzymanie zamyka ekran.";
 "set.input.clockinput.noconfig" = "Konfiguracja nie jest wymagana.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1560,6 +1560,9 @@
 "cooldown.photo" = "Zdjęcie profilowe";
 "cooldown.note" = "Notatka";
 "cooldown.bio" = "Biografia";
+"cooldown.capture.note" = "Przechwytywanie Wejścia (Notatka)";
+"cooldown.capture.bio" = "Przechwytywanie Wejścia (Biografia)";
+"cooldown.performance" = "Przerwa Performance";
 "postpred.help.input.grid.encoding.title" = "Kodowanie cyfr  (jak Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1568,3 +1571,40 @@
 "set.input.cardclock.suits" = "Kodowanie koloru  (ten sam kierunek dwa razy)";
 "set.input.cardclock.longpress" = "Przytrzymaj w dowolnym miejscu siatki, aby potwierdzić.";
 "set.input.cardclock.noconfig" = "Konfiguracja nie jest wymagana.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "ZEGAR KART";
+"postpred.help.input.cardclock.guide.intro" = "Przesuń w dowolnym kierunku po siatce Instagram — zawsze 4 gesty: pierwsze 2 kodują wartość (A–K), ostatnie 2 kolor. Przytrzymaj, aby potwierdzić.";
+"postpred.help.input.cardclock.guide.values" = "KODOWANIE WARTOŚCI  (tarcza zegara)";
+"postpred.help.input.cardclock.guide.suits" = "KODOWANIE KOLORU  (ten sam kierunek dwa razy)";
+"postpred.help.input.cardclock.guide.examples" = "PRZYKŁADY";
+"postpred.help.input.cardclock.guide.ex.js" = "Walet Pik: ←↑ (wartość J) + ↑↑ (pik)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Kier: →→ (wartość 3) + →→ (kier)";
+"postpred.help.input.cardclock.guide.ex.ad" = "As Karo: ↑→ (wartość A) + ←← (karo)";
+"postpred.help.input.cardclock.guide.longpress" = "Po 4. geście przytrzymaj, aby potwierdzić. Zdjęcie karty zostanie automatycznie odarchiwizowane.";
+
+"inputs.interface.exclusive.title" = "Wyłączne wejście";
+"inputs.interface.exclusive.body" = "W zestawach, bio i notatkach jednocześnie może działać tylko jeden interfejs wprowadzania. Pozostałe są zablokowane, gdy ten jest aktywny:";
+
+"inputs.conflict.alert.title" = "Niezgodne wejscie";
+
+"inputs.conflict.alert.body" = "\"%@\" uzywa wylacznego interfejsu, ktory nie moze dzialac jednoczesnie z:
+
+%@
+
+W zestawach, bio i notatkach jednoczesnie moze byc aktywny tylko jeden typ interfejsu. Kontynuowanie spowoduje dezaktywacje kolidujacych wyborow.";
+
+"inputs.conflict.alert.cancel" = "Anuluj";
+
+"inputs.conflict.alert.continue" = "Kontynuuj";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "as";
+"card.value.jack" = "walet";
+"card.value.queen" = "dama";
+"card.value.king" = "król";
+"card.suit.spades" = "pik";
+"card.suit.hearts" = "kier";
+"card.suit.clubs" = "trefl";
+"card.suit.diamonds" = "karo";
+"card.name.format" = "%@ %@";

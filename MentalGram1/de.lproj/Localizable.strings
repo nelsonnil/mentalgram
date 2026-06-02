@@ -1702,18 +1702,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "BLIND WISCHEN";
-"postpred.help.input.clockinput.intro" = "Beim Öffnen von Performance wird der Bildschirm vollständig **schwarz** — simuliert, dass das Telefon ausgeschaltet ist. Du wischt geheim, um eine Zahl einzugeben; der Zuschauer sieht nichts.";
+"postpred.help.input.clockinput.intro" = "Wenn Performance geöffnet wird, wird der Bildschirm vollständig **schwarz** — als wäre das Telefon ausgeschaltet. Wische beliebig viele Ziffern ein und bestätige dann mit langem Drücken. Der Zuschauer sieht nichts.";
 "postpred.help.input.clockinput.encoding.title" = "ZIFFERNKODIERUNG  (jede Ziffer = 2 Wischgesten)";
 "postpred.help.input.clockinput.examples.title" = "BEISPIELE";
-"postpred.help.input.clockinput.example5.note" = "05 eingeben → Ziffer 0 (↑↑) dann Ziffer 5 (↓→) — 4 Wischgesten insgesamt";
-"postpred.help.input.clockinput.example37.note" = "Ziffer 3 (→→) dann Ziffer 7 (↓←) — 4 Wischgesten insgesamt";
-"postpred.help.input.clockinput.example100.note" = "Ziffer 1 (↑→) dann zwei 0en (↑↑ jeweils) — 6 Wischgesten insgesamt";
+"postpred.help.input.clockinput.example5.note" = "Einzelne Ziffer 5 — 2 Wischgesten, dann lange drücken";
+"postpred.help.input.clockinput.example37.note" = "Zwei Ziffern: 3 (→→) dann 7 (↓←) — 4 Wischgesten, dann lange drücken";
+"postpred.help.input.clockinput.example100.note" = "Drei Ziffern: 3 (→→), 6 (↓↓), 9 (←←) — 6 Wischgesten, dann lange drücken";
 "postpred.help.input.clockinput.haptic.title" = "HAPTISCHES FEEDBACK";
-"postpred.help.input.clockinput.haptic.light" = "Leichtes Tippen — jede einzelne Wischgeste registriert";
-"postpred.help.input.clockinput.haptic.medium" = "Mittlerer Impuls — Ziffer vollständig (2 Wischgesten)";
-"postpred.help.input.clockinput.haptic.success" = "Doppelte starke Vibration — Enthüllung erfolgreich";
-"postpred.help.input.clockinput.haptic.error" = "Fehler-Vibration + Bildschirmblitz — ungültige Wischgeste, zurückgesetzt";
-"postpred.help.input.clockinput.dismiss" = "Nach der Enthüllung **1 Sekunde lang drücken** auf den schwarzen Bildschirm, um ihn zu schließen. Das aktualisierte Fake-Profil erscheint sofort.";
+"postpred.help.input.clockinput.haptic.light" = "Leichtes Tippen — jede einzelne Wischgeste erkannt";
+"postpred.help.input.clockinput.haptic.medium" = "Mittlerer Puls — Ziffer abgeschlossen (2 Wischgesten)";
+"postpred.help.input.clockinput.haptic.success" = "Doppelstarke Vibration — Zahl bestätigt (1. langes Drücken)";
+"postpred.help.input.clockinput.haptic.error" = "Fehlerton + Bildschirmblitz — ungültiges Paar; zweite Wischgeste wird neue erste";
+"postpred.help.input.clockinput.dismiss" = "**Erstes langes Drücken** (1 s) bestätigt die Ziffern und löst die Enthüllung aus. **Zweites langes Drücken** schließt den schwarzen Bildschirm — das aktualisierte gefälschte Instagram-Profil erscheint sofort.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Eingabe";
@@ -1729,7 +1729,7 @@
 "set.input.lockscreen.help" = "Zeigt beim Öffnen von Performance einen falschen Sperrbildschirm, damit du den Wert geheim eingeben kannst. Wähle unten ein Hintergrundbild.";
 "set.input.digitgrid.help" = "Wische links oder rechts über das Raster, um den Wert zu erstellen, und tippe auf das Beiträge-Symbol zum Enthüllen.";
 "set.input.digitgrid.noconfig" = "Keine Konfiguration erforderlich.";
-"set.input.clockinput.help" = "Zeigt beim Öffnen von Performance einen komplett schwarzen Bildschirm. Gib eine Zahl von 1–100 mit direktionalen Wischpaaren ein. Langes Drücken zum Schließen nach der Enthüllung.";
+"set.input.clockinput.help" = "Zeigt beim Öffnen von Performance einen vollständig schwarzen Bildschirm. Wische Paare für beliebig viele Ziffern, dann lange drücken zum Bestätigen. Ein zweites langes Drücken schließt den Bildschirm.";
 "set.input.clockinput.noconfig" = "Keine Konfiguration erforderlich.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1744,6 +1744,9 @@
 "cooldown.photo" = "Profilbild";
 "cooldown.note" = "Notiz";
 "cooldown.bio" = "Biografie";
+"cooldown.capture.note" = "Eingabe-Erfassung (Notiz)";
+"cooldown.capture.bio" = "Eingabe-Erfassung (Biografie)";
+"cooldown.performance" = "Performance-Pause";
 "postpred.help.input.grid.encoding.title" = "Ziffernkodierung  (wie Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1752,3 +1755,40 @@
 "set.input.cardclock.suits" = "Farbkodierung  (dieselbe Richtung zweimal)";
 "set.input.cardclock.longpress" = "Irgendwo auf dem Raster lang drücken, um zu bestätigen.";
 "set.input.cardclock.noconfig" = "Keine Konfiguration erforderlich.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "KARTENUHR";
+"postpred.help.input.cardclock.guide.intro" = "Wische in beliebiger Richtung auf dem Instagram-Raster — immer 4 Wischgesten: die ersten 2 kodieren den Kartenwert (A–K), die letzten 2 die Farbe. Lang drücken zum Bestätigen.";
+"postpred.help.input.cardclock.guide.values" = "WERTKODIERUNG  (Zifferblatt)";
+"postpred.help.input.cardclock.guide.suits" = "FARBKODIERUNG  (dieselbe Richtung zweimal)";
+"postpred.help.input.cardclock.guide.examples" = "BEISPIELE";
+"postpred.help.input.cardclock.guide.ex.js" = "Bube Pik: ←↑ (Wert J) + ↑↑ (Pik)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Herz: →→ (Wert 3) + →→ (Herz)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Ass Karo: ↑→ (Wert As) + ←← (Karo)";
+"postpred.help.input.cardclock.guide.longpress" = "Nach dem 4. Wischen lang drücken, um zu bestätigen. Das zugehörige Kartenfoto wird automatisch de-archiviert.";
+
+"inputs.interface.exclusive.title" = "Exklusive Eingabe";
+"inputs.interface.exclusive.body" = "Es kann immer nur eine Eingabeoberfläche gleichzeitig für Sets, Bio und Notizen aktiv sein. Die anderen bleiben gesperrt, solange diese aktiv ist:";
+
+"inputs.conflict.alert.title" = "Inkompatible Eingabe";
+
+"inputs.conflict.alert.body" = "\"%@\" verwendet eine exklusive Oberflaeche, die nicht gleichzeitig mit Folgendem laufen kann:
+
+%@
+
+Nur ein Schnittstellentyp kann gleichzeitig fuer Sets, Bio und Notizen aktiv sein. Beim Fortfahren werden die in Konflikt stehenden Einstellungen deaktiviert.";
+
+"inputs.conflict.alert.cancel" = "Abbrechen";
+
+"inputs.conflict.alert.continue" = "Fortfahren";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "Ass";
+"card.value.jack" = "Bube";
+"card.value.queen" = "Dame";
+"card.value.king" = "König";
+"card.suit.spades" = "Pik";
+"card.suit.hearts" = "Herz";
+"card.suit.clubs" = "Kreuz";
+"card.suit.diamonds" = "Karo";
+"card.name.format" = "%@ %@";

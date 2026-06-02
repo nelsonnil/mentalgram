@@ -151,9 +151,9 @@ struct PostPredictionHelpView: View {
                 title: "Word Reveal",
                 description: "postpred.help.settype.word.desc",
                 badges: [
-                    PPBadgeItem(label: "Grid",   color: Color(hex: "818CF8")),
-                    PPBadgeItem(label: "OCR",    color: Color(hex: "34D399")),
                     PPBadgeItem(label: "Covert", color: Color(hex: "0095F6")),
+                    PPBadgeItem(label: "OCR",    color: Color(hex: "34D399")),
+                    PPBadgeItem(label: "API",    color: Color(hex: "FFD60A")),
                     PPBadgeItem(label: "URL",    color: Color(hex: "FB923C"))
                 ]
             )
@@ -162,9 +162,12 @@ struct PostPredictionHelpView: View {
                 title: "Number Reveal",
                 description: "postpred.help.settype.number.desc",
                 badges: [
-                    PPBadgeItem(label: "Grid", color: Color(hex: "818CF8")),
-                    PPBadgeItem(label: "OCR",  color: Color(hex: "34D399")),
-                    PPBadgeItem(label: "URL",  color: Color(hex: "FB923C"))
+                    PPBadgeItem(label: "Grid",    color: Color(hex: "818CF8")),
+                    PPBadgeItem(label: "Clock",   color: Color(hex: "94A3B8")),
+                    PPBadgeItem(label: "Lock",    color: Color(hex: "6366F1")),
+                    PPBadgeItem(label: "OCR",     color: Color(hex: "34D399")),
+                    PPBadgeItem(label: "API",     color: Color(hex: "FFD60A")),
+                    PPBadgeItem(label: "URL",     color: Color(hex: "FB923C"))
                 ]
             )
 
@@ -179,8 +182,12 @@ struct PostPredictionHelpView: View {
                 title: "Custom Set",
                 description: "postpred.help.settype.custom.desc",
                 badges: [
-                    PPBadgeItem(label: "Grid", color: Color(hex: "818CF8")),
-                    PPBadgeItem(label: "URL",  color: Color(hex: "FB923C"))
+                    PPBadgeItem(label: "Grid",    color: Color(hex: "818CF8")),
+                    PPBadgeItem(label: "Clock",   color: Color(hex: "94A3B8")),
+                    PPBadgeItem(label: "Lock",    color: Color(hex: "6366F1")),
+                    PPBadgeItem(label: "OCR",     color: Color(hex: "34D399")),
+                    PPBadgeItem(label: "API",     color: Color(hex: "FFD60A")),
+                    PPBadgeItem(label: "URL",     color: Color(hex: "FB923C"))
                 ]
             )
             PPSetTypeRow(
@@ -188,8 +195,9 @@ struct PostPredictionHelpView: View {
                 title: "Playing Cards",
                 description: "postpred.help.settype.card.desc",
                 badges: [
-                    PPBadgeItem(label: "Grid", color: Color(hex: "818CF8")),
-                    PPBadgeItem(label: "URL",  color: Color(hex: "FB923C"))
+                    PPBadgeItem(label: "Card Clock", color: Color(hex: "16A34A")),
+                    PPBadgeItem(label: "Lockscreen",  color: Color(hex: "6366F1")),
+                    PPBadgeItem(label: "URL",         color: Color(hex: "FB923C"))
                 ]
             )
         }
@@ -207,8 +215,7 @@ struct PostPredictionHelpView: View {
                 labelColor: VaultTheme.Colors.primary,
                 badges: [
                     PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
-                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
-                    PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
+                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
                 ]
             ) {
                 PPBodyText("postpred.help.input.grid.intro")
@@ -239,8 +246,6 @@ struct PostPredictionHelpView: View {
                                   detail: "postpred.help.input.grid.case.number")
                     PPGridCaseRow(color: Color(hex: "F97316"), setType: "Custom",
                                   detail: "postpred.help.input.grid.case.custom")
-                    PPGridCaseRow(color: Color(hex: "16A34A"), setType: "Cards",
-                                  detail: "postpred.help.input.grid.case.card")
                 }
                 .padding(10)
                 .background(VaultTheme.Colors.background.opacity(0.5))
@@ -254,7 +259,8 @@ struct PostPredictionHelpView: View {
                 labelColor: VaultTheme.Colors.success,
                 badges: [
                     PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
-                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500"))
+                    PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
+                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
                 ]
             ) {
                 PPStepBullet("postpred.help.input.ocr.step1", color: VaultTheme.Colors.success)
@@ -304,8 +310,7 @@ struct PostPredictionHelpView: View {
                 badges: [
                     PPBadgeItem(label: "Word",   color: Color(hex: "7C3AED")),
                     PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
-                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316")),
-                    PPBadgeItem(label: "Cards",  color: Color(hex: "16A34A"))
+                    PPBadgeItem(label: "Custom", color: Color(hex: "F97316"))
                 ]
             ) {
                 PPBodyText("postpred.help.input.api.intro")
@@ -319,7 +324,7 @@ struct PostPredictionHelpView: View {
 
             // ── F: Clock Input — black screen swipe input ────────────────
             PPInputMethodBlock(
-                label: "postpred.help.input.swipeblind.label",
+                label: "postpred.help.input.clockinput.label",
                 labelColor: Color(hex: "94A3B8"),
                 badges: [
                     PPBadgeItem(label: "Number", color: Color(hex: "FF9500")),
@@ -327,6 +332,17 @@ struct PostPredictionHelpView: View {
                 ]
             ) {
                 PPClockInputDescription()
+            }
+
+            // ── G: Card Clock — 4-swipe playing card encoding ────────────
+            PPInputMethodBlock(
+                label: "postpred.help.input.cardclock.label",
+                labelColor: Color(hex: "16A34A"),
+                badges: [
+                    PPBadgeItem(label: "Cards", color: Color(hex: "16A34A"))
+                ]
+            ) {
+                PPCardClockDescription()
             }
         }
     }
@@ -1850,9 +1866,9 @@ private struct PPClockInputDescription: View {
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(accent).tracking(0.5)
 
-                PPSwipeExample(number: "5",   swipes: "↑↑ + ↓→",       noteKey: "postpred.help.input.clockinput.example5.note")
+                PPSwipeExample(number: "5",   swipes: "↓→",            noteKey: "postpred.help.input.clockinput.example5.note")
                 PPSwipeExample(number: "37",  swipes: "→→ + ↓←",       noteKey: "postpred.help.input.clockinput.example37.note")
-                PPSwipeExample(number: "100", swipes: "↑→ + ↑↑ + ↑↑", noteKey: "postpred.help.input.clockinput.example100.note")
+                PPSwipeExample(number: "369", swipes: "→→ + ↓↓ + ←←", noteKey: "postpred.help.input.clockinput.example100.note")
             }
 
             // Haptic feedback legend
@@ -2296,5 +2312,137 @@ private struct PPBanksDemo: View {
             await sleep(0.25)
         }
         await sleep(3.0)
+    }
+}
+
+// MARK: - ── PPCardClockDescription ───────────────────────────────────────────
+// Explains the Card Clock input: 4 directional swipes encode value + suit of
+// any playing card (A–K × ♠♥♣♦). Long-press on the grid to confirm.
+
+private struct PPCardClockDescription: View {
+
+    private let accent = Color(hex: "16A34A")
+
+    private let valueRows: [[(String, String)]] = [
+        [("A","↑→"),("2","→↑"),("3","→→"),("4","→↓"),("5","↓→"),("6","↓↓")],
+        [("7","↓←"),("8","←↓"),("9","←←"),("J","←↑"),("Q","↑←"),("K","↑↑")]
+    ]
+    private let suits: [(String, String, Color)] = [
+        ("♠","↑↑", Color(UIColor.label)),
+        ("♥","→→", .red),
+        ("♣","↓↓", Color(UIColor.label)),
+        ("♦","←←", .red)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+
+            // Intro
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 13)).foregroundColor(accent).padding(.top, 1)
+                Text("postpred.help.input.cardclock.guide.intro")
+                    .font(.system(size: 13))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .background(accent.opacity(0.08))
+            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.25), lineWidth: 1))
+
+            // Value encoding table
+            VStack(alignment: .leading, spacing: 8) {
+                Text("postpred.help.input.cardclock.guide.values")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(accent).tracking(0.5)
+
+                ForEach(valueRows.indices, id: \.self) { ri in
+                    HStack(spacing: 5) {
+                        ForEach(valueRows[ri].indices, id: \.self) { ci in
+                            HStack(spacing: 3) {
+                                Text(valueRows[ri][ci].0)
+                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.white)
+                                Text(valueRows[ri][ci].1)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(accent)
+                            }
+                            .padding(.horizontal, 6).padding(.vertical, 4)
+                            .background(Color.white.opacity(0.05))
+                            .cornerRadius(6)
+                            .overlay(RoundedRectangle(cornerRadius: 6)
+                                .stroke(accent.opacity(0.2), lineWidth: 0.8))
+                        }
+                        Spacer()
+                    }
+                }
+            }
+
+            // Suit encoding
+            VStack(alignment: .leading, spacing: 8) {
+                Text("postpred.help.input.cardclock.guide.suits")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(accent).tracking(0.5)
+
+                HStack(spacing: 8) {
+                    ForEach(suits, id: \.0) { sym, swipes, color in
+                        HStack(spacing: 3) {
+                            Text(sym)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(color)
+                            Text(swipes)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(accent)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(6)
+                        .overlay(RoundedRectangle(cornerRadius: 6)
+                            .stroke(accent.opacity(0.2), lineWidth: 0.8))
+                    }
+                    Spacer()
+                }
+            }
+
+            // Examples
+            VStack(alignment: .leading, spacing: 8) {
+                Text("postpred.help.input.cardclock.guide.examples")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(accent).tracking(0.5)
+
+                PPSwipeExample(number: "J♠", swipes: "←↑  ↑↑",
+                               noteKey: "postpred.help.input.cardclock.guide.ex.js")
+                PPSwipeExample(number: "3♥", swipes: "→→  →→",
+                               noteKey: "postpred.help.input.cardclock.guide.ex.3h")
+                PPSwipeExample(number: "A♦", swipes: "↑→  ←←",
+                               noteKey: "postpred.help.input.cardclock.guide.ex.ad")
+            }
+
+            // Haptic feedback
+            VStack(alignment: .leading, spacing: 6) {
+                Text("postpred.help.input.clockinput.haptic.title")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(accent).tracking(0.5)
+                PPHapticRow(icon: "hand.point.right.fill", color: Color(hex: "60A5FA"),
+                            labelKey: "postpred.help.input.clockinput.haptic.light")
+                PPHapticRow(icon: "circle.hexagongrid.fill", color: Color(hex: "A78BFA"),
+                            labelKey: "postpred.help.input.clockinput.haptic.medium")
+                PPHapticRow(icon: "iphone.radiowaves.left.and.right", color: Color(hex: "34D399"),
+                            labelKey: "postpred.help.input.clockinput.haptic.success")
+                PPHapticRow(icon: "xmark.circle.fill", color: VaultTheme.Colors.error,
+                            labelKey: "postpred.help.input.clockinput.haptic.error")
+            }
+
+            // Long press confirm note
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 12)).foregroundColor(Color(hex: "F59E0B")).padding(.top, 1)
+                Text("postpred.help.input.cardclock.guide.longpress")
+                    .font(.system(size: 13))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }

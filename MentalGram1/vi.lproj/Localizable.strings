@@ -739,20 +739,20 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "VUỐT MÙ";
-"postpred.help.input.clockinput.intro" = "Khi Performance mở ra, màn hình trở nên **đen** hoàn toàn — mô phỏng điện thoại đang tắt. Bạn vuốt bí mật để nhập số; khán giả không thấy gì.";
+"postpred.help.input.clockinput.intro" = "Khi Performance mở ra, màn hình chuyển hoàn toàn sang **màu đen** — giả lập điện thoại đã tắt. Vuốt để nhập bao nhiêu chữ số tùy ý, rồi nhấn giữ để xác nhận. Khán giả không thấy gì.";
 "postpred.help.input.clockinput.encoding.title" = "MÃ HÓA CHỮ SỐ  (mỗi chữ số = 2 lần vuốt)";
 "postpred.help.input.clockinput.examples.title" = "VÍ DỤ";
-"postpred.help.input.clockinput.example5.note" = "Nhập 05 → chữ số 0 (↑↑) rồi chữ số 5 (↓→) — tổng cộng 4 lần vuốt";
-"postpred.help.input.clockinput.example37.note" = "Chữ số 3 (→→) rồi chữ số 7 (↓←) — tổng cộng 4 lần vuốt";
-"postpred.help.input.clockinput.example100.note" = "Chữ số 1 (↑→) rồi hai số 0 (↑↑ mỗi số) — tổng cộng 6 lần vuốt";
-"postpred.help.input.clockinput.haptic.title" = "PHẢN HỒI HAPTIC";
-"postpred.help.input.clockinput.haptic.light" = "Nhấn nhẹ — mỗi lần vuốt được ghi nhận";
-"postpred.help.input.clockinput.haptic.medium" = "Rung vừa — chữ số hoàn thành (2 lần vuốt)";
-"postpred.help.input.clockinput.haptic.success" = "Rung mạnh hai lần — tiết lộ thành công";
-"postpred.help.input.clockinput.haptic.error" = "Rung lỗi + màn hình chớp — cặp không hợp lệ, đặt lại";
-"postpred.help.input.clockinput.dismiss" = "Sau khi tiết lộ, **nhấn giữ 1 giây** trên màn hình đen để thoát. Hồ sơ Instagram giả đã cập nhật hiển thị ngay lập tức.";
+"postpred.help.input.clockinput.example5.note" = "Một chữ số 5 — 2 lần vuốt, rồi nhấn giữ để xác nhận";
+"postpred.help.input.clockinput.example37.note" = "Hai chữ số: 3 (→→) rồi 7 (↓←) — 4 lần vuốt, rồi nhấn giữ";
+"postpred.help.input.clockinput.example100.note" = "Ba chữ số: 3 (→→), 6 (↓↓), 9 (←←) — 6 lần vuốt, rồi nhấn giữ";
+"postpred.help.input.clockinput.haptic.title" = "PHẢN HỒI RUNG";
+"postpred.help.input.clockinput.haptic.light" = "Rung nhẹ — mỗi lần vuốt được ghi nhận";
+"postpred.help.input.clockinput.haptic.medium" = "Rung vừa — hoàn thành một chữ số (2 lần vuốt)";
+"postpred.help.input.clockinput.haptic.success" = "Rung mạnh đôi — số đã xác nhận (nhấn giữ lần 1)";
+"postpred.help.input.clockinput.haptic.error" = "Rung lỗi + màn hình chớp — cặp không hợp lệ; lần vuốt 2 trở thành lần 1 của cặp tiếp theo";
+"postpred.help.input.clockinput.dismiss" = "**Nhấn giữ lần 1** (1 giây) xác nhận các chữ số và kích hoạt tiết lộ. **Nhấn giữ lần 2** đóng màn hình đen — hồ sơ Instagram giả đã cập nhật hiện ngay lập tức.";
 
-"set.input.clockinput.help" = "Hiển thị màn hình đen hoàn toàn khi Performance mở. Nhập số từ 1–100 bằng các cặp vuốt theo hướng. Nhấn giữ để đóng sau khi tiết lộ.";
+"set.input.clockinput.help" = "Hiển thị màn hình đen hoàn toàn khi mở Performance. Vuốt theo cặp để nhập bao nhiêu chữ số tùy ý, rồi nhấn giữ để xác nhận. Nhấn giữ lần hai để đóng màn hình.";
 "set.input.clockinput.noconfig" = "Không cần cấu hình.";
 
 // MARK: - Cooldown Anti-Bot Banner
@@ -760,6 +760,9 @@
 "cooldown.photo" = "Ảnh đại diện";
 "cooldown.note" = "Ghi chú";
 "cooldown.bio" = "Tiểu sử";
+"cooldown.capture.note" = "Bắt Đầu Vào (Ghi Chú)";
+"cooldown.capture.bio" = "Bắt Đầu Vào (Tiểu Sử)";
+"cooldown.performance" = "Tạm dừng hiệu suất";
 "postpred.help.input.grid.intro" = "Trong Performance, vuốt theo bất kỳ hướng nào trong bốn hướng (↑ ↓ ← →) trên lưới ảnh. Mỗi hai lần vuốt liên tiếp mã hóa một chữ số — logic tương tự Clock Input. Nhập bao nhiêu chữ số tùy ý, rồi nhấn giữ bất kỳ vị trí nào trên lưới để xác nhận.";
 "postpred.help.input.grid.step3" = "Nhấn giữ bất kỳ vị trí nào trên lưới ảnh để xác nhận và kích hoạt reveal.";
 "postpred.help.input.grid.case.custom" = "Tất cả các chữ số tích lũy tạo thành số slot. VD: nhập 7, 2 → slot 72.";
@@ -771,3 +774,40 @@
 "set.input.cardclock.suits" = "Mã hóa chất  (cùng hướng hai lần)";
 "set.input.cardclock.longpress" = "Nhấn giữ bất kỳ vị trí nào trên lưới để xác nhận.";
 "set.input.cardclock.noconfig" = "Không cần cấu hình.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "ĐỒNG HỒ BÀI";
+"postpred.help.input.cardclock.guide.intro" = "Vuốt theo bất kỳ hướng nào trên lưới Instagram — luôn 4 vuốt: 2 đầu mã hóa giá trị (A–K), 2 cuối mã hóa chất. Nhấn giữ để xác nhận.";
+"postpred.help.input.cardclock.guide.values" = "MÃ HÓA GIÁ TRỊ  (mặt đồng hồ)";
+"postpred.help.input.cardclock.guide.suits" = "MÃ HÓA CHẤT  (cùng hướng hai lần)";
+"postpred.help.input.cardclock.guide.examples" = "VÍ DỤ";
+"postpred.help.input.cardclock.guide.ex.js" = "J Bích: ←↑ (giá trị J) + ↑↑ (bích)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Cơ: →→ (giá trị 3) + →→ (cơ)";
+"postpred.help.input.cardclock.guide.ex.ad" = "A Rô: ↑→ (giá trị A) + ←← (rô)";
+"postpred.help.input.cardclock.guide.longpress" = "Sau lần vuốt thứ 4, nhấn giữ để xác nhận. Ảnh lá bài tương ứng sẽ tự động được hiển thị.";
+
+"inputs.interface.exclusive.title" = "Nhập độc quyền";
+"inputs.interface.exclusive.body" = "Chỉ một giao diện nhập có thể hoạt động cùng lúc trên Set, Tiểu sử và Ghi chú. Các giao diện khác bị khoá khi giao diện này đang hoạt động:";
+
+"inputs.conflict.alert.title" = "Dau vao khong tuong thich";
+
+"inputs.conflict.alert.body" = "\"%@\" su dung giao dien doc quyen khong the chay dong thoi voi:
+
+%@
+
+Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep tuc se tat cac lua chon xung dot.";
+
+"inputs.conflict.alert.cancel" = "Huy";
+
+"inputs.conflict.alert.continue" = "Tiep tuc";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "át";
+"card.value.jack" = "bồi";
+"card.value.queen" = "đầm";
+"card.value.king" = "già";
+"card.suit.spades" = "bích";
+"card.suit.hearts" = "cơ";
+"card.suit.clubs" = "chuồn";
+"card.suit.diamonds" = "rô";
+"card.name.format" = "%@ %@";

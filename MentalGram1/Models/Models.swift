@@ -765,13 +765,29 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
     /// digitGrid and clockInput show an informational panel, others have editable settings.
     var needsConfig: Bool { true }
 
+    /// Maps to the shared exclusive performance interface (camera / lockscreen / black
+    /// clock). Nil = no dedicated fullscreen interface (api, digitGrid, coverTyping), so
+    /// it never conflicts with bio/note interface sources.
+    /// Note: `.lockscreen` is type-dependent (number vs card), so it resolves to
+    /// `.numberLockscreen` here as a neutral default. The set-aware resolution lives in
+    /// `IntegrationsSettings.activeSetInterfaceKind()`, which inspects the set type.
+    var interfaceKind: InterfaceKind? {
+        switch self {
+        case .ocr:        return .ocr
+        case .lockscreen: return .numberLockscreen
+        case .clockInput: return .numberClock
+        case .cardClock:  return .cardClock
+        default:          return nil
+        }
+    }
+
     /// The subset of input methods valid for a given set type.
     static func allowed(for type: SetType) -> [InputMethod] {
         switch type {
         case .word:   return [.coverTyping, .api, .ocr]
         case .number: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
         case .custom: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
-        case .card:   return [.cardClock, .lockscreen, .api, .ocr]
+        case .card:   return [.cardClock, .lockscreen]
         }
     }
 

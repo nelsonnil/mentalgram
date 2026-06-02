@@ -1725,20 +1725,20 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "DESLIZE CEGO";
-"postpred.help.input.clockinput.intro" = "Quando o Performance abre, o ecrã fica completamente **preto** — simulando que o telemóvel está desligado. Deslizas em segredo para introduzir um número; o espetador não vê nada.";
-"postpred.help.input.clockinput.encoding.title" = "CODIFICAÇÃO DE DÍGITOS  (cada dígito = 2 deslizes)";
+"postpred.help.input.clockinput.intro" = "Quando o Performance abre, o ecrã fica completamente **preto** — simulando que o telemóvel está desligado. Deslize para inserir quantos dígitos precisar e mantenha premido para confirmar. O espectador não vê nada.";
+"postpred.help.input.clockinput.encoding.title" = "CODIFICAÇÃO DE DÍGITOS  (cada dígito = 2 deslizamentos)";
 "postpred.help.input.clockinput.examples.title" = "EXEMPLOS";
-"postpred.help.input.clockinput.example5.note" = "Introduzir 05 → dígito 0 (↑↑) depois dígito 5 (↓→) — 4 deslizes no total";
-"postpred.help.input.clockinput.example37.note" = "Dígito 3 (→→) depois dígito 7 (↓←) — 4 deslizes no total";
-"postpred.help.input.clockinput.example100.note" = "Dígito 1 (↑→) depois dois 0s (↑↑ cada) — 6 deslizes no total";
+"postpred.help.input.clockinput.example5.note" = "Dígito único 5 — 2 deslizamentos, depois pressão longa para confirmar";
+"postpred.help.input.clockinput.example37.note" = "Dois dígitos: 3 (→→) e 7 (↓←) — 4 deslizamentos, depois pressão longa";
+"postpred.help.input.clockinput.example100.note" = "Três dígitos: 3 (→→), 6 (↓↓), 9 (←←) — 6 deslizamentos, depois pressão longa";
 "postpred.help.input.clockinput.haptic.title" = "FEEDBACK HÁPTICO";
-"postpred.help.input.clockinput.haptic.light" = "Toque leve — cada deslize individual registado";
-"postpred.help.input.clockinput.haptic.medium" = "Pulso médio — dígito concluído (2 deslizes)";
-"postpred.help.input.clockinput.haptic.success" = "Dupla vibração forte — revelação bem-sucedida";
-"postpred.help.input.clockinput.haptic.error" = "Buzz de erro + flash no ecrã — par inválido, reiniciado";
-"postpred.help.input.clockinput.dismiss" = "Após a revelação, **pressiona 1 segundo** em qualquer lugar do ecrã preto para fechar. O perfil falso do Instagram atualizado aparece instantaneamente.";
+"postpred.help.input.clockinput.haptic.light" = "Toque suave — cada deslizamento individual registado";
+"postpred.help.input.clockinput.haptic.medium" = "Impulso médio — dígito completo (2 deslizamentos)";
+"postpred.help.input.clockinput.haptic.success" = "Dupla vibração forte — número confirmado (1.ª pressão longa)";
+"postpred.help.input.clockinput.haptic.error" = "Aviso sonoro + flash — par inválido; o 2.º deslizamento torna-se o 1.º do par seguinte";
+"postpred.help.input.clockinput.dismiss" = "**Primeira pressão longa** (1 s) confirma os dígitos e aciona a revelação. **Segunda pressão longa** fecha o ecrã preto — o perfil falso do Instagram atualizado aparece de imediato.";
 
-"set.input.clockinput.help" = "Mostra um ecrã completamente preto ao abrir o Performance. Introduza um número de 1 a 100 com pares de deslizamentos direcionais. Prima longamente para fechar após a revelação.";
+"set.input.clockinput.help" = "Apresenta um ecrã completamente preto ao abrir o Performance. Deslize pares para introduzir qualquer número de dígitos, depois pressão longa para confirmar. Uma segunda pressão longa fecha o ecrã.";
 "set.input.clockinput.noconfig" = "Nenhuma configuração necessária.";
 
 // MARK: - Cooldown Anti-Bot Banner
@@ -1746,6 +1746,9 @@
 "cooldown.photo" = "Foto de perfil";
 "cooldown.note" = "Nota";
 "cooldown.bio" = "Biografia";
+"cooldown.capture.note" = "Captura de Entrada (Nota)";
+"cooldown.capture.bio" = "Captura de Entrada (Biografia)";
+"cooldown.performance" = "Pausa de Performance";
 "postpred.help.input.grid.encoding.title" = "Codificação de dígitos  (igual ao Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1754,3 +1757,40 @@
 "set.input.cardclock.suits" = "Codificação de naipe  (mesma direção duas vezes)";
 "set.input.cardclock.longpress" = "Prima longa em qualquer lugar da grelha para confirmar.";
 "set.input.cardclock.noconfig" = "Nenhuma configuração necessária.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "RELÓGIO DE CARTA";
+"postpred.help.input.cardclock.guide.intro" = "Deslize em qualquer direção na grelha Instagram — sempre 4 deslizamentos: os 2 primeiros codificam o valor (A–K), os 2 últimos o naipe. Prima longa para confirmar.";
+"postpred.help.input.cardclock.guide.values" = "CODIFICAÇÃO DE VALOR  (mostrador do relógio)";
+"postpred.help.input.cardclock.guide.suits" = "CODIFICAÇÃO DE NAIPE  (mesma direção duas vezes)";
+"postpred.help.input.cardclock.guide.examples" = "EXEMPLOS";
+"postpred.help.input.cardclock.guide.ex.js" = "Valete de Espadas: ←↑ (valor J) + ↑↑ (espadas)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 de Copas: →→ (valor 3) + →→ (copas)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Ás de Ouros: ↑→ (valor A) + ←← (ouros)";
+"postpred.help.input.cardclock.guide.longpress" = "Após o 4.º gesto, prima longa para confirmar. A foto da carta desarchiva-se automaticamente.";
+
+"inputs.interface.exclusive.title" = "Entrada exclusiva";
+"inputs.interface.exclusive.body" = "Só pode existir uma interface de entrada de cada vez entre Sets, Bio e Notas. As outras ficam bloqueadas enquanto esta estiver ativa:";
+
+"inputs.conflict.alert.title" = "Entrada incompativel";
+
+"inputs.conflict.alert.body" = "\"%@\" usa uma interface exclusiva que nao pode funcionar ao mesmo tempo que:
+
+%@
+
+So pode estar ativo um tipo de interface de cada vez entre Sets, Bio e Notas. Continuar ira desativar as selecoes incompativeis.";
+
+"inputs.conflict.alert.cancel" = "Cancelar";
+
+"inputs.conflict.alert.continue" = "Continuar";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "ás";
+"card.value.jack" = "valete";
+"card.value.queen" = "dama";
+"card.value.king" = "rei";
+"card.suit.spades" = "espadas";
+"card.suit.hearts" = "copas";
+"card.suit.clubs" = "paus";
+"card.suit.diamonds" = "ouros";
+"card.name.format" = "%@ de %@";

@@ -1753,18 +1753,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "DESLIZAMIENTO CIEGO";
-"postpred.help.input.clockinput.intro" = "Al abrir Performance, la pantalla se vuelve completamente **negra** — simulando que el teléfono está apagado. Deslizas en secreto para introducir un número; el espectador no ve nada.";
+"postpred.help.input.clockinput.intro" = "Cuando se abre Performance la pantalla se vuelve completamente **negra** — simulando que el teléfono está apagado. Desliza para introducir todos los dígitos que necesites y luego mantén pulsado para confirmar. El espectador no ve nada.";
 "postpred.help.input.clockinput.encoding.title" = "CODIFICACIÓN DE DÍGITOS  (cada dígito = 2 deslizamientos)";
 "postpred.help.input.clockinput.examples.title" = "EJEMPLOS";
-"postpred.help.input.clockinput.example5.note" = "Introducir 05 → dígito 0 (↑↑) luego dígito 5 (↓→) — 4 deslizamientos en total";
-"postpred.help.input.clockinput.example37.note" = "Dígito 3 (→→) luego dígito 7 (↓←) — 4 deslizamientos en total";
-"postpred.help.input.clockinput.example100.note" = "Dígito 1 (↑→) luego dos 0s (↑↑ cada uno) — 6 deslizamientos en total";
+"postpred.help.input.clockinput.example5.note" = "Dígito único 5 — 2 swipes y luego mantener pulsado para confirmar";
+"postpred.help.input.clockinput.example37.note" = "Dos dígitos: 3 (→→) y 7 (↓←) — 4 swipes y luego mantener pulsado";
+"postpred.help.input.clockinput.example100.note" = "Tres dígitos: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes y luego mantener pulsado";
 "postpred.help.input.clockinput.haptic.title" = "RESPUESTA HÁPTICA";
-"postpred.help.input.clockinput.haptic.light" = "Toque suave — cada deslizamiento individual registrado";
-"postpred.help.input.clockinput.haptic.medium" = "Pulso medio — dígito completado (2 deslizamientos)";
-"postpred.help.input.clockinput.haptic.success" = "Doble vibración fuerte — revelación exitosa";
-"postpred.help.input.clockinput.haptic.error" = "Vibración de error + destello de pantalla — par inválido, se reinicia";
-"postpred.help.input.clockinput.dismiss" = "Tras la revelación, **mantén pulsado 1 segundo** en la pantalla negra para cerrarla. El perfil falso de Instagram actualizado (con fotos desarchivadas) aparece al instante.";
+"postpred.help.input.clockinput.haptic.light" = "Toque suave — cada swipe individual registrado";
+"postpred.help.input.clockinput.haptic.medium" = "Pulso medio — dígito completado (2 swipes)";
+"postpred.help.input.clockinput.haptic.success" = "Doble vibración fuerte — número confirmado (1er mantener pulsado)";
+"postpred.help.input.clockinput.haptic.error" = "Zumbido de error + destello — par inválido; el 2.º swipe pasa a ser el 1.º del siguiente par";
+"postpred.help.input.clockinput.dismiss" = "**Primera pulsación larga** (1 s) confirma los dígitos y activa la revelación. **Segunda pulsación larga** descarta la pantalla negra: aparece el perfil de Instagram falso actualizado (con las fotos desarchivadas).";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Entrada";
@@ -1780,7 +1780,7 @@
 "set.input.lockscreen.help" = "Muestra una pantalla de bloqueo falsa al abrir Performance para que puedas introducir el valor en secreto. Elige un fondo abajo.";
 "set.input.digitgrid.help" = "Desliza a la izquierda o derecha por la cuadrícula para construir el valor y toca el icono de Publicaciones para revelar.";
 "set.input.digitgrid.noconfig" = "No requiere configuración.";
-"set.input.clockinput.help" = "Muestra una pantalla completamente negra al abrir Performance. Introduce un número del 1 al 100 con pares de deslizamientos direccionales. Mantén pulsado para salir tras la revelación.";
+"set.input.clockinput.help" = "Muestra una pantalla completamente negra al abrir Performance. Desliza pares para introducir cualquier número de dígitos y mantén pulsado para confirmar la revelación. Una segunda pulsación larga descarta la pantalla.";
 "set.input.clockinput.noconfig" = "No requiere configuración.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1795,6 +1795,9 @@
 "cooldown.photo" = "Foto de perfil";
 "cooldown.note" = "Nota";
 "cooldown.bio" = "Biografía";
+"cooldown.capture.note" = "Captura de Entrada (Nota)";
+"cooldown.capture.bio" = "Captura de Entrada (Biografía)";
+"cooldown.performance" = "Pausa de Performance";
 "postpred.help.input.grid.encoding.title" = "Codificación de dígitos  (igual que Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1803,3 +1806,40 @@
 "set.input.cardclock.suits" = "Codificación de palo  (misma dirección dos veces)";
 "set.input.cardclock.longpress" = "Mantén pulsado en cualquier lugar de la cuadrícula para confirmar y revelar.";
 "set.input.cardclock.noconfig" = "No se requiere configuración.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "RELOJ DE CARTA";
+"postpred.help.input.cardclock.guide.intro" = "Desliza en cualquier dirección sobre la cuadrícula de fotos de Instagram — siempre 4 swipes: los 2 primeros codifican el valor (A–K), los 2 últimos el palo. Mantén pulsado para confirmar y disparar el reveal.";
+"postpred.help.input.cardclock.guide.values" = "CODIFICACIÓN DE VALOR  (cara del reloj)";
+"postpred.help.input.cardclock.guide.suits" = "CODIFICACIÓN DE PALO  (misma dirección dos veces)";
+"postpred.help.input.cardclock.guide.examples" = "EJEMPLOS";
+"postpred.help.input.cardclock.guide.ex.js" = "Jota de Picas: ←↑ (valor J) + ↑↑ (picas)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 de Corazones: →→ (valor 3) + →→ (corazones)";
+"postpred.help.input.cardclock.guide.ex.ad" = "As de Diamantes: ↑→ (valor As) + ←← (diamantes)";
+"postpred.help.input.cardclock.guide.longpress" = "Tras el 4.º swipe, mantén pulsado en cualquier lugar de la cuadrícula para confirmar. La foto de la carta correspondiente se desarchiva automáticamente.";
+
+"inputs.interface.exclusive.title" = "Entrada exclusiva";
+"inputs.interface.exclusive.body" = "Solo puede haber una interfaz de entrada a la vez entre Sets, Biografía y Notas. Las demás quedan bloqueadas mientras esta está activa:";
+
+"inputs.conflict.alert.title" = "Entrada incompatible";
+
+"inputs.conflict.alert.body" = "\"%@\" usa una interfaz exclusiva que no puede ejecutarse junto con:
+
+%@
+
+Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Notas. Si continuas, se desactivaran las selecciones incompatibles.";
+
+"inputs.conflict.alert.cancel" = "Cancelar";
+
+"inputs.conflict.alert.continue" = "Continuar";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "as";
+"card.value.jack" = "jota";
+"card.value.queen" = "reina";
+"card.value.king" = "rey";
+"card.suit.spades" = "picas";
+"card.suit.hearts" = "corazones";
+"card.suit.clubs" = "tréboles";
+"card.suit.diamonds" = "diamantes";
+"card.name.format" = "%@ de %@";

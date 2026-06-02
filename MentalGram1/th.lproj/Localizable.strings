@@ -1169,18 +1169,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "สไวป์แบบบลายด์";
-"postpred.help.input.clockinput.intro" = "เมื่อ Performance เปิด หน้าจอจะกลายเป็น**สีดำ**สนิท — จำลองว่าโทรศัพท์ปิดอยู่ คุณปัดลับๆ เพื่อกรอกตัวเลข ผู้ชมไม่เห็นอะไรเลย";
-"postpred.help.input.clockinput.encoding.title" = "การเข้ารหัสตัวเลข  (แต่ละตัวเลข = 2 การปัด)";
+"postpred.help.input.clockinput.intro" = "เมื่อเปิด Performance หน้าจอจะเป็น**สีดำ**สนิท — เหมือนโทรศัพท์ดับ ปัดเพื่อป้อนตัวเลขให้ครบแล้วกดค้างเพื่อยืนยัน ผู้ชมไม่เห็นอะไรเลย";
+"postpred.help.input.clockinput.encoding.title" = "การเข้ารหัสตัวเลข  (1 ตัวเลข = 2 ปัด)";
 "postpred.help.input.clockinput.examples.title" = "ตัวอย่าง";
-"postpred.help.input.clockinput.example5.note" = "กรอก 05 → ตัวเลข 0 (↑↑) แล้ว ตัวเลข 5 (↓→) — รวม 4 การปัด";
-"postpred.help.input.clockinput.example37.note" = "ตัวเลข 3 (→→) แล้ว ตัวเลข 7 (↓←) — รวม 4 การปัด";
-"postpred.help.input.clockinput.example100.note" = "ตัวเลข 1 (↑→) แล้ว 0 สองครั้ง (↑↑ แต่ละครั้ง) — รวม 6 การปัด";
+"postpred.help.input.clockinput.example5.note" = "ตัวเลขเดียว 5 — ปัด 2 ครั้ง แล้วกดค้างเพื่อยืนยัน";
+"postpred.help.input.clockinput.example37.note" = "สองหลัก: 3 (→→) แล้ว 7 (↓←) — ปัด 4 ครั้ง แล้วกดค้าง";
+"postpred.help.input.clockinput.example100.note" = "สามหลัก: 3 (→→), 6 (↓↓), 9 (←←) — ปัด 6 ครั้ง แล้วกดค้าง";
 "postpred.help.input.clockinput.haptic.title" = "การสั่นสะเทือน";
-"postpred.help.input.clockinput.haptic.light" = "แตะเบา — บันทึกการปัดแต่ละครั้ง";
-"postpred.help.input.clockinput.haptic.medium" = "สั่นกลาง — ตัวเลขสมบูรณ์ (2 การปัด)";
-"postpred.help.input.clockinput.haptic.success" = "สั่นสองครั้งแรง — เปิดเผยสำเร็จ";
-"postpred.help.input.clockinput.haptic.error" = "สั่นผิดพลาด + หน้าจอกะพริบ — คู่ไม่ถูกต้อง รีเซ็ต";
-"postpred.help.input.clockinput.dismiss" = "หลังจากเปิดเผยแล้ว **กดค้าง 1 วินาที** บนหน้าจอดำเพื่อปิด โปรไฟล์ Instagram ปลอมที่อัปเดตแล้วจะปรากฏทันที";
+"postpred.help.input.clockinput.haptic.light" = "สั่นเบา — รับรู้ทุกการปัด";
+"postpred.help.input.clockinput.haptic.medium" = "สั่นกลาง — ป้อนตัวเลขครบ (2 ปัด)";
+"postpred.help.input.clockinput.haptic.success" = "สั่นแรงสองครั้ง — ยืนยันตัวเลขแล้ว (กดค้างครั้งที่ 1)";
+"postpred.help.input.clockinput.haptic.error" = "สั่นแสดงข้อผิดพลาด + หน้าจอกะพริบ — คู่ไม่ถูกต้อง การปัดครั้งที่ 2 กลายเป็นครั้งที่ 1 ของคู่ถัดไป";
+"postpred.help.input.clockinput.dismiss" = "**กดค้างครั้งที่ 1** (1 วินาที) ยืนยันตัวเลขและเริ่มการเปิดเผย **กดค้างครั้งที่ 2** ปิดหน้าจอดำ — โปรไฟล์ Instagram ปลอมที่อัปเดตแล้วปรากฏทันที";
 
 // MARK: - Set Input Picker
 "set.input.label" = "อินพุต";
@@ -1196,7 +1196,7 @@
 "set.input.lockscreen.help" = "แสดงหน้าจอล็อกปลอมเมื่อ Performance เปิด เพื่อกรอกค่าแบบลับ ตั้งวอลเปเปอร์ด้านล่าง";
 "set.input.digitgrid.help" = "ปัดซ้ายหรือขวาบนตาราง เพื่อสร้างค่า แล้วแตะไอคอน Posts เพื่อเปิดเผย";
 "set.input.digitgrid.noconfig" = "ไม่ต้องการการตั้งค่า";
-"set.input.clockinput.help" = "แสดงหน้าจอดำสนิทเมื่อ Performance เปิด ใส่ตัวเลข 1–100 ด้วยคู่การปัดตามทิศทาง กดค้างเพื่อปิดหลังเปิดเผย";
+"set.input.clockinput.help" = "แสดงหน้าจอสีดำสนิทเมื่อเปิด Performance ปัดเป็นคู่เพื่อป้อนตัวเลขให้ครบ แล้วกดค้างเพื่อยืนยัน กดค้างครั้งที่สองเพื่อปิดหน้าจอ";
 "set.input.clockinput.noconfig" = "ไม่ต้องการการตั้งค่า";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1211,6 +1211,9 @@
 "cooldown.photo" = "รูปโปรไฟล์";
 "cooldown.note" = "โน้ต";
 "cooldown.bio" = "ประวัติ";
+"cooldown.capture.note" = "จับภาพอินพุต (หมายเหตุ)";
+"cooldown.capture.bio" = "จับภาพอินพุต (ชีวประวัติ)";
+"cooldown.performance" = "หยุดชั่วคราว";
 "postpred.help.input.grid.encoding.title" = "การเข้ารหัสตัวเลข  (เหมือน Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1219,3 +1222,40 @@
 "set.input.cardclock.suits" = "การเข้ารหัสดอก  (ทิศทางเดียวกันสองครั้ง)";
 "set.input.cardclock.longpress" = "กดค้างที่ใดก็ได้บนกริดเพื่อยืนยัน";
 "set.input.cardclock.noconfig" = "ไม่ต้องตั้งค่า";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "นาฬิกาไพ่";
+"postpred.help.input.cardclock.guide.intro" = "ปัดนิ้วในทิศทางใดก็ได้บนกริด Instagram — เสมอ 4 ครั้ง: 2 ครั้งแรกระบุค่า (A–K) 2 ครั้งหลังระบุดอก กดค้างเพื่อยืนยัน";
+"postpred.help.input.cardclock.guide.values" = "การเข้ารหัสค่า  (หน้าปัดนาฬิกา)";
+"postpred.help.input.cardclock.guide.suits" = "การเข้ารหัสดอก  (ทิศทางเดียวกันสองครั้ง)";
+"postpred.help.input.cardclock.guide.examples" = "ตัวอย่าง";
+"postpred.help.input.cardclock.guide.ex.js" = "J โพดำ: ←↑ (ค่า J) + ↑↑ (โพดำ)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 ใจแดง: →→ (ค่า 3) + →→ (ใจแดง)";
+"postpred.help.input.cardclock.guide.ex.ad" = "A ข้าวหลามตัด: ↑→ (ค่า A) + ←← (ข้าวหลามตัด)";
+"postpred.help.input.cardclock.guide.longpress" = "หลังจากปัดครั้งที่ 4 กดค้างเพื่อยืนยัน ภาพไพ่ที่ตรงกันจะถูกเปิดเผยโดยอัตโนมัติ";
+
+"inputs.interface.exclusive.title" = "อินพุตเฉพาะ";
+"inputs.interface.exclusive.body" = "ใช้อินเทอร์เฟซอินพุตได้ครั้งละหนึ่งรายการสำหรับชุด ไบโอ และโน้ต รายการอื่นจะถูกล็อกขณะที่รายการนี้ทำงาน:";
+
+"inputs.conflict.alert.title" = "Anphuut thi mai khao kan";
+
+"inputs.conflict.alert.body" = "\"%@\" chai interface baep ekasit thi mai samat thamngaan phrom kan kap:
+
+%@
+
+Chai interface dai khrae nueng prapet tho khriang samrap Sets, Bio lae Notes. DamnoeniKan to pai cha pit chai kan leuak thi khat yaeng.";
+
+"inputs.conflict.alert.cancel" = "Yokloek";
+
+"inputs.conflict.alert.continue" = "Damnoeniakan to pai";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "เอซ";
+"card.value.jack" = "เจ";
+"card.value.queen" = "ควีน";
+"card.value.king" = "คิง";
+"card.suit.spades" = "โพดำ";
+"card.suit.hearts" = "โพแดง";
+"card.suit.clubs" = "ดอกจิก";
+"card.suit.diamonds" = "ข้าวหลามตัด";
+"card.name.format" = "%@%@";

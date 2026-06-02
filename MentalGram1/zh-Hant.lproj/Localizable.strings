@@ -1179,18 +1179,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "盲劃輸入";
-"postpred.help.input.clockinput.intro" = "開啟 Performance 時，螢幕完全變**黑** — 模擬手機關機。你秘密滑動輸入數字；觀眾看不到任何東西。";
-"postpred.help.input.clockinput.encoding.title" = "數字編碼  (每個數字 = 2次滑動)";
+"postpred.help.input.clockinput.intro" = "開啟 Performance 後螢幕完全變**黑** — 模擬手機已關機。滑動輸入任意位數的數字，然後長按確認。觀眾什麼都看不到。";
+"postpred.help.input.clockinput.encoding.title" = "數字編碼  （每個數字 = 2次滑動）";
 "postpred.help.input.clockinput.examples.title" = "範例";
-"postpred.help.input.clockinput.example5.note" = "輸入 05 → 數字 0 (↑↑) 然後數字 5 (↓→) — 共 4 次滑動";
-"postpred.help.input.clockinput.example37.note" = "數字 3 (→→) 然後數字 7 (↓←) — 共 4 次滑動";
-"postpred.help.input.clockinput.example100.note" = "數字 1 (↑→) 然後兩個 0 (↑↑ 各一次) — 共 6 次滑動";
+"postpred.help.input.clockinput.example5.note" = "單個數字 5 — 滑動2次，然後長按確認";
+"postpred.help.input.clockinput.example37.note" = "兩位數: 3 (→→) 再 7 (↓←) — 滑動4次，然後長按";
+"postpred.help.input.clockinput.example100.note" = "三位數: 3 (→→)、6 (↓↓)、9 (←←) — 滑動6次，然後長按";
 "postpred.help.input.clockinput.haptic.title" = "觸覺回饋";
-"postpred.help.input.clockinput.haptic.light" = "輕觸 — 每次滑動均已記錄";
-"postpred.help.input.clockinput.haptic.medium" = "中等震動 — 數字完成（2次滑動）";
-"postpred.help.input.clockinput.haptic.success" = "雙重強震 — 揭示成功";
-"postpred.help.input.clockinput.haptic.error" = "錯誤震動 + 螢幕閃爍 — 無效組合，重置";
-"postpred.help.input.clockinput.dismiss" = "揭示後，在黑屏上**長按 1 秒**以關閉。更新後的虛假 Instagram 主頁立即顯示。";
+"postpred.help.input.clockinput.haptic.light" = "輕觸 — 每次滑動均有回應";
+"postpred.help.input.clockinput.haptic.medium" = "中等震動 — 一個數字完成（2次滑動）";
+"postpred.help.input.clockinput.haptic.success" = "強烈雙震動 — 數字已確認（第1次長按）";
+"postpred.help.input.clockinput.haptic.error" = "錯誤震動 + 螢幕閃爍 — 無效滑動對；第2次滑動成為下一對的第1次";
+"postpred.help.input.clockinput.dismiss" = "**第1次長按**（1秒）確認數字並觸發揭示。**第2次長按**關閉黑屏 — 更新後的虛假 Instagram 主頁即時顯示。";
 
 // MARK: - Set Input Picker
 "set.input.label" = "輸入";
@@ -1206,7 +1206,7 @@
 "set.input.lockscreen.help" = "Performance 開啟時顯示虛假鎖定畫面，以便秘密輸入值。在下方設定桌布。";
 "set.input.digitgrid.help" = "在格格上左右滑動建立數值，然後點選貼文圖示揭示。";
 "set.input.digitgrid.noconfig" = "無需設定。";
-"set.input.clockinput.help" = "Performance 開啟時顯示全黑螢幕。用方向滑動對輸入 1–100 的數字。揭示後長按關閉。";
+"set.input.clockinput.help" = "開啟 Performance 時顯示全黑螢幕。透過滑動對輸入任意位數的數字，然後長按確認揭示。再次長按關閉螢幕。";
 "set.input.clockinput.noconfig" = "無需設定。";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1221,6 +1221,9 @@
 "cooldown.photo" = "大頭貼";
 "cooldown.note" = "備註";
 "cooldown.bio" = "個人簡介";
+"cooldown.capture.note" = "輸入擷取（備忘錄）";
+"cooldown.capture.bio" = "輸入擷取（個人簡介）";
+"cooldown.performance" = "效能暫停";
 "postpred.help.input.grid.encoding.title" = "數字編碼（與 Clock Input 相同）";
 
 // MARK: - Card Clock Input config
@@ -1229,3 +1232,40 @@
 "set.input.cardclock.suits" = "花色編碼  （同一方向兩次）";
 "set.input.cardclock.longpress" = "在格狀圖任意位置長按以確認並觸發 reveal。";
 "set.input.cardclock.noconfig" = "無需配置。";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "牌面時鐘";
+"postpred.help.input.cardclock.guide.intro" = "在 Instagram 格狀圖上向任意方向滑動 — 始終 4 次：前 2 次編碼牌面值（A–K），後 2 次編碼花色。長按以確認。";
+"postpred.help.input.cardclock.guide.values" = "點數編碼  （時鐘錶盤）";
+"postpred.help.input.cardclock.guide.suits" = "花色編碼  （同一方向兩次）";
+"postpred.help.input.cardclock.guide.examples" = "範例";
+"postpred.help.input.cardclock.guide.ex.js" = "黑桃J: ←↑（J值）+ ↑↑（黑桃）";
+"postpred.help.input.cardclock.guide.ex.3h" = "紅心3: →→（3值）+ →→（紅心）";
+"postpred.help.input.cardclock.guide.ex.ad" = "方塊A: ↑→（A值）+ ←←（方塊）";
+"postpred.help.input.cardclock.guide.longpress" = "第4次滑動後，長按格狀圖任意位置確認。對應牌照片自動被取消歸檔。";
+
+"inputs.interface.exclusive.title" = "獨佔輸入";
+"inputs.interface.exclusive.body" = "在合集、簡介和備註中，一次只能使用一個輸入介面。啟用此項時，其他介面將被鎖定：";
+
+"inputs.conflict.alert.title" = "Shu ru bu xiang rong";
+
+"inputs.conflict.alert.body" = "\"%@\" shi yong du zhan jie mian, wu fa yu yi xia nei rong tong shi yun xing:
+
+%@
+
+He ji, jian jie he bei zhu zhong yi ci zhi neng qi yong yi zhong jie mian lei xing. Ji xu jiang ting yong chong tu de xuan ze.";
+
+"inputs.conflict.alert.cancel" = "Qu xiao";
+
+"inputs.conflict.alert.continue" = "Ji xu";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "A";
+"card.value.jack" = "J";
+"card.value.queen" = "Q";
+"card.value.king" = "K";
+"card.suit.spades" = "黑桃";
+"card.suit.hearts" = "紅心";
+"card.suit.clubs" = "梅花";
+"card.suit.diamonds" = "方塊";
+"card.name.format" = "%2$@%1$@";

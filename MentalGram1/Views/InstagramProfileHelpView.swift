@@ -394,12 +394,18 @@ struct NoteHelpView: View {
 
     private var inputMethods: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 6) {
+            // Pills row — all available input methods
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], spacing: 6) {
                 IPHMethodPill(label: "API", color: Color(hex: "0A84FF"))
                 IPHMethodPill(label: "URL Scheme", color: accent)
                 IPHMethodPill(label: "OCR", color: Color(hex: "A78BFA"))
+                IPHMethodPill(label: "Number Lockscreen", color: Color(hex: "FF453A"))
+                IPHMethodPill(label: "Card Lockscreen", color: Color(hex: "FF453A"))
+                IPHMethodPill(label: "Number Clock", color: Color(hex: "FF9F0A"))
+                IPHMethodPill(label: "Card Clock", color: Color(hex: "30D158"))
             }
 
+            // API
             VStack(alignment: .leading, spacing: 10) {
                 Text("API")
                     .font(.system(size: 14, weight: .semibold))
@@ -410,6 +416,7 @@ struct NoteHelpView: View {
 
             iphDivider
 
+            // URL Scheme
             VStack(alignment: .leading, spacing: 10) {
                 Text("URL Scheme")
                     .font(.system(size: 14, weight: .semibold))
@@ -420,6 +427,7 @@ struct NoteHelpView: View {
 
             iphDivider
 
+            // OCR
             VStack(alignment: .leading, spacing: 10) {
                 Text("OCR — Camera Recognition")
                     .font(.system(size: 14, weight: .semibold))
@@ -427,6 +435,63 @@ struct NoteHelpView: View {
                 IPHBullet(icon: "camera.viewfinder", iconColor: Color(hex: "A78BFA"),
                           text: "Point the camera at a word the spectator wrote or a card they are holding — the app reads the text automatically and sends it as your note, no typing required.")
                 IPHOCRBox()
+            }
+
+            iphDivider
+
+            // Number Lockscreen
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Number Lockscreen")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "lock.fill", iconColor: Color(hex: "FF453A"),
+                          text: "Assign {text1}, {text2}, or {text3} to Number Lockscreen. When you open Performance, the fake lockscreen appears for hidden digit entry. The number you type is substituted into the note template and sent automatically. If a number/custom set is also active, the same number unarchives its slot.")
+            }
+
+            iphDivider
+
+            // Card Lockscreen
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Card Lockscreen")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "lock.rectangle.stack.fill", iconColor: Color(hex: "FF453A"),
+                          text: "Same fake lockscreen, but the digits you type are a card code (0 + value + suit). The card name in the device language (e.g. \"3 of hearts\") fills the template. If a card set is active, the same card is unarchived.")
+            }
+
+            iphDivider
+
+            // Number Clock
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Number Clock")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "hand.draw.fill", iconColor: Color(hex: "FF9F0A"),
+                          text: "Assign {text1}, {text2}, or {text3} to the Number Clock source. When Performance opens, a black screen appears. Swipe pairs to enter any number of digits (1, 2, 3 or more), then long-press to confirm. The number fills the template and the note is sent.")
+            }
+
+            iphDivider
+
+            // Card Clock
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Card Clock")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "clock.fill", iconColor: Color(hex: "30D158"),
+                          text: "Assign {text1}, {text2}, or {text3} to Card Clock. A black screen appears in Performance (the screen looks off). Swipe the value pair + suit pair (4 swipes), then long-press to confirm. The card name in the device language (e.g. \"3 of hearts\") fills the template. If a card set is active, the same card is unarchived.")
+            }
+
+            iphDivider
+
+            // Compatibility
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Compatibility")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "checkmark.circle.fill", iconColor: VaultTheme.Colors.success,
+                          text: "The SAME interface type can be shared across Set, Biography, and Notes — one capture fills them all at once (e.g. Card Clock in Bio + Notes + Set).")
+                IPHBullet(icon: "exclamationmark.triangle.fill", iconColor: VaultTheme.Colors.warning,
+                          text: "DIFFERENT interface types cannot coexist (only one capture happens per performance): OCR, Number Clock, Card Clock, Number Lockscreen and Card Lockscreen are mutually exclusive. Settings warns you and offers to deactivate the conflicting ones.")
             }
         }
     }
@@ -436,9 +501,9 @@ struct NoteHelpView: View {
             IPHBullet(icon: "1.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Ask the spectator to think of or write a short word (max 60 characters).")
             IPHBullet(icon: "2.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Use OCR to read it covertly, or enter it manually before the performance.")
+                      text: "Capture it via OCR, enter it via API/URL Scheme, or use Lockscreen / Number Clock / Card Clock for covert digit or card entry.")
             IPHBullet(icon: "3.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Open Performance — the note posts automatically (with API or URL Scheme) or tap \"Send Note\". It appears in the fake profile instantly.")
+                      text: "Open Performance — the note posts automatically (API / URL Scheme / interface input) or tap \"Send Note\". It appears in the fake profile instantly.")
             IPHBullet(icon: "4.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Wait for the vibration confirming the note is live on real Instagram, then open your own profile before the spectator looks.")
             IPHRealVsFakeBox()
@@ -454,9 +519,11 @@ struct NoteHelpView: View {
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
                       text: "Use the URL Scheme method with Apple Shortcuts so the note posts the moment you open the app — zero visible interaction.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
-                      text: "Use the Text Template field to wrap the word in a sentence. Type {text1} where the detected word should appear — e.g. \"My prediction is: {text1}\".")
+                      text: "Use the Text Template field to wrap the value in a sentence — e.g. \"My prediction is: {text1}\". Works with any source: API, OCR, Lockscreen, Number Clock, or Card Clock.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
-                      text: "Need two values in one note? Use {text1} and {text2} in your template, each sourced from a different API.")
+                      text: "Need two values in one note? Use {text1} and {text2} in your template. They can come from different APIs, or both from the same interface capture (same captured value fills all interface-assigned slots).")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Only one interface type (OCR, Lockscreen, Number Clock, Card Clock) can be active per performance. If your Set already uses Lockscreen, Biography and Notes can also use Lockscreen but not a different interface type.")
         }
     }
 }
@@ -542,13 +609,19 @@ struct BiographyHelpView: View {
 
     private var inputMethods: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 6) {
+            // Pills row
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], spacing: 6) {
                 IPHMethodPill(label: "API", color: Color(hex: "0A84FF"))
                 IPHMethodPill(label: "URL Scheme", color: accent)
                 IPHMethodPill(label: "OCR", color: Color(hex: "A78BFA"))
-                IPHMethodPill(label: "Templates", color: Color(hex: "30D158"))
+                IPHMethodPill(label: "Number Lockscreen", color: Color(hex: "FF453A"))
+                IPHMethodPill(label: "Card Lockscreen", color: Color(hex: "FF453A"))
+                IPHMethodPill(label: "Number Clock", color: Color(hex: "FF9F0A"))
+                IPHMethodPill(label: "Card Clock", color: Color(hex: "30D158"))
+                IPHMethodPill(label: "Templates", color: Color(hex: "64D2FF"))
             }
 
+            // API
             VStack(alignment: .leading, spacing: 10) {
                 Text("API")
                     .font(.system(size: 14, weight: .semibold))
@@ -561,6 +634,7 @@ struct BiographyHelpView: View {
 
             iphDivider
 
+            // URL Scheme
             VStack(alignment: .leading, spacing: 10) {
                 Text("URL Scheme")
                     .font(.system(size: 14, weight: .semibold))
@@ -573,6 +647,7 @@ struct BiographyHelpView: View {
 
             iphDivider
 
+            // OCR
             VStack(alignment: .leading, spacing: 10) {
                 Text("OCR — Camera Recognition")
                     .font(.system(size: 14, weight: .semibold))
@@ -584,16 +659,74 @@ struct BiographyHelpView: View {
 
             iphDivider
 
+            // Number Lockscreen
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Number Lockscreen")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "lock.fill", iconColor: Color(hex: "FF453A"),
+                          text: "Assign {text1}, {text2}, or {text3} to Number Lockscreen. When you open Performance, the fake lockscreen appears. Type the number covertly — it is substituted into the bio template and sent automatically. If a number/custom set is also active, the same number unarchives its slot.")
+            }
+
+            iphDivider
+
+            // Card Lockscreen
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Card Lockscreen")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "lock.rectangle.stack.fill", iconColor: Color(hex: "FF453A"),
+                          text: "Same fake lockscreen, but the digits are a card code (0 + value + suit). The card name in the device language (e.g. \"3 of hearts\") fills the bio template. If a card set is active, the same card is unarchived.")
+            }
+
+            iphDivider
+
+            // Number Clock
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Number Clock")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "hand.draw.fill", iconColor: Color(hex: "FF9F0A"),
+                          text: "Assign {text1}, {text2}, or {text3} to Number Clock. A black screen appears when Performance opens. Swipe pairs to enter any number of digits (1, 2, 3 or more), then long-press to confirm. The number fills the bio template and the bio is updated.")
+            }
+
+            iphDivider
+
+            // Card Clock
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Card Clock")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "clock.fill", iconColor: Color(hex: "30D158"),
+                          text: "Assign {text1}, {text2}, or {text3} to Card Clock. A black screen appears in Performance (the screen looks off). Swipe the value pair + suit pair (4 swipes), then long-press to confirm. The card name in the device language (e.g. \"3 of hearts\") fills the bio template. If a card set is active, the same card is unarchived.")
+            }
+
+            iphDivider
+
+            // Compatibility
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Compatibility")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                IPHBullet(icon: "checkmark.circle.fill", iconColor: VaultTheme.Colors.success,
+                          text: "The SAME interface type can be shared across Set, Biography, and Notes — one capture fills them all at once.")
+                IPHBullet(icon: "exclamationmark.triangle.fill", iconColor: VaultTheme.Colors.warning,
+                          text: "DIFFERENT interface types cannot coexist: OCR, Number Clock, Card Clock, Number Lockscreen and Card Lockscreen are mutually exclusive. Settings warns you and offers to deactivate the conflicting ones.")
+            }
+
+            iphDivider
+
+            // Templates
             VStack(alignment: .leading, spacing: 10) {
                 Text("Bio Templates (T1 – T4)")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textPrimary)
-                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "30D158"),
+                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "64D2FF"),
                           text: "Above the biography text field there are four template slots — T1, T2, T3, T4. Tap a slot to switch to that template and edit it freely.")
-                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "30D158"),
-                          text: "The active template is the one used when you tap \"Update Biography\", during Performance auto-updates, and when triggered via URL Scheme — so you can have up to 4 completely different bio texts ready without retyping.")
-                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "30D158"),
-                          text: "You can include {text1}, {text2}, {text3} placeholders inside any template. The placeholders are replaced at send time by their configured API, OCR, or Inject source.")
+                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "64D2FF"),
+                          text: "The active template is the one used when you tap \"Update Biography\", during Performance auto-updates, and when triggered via URL Scheme — up to 4 completely different bio texts ready without retyping.")
+                IPHBullet(icon: "square.grid.2x2.fill", iconColor: Color(hex: "64D2FF"),
+                          text: "Use {text1}, {text2}, {text3} anywhere in the template. At send time, each placeholder is replaced by its configured source — API, OCR, Lockscreen, Number Clock, or Card Clock.")
             }
         }
     }
@@ -603,9 +736,9 @@ struct BiographyHelpView: View {
             IPHBullet(icon: "1.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Have the spectator write or choose a word / phrase beforehand (up to 150 characters).")
             IPHBullet(icon: "2.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Capture it via OCR, load it via API, type it manually, or select the matching template slot (T1–T4) in one tap.")
+                      text: "Capture it via OCR, load via API, type it manually, use Lockscreen / Number Clock / Card Clock for covert digit or card entry, or select the matching template slot (T1–T4) in one tap.")
             IPHBullet(icon: "3.circle.fill", iconColor: VaultTheme.Colors.warning,
-                      text: "Open Performance (or trigger the URL Scheme) — the biography updates in the fake profile instantly.")
+                      text: "Open Performance (or trigger the URL Scheme) — the biography updates in the fake profile instantly. If using Lockscreen or Number Clock, the interface appears first for covert input before showing the fake Instagram profile.")
             IPHBullet(icon: "4.circle.fill", iconColor: VaultTheme.Colors.warning,
                       text: "Wait for the vibration confirming the bio is live on real Instagram, then visit your own Instagram profile before showing the spectator.")
             IPHRealVsFakeBox()
@@ -620,6 +753,12 @@ struct BiographyHelpView: View {
                       text: "The biography works for any text — not just single words. You can reveal a sentence, a date, or a full phrase.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
                       text: "Press Return inside the bio field to add line breaks — the formatting is preserved when sent to Instagram.")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Use {text1} in the template with Number Clock to show the spectator's thought-of number — e.g. \"You thought of the number {text1}\".")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Use {text1} with Card Clock for card reveals — e.g. \"Your card was {text1}\" fills automatically with the encoded card (e.g. A♠).")
+            IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
+                      text: "Only one interface type (OCR, Lockscreen, Number Clock, Card Clock) can run per performance — shared across Set, Bio, and Notes. Configure all slots to use the same type.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),
                       text: "Combine with the Profile Picture method: update both the photo and the bio to make an even stronger double reveal.")
             IPHBullet(icon: "lightbulb", iconColor: Color(hex: "F472B6"),

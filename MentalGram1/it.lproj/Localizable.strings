@@ -1702,18 +1702,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "SCORRIMENTO CIECO";
-"postpred.help.input.clockinput.intro" = "All'apertura di Performance, lo schermo diventa completamente **nero** — simulando che il telefono sia spento. Scorri di nascosto per inserire un numero; lo spettatore non vede nulla.";
-"postpred.help.input.clockinput.encoding.title" = "CODIFICA DELLE CIFRE  (ogni cifra = 2 scorrimenti)";
+"postpred.help.input.clockinput.intro" = "Quando si apre Performance, lo schermo diventa completamente **nero** — come se il telefono fosse spento. Scorri per inserire tutte le cifre necessarie, poi tieni premuto per confermare. Lo spettatore non vede nulla.";
+"postpred.help.input.clockinput.encoding.title" = "CODIFICA CIFRE  (ogni cifra = 2 swipe)";
 "postpred.help.input.clockinput.examples.title" = "ESEMPI";
-"postpred.help.input.clockinput.example5.note" = "Inserire 05 → cifra 0 (↑↑) poi cifra 5 (↓→) — 4 scorrimenti in totale";
-"postpred.help.input.clockinput.example37.note" = "Cifra 3 (→→) poi cifra 7 (↓←) — 4 scorrimenti in totale";
-"postpred.help.input.clockinput.example100.note" = "Cifra 1 (↑→) poi due 0 (↑↑ ciascuno) — 6 scorrimenti in totale";
+"postpred.help.input.clockinput.example5.note" = "Cifra singola 5 — 2 swipe, poi tieni premuto per confermare";
+"postpred.help.input.clockinput.example37.note" = "Due cifre: 3 (→→) poi 7 (↓←) — 4 swipe, poi tieni premuto";
+"postpred.help.input.clockinput.example100.note" = "Tre cifre: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipe, poi tieni premuto";
 "postpred.help.input.clockinput.haptic.title" = "FEEDBACK APTICO";
-"postpred.help.input.clockinput.haptic.light" = "Tocco leggero — ogni scorrimento registrato";
-"postpred.help.input.clockinput.haptic.medium" = "Impulso medio — cifra completata (2 scorrimenti)";
-"postpred.help.input.clockinput.haptic.success" = "Doppia vibrazione forte — rivelazione riuscita";
-"postpred.help.input.clockinput.haptic.error" = "Vibrazione errore + flash schermo — coppia non valida, ripristino";
-"postpred.help.input.clockinput.dismiss" = "Dopo la rivelazione, **tieni premuto 1 secondo** sullo schermo nero per chiuderlo. Il profilo Instagram falso aggiornato appare immediatamente.";
+"postpred.help.input.clockinput.haptic.light" = "Tocco leggero — ogni singolo swipe registrato";
+"postpred.help.input.clockinput.haptic.medium" = "Impulso medio — cifra completata (2 swipe)";
+"postpred.help.input.clockinput.haptic.success" = "Doppia vibrazione forte — numero confermato (1a pressione lunga)";
+"postpred.help.input.clockinput.haptic.error" = "Buzz errore + flash — coppia non valida; il 2° swipe diventa il 1° della coppia successiva";
+"postpred.help.input.clockinput.dismiss" = "**Prima pressione lunga** (1 s) conferma le cifre e attiva la rivelazione. **Seconda pressione lunga** chiude lo schermo nero — il profilo Instagram falso aggiornato appare immediatamente.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Inserimento";
@@ -1729,7 +1729,7 @@
 "set.input.lockscreen.help" = "Mostra una falsa schermata di blocco all'apertura di Performance per inserire il valore in segreto. Imposta uno sfondo sotto.";
 "set.input.digitgrid.help" = "Scorri a sinistra o destra sulla griglia per costruire il valore, poi tocca l'icona Post per rivelare.";
 "set.input.digitgrid.noconfig" = "Nessuna configurazione richiesta.";
-"set.input.clockinput.help" = "Mostra uno schermo completamente nero all'apertura di Performance. Inserisci un numero da 1 a 100 con coppie di scorrimenti direzionali. Premi a lungo per chiudere dopo la rivelazione.";
+"set.input.clockinput.help" = "Mostra uno schermo completamente nero all'apertura di Performance. Scorri coppie per inserire qualsiasi numero di cifre, poi tieni premuto per confermare. Una seconda pressione lunga chiude lo schermo.";
 "set.input.clockinput.noconfig" = "Nessuna configurazione richiesta.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1744,6 +1744,9 @@
 "cooldown.photo" = "Foto profilo";
 "cooldown.note" = "Nota";
 "cooldown.bio" = "Biografia";
+"cooldown.capture.note" = "Acquisizione Input (Nota)";
+"cooldown.capture.bio" = "Acquisizione Input (Biografia)";
+"cooldown.performance" = "Pausa Performance";
 "postpred.help.input.grid.encoding.title" = "Codifica delle cifre  (come Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1752,3 +1755,40 @@
 "set.input.cardclock.suits" = "Codifica del seme  (stessa direzione due volte)";
 "set.input.cardclock.longpress" = "Tieni premuto ovunque sulla griglia per confermare.";
 "set.input.cardclock.noconfig" = "Nessuna configurazione richiesta.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "OROLOGIO CARTA";
+"postpred.help.input.cardclock.guide.intro" = "Scorri in qualsiasi direzione sulla griglia Instagram — sempre 4 swipe: i primi 2 codificano il valore (A–K), gli ultimi 2 il seme. Tieni premuto per confermare.";
+"postpred.help.input.cardclock.guide.values" = "CODIFICA DEL VALORE  (quadrante orologio)";
+"postpred.help.input.cardclock.guide.suits" = "CODIFICA DEL SEME  (stessa direzione due volte)";
+"postpred.help.input.cardclock.guide.examples" = "ESEMPI";
+"postpred.help.input.cardclock.guide.ex.js" = "Fante di Picche: ←↑ (valore J) + ↑↑ (picche)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 di Cuori: →→ (valore 3) + →→ (cuori)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Asso di Quadri: ↑→ (valore A) + ←← (quadri)";
+"postpred.help.input.cardclock.guide.longpress" = "Dopo il 4° swipe, tieni premuto per confermare. La foto della carta si disarchivia automaticamente.";
+
+"inputs.interface.exclusive.title" = "Input esclusivo";
+"inputs.interface.exclusive.body" = "Può essere attiva una sola interfaccia di input alla volta tra Set, Bio e Note. Le altre restano bloccate mentre questa è attiva:";
+
+"inputs.conflict.alert.title" = "Input incompatibile";
+
+"inputs.conflict.alert.body" = "\"%@\" usa un'interfaccia esclusiva che non puo funzionare insieme a:
+
+%@
+
+Solo un tipo di interfaccia puo essere attivo alla volta tra Set, Bio e Note. Continuando le selezioni in conflitto verranno disattivate.";
+
+"inputs.conflict.alert.cancel" = "Annulla";
+
+"inputs.conflict.alert.continue" = "Continua";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "asso";
+"card.value.jack" = "jack";
+"card.value.queen" = "donna";
+"card.value.king" = "re";
+"card.suit.spades" = "picche";
+"card.suit.hearts" = "cuori";
+"card.suit.clubs" = "fiori";
+"card.suit.diamonds" = "quadri";
+"card.name.format" = "%@ di %@";

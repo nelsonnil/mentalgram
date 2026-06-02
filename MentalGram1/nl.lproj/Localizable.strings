@@ -1519,18 +1519,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "BLIND VEGEN";
-"postpred.help.input.clockinput.intro" = "Wanneer Performance opent, wordt het scherm volledig **zwart** — alsof de telefoon uit is. Je veegt stiekem om een getal in te voeren; de toeschouwer ziet niets.";
-"postpred.help.input.clockinput.encoding.title" = "CIJFERCODERING  (elk cijfer = 2 veegbewegingen)";
+"postpred.help.input.clockinput.intro" = "Wanneer Performance opent, wordt het scherm volledig **zwart** — alsof de telefoon is uitgeschakeld. Swipe zoveel cijfers als nodig en druk lang om te bevestigen. De toeschouwer ziet niets.";
+"postpred.help.input.clockinput.encoding.title" = "CIJFERCODERING  (elk cijfer = 2 swipes)";
 "postpred.help.input.clockinput.examples.title" = "VOORBEELDEN";
-"postpred.help.input.clockinput.example5.note" = "Voer 05 in → cijfer 0 (↑↑) dan cijfer 5 (↓→) — 4 veegbewegingen totaal";
-"postpred.help.input.clockinput.example37.note" = "Cijfer 3 (→→) dan cijfer 7 (↓←) — 4 veegbewegingen totaal";
-"postpred.help.input.clockinput.example100.note" = "Cijfer 1 (↑→) dan twee 0s (↑↑ elk) — 6 veegbewegingen totaal";
+"postpred.help.input.clockinput.example5.note" = "Enkel cijfer 5 — 2 swipes, dan lang drukken om te bevestigen";
+"postpred.help.input.clockinput.example37.note" = "Twee cijfers: 3 (→→) dan 7 (↓←) — 4 swipes, dan lang drukken";
+"postpred.help.input.clockinput.example100.note" = "Drie cijfers: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, dan lang drukken";
 "postpred.help.input.clockinput.haptic.title" = "HAPTISCHE FEEDBACK";
-"postpred.help.input.clockinput.haptic.light" = "Lichte tik — elke afzonderlijke veegbeweging geregistreerd";
-"postpred.help.input.clockinput.haptic.medium" = "Middel puls — cijfer voltooid (2 veegbewegingen)";
-"postpred.help.input.clockinput.haptic.success" = "Dubbele sterke trilling — onthulling geslaagd";
-"postpred.help.input.clockinput.haptic.error" = "Foutbuzz + schermflits — ongeldig paar, reset";
-"postpred.help.input.clockinput.dismiss" = "Na de onthulling **1 seconde ingedrukt houden** op het zwarte scherm om het te sluiten. Het bijgewerkte neppe Instagram-profiel verschijnt direct.";
+"postpred.help.input.clockinput.haptic.light" = "Lichte tik — elke afzonderlijke swipe geregistreerd";
+"postpred.help.input.clockinput.haptic.medium" = "Middenpuls — cijfer voltooid (2 swipes)";
+"postpred.help.input.clockinput.haptic.success" = "Dubbele sterke vibratie — getal bevestigd (1e lang drukken)";
+"postpred.help.input.clockinput.haptic.error" = "Foutbuzz + schermflits — ongeldig paar; 2e swipe wordt 1e van volgend paar";
+"postpred.help.input.clockinput.dismiss" = "**Eerste lang drukken** (1 s) bevestigt de cijfers en activeert de onthulling. **Tweede lang drukken** sluit het zwarte scherm — het bijgewerkte nep-Instagram-profiel verschijnt direct.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Invoer";
@@ -1546,7 +1546,7 @@
 "set.input.lockscreen.help" = "Toont een nep-vergrendelscherm bij het openen van Performance om de waarde geheim in te voeren. Kies een achtergrond hieronder.";
 "set.input.digitgrid.help" = "Veeg links of rechts over het raster om de waarde te vormen en tik op het Berichten-icoon om te onthullen.";
 "set.input.digitgrid.noconfig" = "Geen configuratie vereist.";
-"set.input.clockinput.help" = "Toont een volledig zwart scherm bij het openen van Performance. Voer een getal van 1–100 in met richtingsveegparen. Lang indrukken om te sluiten na de onthulling.";
+"set.input.clockinput.help" = "Toont een volledig zwart scherm bij het openen van Performance. Swipe paren voor zoveel cijfers als gewenst en druk lang om te bevestigen. Een tweede lang drukken sluit het scherm.";
 "set.input.clockinput.noconfig" = "Geen configuratie vereist.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1561,6 +1561,9 @@
 "cooldown.photo" = "Profielfoto";
 "cooldown.note" = "Notitie";
 "cooldown.bio" = "Biografie";
+"cooldown.capture.note" = "Invoer Vastleggen (Notitie)";
+"cooldown.capture.bio" = "Invoer Vastleggen (Biografie)";
+"cooldown.performance" = "Performance pauze";
 "postpred.help.input.grid.encoding.title" = "Cijfercodering  (zelfde als Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1569,3 +1572,40 @@
 "set.input.cardclock.suits" = "Kleurcode  (dezelfde richting tweemaal)";
 "set.input.cardclock.longpress" = "Houd ergens op het raster ingedrukt om te bevestigen.";
 "set.input.cardclock.noconfig" = "Geen configuratie vereist.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "KAARTKLOK";
+"postpred.help.input.cardclock.guide.intro" = "Veeg in beliebige richting over het Instagram-raster — altijd 4 vegen: de eerste 2 coderen de waarde (A–K), de laatste 2 de kleur. Houd ingedrukt om te bevestigen.";
+"postpred.help.input.cardclock.guide.values" = "WAARDECODE  (klokwijzerplaat)";
+"postpred.help.input.cardclock.guide.suits" = "KLEURCODE  (dezelfde richting tweemaal)";
+"postpred.help.input.cardclock.guide.examples" = "VOORBEELDEN";
+"postpred.help.input.cardclock.guide.ex.js" = "Boer Schoppen: ←↑ (waarde J) + ↑↑ (schoppen)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Harten: →→ (waarde 3) + →→ (harten)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Aas Ruiten: ↑→ (waarde A) + ←← (ruiten)";
+"postpred.help.input.cardclock.guide.longpress" = "Na de 4e veeg houd ingedrukt om te bevestigen. De bijbehorende kaartfoto wordt automatisch gedearchiveerd.";
+
+"inputs.interface.exclusive.title" = "Exclusieve invoer";
+"inputs.interface.exclusive.body" = "Er kan maar één invoerinterface tegelijk actief zijn voor Sets, Bio en Notities. De andere blijven vergrendeld zolang deze actief is:";
+
+"inputs.conflict.alert.title" = "Incompatibele invoer";
+
+"inputs.conflict.alert.body" = "\"%@\" gebruikt een exclusieve interface die niet tegelijkertijd kan werken met:
+
+%@
+
+Slechts een interfacetype kan tegelijk actief zijn voor Sets, Bio en Notities. Als u doorgaat, worden de conflicterende selecties gedeactiveerd.";
+
+"inputs.conflict.alert.cancel" = "Annuleren";
+
+"inputs.conflict.alert.continue" = "Doorgaan";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "aas";
+"card.value.jack" = "boer";
+"card.value.queen" = "vrouw";
+"card.value.king" = "heer";
+"card.suit.spades" = "schoppen";
+"card.suit.hearts" = "harten";
+"card.suit.clubs" = "klaveren";
+"card.suit.diamonds" = "ruiten";
+"card.name.format" = "%@ %@";

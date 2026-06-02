@@ -1169,18 +1169,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "स्वाइप ब्लाइंड";
-"postpred.help.input.clockinput.intro" = "Performance खुलने पर स्क्रीन पूरी तरह **काली** हो जाती है — फोन बंद होने का अनुकरण। आप गुप्त रूप से नंबर दर्ज करने के लिए स्वाइप करते हैं; दर्शक को कुछ नहीं दिखता।";
-"postpred.help.input.clockinput.encoding.title" = "अंक कोडिंग  (प्रत्येक अंक = 2 स्वाइप)";
+"postpred.help.input.clockinput.intro" = "Performance खुलने पर स्क्रीन पूरी तरह **काली** हो जाती है — जैसे फ़ोन बंद हो। जितने अंक चाहिए उतने स्वाइप करें, फिर लंबे दबाव से पुष्टि करें। दर्शक कुछ नहीं देखते।";
+"postpred.help.input.clockinput.encoding.title" = "अंक एन्कोडिंग  (प्रत्येक अंक = 2 स्वाइप)";
 "postpred.help.input.clockinput.examples.title" = "उदाहरण";
-"postpred.help.input.clockinput.example5.note" = "05 दर्ज करें → अंक 0 (↑↑) फिर अंक 5 (↓→) — कुल 4 स्वाइप";
-"postpred.help.input.clockinput.example37.note" = "अंक 3 (→→) फिर अंक 7 (↓←) — कुल 4 स्वाइप";
-"postpred.help.input.clockinput.example100.note" = "अंक 1 (↑→) फिर दो 0 (↑↑ प्रत्येक) — कुल 6 स्वाइप";
+"postpred.help.input.clockinput.example5.note" = "एकल अंक 5 — 2 स्वाइप, फिर लंबा दबाव";
+"postpred.help.input.clockinput.example37.note" = "दो अंक: 3 (→→) फिर 7 (↓←) — 4 स्वाइप, फिर लंबा दबाव";
+"postpred.help.input.clockinput.example100.note" = "तीन अंक: 3 (→→), 6 (↓↓), 9 (←←) — 6 स्वाइप, फिर लंबा दबाव";
 "postpred.help.input.clockinput.haptic.title" = "हैप्टिक फ़ीडबैक";
-"postpred.help.input.clockinput.haptic.light" = "हल्का टैप — प्रत्येक स्वाइप दर्ज";
-"postpred.help.input.clockinput.haptic.medium" = "मध्यम पल्स — अंक पूर्ण (2 स्वाइप)";
-"postpred.help.input.clockinput.haptic.success" = "दोहरा तेज़ कंपन — रिवील सफल";
-"postpred.help.input.clockinput.haptic.error" = "त्रुटि बज + स्क्रीन फ्लैश — अमान्य जोड़ी, रीसेट";
-"postpred.help.input.clockinput.dismiss" = "रिवील के बाद, काली स्क्रीन बंद करने के लिए **1 सेकंड दबाए रखें**। अपडेटेड फेक Instagram प्रोफाइल तुरंत दिखाई देता है।";
+"postpred.help.input.clockinput.haptic.light" = "हल्का स्पर्श — प्रत्येक स्वाइप पंजीकृत";
+"postpred.help.input.clockinput.haptic.medium" = "मध्यम स्पंदन — अंक पूर्ण (2 स्वाइप)";
+"postpred.help.input.clockinput.haptic.success" = "दोहरी तेज़ वाइब्रेशन — संख्या पुष्ट (पहला लंबा दबाव)";
+"postpred.help.input.clockinput.haptic.error" = "त्रुटि वाइब्रेशन + फ्लैश — अमान्य जोड़ी; दूसरा स्वाइप अगली जोड़ी का पहला बन जाता है";
+"postpred.help.input.clockinput.dismiss" = "**पहला लंबा दबाव** (1 सेकंड) अंकों की पुष्टि करता है और खुलासा शुरू करता है। **दूसरा लंबा दबाव** काली स्क्रीन बंद करता है — अपडेट किया गया नकली Instagram प्रोफ़ाइल तुरंत दिखता है।";
 
 // MARK: - Set Input Picker
 "set.input.label" = "इनपुट";
@@ -1196,7 +1196,7 @@
 "set.input.lockscreen.help" = "Performance खुलने पर नकली लॉक स्क्रीन दिखाता है ताकि आप गुप्त रूप से मान दर्ज कर सकें। नीचे वॉलपेपर सेट करें।";
 "set.input.digitgrid.help" = "ग्रिड पर बाएं या दाएं स्वाइप करके मान बनाएं, फिर रिवील के लिए Posts आइकन टैप करें।";
 "set.input.digitgrid.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
-"set.input.clockinput.help" = "Performance खुलने पर पूरी तरह काली स्क्रीन दिखाता है। दिशात्मक स्वाइप जोड़ों से 1–100 नंबर दर्ज करें। रिवील के बाद बंद करने के लिए लंबे दबाएं।";
+"set.input.clockinput.help" = "Performance खुलने पर पूरी तरह काली स्क्रीन दिखाता है। स्वाइप जोड़ियों से अंक दर्ज करें, फिर लंबे दबाव से पुष्टि करें। दूसरे लंबे दबाव से स्क्रीन बंद होती है।";
 "set.input.clockinput.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1211,6 +1211,9 @@
 "cooldown.photo" = "प्रोफ़ाइल फ़ोटो";
 "cooldown.note" = "नोट";
 "cooldown.bio" = "जीवनी";
+"cooldown.capture.note" = "इनपुट कैप्चर (नोट)";
+"cooldown.capture.bio" = "इनपुट कैप्चर (जीवनी)";
+"cooldown.performance" = "प्रदर्शन विराम";
 "postpred.help.input.grid.encoding.title" = "अंक एन्कोडिंग  (Clock Input जैसी)";
 
 // MARK: - Card Clock Input config
@@ -1219,3 +1222,40 @@
 "set.input.cardclock.suits" = "सूट कोडिंग  (एक ही दिशा दो बार)";
 "set.input.cardclock.longpress" = "पुष्टि के लिए ग्रिड पर कहीं भी लंबे समय तक दबाएं।";
 "set.input.cardclock.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "कार्ड क्लॉक";
+"postpred.help.input.cardclock.guide.intro" = "Instagram ग्रिड पर किसी भी दिशा में स्वाइप करें — हमेशा 4 बार: पहले 2 मान (A–K) कोड करते हैं, अंतिम 2 सूट। पुष्टि के लिए लंबे समय तक दबाएं।";
+"postpred.help.input.cardclock.guide.values" = "मूल्य कोडिंग  (घड़ी की डायल)";
+"postpred.help.input.cardclock.guide.suits" = "सूट कोडिंग  (एक ही दिशा दो बार)";
+"postpred.help.input.cardclock.guide.examples" = "उदाहरण";
+"postpred.help.input.cardclock.guide.ex.js" = "स्पेड्स का जैक: ←↑ (J मान) + ↑↑ (स्पेड्स)";
+"postpred.help.input.cardclock.guide.ex.3h" = "हार्ट्स का 3: →→ (3 मान) + →→ (हार्ट्स)";
+"postpred.help.input.cardclock.guide.ex.ad" = "डायमंड का इक्का: ↑→ (A मान) + ←← (डायमंड)";
+"postpred.help.input.cardclock.guide.longpress" = "4वें स्वाइप के बाद पुष्टि के लिए लंबे समय तक दबाएं। संबंधित कार्ड फोटो स्वचालित रूप से प्रकट होती है।";
+
+"inputs.interface.exclusive.title" = "अनन्य इनपुट";
+"inputs.interface.exclusive.body" = "सेट, बायो और नोट्स में एक समय पर केवल एक इनपुट इंटरफ़ेस चल सकता है। यह सक्रिय रहने पर बाकी लॉक रहते हैं:";
+
+"inputs.conflict.alert.title" = "Asangat input";
+
+"inputs.conflict.alert.body" = "\"%@\" ek ananya interface ka upayog karta hai jo nimn ke saath ek saath nahin chal sakta:
+
+%@
+
+Sets, Bio aur Notes mein ek samay par keval ek interface prakar sakriy ho sakta hai. Jaari rakhne par, virodhabhaasi chayan niskriy ho jaayenge.";
+
+"inputs.conflict.alert.cancel" = "Radd karen";
+
+"inputs.conflict.alert.continue" = "Jaari rakhen";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "इक्का";
+"card.value.jack" = "गुलाम";
+"card.value.queen" = "बेगम";
+"card.value.king" = "बादशाह";
+"card.suit.spades" = "हुकुम";
+"card.suit.hearts" = "पान";
+"card.suit.clubs" = "चिड़ी";
+"card.suit.diamonds" = "ईंट";
+"card.name.format" = "%@ %@";

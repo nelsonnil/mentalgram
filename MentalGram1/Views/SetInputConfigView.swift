@@ -277,7 +277,7 @@ private struct ApiInputConfig: View {
                 .foregroundColor(VaultTheme.Colors.textPrimary)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 6)], alignment: .leading, spacing: 6) {
-                ForEach(ApiSource.allCases.filter { $0 != .none && $0 != .ocr }, id: \.rawValue) { src in
+                ForEach(ApiSource.allCases.filter { $0 != .none && !$0.isInterfaceInput }, id: \.rawValue) { src in
                     let isActive = integrations.ppApiSource == src
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {

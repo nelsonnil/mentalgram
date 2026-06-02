@@ -1703,18 +1703,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "GLISSEMENT AVEUGLE";
-"postpred.help.input.clockinput.intro" = "Quand Performance s'ouvre, l'écran devient complètement **noir** — simulant que le téléphone est éteint. Tu glisses secrètement pour entrer un nombre ; le spectateur ne voit rien.";
+"postpred.help.input.clockinput.intro" = "Quand Performance s'ouvre, l'écran devient entièrement **noir** — comme si le téléphone était éteint. Faites glisser autant de chiffres que nécessaire, puis appuyez longuement pour confirmer. Le spectateur ne voit rien.";
 "postpred.help.input.clockinput.encoding.title" = "ENCODAGE DES CHIFFRES  (chaque chiffre = 2 glissements)";
 "postpred.help.input.clockinput.examples.title" = "EXEMPLES";
-"postpred.help.input.clockinput.example5.note" = "Entrer 05 → chiffre 0 (↑↑) puis chiffre 5 (↓→) — 4 glissements au total";
-"postpred.help.input.clockinput.example37.note" = "Chiffre 3 (→→) puis chiffre 7 (↓←) — 4 glissements au total";
-"postpred.help.input.clockinput.example100.note" = "Chiffre 1 (↑→) puis deux 0s (↑↑ chacun) — 6 glissements au total";
+"postpred.help.input.clockinput.example5.note" = "Chiffre unique 5 — 2 glissements puis appui long pour confirmer";
+"postpred.help.input.clockinput.example37.note" = "Deux chiffres : 3 (→→) puis 7 (↓←) — 4 glissements puis appui long";
+"postpred.help.input.clockinput.example100.note" = "Trois chiffres : 3 (→→), 6 (↓↓), 9 (←←) — 6 glissements puis appui long";
 "postpred.help.input.clockinput.haptic.title" = "RETOUR HAPTIQUE";
-"postpred.help.input.clockinput.haptic.light" = "Tap léger — chaque glissement individuel enregistré";
+"postpred.help.input.clockinput.haptic.light" = "Léger tapotement — chaque glissement individuel enregistré";
 "postpred.help.input.clockinput.haptic.medium" = "Impulsion moyenne — chiffre complété (2 glissements)";
-"postpred.help.input.clockinput.haptic.success" = "Double vibration forte — révélation réussie";
-"postpred.help.input.clockinput.haptic.error" = "Buzz d'erreur + flash écran — paire invalide, réinitialisation";
-"postpred.help.input.clockinput.dismiss" = "Après la révélation, **appuie 1 seconde** n'importe où sur l'écran noir pour le fermer. Le faux profil Instagram mis à jour apparaît immédiatement.";
+"postpred.help.input.clockinput.haptic.success" = "Double vibration forte — nombre confirmé (1er appui long)";
+"postpred.help.input.clockinput.haptic.error" = "Buzz d'erreur + flash — paire invalide ; le 2e glissement devient le 1er du prochain";
+"postpred.help.input.clockinput.dismiss" = "**Premier appui long** (1 s) confirme les chiffres et déclenche la révélation. **Deuxième appui long** ferme l'écran noir — le faux profil Instagram mis à jour apparaît instantanément.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Entrée";
@@ -1730,7 +1730,7 @@
 "set.input.lockscreen.help" = "Affiche un faux écran verrouillé à l'ouverture de Performance pour saisir la valeur en secret. Choisis un fond d'écran ci-dessous.";
 "set.input.digitgrid.help" = "Glisse à gauche ou à droite sur la grille pour construire la valeur, puis tape l'icône Publications pour révéler.";
 "set.input.digitgrid.noconfig" = "Aucune configuration requise.";
-"set.input.clockinput.help" = "Affiche un écran entièrement noir à l'ouverture de Performance. Saisis un nombre de 1 à 100 avec des paires de glissements directionnels. Appui long pour fermer après la révélation.";
+"set.input.clockinput.help" = "Affiche un écran entièrement noir à l'ouverture de Performance. Glissez des paires pour entrer autant de chiffres que souhaité, puis appuyez longuement pour confirmer. Un second appui long ferme l'écran.";
 "set.input.clockinput.noconfig" = "Aucune configuration requise.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1745,6 +1745,9 @@
 "cooldown.photo" = "Photo de profil";
 "cooldown.note" = "Note";
 "cooldown.bio" = "Biographie";
+"cooldown.capture.note" = "Capture d'entrée (Note)";
+"cooldown.capture.bio" = "Capture d'entrée (Biographie)";
+"cooldown.performance" = "Pause Performance";
 "postpred.help.input.grid.encoding.title" = "Encodage des chiffres  (identique à Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1753,3 +1756,40 @@
 "set.input.cardclock.suits" = "Encodage de la couleur  (même direction deux fois)";
 "set.input.cardclock.longpress" = "Appuyez longuement n'importe où sur la grille pour confirmer.";
 "set.input.cardclock.noconfig" = "Aucune configuration requise.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "HORLOGE CARTE";
+"postpred.help.input.cardclock.guide.intro" = "Glissez dans n'importe quelle direction sur la grille Instagram — toujours 4 glissements : les 2 premiers encodent la valeur (A–K), les 2 derniers la couleur. Appuyez longuement pour confirmer.";
+"postpred.help.input.cardclock.guide.values" = "ENCODAGE DE LA VALEUR  (cadran d'horloge)";
+"postpred.help.input.cardclock.guide.suits" = "ENCODAGE DE LA COULEUR  (même direction deux fois)";
+"postpred.help.input.cardclock.guide.examples" = "EXEMPLES";
+"postpred.help.input.cardclock.guide.ex.js" = "Valet de Pique : ←↑ (valeur V) + ↑↑ (pique)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 de Cœur : →→ (valeur 3) + →→ (cœur)";
+"postpred.help.input.cardclock.guide.ex.ad" = "As de Carreau : ↑→ (valeur As) + ←← (carreau)";
+"postpred.help.input.cardclock.guide.longpress" = "Après le 4e glissement, appuyez longuement pour confirmer. La photo de la carte se désarchive automatiquement.";
+
+"inputs.interface.exclusive.title" = "Entrée exclusive";
+"inputs.interface.exclusive.body" = "Une seule interface de saisie peut être active à la fois pour les Sets, la Bio et les Notes. Les autres restent verrouillées tant que celle-ci est active :";
+
+"inputs.conflict.alert.title" = "Entree incompatible";
+
+"inputs.conflict.alert.body" = "\"%@\" utilise une interface exclusive qui ne peut pas fonctionner en meme temps que :
+
+%@
+
+Un seul type d'interface peut etre actif a la fois pour les Sets, la Bio et les Notes. Continuer desactivera les selections en conflit.";
+
+"inputs.conflict.alert.cancel" = "Annuler";
+
+"inputs.conflict.alert.continue" = "Continuer";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "as";
+"card.value.jack" = "valet";
+"card.value.queen" = "dame";
+"card.value.king" = "roi";
+"card.suit.spades" = "pique";
+"card.suit.hearts" = "cœur";
+"card.suit.clubs" = "trèfle";
+"card.suit.diamonds" = "carreau";
+"card.name.format" = "%@ de %@";

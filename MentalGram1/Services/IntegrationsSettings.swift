@@ -31,29 +31,77 @@ enum AutoInputMode: String, CaseIterable {
     }
 }
 
-// MARK: - API Source
+// MARK: - Interface Kind
 
-enum ApiSource: Int, CaseIterable {
-    case none       = 0
-    case inject     = 1
-    case custom1    = 2
-    case custom2    = 3
-    case custom3    = 4
-    case ocr        = 5   // event-driven — not polled, filled when camera recognises a word
+/// Exclusive performance input interfaces. Only ONE kind may be active across
+/// the active set + all bio/note {textN} sources at the same time, because there is
+/// a single capture per performance feeding every consumer, and that capture can only
+/// produce ONE type of value via ONE device. The same kind may repeat across set/bio/
+/// notes (one capture fills all). Different kinds conflict.
+///
+/// Lockscreen and Clock each have two variants because the same physical device can
+/// only be in one mode at a time (numbers OR cards), so e.g. a Number Lockscreen and a
+/// Card Lockscreen cannot coexist.
+enum InterfaceKind: String, Hashable {
+    case ocr, numberClock, cardClock, numberLockscreen, cardLockscreen
 
     var displayName: String {
         switch self {
-        case .none:    return "None"
-        case .inject:  return "Inject"
-        case .custom1: return IntegrationsSettings.shared.customApi1Name.isEmpty ? "API 1" : IntegrationsSettings.shared.customApi1Name
-        case .custom2: return IntegrationsSettings.shared.customApi2Name.isEmpty ? "API 2" : IntegrationsSettings.shared.customApi2Name
-        case .custom3: return IntegrationsSettings.shared.customApi3Name.isEmpty ? "API 3" : IntegrationsSettings.shared.customApi3Name
-        case .ocr:     return "OCR"
+        case .ocr:              return "Camera (OCR)"
+        case .numberClock:      return "Number Clock"
+        case .cardClock:        return "Card Clock"
+        case .numberLockscreen: return "Number Lockscreen"
+        case .cardLockscreen:   return "Card Lockscreen"
+        }
+    }
+}
+
+// MARK: - API Source
+
+enum ApiSource: Int, CaseIterable {
+    case none             = 0
+    case inject           = 1
+    case custom1          = 2
+    case custom2          = 3
+    case custom3          = 4
+    case ocr              = 5   // interface: camera recognises a word/card
+    case numberLockscreen = 6   // interface: fake lockscreen digit entry → number (was .lockscreen)
+    case numberClock      = 7   // interface: black screen swipe → number
+    case cardClock        = 8   // interface: black screen swipe → card (value+suit)
+    case cardLockscreen   = 9   // interface: fake lockscreen card code → card (value+suit)
+
+    var displayName: String {
+        switch self {
+        case .none:             return "None"
+        case .inject:           return "Inject"
+        case .custom1:          return IntegrationsSettings.shared.customApi1Name.isEmpty ? "API 1" : IntegrationsSettings.shared.customApi1Name
+        case .custom2:          return IntegrationsSettings.shared.customApi2Name.isEmpty ? "API 2" : IntegrationsSettings.shared.customApi2Name
+        case .custom3:          return IntegrationsSettings.shared.customApi3Name.isEmpty ? "API 3" : IntegrationsSettings.shared.customApi3Name
+        case .ocr:              return "OCR"
+        case .numberLockscreen: return "Number Lockscreen"
+        case .numberClock:      return "Number Clock"
+        case .cardClock:        return "Card Clock"
+        case .cardLockscreen:   return "Card Lockscreen"
         }
     }
 
-    /// OCR is event-driven, not polled — exclude it from API polling loops.
-    var isPolled: Bool { self != .none && self != .ocr }
+    /// The exclusive interface kind this source requires (nil for polled API / none).
+    var interfaceKind: InterfaceKind? {
+        switch self {
+        case .ocr:              return .ocr
+        case .numberLockscreen: return .numberLockscreen
+        case .numberClock:      return .numberClock
+        case .cardClock:        return .cardClock
+        case .cardLockscreen:   return .cardLockscreen
+        default:                return nil
+        }
+    }
+
+    /// Interface-family sources need an exclusive fullscreen UI / device event.
+    var isInterfaceInput: Bool { interfaceKind != nil }
+
+    /// Only API sources are polled; OCR and the clock/lockscreen interfaces are event-driven.
+    var isPolled: Bool { self != .none && interfaceKind == nil }
 }
 
 struct ApiFetchedValue {
@@ -178,7 +226,8 @@ final class IntegrationsSettings: ObservableObject {
         case .custom1: return await loadCustomApiPayload(url: customApi1Url, field: customApi1Field)
         case .custom2: return await loadCustomApiPayload(url: customApi2Url, field: customApi2Field)
         case .custom3: return await loadCustomApiPayload(url: customApi3Url, field: customApi3Field)
-        case .ocr:     return nil  // event-driven — not polled
+        // Interface-family sources are captured live at performance, never polled here.
+        case .ocr, .numberLockscreen, .cardLockscreen, .numberClock, .cardClock: return nil
         }
     }
 
@@ -225,6 +274,111 @@ final class IntegrationsSettings: ObservableObject {
             ? [noteText1Source, noteText2Source, noteText3Source]
             : [bioText1Source,  bioText2Source,  bioText3Source]
         return sources.firstIndex(of: .ocr).map { $0 + 1 }
+    }
+
+    // MARK: - Interface conflict validation
+    //
+    // Only ONE interface kind (OCR / Lockscreen / Number Clock / Card Clock) may be
+    // active across the active set + all bio/note {textN} sources at the same time,
+    // because each needs its own dedicated screen/event. Polled API sources (Inject,
+    // API 1-3) never conflict and may be mixed freely.
+
+    /// Interface kind required by the currently-active set (nil if none / api / grid).
+    /// Lockscreen resolves to its number/card variant based on the set type, because the
+    /// lockscreen produces a number for number/custom sets and a card for card sets.
+    private func activeSetInterfaceKind() -> InterfaceKind? {
+        guard let id = ActiveSetSettings.shared.activeSetId,
+              let set = DataManager.shared.sets.first(where: { $0.id == id }) else { return nil }
+        switch set.resolvedInputMethod {
+        case .ocr:        return .ocr
+        case .clockInput: return .numberClock
+        case .cardClock:  return .cardClock
+        case .lockscreen: return set.type == .card ? .cardLockscreen : .numberLockscreen
+        default:          return nil
+        }
+    }
+
+    /// All (target, token, source) entries for bio + note templates.
+    private var allTokenSourceEntries: [(target: String, token: String, source: ApiSource)] {
+        [("bio",  "{text1}", bioText1Source),  ("bio",  "{text2}", bioText2Source),  ("bio",  "{text3}", bioText3Source),
+         ("note", "{text1}", noteText1Source), ("note", "{text2}", noteText2Source), ("note", "{text3}", noteText3Source)]
+    }
+
+    /// Interface kinds currently in use, optionally excluding one token (the one being edited).
+    func interfaceKindsInUse(excludingTarget: String? = nil, excludingToken: String? = nil) -> Set<InterfaceKind> {
+        var kinds = Set<InterfaceKind>()
+        if let k = activeSetInterfaceKind() { kinds.insert(k) }
+        for e in allTokenSourceEntries {
+            if e.target == excludingTarget && e.token == excludingToken { continue }
+            if let k = e.source.interfaceKind { kinds.insert(k) }
+        }
+        return kinds
+    }
+
+    /// Whether `candidate` can be assigned to (target, token) without an interface conflict.
+    /// Polled / none sources are always allowed. An interface source is allowed only when no
+    /// other (different) interface kind is already in use anywhere.
+    func canSelectSource(_ candidate: ApiSource, target: String, token: String) -> Bool {
+        guard let candKind = candidate.interfaceKind else { return true }
+        let others = interfaceKindsInUse(excludingTarget: target, excludingToken: token)
+        return others.isEmpty || (others.count == 1 && others.first == candKind)
+    }
+
+    /// The interface kind already established elsewhere that blocks different interface
+    /// selections for (target, token), or nil if none is established yet.
+    func blockingInterfaceKind(target: String, token: String) -> InterfaceKind? {
+        interfaceKindsInUse(excludingTarget: target, excludingToken: token).first
+    }
+
+    /// Human-readable list of locations where interface-family inputs are currently
+    /// configured (excluding the slot being edited). Used to build conflict alert messages.
+    /// Returns e.g. ["Active Set (Lockscreen)", "Biography {text2} (Number Clock)"]
+    func conflictLocations(excludingTarget: String, excludingToken: String) -> [String] {
+        var locations: [String] = []
+        if let k = activeSetInterfaceKind() {
+            let name = DataManager.shared.sets
+                .first(where: { $0.id == ActiveSetSettings.shared.activeSetId })?.name ?? "Active Set"
+            locations.append("\(name) (\(k.displayName))")
+        }
+        let targetLabels = ["bio": "Biography", "note": "Notes"]
+        for e in allTokenSourceEntries {
+            if e.target == excludingTarget && e.token == excludingToken { continue }
+            guard let k = e.source.interfaceKind else { continue }
+            let tLabel = targetLabels[e.target] ?? e.target
+            locations.append("\(tLabel) \(e.token) (\(k.displayName))")
+        }
+        return locations
+    }
+
+    /// Clears all interface-family sources across bio and notes that conflict with
+    /// `kind`, then assigns `kind`'s matching source to the given (target, token).
+    /// Call this when the user taps "Continue" on the conflict alert.
+    func resolveConflictAndSet(source: ApiSource, target: String, token: String) {
+        guard let incomingKind = source.interfaceKind else {
+            // Not an interface source — just assign directly
+            setSource(source, target: target, token: token)
+            return
+        }
+        // Clear any slot whose interface kind differs from incomingKind
+        for e in allTokenSourceEntries {
+            guard let k = e.source.interfaceKind, k != incomingKind else { continue }
+            setSource(.none, target: e.target, token: e.token)
+        }
+        // Assign the new source to the edited slot
+        setSource(source, target: target, token: token)
+    }
+
+    /// Sets a single source slot by (target, token).
+    func setSource(_ source: ApiSource, target: String, token: String) {
+        switch (target, token) {
+        case ("note", "{text1}"): noteText1Source = source
+        case ("note", "{text2}"): noteText2Source = source
+        case ("note", "{text3}"): noteText3Source = source
+        case ("bio",  "{text1}"): bioText1Source  = source
+        case ("bio",  "{text2}"): bioText2Source  = source
+        case ("bio",  "{text3}"): bioText3Source  = source
+        default: break
+        }
     }
 
     // MARK: - Inject (11z.co)

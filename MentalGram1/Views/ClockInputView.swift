@@ -9,57 +9,82 @@ import UIKit
 //   0 = ↑↑   1 = ↑→   2 = →↑   3 = →→   4 = →↓
 //   5 = ↓→   6 = ↓↓   7 = ↓←   8 = ←↓   9 = ←←
 
+// MARK: - Clock Input Mode
+
+/// Whether the black clock screen captures a number (digit pairs) or a playing card
+/// (value pair + suit pair). The mode is chosen by the active interface kind in
+/// PerformanceView (Number Clock vs Card Clock).
+enum ClockInputMode { case number, card }
+
 // MARK: - ClockInputView
 
-/// A completely black fullscreen overlay used to enter a number (1-100)
+/// A completely black fullscreen overlay used to enter a number OR a playing card
 /// through hidden swipe gestures. The screen simulates the device being off.
-/// Each digit (0-9) requires exactly 2 swipes. Numbers 1-99 use 2 digits
-/// (4 swipes). 100 uses 3 digits (6 swipes, entered as 1→0→0).
-/// A long press (1 s) dismisses the overlay after a successful reveal.
+///
+/// Number encoding (same as Digit Grid):
+///   Each digit (0-9) = 2 consecutive swipes.
+///   0=↑↑  1=↑→  2=→↑  3=→→  4=→↓  5=↓→  6=↓↓  7=↓←  8=←↓  9=←←
+///   No digit-count limit. Swipe pairs, then long-press to confirm → onReveal([digits]).
+///
+/// Card encoding (same clock-face mapping as the grid card input):
+///   4 swipes total = value pair (K=↑↑, A=↑→, 2=→↑, … J=←↑, Q=↑←) + suit pair
+///   (↑↑=♠, →→=♥, ↓↓=♣, ←←=♦). Long-press confirms → onRevealCard("A♥").
+///
+/// After confirming, long-press again to dismiss.
 struct ClockInputView: View {
 
-    /// Called with the digit array once a valid number is entered.
-    /// The array contains individual digits left-to-right, e.g. [0,5] for 5 or [1,0,0] for 100.
+    /// Capture mode. Defaults to number for existing call sites.
+    var mode: ClockInputMode = .number
+
+    /// Called with the digit array when the user long-presses to confirm (number mode).
+    /// e.g. [3] for "3", [3,6,9] for "369", [4,2] for "42".
     let onReveal: ([Int]) -> Void
 
-    /// Called when the user long-presses to dismiss.
+    /// Called with the card symbol (e.g. "A♥") when confirmed (card mode).
+    var onRevealCard: ((String) -> Void)? = nil
+
+    /// Called when the user long-presses after the reveal to dismiss.
     let onDismiss: () -> Void
 
-    // ── Swipe buffer ──────────────────────────────────────────────────────
-    @State private var currentPair:  [SwipeDir] = []   // building the current digit (0-2 swipes)
-    @State private var digitBuffer:  [Int]      = []   // completed digits so far
-    @State private var revealed     = false            // true once a valid number validated
+    // ── Swipe buffer (number mode) ────────────────────────────────────────
+    /// First swipe of the current in-progress pair (nil = waiting for 1st swipe).
+    @State private var pendingSwipe: SwipeDir? = nil
+    /// Completed digits accumulated so far.
+    @State private var digitBuffer: [Int] = []
+    /// True once onReveal has been called (long-press commits and sets this).
+    @State private var revealed = false
 
-    // Disambiguation timer: after "10" (2 digits), wait before validating
-    @State private var waitingFor100Task: Task<Void, Never>? = nil
+    // ── Card buffer (card mode) ───────────────────────────────────────────
+    /// Raw swipes accumulated for the card: value pair (idx 0-1) + suit pair (idx 2-3).
+    @State private var cardSwipes: [SwipeDir] = []
 
-    // Flash feedback: briefly dims screen on invalid input
+    // Flash feedback: briefly dims screen on invalid swipe pair
     @State private var flashError = false
 
     var body: some View {
         ZStack {
             Color.black
                 .ignoresSafeArea(.all)
-                // Error flash: momentary dim-then-return on bad swipe
                 .opacity(flashError ? 0.6 : 1.0)
                 .animation(.easeInOut(duration: 0.15), value: flashError)
-
-            // Invisible tap target that fills the whole screen for long press
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        // Swipe detection
+        // Swipe detection — each completed pair adds one digit
         .gesture(
             DragGesture(minimumDistance: 25)
                 .onEnded { value in
-                    let dir = swipeDirection(from: value)
-                    handleSwipe(dir)
+                    handleSwipe(swipeDirection(from: value))
                 }
         )
-        // Long press to dismiss (only allowed after reveal completes)
+        // Long press:
+        //   • Before reveal  → commit whatever digits are buffered (≥1 digit required)
+        //   • After reveal   → dismiss the overlay
         .onLongPressGesture(minimumDuration: 1.0) {
             if revealed {
                 onDismiss()
+            } else {
+                commitBuffer()
             }
         }
     }
@@ -79,106 +104,126 @@ struct ClockInputView: View {
     // MARK: - Swipe processing
 
     private func handleSwipe(_ dir: SwipeDir) {
-        // Light haptic on every individual swipe
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        // Ignore swipes once the value has already been committed
+        guard !revealed else { return }
 
-        currentPair.append(dir)
-
-        guard currentPair.count == 2 else { return }
-
-        // Decode the completed pair into a digit
-        let a = currentPair[0], b = currentPair[1]
-        currentPair = []
-
-        guard let digit = SecretNumberManager.decodeDigit(a, b) else {
-            // Invalid pair: error haptic + flash, reset everything
-            triggerErrorReset()
+        if mode == .card {
+            handleCardSwipe(dir)
             return
         }
 
-        // Medium haptic: digit complete
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        digitBuffer.append(digit)
-
-        evaluateBuffer()
-    }
-
-    // MARK: - Buffer evaluation
-
-    private func evaluateBuffer() {
-        let count = digitBuffer.count
-        let number = digitBuffer.reduce(0) { $0 * 10 + $1 }
-
-        switch count {
-        case 1:
-            // Only 1 digit so far — need at least 2 for a two-digit number
-            break
-
-        case 2:
-            // Possible two-digit numbers: 01…09 (= 1-9) or 10…99
-            // Special case: "10" could become "100" — wait 1.5 s before committing
-            if number == 0 {
-                // "00" is not a valid number — reset
-                triggerErrorReset()
-            } else if number == 10 {
-                // Could be 10 or start of 100 — set a disambiguation timer
-                waitingFor100Task?.cancel()
-                waitingFor100Task = Task {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 s
-                    guard !Task.isCancelled else { return }
-                    await MainActor.run {
-                        // No 3rd digit arrived — commit as 10
-                        commitReveal(digits: digitBuffer, number: number)
-                    }
-                }
-            } else if number >= 1 && number <= 99 {
-                // Immediate validation for all other two-digit numbers
-                waitingFor100Task?.cancel()
-                commitReveal(digits: digitBuffer, number: number)
+        if let first = pendingSwipe {
+            // Second swipe of a pair — try to decode
+            pendingSwipe = nil
+            if let digit = SecretNumberManager.decodeDigit(first, dir) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                digitBuffer.append(digit)
+                print("🖤 [CLOCK-INPUT] pair \(first)\(dir) → digit \(digit)  buffer: \(digitBuffer.map(String.init).joined())")
             } else {
-                triggerErrorReset()
+                // Invalid pair — error flash; treat second swipe as start of a new pair
+                triggerErrorFlash()
+                pendingSwipe = dir
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                print("🖤 [CLOCK-INPUT] invalid pair \(first)\(dir) — restarting with \(dir)")
             }
-
-        case 3:
-            // Cancel any pending disambiguation timer — we're handling it now
-            waitingFor100Task?.cancel()
-            waitingFor100Task = nil
-
-            if number == 100 {
-                commitReveal(digits: digitBuffer, number: number)
-            } else {
-                // Invalid 3-digit number
-                triggerErrorReset()
-            }
-
-        default:
-            // Too many digits without validation — full reset
-            triggerErrorReset()
+        } else {
+            // First swipe of a new pair
+            pendingSwipe = dir
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            print("🖤 [CLOCK-INPUT] first swipe \(dir) — waiting for second")
         }
     }
 
-    // MARK: - Commit
+    // MARK: - Card swipe processing
+    //
+    // Phase 1 (swipes 1-2): value pair — one of the 12 valid card-value pairs.
+    // Phase 2 (swipes 3-4): suit pair  — same direction twice.
+    // Invalid pairs roll back and the offending swipe starts a new attempt.
 
-    private func commitReveal(digits: [Int], number: Int) {
-        revealed = true
-        // Strong double vibration — same as all other reveal paths
-        fireDoubleVibration()
-        print("📳 [CLOCK-INPUT] Number entered: \(number) — digits: \(digits)")
-        onReveal(digits)
+    private func handleCardSwipe(_ dir: SwipeDir) {
+        let idx = cardSwipes.count
+        switch idx {
+        case 0:
+            cardSwipes.append(dir)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case 1:
+            if SecretNumberManager.decodeCardValue(cardSwipes[0], dir) != nil {
+                cardSwipes.append(dir)
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            } else {
+                triggerErrorFlash()
+                cardSwipes = [dir]
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        case 2:
+            cardSwipes.append(dir)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case 3:
+            if dir == cardSwipes[2] {
+                cardSwipes.append(dir)
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                print("🖤 [CLOCK-INPUT] card complete: \(decodedCardSymbol ?? "?")")
+            } else {
+                triggerErrorFlash()
+                cardSwipes = Array(cardSwipes.prefix(2)) + [dir]
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        default:
+            break
+        }
     }
 
-    // MARK: - Error / Reset
+    private var decodedCardSymbol: String? {
+        guard cardSwipes.count == 4,
+              let val  = SecretNumberManager.decodeCardValue(cardSwipes[0], cardSwipes[1]),
+              let suit = SecretNumberManager.decodeSuit(cardSwipes[2], cardSwipes[3]) else { return nil }
+        return "\(val)\(suit)"
+    }
 
-    private func triggerErrorReset() {
-        currentPair = []
-        digitBuffer = []
-        waitingFor100Task?.cancel()
-        waitingFor100Task = nil
+    // MARK: - Commit (long-press)
 
-        // Error haptic
+    private func commitBuffer() {
+        if mode == .card {
+            guard let symbol = decodedCardSymbol else {
+                // Card not complete yet — gentle warning haptic
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                return
+            }
+            revealed = true
+            print("📳 [CLOCK-INPUT] Committed card: \(symbol)")
+            fireDoubleVibration()
+            onRevealCard?(symbol)
+            // Auto-dismiss after a brief pause so the user feels the confirmation
+            // haptics before the black screen disappears — no second long press needed.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                onDismiss()
+            }
+            return
+        }
+
+        guard !digitBuffer.isEmpty else {
+            // Nothing to commit yet — gentle warning haptic
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            return
+        }
+        // Discard any in-progress partial pair
+        pendingSwipe = nil
+        revealed = true
+        let number = digitBuffer.reduce(0) { $0 * 10 + $1 }
+        print("📳 [CLOCK-INPUT] Committed: \(number) — digits: \(digitBuffer)")
+        fireDoubleVibration()
+        onReveal(digitBuffer)
+        // Auto-dismiss after a brief pause so the confirmation haptics complete
+        // before the fake Instagram profile is revealed — no second long press needed.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            onDismiss()
+        }
+    }
+
+    // MARK: - Error flash
+
+    private func triggerErrorFlash() {
         UINotificationFeedbackGenerator().notificationOccurred(.error)
-
-        // Brief visual flash
         withAnimation(.easeInOut(duration: 0.15)) { flashError = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             withAnimation(.easeInOut(duration: 0.15)) { flashError = false }

@@ -1178,18 +1178,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "СЛЕПОЙ СВАЙП";
-"postpred.help.input.clockinput.intro" = "При открытии Performance экран становится полностью **чёрным** — имитируя выключенный телефон. Вы тайно свайпаете для ввода числа; зритель ничего не видит.";
+"postpred.help.input.clockinput.intro" = "Когда открывается Performance, экран становится полностью **чёрным** — как будто телефон выключен. Проведите столько пар жестов, сколько нужно, затем нажмите и удержите для подтверждения. Зритель ничего не видит.";
 "postpred.help.input.clockinput.encoding.title" = "КОДИРОВКА ЦИФР  (каждая цифра = 2 свайпа)";
 "postpred.help.input.clockinput.examples.title" = "ПРИМЕРЫ";
-"postpred.help.input.clockinput.example5.note" = "Ввести 05 → цифра 0 (↑↑) затем цифра 5 (↓→) — 4 свайпа всего";
-"postpred.help.input.clockinput.example37.note" = "Цифра 3 (→→) затем цифра 7 (↓←) — 4 свайпа всего";
-"postpred.help.input.clockinput.example100.note" = "Цифра 1 (↑→) затем два 0 (↑↑ каждый) — 6 свайпов всего";
-"postpred.help.input.clockinput.haptic.title" = "ТАКТИЛЬНАЯ ОБРАТНАЯ СВЯЗЬ";
-"postpred.help.input.clockinput.haptic.light" = "Лёгкое касание — каждый свайп зарегистрирован";
-"postpred.help.input.clockinput.haptic.medium" = "Средний импульс — цифра завершена (2 свайпа)";
-"postpred.help.input.clockinput.haptic.success" = "Двойная сильная вибрация — показ успешен";
-"postpred.help.input.clockinput.haptic.error" = "Вибрация ошибки + вспышка экрана — неверная пара, сброс";
-"postpred.help.input.clockinput.dismiss" = "После показа **удерживайте 1 секунду** на чёрном экране, чтобы закрыть его. Обновлённый фейковый профиль Instagram появится мгновенно.";
+"postpred.help.input.clockinput.example5.note" = "Одна цифра 5 — 2 свайпа, затем долгое нажатие для подтверждения";
+"postpred.help.input.clockinput.example37.note" = "Две цифры: 3 (→→) затем 7 (↓←) — 4 свайпа, затем долгое нажатие";
+"postpred.help.input.clockinput.example100.note" = "Три цифры: 3 (→→), 6 (↓↓), 9 (←←) — 6 свайпов, затем долгое нажатие";
+"postpred.help.input.clockinput.haptic.title" = "ТАКТИЛЬНЫЙ ОТКЛИК";
+"postpred.help.input.clockinput.haptic.light" = "Лёгкий толчок — каждый свайп зарегистрирован";
+"postpred.help.input.clockinput.haptic.medium" = "Средний пульс — цифра завершена (2 свайпа)";
+"postpred.help.input.clockinput.haptic.success" = "Двойная сильная вибрация — число подтверждено (1-е долгое нажатие)";
+"postpred.help.input.clockinput.haptic.error" = "Сигнал ошибки + вспышка — неверная пара; 2-й свайп становится 1-м следующей пары";
+"postpred.help.input.clockinput.dismiss" = "**Первое долгое нажатие** (1 с) подтверждает цифры и запускает раскрытие. **Второе долгое нажатие** закрывает чёрный экран — обновлённый фейковый профиль Instagram появляется мгновенно.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Ввод";
@@ -1205,7 +1205,7 @@
 "set.input.lockscreen.help" = "Показывает фейковый экран блокировки при открытии Performance для тайного ввода значения. Установите обои ниже.";
 "set.input.digitgrid.help" = "Проведите влево или вправо по сетке чтобы составить значение, затем нажмите иконку Публикации для раскрытия.";
 "set.input.digitgrid.noconfig" = "Настройка не требуется.";
-"set.input.clockinput.help" = "При открытии Performance показывает полностью чёрный экран. Введите число от 1 до 100 парами направленных свайпов. Долгое нажатие для закрытия после раскрытия.";
+"set.input.clockinput.help" = "Показывает полностью чёрный экран при открытии Performance. Проводите пары свайпов для ввода любого количества цифр, затем долгое нажатие для подтверждения. Второе долгое нажатие закрывает экран.";
 "set.input.clockinput.noconfig" = "Настройка не требуется.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1220,6 +1220,9 @@
 "cooldown.photo" = "Фото профиля";
 "cooldown.note" = "Заметка";
 "cooldown.bio" = "Биография";
+"cooldown.capture.note" = "Захват Ввода (Заметка)";
+"cooldown.capture.bio" = "Захват Ввода (Биография)";
+"cooldown.performance" = "Пауза режима";
 "postpred.help.input.grid.encoding.title" = "Кодировка цифр  (как Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1228,3 +1231,40 @@
 "set.input.cardclock.suits" = "Кодировка масти  (одинаковое направление дважды)";
 "set.input.cardclock.longpress" = "Нажмите и удерживайте в любом месте сетки для подтверждения.";
 "set.input.cardclock.noconfig" = "Настройка не требуется.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "КАРТОЧНЫЕ ЧАСЫ";
+"postpred.help.input.cardclock.guide.intro" = "Проводите пальцем в любом направлении по сетке Instagram — всегда 4 свайпа: первые 2 кодируют значение (A–K), последние 2 — масть. Нажмите и удерживайте для подтверждения.";
+"postpred.help.input.cardclock.guide.values" = "КОДИРОВКА ЗНАЧЕНИЯ  (циферблат часов)";
+"postpred.help.input.cardclock.guide.suits" = "КОДИРОВКА МАСТИ  (одинаковое направление дважды)";
+"postpred.help.input.cardclock.guide.examples" = "ПРИМЕРЫ";
+"postpred.help.input.cardclock.guide.ex.js" = "Валет Пик: ←↑ (значение J) + ↑↑ (пики)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Червей: →→ (значение 3) + →→ (червы)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Туз Бубен: ↑→ (значение A) + ←← (бубны)";
+"postpred.help.input.cardclock.guide.longpress" = "После 4-го свайпа нажмите и удерживайте для подтверждения. Фото карты разархивируется автоматически.";
+
+"inputs.interface.exclusive.title" = "Эксклюзивный ввод";
+"inputs.interface.exclusive.body" = "Одновременно может работать только один интерфейс ввода для наборов, описания и заметок. Остальные заблокированы, пока активен этот:";
+
+"inputs.conflict.alert.title" = "Nesovmestimyy vvod";
+
+"inputs.conflict.alert.body" = "\"%@\" ispolzuet eksklyuzivnyy interfeys, kotoryy ne mozhet rabotat' odnovremenno s:
+
+%@
+
+Odnovremenno mozhet byt' aktiven tolko odin tip interfeisa dlya naborov, opisaniya i zametok. Pri prodolzhenii konfliktuushchiye nastroyki budut otklyucheny.";
+
+"inputs.conflict.alert.cancel" = "Otmena";
+
+"inputs.conflict.alert.continue" = "Prodolzhit'";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "туз";
+"card.value.jack" = "валет";
+"card.value.queen" = "дама";
+"card.value.king" = "король";
+"card.suit.spades" = "пики";
+"card.suit.hearts" = "червы";
+"card.suit.clubs" = "трефы";
+"card.suit.diamonds" = "бубны";
+"card.name.format" = "%@ %@";

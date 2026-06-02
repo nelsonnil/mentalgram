@@ -57,6 +57,11 @@ struct PerformanceView: View {
     /// True once OCR has recognised and routed a word in this session.
     /// Prevents a second OCR trigger in the same Performance session (one reveal per trick).
     @State private var ocrUsedInSession: Bool = false
+    /// Optimistic bio text currently being sent via OCR / interface capture.
+    /// While set, the onChange(of: profileCache.cachedProfile?.biography) handler will NOT
+    /// revert the fake profile bio — prevents a concurrent loadProfile (fetching the old bio
+    /// from Instagram before our POST completes) from overwriting the newly-shown word.
+    @State private var pendingBioText: String? = nil
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
@@ -109,14 +114,35 @@ struct PerformanceView: View {
     /// Prevents re-presenting the black screen when onAppear re-fires after dismiss.
     @State private var clockInputWasShown = false
 
-    /// True when Clock Input should show on Performance open:
-    /// either the global PP mode is set to clockInput, or the active number/custom set uses it.
+    /// True when the black swipe-clock screen should appear on Performance open.
+    /// Covers: PP clockInput mode, active number/custom set using Clock Input, OR
+    /// any set/bio/note source configured for Number Clock or Card Clock. Card Clock is
+    /// now unified to this black screen too (4 swipes → value+suit), so a single capture
+    /// can reveal the active card set AND fill any bio/note placeholder at once.
     private var isClockInputActive: Bool {
         if ppTopInputMode == "clockInput" { return true }
+        let kinds = integrations.interfaceKindsInUse()
+        if kinds.contains(.numberClock) || kinds.contains(.cardClock) { return true }
         guard let activeId = ActiveSetSettings.shared.activeSetId,
               let activeType = ActiveSetSettings.shared.activeSetType,
               activeType == .number || activeType == .custom else { return false }
         return DataManager.shared.sets.first { $0.id == activeId }?.resolvedInputMethod == .clockInput
+    }
+
+    /// True when the black clock screen should capture a CARD (value+suit) rather than a
+    /// number. Decided by the single active interface kind (only one can be active at a time).
+    private var isClockCardMode: Bool {
+        integrations.interfaceKindsInUse().contains(.cardClock)
+    }
+
+    /// True when the fake lockscreen should appear on Performance open.
+    /// Covers: global LockscreenInputSettings (active set path) OR any bio/note
+    /// placeholder configured for Number/Card Lockscreen (wallpaper is optional for the
+    /// bio/note path — the view renders on a dark background if none is set).
+    private var isLockscreenActive: Bool {
+        if LockscreenInputSettings.shared.isReady { return true }
+        let kinds = integrations.interfaceKindsInUse()
+        return kinds.contains(.numberLockscreen) || kinds.contains(.cardLockscreen)
     }
 
     // MARK: - Spectator profile overlay
@@ -429,7 +455,10 @@ struct PerformanceView: View {
             pendingSlotReveal: $pendingSlotReveal,
             pendingCardReveal: $pendingCardReveal,
             pendingLockscreenDigits: $pendingLockscreenDigits,
-            onTabSelected: { tab in handleTabSelected(tab) }
+            onTabSelected: { tab in handleTabSelected(tab) },
+            onInterfaceCapture: { value, kinds in
+                Task { await applyInterfaceCapture(value: value, kinds: kinds) }
+            }
         )
     }
 
@@ -788,8 +817,12 @@ struct PerformanceView: View {
             }
             .fullScreenCover(isPresented: $showingClockInput) {
                 ClockInputView(
+                    mode: isClockCardMode ? .card : .number,
                     onReveal: { digits in
                         pendingLockscreenDigits = digits
+                    },
+                    onRevealCard: { symbol in
+                        pendingCardReveal = symbol
                     },
                     onDismiss: {
                         showingClockInput = false
@@ -831,6 +864,14 @@ struct PerformanceView: View {
         // changeBiography() saves to ProfileCacheService on success; we pick it up here.
         .onChange(of: profileCache.cachedProfile?.biography) { newBio in
             guard let newBio, !isLoading else { return }
+            // If a bio POST is in-flight (OCR / interface capture), block any revert that
+            // arrives from a concurrent loadProfile fetching the old bio from Instagram.
+            // Once the POST completes (success or fail) pendingBioText is cleared and
+            // the next cache change (which will carry the correct value) is accepted.
+            if let pending = pendingBioText, newBio != pending {
+                print("⚡️ [PERF] onChange bio: ignored revert to '\(newBio.prefix(30))' — pending POST for '\(pending.prefix(30))'")
+                return
+            }
             guard let current = profile, current.biography != newBio else { return }
             profile = InstagramProfile(
                 userId: current.userId, username: current.username,
@@ -903,13 +944,18 @@ struct PerformanceView: View {
             // Show fake lockscreen for secret digit entry (one-shot per session).
             // Guard required: onAppear re-fires when fullScreenCover is dismissed,
             // which would instantly re-present the lockscreen in an infinite loop.
-            if !lockscreenWasShown && LockscreenInputSettings.shared.isReady {
+            let lockscreenActive = isLockscreenActive
+            let clockActive      = isClockInputActive
+            let interfaceKinds   = integrations.interfaceKindsInUse()
+            print("🎩 [PERF] onAppear — lockscreenActive=\(lockscreenActive) clockActive=\(clockActive) interfaceKinds=\(interfaceKinds) lockscreenWasShown=\(lockscreenWasShown) clockInputWasShown=\(clockInputWasShown)")
+
+            if !lockscreenWasShown && lockscreenActive {
                 lockscreenWasShown = true
                 showingLockscreen = true
                 print("🔒 [LOCKSCREEN] Showing fake lockscreen for secret input")
             }
             // Show clock input black screen if mode is active (and lockscreen isn't)
-            else if !clockInputWasShown && !lockscreenWasShown && isClockInputActive {
+            else if !clockInputWasShown && !lockscreenWasShown && clockActive {
                 clockInputWasShown = true
                 showingClockInput = true
                 print("🖤 [CLOCK-INPUT] Showing black screen for swipe digit input")
@@ -942,10 +988,14 @@ struct PerformanceView: View {
             // Activate volume button detection for FollowingMagic and/or OCR.
             // prepareVolume() warms up the audio session and slider (must run first).
             // startMonitoring() registers the KVO observer that increments upCount/downCount.
+            // Also activate volume monitoring when any bio/note {textN} placeholder
+            // uses OCR as its source (even if the legacy top-level mode is "off").
+            let hasPlaceholderOCR = integrations.interfaceKindsInUse().contains(.ocr)
             let needsVolume = FollowingMagicSettings.shared.isEnabled
                 || noteTopInputMode == "ocr"
                 || bioTopInputMode  == "ocr"
                 || ppTopInputMode == "ocr"
+                || hasPlaceholderOCR
             if needsVolume {
                 VolumeButtonMonitor.shared.prepareVolume()
                 VolumeButtonMonitor.shared.startMonitoring()
@@ -1387,7 +1437,8 @@ struct PerformanceView: View {
         }
         .onDisappear {
             // Reset one-shot flags so they fire again on the next entry into Performance
-            lockscreenWasShown = false
+            lockscreenWasShown  = false
+            clockInputWasShown  = false
             performanceEntryRecorded = false
 
             // Stop volume monitoring and OCR when leaving Performance
@@ -2087,8 +2138,13 @@ struct PerformanceView: View {
                 }
             } else {
                 let final = truncateAtWordBoundary(composed, limit: 150)
-                // Optimistic: update bio in fake profile instantly, before API confirms
+
+                // ── Optimistic UI update (fake profile shows result instantly) ────────
+                // Pin pendingBioText so that a concurrent loadProfile (fetching the old
+                // bio from Instagram while our POST is in-flight) cannot revert the fake
+                // profile via onChange(of: profileCache.cachedProfile?.biography).
                 await MainActor.run {
+                    pendingBioText = final
                     if let current = profile {
                         profile = InstagramProfile(
                             userId: current.userId, username: current.username,
@@ -2107,7 +2163,20 @@ struct PerformanceView: View {
                         )
                     }
                 }
+
+                // ── Direct POST — mirrors mentalgram5's proven pattern ─────────────
+                // No cold-start delay or jitter here. The real root cause of the previous
+                // HTTP 400 "new login from device" was changeBiography sending email=""
+                // (empty string) when edit-profile fields weren't cached, which Instagram
+                // interprets as "clear my email from an unknown device".
+                // That is fixed by prefetchEditFieldsIfNeeded() (fires 20s after session
+                // validation) and by the body builder in changeBiography that now omits
+                // empty identity fields instead of sending empty strings.
+                // Adding extra delays here introduces guard-fail-after-sleep bugs where
+                // UploadManager or isLocked state can change during the sleep window and
+                // silently abort the POST while leaving the fake profile reverted.
                 let ok = try await instagram.changeBiography(text: final)
+                await MainActor.run { pendingBioText = nil }
                 if ok {
                     ud.set(trimmed, forKey: lastKey)  // raw word for dedup
                     ud.set(Date(), forKey: dateKey)   // timestamp so dedup expires in 2h
@@ -2116,8 +2185,154 @@ struct PerformanceView: View {
                 }
             }
         } catch {
+            await MainActor.run { pendingBioText = nil }
             print("⚠️ [OCR] Error applying \(target): \(error.localizedDescription)")
             LogManager.shared.warning("OCR auto-mode failed (\(target)): \(error.localizedDescription)", category: .general)
+        }
+    }
+
+    // MARK: - Interface capture → bio/note injection
+
+    /// Routes a value captured by a secret input interface (Lockscreen / Number Clock /
+    /// Card Clock) into any bio & note {textN} slots whose source matches one of `kinds`,
+    /// then sends the composed note / biography. This lets a single capture both reveal a
+    /// set AND fill the prediction text. Mirrors applyOCRResult's anti-bot dedup.
+    private func applyInterfaceCapture(value: String, kinds: Set<InterfaceKind>) async {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await applyInterfaceCaptureToTarget(value: trimmed, kinds: kinds, target: "note")
+        await applyInterfaceCaptureToTarget(value: trimmed, kinds: kinds, target: "bio")
+    }
+
+    // Minimum gap between consecutive interface-capture bio/note sends (anti-bot).
+    // Prevents a second accidental lockscreen/clock dismiss from firing a second POST
+    // within seconds of the first — same philosophy as interRevealCooldown for unarchives.
+    private let interfaceCaptureCooldown: TimeInterval = 90
+
+    private func applyInterfaceCaptureToTarget(value: String, kinds: Set<InterfaceKind>, target: String) async {
+        guard instagram.isLoggedIn, !instagram.isLocked else { return }
+        // Don't stack a note/bio POST on top of a running upload (anti-bot).
+        guard !UploadManager.shared.isActive else { return }
+        // Respect cache-only mode (re-entry too soon safety gate).
+        guard performanceRemoteCallsAllowed else {
+            print("⏭️ [INPUT] Skipped (\(target)): cache-only mode active")
+            return
+        }
+
+        // Inter-capture cooldown: block a second send within 90s of the last one for
+        // this target, regardless of value. Prevents rapid consecutive POSTs during
+        // testing or accidental double-dismiss of the input overlay.
+        let cooldownKey = "last_interface_capture_sent_\(target)"
+        let lastSentTime = UserDefaults.standard.double(forKey: cooldownKey)
+        let timeSinceLast = Date().timeIntervalSince1970 - lastSentTime
+        if lastSentTime > 0, timeSinceLast < interfaceCaptureCooldown {
+            let remaining = Int(interfaceCaptureCooldown - timeSinceLast)
+            print("⏭️ [INPUT] Cooldown: \(remaining)s remaining before next \(target) capture send")
+            LogManager.shared.warning("Interface capture \(target) blocked: cooldown \(remaining)s remaining", category: .general)
+            return
+        }
+
+        let sources: [ApiSource] = target == "note"
+            ? [integrations.noteText1Source, integrations.noteText2Source, integrations.noteText3Source]
+            : [integrations.bioText1Source,  integrations.bioText2Source,  integrations.bioText3Source]
+        let matchingSlots = sources.enumerated().compactMap { idx, src -> Int? in
+            guard let k = src.interfaceKind, kinds.contains(k) else { return nil }
+            return idx + 1
+        }
+        guard !matchingSlots.isEmpty else { return }
+
+        let ud = UserDefaults.standard
+        let lastKey = target == "note" ? "last_note_auto_input"     : "last_biography_text"
+        let dateKey = target == "note" ? "last_note_auto_sent_date" : "last_biography_sent_date"
+
+        // Dedup (2h) on the raw captured value — same policy as OCR to avoid duplicate-note spam flags
+        if let lastSent = ud.string(forKey: lastKey), lastSent == value {
+            let sentDate = ud.object(forKey: dateKey) as? Date ?? .distantPast
+            if Date().timeIntervalSince(sentDate) / 3600 < 2 {
+                print("⏭️ [INPUT] Dedup: same value sent recently — skipping (\(target))")
+                return
+            }
+            ud.removeObject(forKey: lastKey)
+        }
+
+        let tpl = target == "note" ? noteTemplate : bioTemplate
+        // Resolve polled API slots in parallel, then overwrite the interface-driven slots.
+        var resolvedValues = await integrations.fetchTemplatePlaceholders(for: target)
+        for slot in matchingSlots { resolvedValues["text\(slot)"] = value }
+        let composed = tpl.isEmpty ? value : applyTemplate(resolvedValues, template: tpl)
+
+        LogManager.shared.info("Interface capture → \(target): \"\(composed.prefix(40))\"", category: .general)
+
+        // ── Immediate UI update (fake profile shows result instantly) ──────────
+        // The fake Instagram profile is updated right away so the magician sees
+        // the correct bio/note the moment the overlay dismisses. The actual API
+        // POST to real Instagram is intentionally delayed below (anti-bot).
+        // pendingBioText is pinned for the bio target so that a concurrent
+        // loadProfile (fetching old bio from Instagram while POST is in-flight)
+        // cannot revert the fake profile via onChange(cachedProfile?.biography).
+        let finalText: String
+        if target == "note" {
+            finalText = truncateAtWordBoundary(composed, limit: 60)
+            await MainActor.run { lastNoteText = finalText }
+        } else {
+            finalText = truncateAtWordBoundary(composed, limit: 150)
+            await MainActor.run {
+                pendingBioText = finalText
+                if let current = profile {
+                    profile = InstagramProfile(
+                        userId: current.userId, username: current.username,
+                        fullName: current.fullName, biography: finalText,
+                        externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
+                        isVerified: current.isVerified, isPrivate: current.isPrivate,
+                        followerCount: current.followerCount, followingCount: current.followingCount,
+                        mediaCount: current.mediaCount, followedBy: current.followedBy,
+                        isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+                        cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+                        cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+                        cachedHighlights: current.cachedHighlights,
+                        cachedMediaItems: current.cachedMediaItems,
+                        cachedReelItems: current.cachedReelItems,
+                        cachedNextMaxId: current.cachedNextMaxId
+                    )
+                }
+            }
+        }
+
+        // ── Direct POST — mirrors mentalgram5's proven pattern ───────────────────
+        // No cold-start delay or jitter. The previous HTTP 400 "new login from device"
+        // was caused by changeBiography sending empty strings for email/phone when
+        // edit-profile fields weren't cached — fixed by prefetchEditFieldsIfNeeded().
+        // Adding delays here introduced guard-fail-after-sleep bugs where state changes
+        // during the sleep window silently aborted the POST and left the bio reverted.
+        // Stamp the cooldown timestamp before the POST so a second rapid send is
+        // still blocked for 90s even if the request fails.
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cooldownKey)
+
+        do {
+            if target == "note" {
+                let ok = try await instagram.createNote(text: finalText)
+                if ok {
+                    ud.set(value, forKey: lastKey)
+                    ud.set(Date(), forKey: dateKey)
+                    await MainActor.run { lastNoteSentTimestamp = Date().timeIntervalSince1970 }
+                    print("✅ [INPUT] Note sent: \"\(finalText)\"")
+                    // Double vibration: confirms the note is live on real Instagram
+                    fireDoubleConfirmationVibration()
+                }
+            } else {
+                let ok = try await instagram.changeBiography(text: finalText)
+                await MainActor.run { pendingBioText = nil }
+                if ok {
+                    ud.set(value, forKey: lastKey)
+                    ud.set(Date(), forKey: dateKey)
+                    print("✅ [INPUT] Biography updated: \"\(finalText)\"")
+                    // Double vibration: confirms the biography is live on real Instagram
+                    fireDoubleConfirmationVibration()
+                }
+            }
+        } catch {
+            await MainActor.run { pendingBioText = nil }
+            LogManager.shared.warning("Interface capture send failed (\(target)): \(error.localizedDescription)", category: .general)
         }
     }
 
@@ -3804,6 +4019,10 @@ struct InstagramProfileView: View {
     /// Called whenever the Posts/Reels/Tagged tab changes so PerformanceView can
     /// trigger lazy loading of secondary tabs on first visit.
     var onTabSelected: ((Int) -> Void)? = nil
+    /// Called when a secret input interface (Lockscreen / Number Clock / Card Clock)
+    /// captures a value, so PerformanceView can inject it into bio/note {textN} slots
+    /// configured for that interface kind and send the note/biography.
+    var onInterfaceCapture: ((String, Set<InterfaceKind>) -> Void)? = nil
 
     // Single fullScreenCover for posts/reels/tagged — avoids SwiftUI bugs when
     // multiple .fullScreenCover modifiers are stacked on the same view.
@@ -4052,12 +4271,19 @@ struct InstagramProfileView: View {
             guard let symbol = symbol, !symbol.isEmpty else { return }
             pendingCardReveal = nil
             guard SetType.cardSlotLabels.contains(symbol) else {
-                print("⚠️ [URL] pendingCardReveal: '\(symbol)' is not a valid card symbol")
+                print("⚠️ [CARD] pendingCardReveal: '\(symbol)' is not a valid card symbol")
                 return
             }
+            // Feed the localized card name into any bio/note slot configured for a card
+            // interface (Card Clock black screen or Card Lockscreen, or URL scheme).
+            if let comp = cardComponents(fromSymbol: symbol) {
+                onInterfaceCapture?(localizedCardName(value: comp.value, suit: comp.suit),
+                                    [.cardClock, .cardLockscreen])
+            }
+            // Unarchive the matching slot only when a card set is active.
             guard let activeId = ActiveSetSettings.shared.activeCardSetId,
                   let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) else {
-                print("⚠️ [URL] pendingCardReveal: no active card set")
+                print("ℹ️ [CARD] pendingCardReveal: no active card set — bio/note injection only")
                 return
             }
             showOCRPeek(label: symbol)
@@ -4098,9 +4324,35 @@ struct InstagramProfileView: View {
             return
         }
 
-        // Cards are checked first because inputs like 061 are intentionally a card code
-        // (0 + value + suit), while number/custom reveals remain available as fallback.
-        if let activeId = ActiveSetSettings.shared.activeCardSetId,
+        // The fake lockscreen captures digits; whether they mean a CARD or a NUMBER is
+        // decided by the single active interface kind (only one can be active at a time).
+        let activeKinds = IntegrationsSettings.shared.interfaceKindsInUse()
+
+        // ── Card Lockscreen ─────────────────────────────────────────────────────
+        // Digits encode a card (0 + value + suit). Feed the localized card name into any
+        // bio/note slot set to Card Lockscreen, and unarchive the active card set's slot.
+        if activeKinds.contains(.cardLockscreen), let (value, suit) = decodeCardInput(digits) {
+            let symbol = cardSymbol(value: value, suit: suit)
+            onInterfaceCapture?(localizedCardName(value: value, suit: suit), [.cardLockscreen])
+            if let activeId = ActiveSetSettings.shared.activeCardSetId,
+               let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {
+                showOCRPeek(label: symbol)
+                Task { await revealByCardSlot(symbol: symbol, fromSet: activeSet) }
+            }
+            return
+        }
+
+        // ── Number Lockscreen / Number Clock ────────────────────────────────────
+        // Feed the captured number into any bio/note {textN} configured for Number
+        // Lockscreen or Number Clock (both fullscreen digit interfaces funnel through
+        // here). Runs independently of the set reveal, so bio/note injection works even
+        // with no active set.
+        onInterfaceCapture?(input, [.numberLockscreen, .numberClock])
+
+        // Legacy card-code fallback: when no card-lockscreen source is configured but an
+        // active card set exists, treat a 0+value+suit code as a card reveal.
+        if !activeKinds.contains(.cardLockscreen),
+           let activeId = ActiveSetSettings.shared.activeCardSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
            let (value, suit) = decodeCardInput(digits) {
             let symbol = cardSymbol(value: value, suit: suit)
@@ -4583,6 +4835,10 @@ struct InstagramProfileView: View {
                 LogManager.shared.warning("Card clock reveal blocked: upload in progress", category: .general)
                 onUploadConflict?(); return
             }
+            // Feed the captured card into any bio/note {textN} configured for Card Clock.
+            if let comp = cardComponents(fromSymbol: cardSym) {
+                onInterfaceCapture?(localizedCardName(value: comp.value, suit: comp.suit), [.cardClock])
+            }
             showOCRPeek(label: cardSym)
             Task { await revealByCardSlot(symbol: cardSym, fromSet: activeSet) }
             selectedTab = 0
@@ -5039,6 +5295,45 @@ struct InstagramProfileView: View {
         let suits = ["♠", "♥", "♣", "♦"]
         let s = (1...4).contains(suit) ? suits[suit - 1] : "?"
         return "\(v)\(s)"
+    }
+
+    /// Parse a card symbol string (e.g. "A♥", "10♣") back into (value 1-13, suit 1-4).
+    private func cardComponents(fromSymbol symbol: String) -> (value: Int, suit: Int)? {
+        let suitMap: [Character: Int] = ["♠": 1, "♥": 2, "♣": 3, "♦": 4]
+        guard let suitChar = symbol.last, let suit = suitMap[suitChar] else { return nil }
+        let valuePart = String(symbol.dropLast())
+        let value: Int
+        switch valuePart {
+        case "A": value = 1
+        case "J": value = 11
+        case "Q": value = 12
+        case "K": value = 13
+        default:  value = Int(valuePart) ?? 0
+        }
+        guard (1...13).contains(value) else { return nil }
+        return (value, suit)
+    }
+
+    /// Localized human-readable card name for bio/note injection, e.g. "3 of hearts" /
+    /// "3 de corazones". Number values stay as digits; face cards use localized words.
+    private func localizedCardName(value: Int, suit: Int) -> String {
+        let valueName: String
+        switch value {
+        case 1:  valueName = NSLocalizedString("card.value.ace",   comment: "")
+        case 11: valueName = NSLocalizedString("card.value.jack",  comment: "")
+        case 12: valueName = NSLocalizedString("card.value.queen", comment: "")
+        case 13: valueName = NSLocalizedString("card.value.king",  comment: "")
+        default: valueName = String(value)
+        }
+        let suitKey: String
+        switch suit {
+        case 1:  suitKey = "card.suit.spades"
+        case 2:  suitKey = "card.suit.hearts"
+        case 3:  suitKey = "card.suit.clubs"
+        default: suitKey = "card.suit.diamonds"
+        }
+        let suitName = NSLocalizedString(suitKey, comment: "")
+        return String(format: NSLocalizedString("card.name.format", comment: ""), valueName, suitName)
     }
 
     /// Unarchives the photo matching `symbol` in the active card set.

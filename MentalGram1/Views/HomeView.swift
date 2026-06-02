@@ -1232,24 +1232,39 @@ struct APIBudgetWidget: View {
 
 // MARK: - Cooldown Warning Banner
 
-/// Banner rojo que muestra los cooldowns anti-bot activos (foto, nota, bio)
-/// con un countdown en tiempo real. Se oculta automáticamente cuando expiran.
+/// Banner rojo que muestra los cooldowns anti-bot activos (foto, nota, bio,
+/// y el cooldown de 90s de interface capture de bio/notas) con un countdown
+/// en tiempo real. Se oculta automáticamente cuando expiran todos.
 struct CooldownWarningBanner: View {
     @ObservedObject private var instagram = InstagramService.shared
     @Environment(\.scenePhase) private var scenePhase
 
     // Estado local para los tiempos restantes
-    @State private var picSeconds: Int  = 0
-    @State private var noteSeconds: Int = 0
-    @State private var bioSeconds: Int  = 0
-    @State private var timer: Timer?    = nil
+    @State private var picSeconds: Int          = 0
+    @State private var noteSeconds: Int         = 0
+    @State private var bioSeconds: Int          = 0
+    @State private var captureNoteSeconds: Int  = 0
+    @State private var captureBioSeconds: Int   = 0
+    @State private var perfPauseSeconds: Int    = 0
+    @State private var timer: Timer?            = nil
+    @State private var blink: Bool              = false
+
+    // Interface-capture cooldown duration kept in sync with PerformanceView
+    private let captureCooldown: TimeInterval = 90
 
     private var activeCooldowns: [(icon: String, label: String, seconds: Int)] {
         var list: [(String, String, Int)] = []
-        if picSeconds  > 0 { list.append(("camera.fill",       "cooldown.photo", picSeconds))  }
-        if noteSeconds > 0 { list.append(("bubble.left.fill",  "cooldown.note",  noteSeconds)) }
-        if bioSeconds  > 0 { list.append(("person.text.rectangle.fill", "cooldown.bio", bioSeconds)) }
+        if perfPauseSeconds   > 0 { list.append(("bolt.slash.fill",                "cooldown.performance",     perfPauseSeconds))   }
+        if picSeconds         > 0 { list.append(("camera.fill",                    "cooldown.photo",           picSeconds))         }
+        if noteSeconds        > 0 { list.append(("bubble.left.fill",               "cooldown.note",            noteSeconds))        }
+        if bioSeconds         > 0 { list.append(("person.text.rectangle.fill",     "cooldown.bio",             bioSeconds))         }
+        if captureNoteSeconds > 0 { list.append(("hand.draw.fill",                 "cooldown.capture.note",    captureNoteSeconds)) }
+        if captureBioSeconds  > 0 { list.append(("hand.draw.fill",                 "cooldown.capture.bio",     captureBioSeconds))  }
         return list
+    }
+
+    private var shouldBlink: Bool {
+        hasActive
     }
 
     private var hasActive: Bool { !activeCooldowns.isEmpty }
@@ -1258,10 +1273,17 @@ struct CooldownWarningBanner: View {
         if hasActive {
             bannerContent
                 .transition(.move(edge: .top).combined(with: .opacity))
-                .onAppear { refresh(); startTimer() }
+                .onAppear {
+                    refresh()
+                    startTimer()
+                    if shouldBlink { startBlink() }
+                }
                 .onDisappear { stopTimer() }
                 .onChange(of: scenePhase) { phase in
                     if phase == .active { refresh() }
+                }
+                .onChange(of: shouldBlink) { active in
+                    if active { startBlink() }
                 }
         }
     }
@@ -1271,8 +1293,10 @@ struct CooldownWarningBanner: View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.red)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundColor(blink ? .red : Color.red.opacity(0.35))
+                    .scaleEffect(blink ? 1.18 : 1.0)
+                    .animation(.easeInOut(duration: 0.5), value: blink)
                     .padding(.top, 1)
                 cooldownList
             }
@@ -1288,18 +1312,29 @@ struct CooldownWarningBanner: View {
     private var cooldownList: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(String(localized: "cooldown.title"))
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.red)
+                .font(.system(size: 13, weight: .black))
+                .foregroundColor(blink ? .red : Color.red.opacity(0.45))
+                .scaleEffect(blink ? 1.03 : 1.0, anchor: .leading)
+                .animation(.easeInOut(duration: 0.5), value: blink)
             ForEach(activeCooldowns, id: \.label) { item in
-                CooldownRow(item: item, formatSeconds: formatSeconds)
+                CooldownRow(
+                    item: item,
+                    formatSeconds: formatSeconds,
+                    // Strong blinking on every visible row so cooldowns are hard to miss.
+                    highlight: blink
+                )
             }
         }
     }
 
     private var bannerBackground: some View {
         RoundedRectangle(cornerRadius: 10)
-            .fill(Color.red.opacity(0.12))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.4), lineWidth: 1))
+            .fill(shouldBlink
+                  ? Color.red.opacity(blink ? 0.18 : 0.08)
+                  : Color.red.opacity(0.12))
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.red.opacity(shouldBlink ? (blink ? 0.9 : 0.3) : 0.4), lineWidth: blink ? 1.5 : 1))
+            .animation(.easeInOut(duration: 0.5), value: blink)
     }
 
     private func formatSeconds(_ s: Int) -> String {
@@ -1309,6 +1344,14 @@ struct CooldownWarningBanner: View {
         return "\(sec)s"
     }
 
+    private func captureRemainingSeconds(for target: String) -> Int {
+        let key = "last_interface_capture_sent_\(target)"
+        let lastSent = UserDefaults.standard.double(forKey: key)
+        guard lastSent > 0 else { return 0 }
+        let remaining = captureCooldown - (Date().timeIntervalSince1970 - lastSent)
+        return remaining > 0 ? Int(remaining) : 0
+    }
+
     private func refresh() {
         let pic  = instagram.isProfilePicOnCooldown()
         let note = instagram.isNoteOnCooldown()
@@ -1316,16 +1359,31 @@ struct CooldownWarningBanner: View {
         picSeconds  = pic.onCooldown  ? pic.remainingSeconds  : 0
         noteSeconds = note.onCooldown ? note.remainingSeconds : 0
         bioSeconds  = bio.onCooldown  ? bio.remainingSeconds  : 0
+        captureNoteSeconds = captureRemainingSeconds(for: "note")
+        captureBioSeconds  = captureRemainingSeconds(for: "bio")
+        perfPauseSeconds   = InstagramSafetyGate.shared.performancePauseSecondsRemaining
+    }
+
+    private func startBlink() {
+        // Repite el parpadeo mientras haya un cooldown visible.
+        Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { t in
+            guard shouldBlink else { t.invalidate(); blink = false; return }
+            blink.toggle()
+        }
     }
 
     private func startTimer() {
         stopTimer()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            if picSeconds  > 0 { picSeconds  -= 1 }
-            if noteSeconds > 0 { noteSeconds -= 1 }
-            if bioSeconds  > 0 { bioSeconds  -= 1 }
+            if picSeconds          > 0 { picSeconds          -= 1 }
+            if noteSeconds         > 0 { noteSeconds         -= 1 }
+            if bioSeconds          > 0 { bioSeconds          -= 1 }
+            if captureNoteSeconds  > 0 { captureNoteSeconds  -= 1 }
+            if captureBioSeconds   > 0 { captureBioSeconds   -= 1 }
+            if perfPauseSeconds    > 0 { perfPauseSeconds    -= 1 }
             // Resync cada 15 s para evitar drift
-            if (picSeconds + noteSeconds + bioSeconds) % 15 == 0 { refresh() }
+            let total = picSeconds + noteSeconds + bioSeconds + captureNoteSeconds + captureBioSeconds + perfPauseSeconds
+            if total % 15 == 0 { refresh() }
         }
     }
 
@@ -1335,24 +1393,98 @@ struct CooldownWarningBanner: View {
     }
 }
 
-/// Una fila dentro del CooldownWarningBanner
+/// Una fila dentro del CooldownWarningBanner.
+/// `highlight` activa el parpadeo en filas de interface capture cooldown.
 private struct CooldownRow: View {
     let item: (icon: String, label: String, seconds: Int)
     let formatSeconds: (Int) -> String
+    var highlight: Bool = false
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: item.icon)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(Color.red.opacity(0.8))
+                .foregroundColor(highlight ? .red : Color.red.opacity(0.8))
+                .animation(.easeInOut(duration: 0.5), value: highlight)
             Text(LocalizedStringKey(item.label))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Color.red.opacity(0.85))
+                .font(.system(size: 11, weight: highlight ? .bold : .medium))
+                .foregroundColor(highlight ? .red : Color.red.opacity(0.85))
+                .animation(.easeInOut(duration: 0.5), value: highlight)
             Spacer()
             Text(formatSeconds(item.seconds))
                 .font(.system(size: 12, weight: .bold).monospacedDigit())
                 .foregroundColor(.red)
+                .scaleEffect(highlight ? 1.05 : 1.0)
+                .animation(.easeInOut(duration: 0.5), value: highlight)
         }
+    }
+}
+
+// MARK: - Duplicate Note Warning Banner
+
+/// Shown at the top of Settings after a Performance note send is blocked because
+/// the detected text matches the last note exactly. This is intentionally not a
+/// timer: the fix for the user is to change at least one word.
+private struct DuplicateNoteWarningBanner: View {
+    @AppStorage("note_duplicate_warning_text") private var duplicateText: String = ""
+    @State private var blink = false
+    @State private var timer: Timer? = nil
+
+    var body: some View {
+        if !duplicateText.isEmpty {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundColor(blink ? .red : Color.red.opacity(0.35))
+                    .scaleEffect(blink ? 1.18 : 1.0)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Duplicate note blocked")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundColor(blink ? .red : Color.red.opacity(0.45))
+                    Text("OCR recognized \"\(duplicateText)\" again. Change at least one word before sending another Note.")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(blink ? .red : Color.red.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    duplicateText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Color.red.opacity(0.85))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.red.opacity(blink ? 0.18 : 0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.red.opacity(blink ? 0.9 : 0.3), lineWidth: blink ? 1.5 : 1)
+                    )
+            )
+            .animation(.easeInOut(duration: 0.5), value: blink)
+            .onAppear { startBlink() }
+            .onDisappear { stopBlink() }
+        }
+    }
+
+    private func startBlink() {
+        stopBlink()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { _ in
+            blink.toggle()
+        }
+    }
+
+    private func stopBlink() {
+        timer?.invalidate()
+        timer = nil
     }
 }
 
@@ -1607,7 +1739,13 @@ struct SettingsView: View {
         }
         // API budget — always visible so the magician can check before performing
         APIBudgetWidget()
-            .padding(.bottom, 8)
+            .padding(.bottom, 4)
+        // Cooldown banner — shows active waits so the user knows how long before
+        // re-entering Performance will allow the feature they just used.
+        CooldownWarningBanner()
+            .padding(.bottom, 4)
+        DuplicateNoteWarningBanner()
+            .padding(.bottom, 4)
         accountSection
         instagramProfileSection
         tricksSection
@@ -2042,6 +2180,9 @@ struct SettingsView: View {
                                icon: "paperplane.fill", loading: isSendingNote,
                                enabled: !noteTemplate.isEmpty && !isSendingNote && !instagram.isLocked && getNoteCooldownSeconds() == 0,
                                action: sendNote)
+            if let msg = getDuplicateNoteWarningMessage() {
+                modernStatusRow(msg, color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill")
+            }
             if let msg = getNoteCooldownMessage() { modernStatusRow(msg, color: VaultTheme.Colors.warning, icon: "clock.fill") }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
@@ -2495,7 +2636,7 @@ struct SettingsView: View {
                 }
             }
             HStack(spacing: 6) {
-                ForEach(ApiSource.allCases, id: \.rawValue) { apiSource in
+                ForEach(ApiSource.allCases.filter { !$0.isInterfaceInput || $0 == .ocr }, id: \.rawValue) { apiSource in
                     Button {
                         source.wrappedValue = apiSource
                         if apiSource != .none { onSelect() }
@@ -2688,11 +2829,8 @@ struct SettingsView: View {
     // MARK: - Instagram Notes Helpers
     
     private func getNoteCooldownSeconds() -> Int {
-        guard let cooldownUntil = UserDefaults.standard.object(forKey: "note_cooldown_until") as? Date else {
-            return 0
-        }
-        let remaining = Int(cooldownUntil.timeIntervalSinceNow)
-        return max(0, remaining)
+        let cooldown = instagram.isNoteOnCooldown()
+        return cooldown.onCooldown ? cooldown.remainingSeconds : 0
     }
     
     private func getNoteCooldownMessage() -> String? {
@@ -2701,6 +2839,13 @@ struct SettingsView: View {
             return "Wait \(remaining)s before next note"
         }
         return nil
+    }
+
+    private func getDuplicateNoteWarningMessage() -> String? {
+        guard UserDefaults.standard.string(forKey: "note_duplicate_warning_text") != nil else {
+            return nil
+        }
+        return "Duplicate note blocked. Change at least one word before sending again."
     }
     
     private func sendNote() {
@@ -2889,6 +3034,11 @@ private struct InlineSourcePickerView: View {
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
     @AppStorage("ocr_camera")   private var ocrCamera:   Int    = 0
 
+    // Conflict alert state
+    @State private var pendingConflictSource: ApiSource? = nil
+    @State private var pendingConflictToken:  String     = ""
+    @State private var showConflictAlert                 = false
+
     private let allTokens = ["{text1}", "{text2}", "{text3}"]
 
     private var visibleTokens: [String] {
@@ -2907,6 +3057,46 @@ private struct InlineSourcePickerView: View {
         case "{text3}": return target == "note" ? $integrations.noteText3Source : $integrations.bioText3Source
         default:        return target == "note" ? $integrations.noteText1Source : $integrations.bioText1Source
         }
+    }
+
+    /// SF Symbol for interface-family sources (camera / lockscreen / clock). nil for API/none.
+    static func sourceIcon(_ src: ApiSource) -> String? {
+        switch src {
+        case .ocr:              return "camera.viewfinder"
+        case .numberLockscreen: return "lock.fill"
+        case .cardLockscreen:   return "lock.rectangle.stack.fill"
+        case .numberClock:      return "hand.draw.fill"
+        case .cardClock:        return "clock.fill"
+        default:                return nil
+        }
+    }
+
+    @ViewBuilder
+    private func inputHintBanner(icon: String, color: Color, text: String) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundColor(color)
+                .padding(.top, 1)
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.10))
+        .cornerRadius(8)
+    }
+
+    /// Builds the alert message listing all locations where conflicting inputs are active.
+    private func conflictAlertMessage(for source: ApiSource, token: String) -> String {
+        let locations = integrations.conflictLocations(excludingTarget: target, excludingToken: token)
+        let listStr = locations.map { "• \($0)" }.joined(separator: "\n")
+        return String(
+            format: NSLocalizedString("inputs.conflict.alert.body", comment: ""),
+            source.displayName, listStr
+        )
     }
 
     var body: some View {
@@ -2931,7 +3121,6 @@ private struct InlineSourcePickerView: View {
                             .frame(width: 62, alignment: .leading)
 
                         Menu {
-                            // "None" option
                             Button {
                                 withAnimation { binding.wrappedValue = .none }
                             } label: {
@@ -2942,23 +3131,37 @@ private struct InlineSourcePickerView: View {
                             }
                             Divider()
                             ForEach(ApiSource.allCases.filter { $0 != .none }, id: \.rawValue) { src in
+                                let isConflict = !integrations.canSelectSource(src, target: target, token: token)
                                 Button {
-                                    withAnimation { binding.wrappedValue = src }
+                                    if isConflict {
+                                        // Store intent and show informative alert
+                                        pendingConflictSource = src
+                                        pendingConflictToken  = token
+                                        showConflictAlert     = true
+                                    } else {
+                                        withAnimation { binding.wrappedValue = src }
+                                    }
                                 } label: {
                                     HStack {
-                                        if src == .ocr {
-                                            Label(src.displayName, systemImage: "camera.viewfinder")
+                                        if let icon = Self.sourceIcon(src) {
+                                            Label(src.displayName, systemImage: icon)
                                         } else {
                                             Text(src.displayName)
+                                        }
+                                        // Subtle warning badge for conflicting options
+                                        if isConflict {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundColor(Color(hex: "FF9F0A"))
                                         }
                                         if currentSrc == src { Image(systemName: "checkmark") }
                                     }
                                 }
+                                // No .disabled — user can tap and see the explanation
                             }
                         } label: {
                             HStack(spacing: 5) {
-                                if currentSrc == .ocr {
-                                    Image(systemName: "camera.viewfinder")
+                                if let icon = Self.sourceIcon(currentSrc) {
+                                    Image(systemName: icon)
                                         .font(.system(size: 13))
                                 }
                                 Text(currentSrc == .none ? "No source" : currentSrc.displayName)
@@ -2974,6 +3177,47 @@ private struct InlineSourcePickerView: View {
                             .cornerRadius(8)
                         }
                     }
+                }
+                .alert(
+                    Text("inputs.conflict.alert.title"),
+                    isPresented: $showConflictAlert,
+                    actions: {
+                        Button(role: .cancel) { pendingConflictSource = nil } label: {
+                            Text("inputs.conflict.alert.cancel")
+                        }
+                        Button(role: .destructive) {
+                            if let src = pendingConflictSource {
+                                integrations.resolveConflictAndSet(source: src, target: target, token: pendingConflictToken)
+                            }
+                            pendingConflictSource = nil
+                        } label: {
+                            Text("inputs.conflict.alert.continue")
+                        }
+                    },
+                    message: {
+                        if let src = pendingConflictSource {
+                            Text(conflictAlertMessage(for: src, token: pendingConflictToken))
+                        }
+                    }
+                )
+
+                // ── Context banners for interface-based inputs ───────────────
+                let usedKinds = integrations.interfaceKindsInUse()
+
+                // OCR: remind user how to trigger
+                if usedKinds.contains(.ocr) {
+                    inputHintBanner(icon: "camera.viewfinder", color: Color(hex: "A78BFA"),
+                                    text: "OCR is active. Press the Volume Up button in Performance to start the camera. The recognised text will be sent automatically.")
+                }
+
+                // Card Clock / Card Lockscreen: explain the capture and the localized output
+                if usedKinds.contains(.cardClock) {
+                    inputHintBanner(icon: "clock.fill", color: Color(hex: "FF9F0A"),
+                                    text: "Card Clock shows a black screen in Performance. Swipe the value pair + suit pair, then long-press to confirm. The card name (e.g. \"3 of hearts\") fills this placeholder, and an active card set unarchives that card automatically.")
+                }
+                if usedKinds.contains(.cardLockscreen) {
+                    inputHintBanner(icon: "lock.rectangle.stack.fill", color: Color(hex: "FF9F0A"),
+                                    text: "Card Lockscreen shows the fake lock screen in Performance. Enter the card code (0 + value + suit). The card name fills this placeholder, and an active card set unarchives that card automatically.")
                 }
 
                 // ── OCR settings (visible only when any slot uses OCR) ───────
@@ -3720,7 +3964,7 @@ private struct PostPredictionInputModeView: View {
                         .font(VaultTheme.Typography.caption())
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                     HStack(spacing: 6) {
-                        ForEach(ApiSource.allCases.filter { $0 != .none && $0 != .ocr }, id: \.rawValue) { src in
+                        ForEach(ApiSource.allCases.filter { $0 != .none && !$0.isInterfaceInput }, id: \.rawValue) { src in
                             let isActive = apiSource == src
                             Button {
                                 withAnimation(.easeInOut(duration: 0.2)) {

@@ -1154,18 +1154,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "CLOCK INPUT";
-"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. You secretly swipe to enter a number; the spectator sees nothing.";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then long-press to confirm. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "DIGIT ENCODING  (each digit = 2 swipes)";
 "postpred.help.input.clockinput.examples.title" = "EXAMPLES";
-"postpred.help.input.clockinput.example5.note" = "Enter 05 → digit 0 (↑↑) then digit 5 (↓→) — 4 swipes total";
-"postpred.help.input.clockinput.example37.note" = "Digit 3 (→→) then digit 7 (↓←) — 4 swipes total";
-"postpred.help.input.clockinput.example100.note" = "Digit 1 (↑→) then two 0s (↑↑ each) — 6 swipes total";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then long-press to confirm";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→) then 7 (↓←) — 4 swipes, then long-press";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then long-press";
 "postpred.help.input.clockinput.haptic.title" = "HAPTIC FEEDBACK";
 "postpred.help.input.clockinput.haptic.light" = "Light tap — each individual swipe registered";
 "postpred.help.input.clockinput.haptic.medium" = "Medium pulse — digit completed (2 swipes)";
-"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — reveal successful";
-"postpred.help.input.clockinput.haptic.error" = "Error buzz + screen flash — invalid swipe pair, resets";
-"postpred.help.input.clockinput.dismiss" = "After the reveal, **long-press 1 second** anywhere on the black screen to dismiss it. The updated fake Instagram profile (with unarchived photos) appears instantly.";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed (1st long-press)";
+"postpred.help.input.clockinput.haptic.error" = "Error buzz + screen flash — invalid swipe pair; second swipe becomes first of next pair";
+"postpred.help.input.clockinput.dismiss" = "**First long-press** (1 s) commits the digits and triggers the reveal. **Second long-press** dismisses the black screen — the updated fake Instagram profile (with unarchived photos) appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Input";
@@ -1181,7 +1181,7 @@
 "set.input.lockscreen.help" = "Shows a fake lock screen when Performance opens so you can enter the value secretly. Set a wallpaper below.";
 "set.input.digitgrid.help" = "Swipe left or right across the grid to build the value, then tap the Posts icon to reveal.";
 "set.input.digitgrid.noconfig" = "No configuration required.";
-"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Enter a number 1–100 using directional swipe pairs. Long-press to dismiss after the reveal.";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then long-press to confirm the reveal. A second long-press dismisses the screen.";
 "set.input.clockinput.noconfig" = "No configuration required.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1196,6 +1196,9 @@
 "cooldown.photo" = "Profile Photo";
 "cooldown.note" = "Note";
 "cooldown.bio" = "Biography";
+"cooldown.capture.note" = "Input Capture (Note)";
+"cooldown.capture.bio" = "Input Capture (Biography)";
+"cooldown.performance" = "Performance Pause";
 "postpred.help.input.grid.encoding.title" = "Digit Encoding  (same as Clock Input)";
 
 // MARK: - Card Clock Input config
@@ -1204,3 +1207,28 @@
 "set.input.cardclock.suits" = "Suit encoding  (same direction twice)";
 "set.input.cardclock.longpress" = "Long-press anywhere on the grid to confirm and reveal.";
 "set.input.cardclock.noconfig" = "No configuration required.";
+
+// MARK: - Card Clock user guide
+"postpred.help.input.cardclock.label" = "CARD CLOCK";
+"postpred.help.input.cardclock.guide.intro" = "Swipe in any direction on the fake Instagram photo grid — 4 swipes always: first 2 encode the card value (A–K), last 2 encode the suit. Long-press to confirm and trigger the reveal.";
+"postpred.help.input.cardclock.guide.values" = "VALUE ENCODING  (clock face)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (same direction twice)";
+"postpred.help.input.cardclock.guide.examples" = "EXAMPLES";
+"postpred.help.input.cardclock.guide.ex.js" = "Jack of Spades: ←↑ (J value) + ↑↑ (spades)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 of Hearts: →→ (3 value) + →→ (hearts)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Ace of Diamonds: ↑→ (Ace value) + ←← (diamonds)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 4th swipe, long-press anywhere on the grid to confirm. The matching card photo unarchives automatically.";
+
+"inputs.interface.exclusive.title" = "Exclusive input";
+"inputs.interface.exclusive.body" = "Only one input interface can run at a time across Sets, Bio and Notes. The others stay locked while this one is active:";
+
+/* Playing card names (interface card capture → bio/note) */
+"card.value.ace" = "ace";
+"card.value.jack" = "jack";
+"card.value.queen" = "queen";
+"card.value.king" = "king";
+"card.suit.spades" = "spades";
+"card.suit.hearts" = "hearts";
+"card.suit.clubs" = "clubs";
+"card.suit.diamonds" = "diamonds";
+"card.name.format" = "%@ of %@";
