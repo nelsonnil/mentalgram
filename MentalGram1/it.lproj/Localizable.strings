@@ -719,6 +719,13 @@
 "postpred.help.howitworks.body2" = "Quando attivi la rivelazione, l'app dearchivia la foto corrispondente. Riappare nella sua **posizione originale nella griglia**, con la sua **data originale**, come se fosse sempre stata li.";
 "postpred.help.howitworks.info" = "Lo spettatore vede un post reale su un profilo Instagram reale. Nessuna app e visibile, solo Instagram.";
 "postpred.help.howitworks.archive_reason" = "Instagram non permette di caricare una nuova foto e assegnarle una data vecchia. Vault risolve caricando le immagini di predizione in anticipo e archiviandole subito. Instagram conserva la data originale di caricamento e la posizione nella griglia, quindi una predizione disarchiviata più tardi sembra un vecchio post che era sempre stato lì. Caricamento e archiviazione sono automatici e immediati, così gli spettatori non vedono mai le foto di preparazione sul profilo reale.";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "Set";
 "postpred.help.metric.sets.desc" = "Raccolte di foto (lettere A-Z o cifre 0-9) caricate e archiviate in anticipo, pronte per essere rivelate.";
 "postpred.help.metric.banks" = "Banche";
@@ -1435,7 +1442,7 @@
 
 "limits.help.gauge.title" = "Il tuo budget orario di 55 azioni";
 "limits.help.gauge.body" = "Instagram limita ogni app connessa a 55 azioni all'ora. Il budget funziona come una finestra scorrevole di 60 minuti — ogni azione scade esattamente 60 minuti dopo essere stata eseguita, quindi il contatore scende automaticamente senza bisogno di un reset forzato.";
-"limits.help.gauge.cache" = "La prima volta che apri Performance o il profilo di un follower, l'app contatta Instagram (usa budget). Ogni visita successiva si carica istantaneamente dalla cache, senza alcun costo.";
+"limits.help.gauge.cache" = "Le visite ripetute rapide usano la cache e possono costare 0. Dopo il cooldown di sicurezza, Performance o un profilo follower può aggiornarsi di nuovo e usare budget.";
 "limits.help.gauge.hardstop" = "Quando viene raggiunto il limite di 55, l'app smette automaticamente di inviare qualsiasi richiesta a Instagram. Non viene inviato nulla né eseguita nessuna azione — aspetta in silenzio finché il budget si rinnova. Non devi fare nulla.";
 "limits.help.gauge.zone.safe" = "Sicuro (>20)";
 "limits.help.gauge.zone.low" = "Basso (8–20)";
@@ -1449,6 +1456,7 @@
 "limits.help.table.row.performance" = "Apri Performance";
 "limits.help.table.row.followers" = "Lista follower";
 "limits.help.table.row.profile.new" = "Nuovo profilo follower";
+"limits.help.table.row.profilepic" = "Cambia immagine profilo";
 "limits.help.table.row.sa" = "Sync & Archive (per foto)";
 "limits.help.table.row.upload" = "Caricamento (per foto)";
 "limits.help.table.row.autoupload" = "Ciclo completo di auto-upload (per foto)";
@@ -1456,13 +1464,14 @@
 "limits.help.table.row.notebio" = "Cambia nota o bio";
 "limits.help.table.row.explore" = "Esplora / Cerca";
 "limits.help.sa.auto" = "Dopo una performance completa con rivelazioni e visite ai profili, l'app aggiunge automaticamente una breve pausa prima di Sync & Archive. È normale — protegge la tua sessione.";
-"limits.help.table.cache.lost" = "La cache di Performance si carica senza costi nelle visite successive. Può andare persa in caso di: reinstallazione, cambio account, cancellazione dei dati dell'app o ripristino su un nuovo dispositivo — in questi casi la prima entrata costa 3 azioni.";
+"limits.help.table.cache.lost" = "Aprire Performance di solito costa 3 azioni per profilo + post, o fino a 5 se la cache Reels/Tagged deve essere ricostruita. Le ripetizioni rapide possono costare 0, ma gli aggiornamenti successivi possono usare di nuovo budget. Gli Highlights non vengono aggiornati automaticamente in Performance.";
+"limits.help.table.batch.note" = "I costi per foto si sommano. Sync & Archive su 4 foto = 8 azioni totali. Caricare 4 foto = 9 totali (1 chiamata di preparazione + 2 per foto). La foto profilo mostra 1 azione di budget, anche se Instagram riceve anche la chiamata di upload dell'immagine.";
 
 "limits.help.profiles.title" = "Visitare profili — l'azione più costosa";
-"limits.help.profiles.body" = "Aprire un nuovo profilo follower costa 4–5 azioni ogni volta. La seconda visita allo stesso profilo è gratuita (caricata dalla cache). Ecco perché aprire 3–4 profili diversi in rapida successione può esaurire il budget e attivare il rilevamento bot.";
+"limits.help.profiles.body" = "Aprire un nuovo profilo follower di solito costa 3–4 azioni. Una seconda visita rapida allo stesso profilo carica dalla cache, ma un aggiornamento successivo può usare di nuovo budget. Ecco perché aprire 3–4 profili diversi in rapida successione può esaurire il budget e attivare il rilevamento bot.";
 "limits.help.profiles.max" = "Raccomandazione: apri al massimo 2 nuovi profili per sessione. Evita di visitare nuovi profili subito prima di un Sync & Archive.";
 "limits.help.reddot.title" = "Il punto rosso";
-"limits.help.reddot.body" = "Quando rimangono meno di 8 azioni, appare un piccolo punto rosso sull'icona nell'intestazione della lista follower. Solo tu lo vedi — non è visibile durante la performance.";
+"limits.help.reddot.body" = "Quando rimangono meno di 8 azioni, appare un piccolo punto rosso su icone private di controllo, come l'intestazione della lista follower o l'aeroplano di carta in Performance. Serve ad avvisarti prima di consumare altro budget.";
 "limits.help.reddot.block" = "Se provi ad aprire un nuovo profilo quando il budget è critico, l'app blocca l'azione con una forte vibrazione. Nessuna chiamata API viene effettuata — la tua sessione rimane al sicuro.";
 "limits.help.reddot.location.followers" = "Lista follower";
 "limits.help.reddot.location.performance" = "Icona aeroplanino di carta (Performance)";
@@ -1658,7 +1667,7 @@
 "faq.q.not_instagram.question" = "Il pubblico chiede perché l'app sembra Instagram. Cosa dico?";
 "faq.q.not_instagram.answer" = "Performance è una replica visiva fedele del tuo profilo Instagram — stesso layout, stesse foto, stessi contatori. Se qualcuno chiede, puoi semplicemente dire che stai controllando il tuo Instagram, perché i dati mostrati sono reali e in tempo reale dal tuo account.";
 
-"upload.tip.title" = "Consiglio di upload";
+"upload.tip.title" = "Puoi lasciarlo caricare";
 "upload.tip.overnight" = "Mentre l'upload è attivo, lo schermo rimane acceso — il telefono non si bloccherà mai né si abbasserà la luminosità. Collegalo alla corrente e lascialo girare tutta la notte per riempire 10 o più bank senza toccarlo.";
 "upload.tip.background" = "Preferisci usare il telefono? Puoi passare a qualsiasi altra app liberamente. Un avviso pop-up ti riporterà qui quando la foto successiva è pronta per l'upload.";
 
@@ -1703,18 +1712,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "SCORRIMENTO CIECO";
-"postpred.help.input.clockinput.intro" = "Quando si apre Performance, lo schermo diventa completamente **nero** — come se il telefono fosse spento. Scorri per inserire tutte le cifre necessarie, poi tieni premuto per confermare. Lo spettatore non vede nulla.";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "CODIFICA CIFRE  (ogni cifra = 2 swipe)";
 "postpred.help.input.clockinput.examples.title" = "ESEMPI";
-"postpred.help.input.clockinput.example5.note" = "Cifra singola 5 — 2 swipe, poi tieni premuto per confermare";
-"postpred.help.input.clockinput.example37.note" = "Due cifre: 3 (→→) poi 7 (↓←) — 4 swipe, poi tieni premuto";
-"postpred.help.input.clockinput.example100.note" = "Tre cifre: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipe, poi tieni premuto";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "FEEDBACK APTICO";
 "postpred.help.input.clockinput.haptic.light" = "Tocco leggero — ogni singolo swipe registrato";
 "postpred.help.input.clockinput.haptic.medium" = "Impulso medio — cifra completata (2 swipe)";
-"postpred.help.input.clockinput.haptic.success" = "Doppia vibrazione forte — numero confermato (1a pressione lunga)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "Buzz errore + flash — coppia non valida; il 2° swipe diventa il 1° della coppia successiva";
-"postpred.help.input.clockinput.dismiss" = "**Prima pressione lunga** (1 s) conferma le cifre e attiva la rivelazione. **Seconda pressione lunga** chiude lo schermo nero — il profilo Instagram falso aggiornato appare immediatamente.";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Inserimento";
@@ -1730,7 +1739,7 @@
 "set.input.lockscreen.help" = "Mostra una falsa schermata di blocco all'apertura di Performance per inserire il valore in segreto. Imposta uno sfondo sotto.";
 "set.input.digitgrid.help" = "Usa la Griglia Cifre nascosta nel profilo falso per costruire il valore. Post Prediction conferma con l'icona Post o pressione lunga; Force Reel blocca il valore quando apri Search/Explore.";
 "set.input.digitgrid.noconfig" = "Nessuna configurazione richiesta.";
-"set.input.clockinput.help" = "Mostra uno schermo completamente nero all'apertura di Performance. Scorri coppie per inserire qualsiasi numero di cifre, poi tieni premuto per confermare. Una seconda pressione lunga chiude lo schermo.";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "Nessuna configurazione richiesta.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1751,22 +1760,22 @@
 "postpred.help.input.grid.encoding.title" = "Codifica delle cifre  (come Clock Input)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "In Performance, scorri in qualsiasi direzione sulla griglia. Sempre 4 swipe: prima coppia = valore, seconda coppia = seme. Tieni premuto per confermare.";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "Codifica del valore  (quadrante orologio)";
-"set.input.cardclock.suits" = "Codifica del seme  (stessa direzione due volte)";
-"set.input.cardclock.longpress" = "Tieni premuto ovunque sulla griglia per confermare.";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "Nessuna configurazione richiesta.";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "OROLOGIO CARTA";
-"postpred.help.input.cardclock.guide.intro" = "Scorri in qualsiasi direzione sulla griglia Instagram — sempre 4 swipe: i primi 2 codificano il valore (A–K), gli ultimi 2 il seme. Tieni premuto per confermare.";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "CODIFICA DEL VALORE  (quadrante orologio)";
-"postpred.help.input.cardclock.guide.suits" = "CODIFICA DEL SEME  (stessa direzione due volte)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "ESEMPI";
-"postpred.help.input.cardclock.guide.ex.js" = "Fante di Picche: ←↑ (valore J) + ↑↑ (picche)";
-"postpred.help.input.cardclock.guide.ex.3h" = "3 di Cuori: →→ (valore 3) + →→ (cuori)";
-"postpred.help.input.cardclock.guide.ex.ad" = "Asso di Quadri: ↑→ (valore A) + ←← (quadri)";
-"postpred.help.input.cardclock.guide.longpress" = "Dopo il 4° swipe, tieni premuto per confermare. La foto della carta si disarchivia automaticamente.";
+"postpred.help.input.cardclock.guide.ex.js" = "Fante di Picche: ↑← (valore J) + ↑ (picche)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 di Cuori: →→ (valore 3) + → (cuori)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Asso di Quadri: ↑→ (valore A) + ← (quadri)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "Input esclusivo";
 "inputs.interface.exclusive.body" = "Può essere attiva una sola interfaccia di input alla volta tra Set, Bio e Note. Le altre restano bloccate mentre questa è attiva:";
@@ -1809,7 +1818,7 @@ Solo un tipo di interfaccia puo essere attivo alla volta tra Set, Bio e Note. Co
 "input.guide.covertyping.title" = "Digitazione Nascosta";
 "input.guide.covertyping.compat" = "Set di parole";
 "input.guide.covertyping.body" = "Digiti segretamente la parola scelta dallo spettatore nella barra di ricerca di Esplora. Sullo schermo viene mostrata una parola esca diversa — l'app legge solo ciò che digiti, non ciò che è visualizzato.";
-"input.guide.covertyping.activate" = "Tocca la barra di ricerca in Esplora e digita la parola segreta. Un doppio spazio la conferma e attiva la rivelazione. La barra mostra una parola esca completamente diversa.";
+"input.guide.covertyping.activate" = "Tocca la barra di ricerca in Esplora e digita la parola segreta. Premi Spazio una volta per confermare — lo spazio scompare dal campo e una vibrazione discreta conferma che la parola è stata acquisita e la rivelazione avviata. La barra continua a mostrare una parola esca.";
 "input.guide.ocr.title" = "Fotocamera (OCR)";
 "input.guide.ocr.compat" = "Set Parole · Numeri · Personalizzati";
 "input.guide.ocr.body" = "La fotocamera posteriore legge silenziosamente il testo nel fotogramma — carte da gioco, parole scritte, risultati aritmetici, date — e invia il risultato direttamente al set attivo. Nulla appare sullo schermo durante la scansione.";
@@ -1823,12 +1832,12 @@ Solo un tipo di interfaccia puo essere attivo alla volta tra Set, Bio e Note. Co
 "input.guide.clock.title" = "Orologio Numerico";
 "input.guide.clock.compat" = "Set Numerici · Personalizzati";
 "input.guide.clock.body" = "Schermo completamente nero — come se il telefono fosse spento. I gesti di scorrimento codificano le cifre 0–9 usando coppie di scorrimenti direzionali: ogni cifra richiede esattamente due scorrimenti consecutivi (es. ↑↑ = 0, ↑→ = 1, →→ = 3). Puoi inserire un numero di qualsiasi lunghezza.";
-"input.guide.clock.activate" = "Lo schermo nero si apre automaticamente quando il set attivo usa Orologio Numerico. Scorri coppie per costruire il numero cifra per cifra — ogni coppia completata dà una breve vibrazione. Tieni premuto per confermare.";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "Stessa codifica della Griglia Cifre: se conosci la griglia, l'orologio è identico. L'unica differenza è lo schermo completamente nero senza griglia visibile.";
 "input.guide.cardclock.title" = "Orologio Carte";
 "input.guide.cardclock.compat" = "Set Carte";
-"input.guide.cardclock.body" = "Schermo completamente nero — identico all'Orologio Numerico, ma cattura una carta da gioco invece di un numero. Esattamente 4 scorrimenti richiesti: i primi 2 codificano il valore (A fino a R), i successivi 2 codificano il seme. Codifica seme: stessa direzione due volte (↑↑ = ♠, →→ = ♥, ↓↓ = ♣, ←← = ♦).";
-"input.guide.cardclock.activate" = "Scorri 1 + 2 per il valore, scorri 3 + 4 per il seme (stessa direzione due volte). Ogni coppia valida dà una vibrazione distinta. Tieni premuto per confermare. Un flash di errore segnala coppie non valide.";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "La tabella completa valore → direzione è mostrata nella configurazione del set sotto Orologio Carte. Memorizza solo le 4–5 carte che usi di più.";
 "input.guide.lockscreen.title" = "Blocco Numerico";
 "input.guide.lockscreen.compat" = "Set Numerici · Personalizzati";

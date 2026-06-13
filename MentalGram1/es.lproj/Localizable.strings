@@ -1477,7 +1477,7 @@
 
 "limits.help.gauge.title" = "Tu presupuesto de 55 acciones por hora";
 "limits.help.gauge.body" = "Instagram limita cada app conectada a 55 acciones por hora. El presupuesto funciona como una ventana deslizante de 60 minutos: cada acción caduca exactamente 60 minutos después de realizarse, por lo que el contador baja automáticamente sin necesidad de un reinicio forzado.";
-"limits.help.gauge.cache" = "La primera vez que abres Performance o el perfil de un seguidor, la app contacta a Instagram (usa presupuesto). Cada visita posterior se carga al instante desde caché, sin coste.";
+"limits.help.gauge.cache" = "Las visitas repetidas rápidas usan caché y pueden costar 0. Después del cooldown de seguridad, Performance o un perfil de seguidor puede refrescarse de nuevo y usar presupuesto para mantener los datos actualizados.";
 "limits.help.gauge.hardstop" = "Cuando se alcanza el límite de 55, la app detiene automáticamente cualquier nueva petición a Instagram. No se envía nada ni se ejecuta ninguna acción — espera en silencio hasta que el presupuesto se renueve. No tienes que hacer nada.";
 "limits.help.gauge.zone.safe" = "Seguro (>20)";
 "limits.help.gauge.zone.low" = "Bajo (8–20)";
@@ -1491,6 +1491,7 @@
 "limits.help.table.row.performance" = "Abrir Performance";
 "limits.help.table.row.followers" = "Lista de seguidores";
 "limits.help.table.row.profile.new" = "Perfil nuevo de seguidor";
+"limits.help.table.row.profilepic" = "Cambiar foto de perfil";
 "limits.help.table.row.sa" = "Sync & Archive (por foto)";
 "limits.help.table.row.upload" = "Subida (por foto)";
 "limits.help.table.row.autoupload" = "Ciclo completo de auto-subida (por foto)";
@@ -1498,13 +1499,14 @@
 "limits.help.table.row.notebio" = "Cambiar nota o bio";
 "limits.help.table.row.explore" = "Explorar / Buscar";
 "limits.help.sa.auto" = "Después de una actuación completa con revelaciones y visitas a perfiles, la app añade automáticamente una breve espera antes de Sync & Archive. Es normal — protege tu sesión.";
-"limits.help.table.cache.lost" = "La caché de Performance se carga sin coste en visitas repetidas. Se puede perder al: reinstalar la app, cambiar de cuenta, borrar datos de la app o restaurar en un dispositivo nuevo — en esos casos la primera entrada cuesta 3 acciones.";
+"limits.help.table.cache.lost" = "Abrir Performance suele costar 3 acciones para perfil + posts, o hasta 5 si hay que reconstruir la caché de Reels/Tagged. Las repeticiones rápidas pueden costar 0, pero los refrescos posteriores pueden volver a usar presupuesto. Highlights no se refresca automáticamente en Performance.";
+"limits.help.table.batch.note" = "Los costes por foto se multiplican. Sync & Archive en 4 fotos = 8 acciones en total. Subir 4 fotos = 9 en total (1 llamada de preparación + 2 por foto). La foto de perfil muestra 1 acción de presupuesto, aunque Instagram también recibe la llamada de subida de imagen.";
 
 "limits.help.profiles.title" = "Visitar perfiles — la acción más costosa";
-"limits.help.profiles.body" = "Abrir un perfil nuevo de seguidor cuesta 4–5 acciones cada vez. La segunda visita al mismo perfil es gratuita (se carga desde caché). Por eso abrir 3–4 perfiles distintos en rápida sucesión puede agotar el presupuesto y activar la detección de bot.";
+"limits.help.profiles.body" = "Abrir un perfil nuevo de seguidor suele costar 3–4 acciones. Una segunda visita rápida al mismo perfil carga desde caché, pero un refresco posterior puede volver a usar presupuesto. Por eso abrir 3–4 perfiles distintos en rápida sucesión puede agotar el presupuesto y activar la detección de bot.";
 "limits.help.profiles.max" = "Recomendación: abre como máximo 2 perfiles nuevos por sesión. Evita visitar perfiles justo antes de un Sync & Archive.";
 "limits.help.reddot.title" = "El punto rojo";
-"limits.help.reddot.body" = "Cuando quedan menos de 8 acciones, aparece un pequeño punto rojo sobre el icono en la cabecera de la lista de seguidores. Solo tú lo verás — no es visible durante la actuación.";
+"limits.help.reddot.body" = "Cuando quedan menos de 8 acciones, aparece un pequeño punto rojo en iconos privados de control, como la cabecera de la lista de seguidores o el avión de papel en Performance. Sirve para avisarte antes de gastar más presupuesto.";
 "limits.help.reddot.block" = "Si intentas abrir un perfil nuevo con el presupuesto en zona crítica, la app bloquea la acción con una vibración fuerte. No se realiza ninguna llamada a la API — tu sesión permanece segura.";
 "limits.help.reddot.location.followers" = "Lista de seguidores";
 "limits.help.reddot.location.performance" = "Avión de papel (Performance)";
@@ -1524,18 +1526,22 @@
 // ── Guide: Camouflage section ──
 "guide.section.camouflage" = "CAMUFLAJE";
 
-"guide.fakehome.title" = "Pantalla de inicio falsa";
-"guide.fakehome.subtitle" = "Muestra una captura de pantalla del inicio al abrir Performance";
-"guide.fakehome.help.what.title" = "¿Qué es la pantalla de inicio falsa?";
-"guide.fakehome.help.what.body" = "Al abrir Performance, en lugar de ir directamente a tu perfil, la app muestra una captura de tu pantalla de inicio real. Para quien observe parecerá que acabas de abrir Instagram normalmente.";
-"guide.fakehome.help.how.title" = "Cómo usarla";
-"guide.fakehome.help.how.body" = "1. Toma una captura de pantalla real de tu pantalla de inicio del iPhone asegurándote de que el ícono de Instagram sea visible.
+"guide.fakehome.title" = "Performance Cover";
+"guide.fakehome.subtitle" = "Muestra una pantalla de inicio falsa o una pantalla negra antes de Performance";
+"guide.fakehome.help.what.title" = "¿Qué es Performance Cover?";
+"guide.fakehome.help.what.body" = "Performance Cover muestra una capa a pantalla completa antes de que aparezca tu perfil falso de Instagram. Elige Fake Home Screen para mostrar una captura real de tu pantalla de inicio, o Fake Screen Off para mostrar una pantalla negra como si el móvil estuviera apagado.";
+"guide.fakehome.help.screenoff.title" = "Fake Screen Off";
+"guide.fakehome.help.screenoff.body" = "Fake Screen Off usa el mismo flujo que Fake Home Screen, pero la capa es completamente negra. Puede permanecer visible mientras OCR, Inject/API, biografía, notas u otros inputs de fondo siguen funcionando debajo. Toca en cualquier lugar para revelar Performance.";
+"guide.fakehome.help.how.title" = "Cómo usarlo";
+"guide.fakehome.help.how.body" = "1. En Ajustes, abre Performance Cover y elige Off, Fake Home Screen o Fake Screen Off.
 
-2. Súbela en Ajustes › Datos › Fake Home Screen.
+2. Para Fake Home Screen, sube una captura real de la pantalla de inicio del iPhone con el icono de Instagram visible.
 
-3. Una vez cargada la captura, la pantalla de inicio falsa se activa automáticamente. La próxima vez que abras Performance, aparece a pantalla completa — toca en cualquier lugar (idealmente sobre el ícono de Instagram) para revelar tu perfil.";
+3. Para Fake Screen Off, no necesitas imagen: la app muestra una pantalla totalmente negra.
+
+4. Abre Performance. Toca en cualquier lugar de la capa para revelar tu perfil.";
 "guide.fakehome.help.why.title" = "¿Por qué usarla?";
-"guide.fakehome.help.why.body" = "Crea la ilusión de que simplemente estás abriendo la app real de Instagram. Quien mire tu pantalla solo verá la pantalla de inicio normal antes de que aparezca tu perfil, haciendo que la experiencia parezca completamente natural.";
+"guide.fakehome.help.why.body" = "Crea una pausa natural antes de la revelación. Fake Home Screen parece que estás abriendo Instagram normalmente; Fake Screen Off parece que el móvil estaba apagado hasta que lo tocas.";
 
 "guide.lockscreen.title" = "Entrada por pantalla de bloqueo";
 "guide.lockscreen.subtitle" = "Pantalla de bloqueo iOS falsa para introducir dígitos secretos";
@@ -1709,7 +1715,7 @@
 "faq.q.not_instagram.question" = "El público pregunta por qué la app parece Instagram. ¿Qué digo?";
 "faq.q.not_instagram.answer" = "Performance es una réplica visual fiel de tu perfil de Instagram — misma disposición, mismas fotos, mismos contadores. Si alguien pregunta, puedes decir simplemente que estás revisando tu Instagram, porque los datos que se muestran son reales y en directo desde tu cuenta.";
 
-"upload.tip.title" = "Consejo de subida";
+"upload.tip.title" = "Puedes dejarlo subiendo";
 "upload.tip.overnight" = "Mientras la subida está activa, la pantalla permanece encendida — el móvil nunca se bloqueará ni apagará la pantalla. Conéctalo a la corriente y déjalo correr toda la noche para llenar 10 o más banks sin tocarlo.";
 "upload.tip.background" = "¿Prefieres usar el móvil? Puedes cambiar a cualquier otra app libremente. Una alerta emergente te avisará cuando la siguiente foto esté lista para subir.";
 
@@ -1754,18 +1760,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "DESLIZAMIENTO CIEGO";
-"postpred.help.input.clockinput.intro" = "Cuando se abre Performance la pantalla se vuelve completamente **negra** — simulando que el teléfono está apagado. Desliza para introducir todos los dígitos que necesites y luego mantén pulsado para confirmar. El espectador no ve nada.";
+"postpred.help.input.clockinput.intro" = "Cuando se abre Performance la pantalla se vuelve completamente **negra** — simulando que el teléfono está apagado. Desliza para introducir todos los dígitos que necesites y deja de deslizar durante 3 segundos para confirmar automáticamente. El espectador no ve nada.";
 "postpred.help.input.clockinput.encoding.title" = "CODIFICACIÓN DE DÍGITOS  (cada dígito = 2 deslizamientos)";
 "postpred.help.input.clockinput.examples.title" = "EJEMPLOS";
-"postpred.help.input.clockinput.example5.note" = "Dígito único 5 — 2 swipes y luego mantener pulsado para confirmar";
+"postpred.help.input.clockinput.example5.note" = "Dígito único 5 — 2 swipes y luego espera 3 segundos sin deslizar";
 "postpred.help.input.clockinput.example37.note" = "Dos dígitos: 3 (→→) y 7 (↓←) — 4 swipes y luego mantener pulsado";
 "postpred.help.input.clockinput.example100.note" = "Tres dígitos: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes y luego mantener pulsado";
 "postpred.help.input.clockinput.haptic.title" = "RESPUESTA HÁPTICA";
 "postpred.help.input.clockinput.haptic.light" = "Toque suave — cada swipe individual registrado";
 "postpred.help.input.clockinput.haptic.medium" = "Pulso medio — dígito completado (2 swipes)";
-"postpred.help.input.clockinput.haptic.success" = "Doble vibración fuerte — número confirmado (1er mantener pulsado)";
+"postpred.help.input.clockinput.haptic.success" = "Doble vibración fuerte — número confirmado tras 3 segundos sin swipes";
 "postpred.help.input.clockinput.haptic.error" = "Zumbido de error + destello — par inválido; el 2.º swipe pasa a ser el 1.º del siguiente par";
-"postpred.help.input.clockinput.dismiss" = "**Primera pulsación larga** (1 s) confirma los dígitos y activa la revelación. **Segunda pulsación larga** descarta la pantalla negra: aparece el perfil de Instagram falso actualizado (con las fotos desarchivadas).";
+"postpred.help.input.clockinput.dismiss" = "Después de 3 segundos sin otro swipe, Vault confirma los dígitos y activa la revelación manteniendo la pantalla negra visible. Toca cualquier parte para cerrarla: aparece al instante el perfil falso de Instagram actualizado.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Entrada";
@@ -1781,7 +1787,7 @@
 "set.input.lockscreen.help" = "Muestra una pantalla de bloqueo falsa al abrir Performance para que puedas introducir el valor en secreto. Elige un fondo abajo.";
 "set.input.digitgrid.help" = "Usa la Cuadrícula de Dígitos oculta en el perfil falso para construir el valor. Post Prediction confirma con el icono de Publicaciones o pulsación larga; Force Reel bloquea el valor al abrir Search/Explore.";
 "set.input.digitgrid.noconfig" = "No requiere configuración.";
-"set.input.clockinput.help" = "Muestra una pantalla completamente negra al abrir Performance. Desliza pares para introducir cualquier número de dígitos y mantén pulsado para confirmar la revelación. Una segunda pulsación larga descarta la pantalla.";
+"set.input.clockinput.help" = "Muestra una pantalla completamente negra al abrir Performance. Desliza pares para introducir cualquier número de dígitos y deja de deslizar durante 3 segundos para confirmar. La pantalla negra queda visible hasta que toques cualquier parte para cerrarla.";
 "set.input.clockinput.noconfig" = "No requiere configuración.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1802,22 +1808,24 @@
 "postpred.help.input.grid.encoding.title" = "Codificación de dígitos  (igual que Clock Input)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "En Performance, desliza en cualquier dirección sobre la cuadrícula. Siempre 4 swipes: primer par = valor, segundo par = palo. Mantén pulsado para confirmar.";
+"set.input.cardclock.help" = "En Performance, desliza sobre la pantalla negra: 2 swipes para el valor (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe para el palo (↑=♠ →=♥ ↓=♣ ←=♦). Deja de deslizar durante 3 segundos para confirmar.";
 "set.input.cardclock.values" = "Codificación de valor  (cara del reloj)";
-"set.input.cardclock.suits" = "Codificación de palo  (misma dirección dos veces)";
-"set.input.cardclock.longpress" = "Mantén pulsado en cualquier lugar de la cuadrícula para confirmar y revelar.";
+"set.input.cardclock.suits" = "Codificación de palo  (un solo swipe)";
+"set.input.cardclock.longpress" = "Después del último swipe, espera 3 segundos sin deslizar para confirmar. Tras la confirmación, toca cualquier parte para cerrar la pantalla negra.";
 "set.input.cardclock.noconfig" = "No se requiere configuración.";
+"set.input.numpadcard.help" = "Performance se abre en una pantalla negra. Toca cualquier parte para mostrar un selector elegante de cartas, elige valor y palo, y la vista desaparece. El nombre localizado de la carta puede rellenar Notes/Bio y un set activo de Playing Cards revela esa carta.";
+"set.input.numpadcard.noconfig" = "No se requiere configuración.";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "RELOJ DE CARTA";
-"postpred.help.input.cardclock.guide.intro" = "Desliza en cualquier dirección sobre la cuadrícula de fotos de Instagram — siempre 4 swipes: los 2 primeros codifican el valor (A–K), los 2 últimos el palo. Mantén pulsado para confirmar y disparar el reveal.";
+"postpred.help.input.cardclock.guide.intro" = "Desliza sobre la cuadrícula de fotos — 3 swipes en total: los 2 primeros codifican el valor (A–K en la esfera del reloj), el 3.º es un solo swipe para el palo. Pulsa el botón de volumen para confirmar y disparar el reveal.";
 "postpred.help.input.cardclock.guide.values" = "CODIFICACIÓN DE VALOR  (cara del reloj)";
-"postpred.help.input.cardclock.guide.suits" = "CODIFICACIÓN DE PALO  (misma dirección dos veces)";
+"postpred.help.input.cardclock.guide.suits" = "CODIFICACIÓN DE PALO  (un solo swipe)";
 "postpred.help.input.cardclock.guide.examples" = "EJEMPLOS";
-"postpred.help.input.cardclock.guide.ex.js" = "Jota de Picas: ←↑ (valor J) + ↑↑ (picas)";
-"postpred.help.input.cardclock.guide.ex.3h" = "3 de Corazones: →→ (valor 3) + →→ (corazones)";
-"postpred.help.input.cardclock.guide.ex.ad" = "As de Diamantes: ↑→ (valor As) + ←← (diamantes)";
-"postpred.help.input.cardclock.guide.longpress" = "Tras el 4.º swipe, mantén pulsado en cualquier lugar de la cuadrícula para confirmar. La foto de la carta correspondiente se desarchiva automáticamente.";
+"postpred.help.input.cardclock.guide.ex.js" = "Jota de Picas: ↑← (valor J) + ↑ (picas)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 de Corazones: →→ (valor 3) + → (corazones)";
+"postpred.help.input.cardclock.guide.ex.ad" = "As de Diamantes: ↑→ (valor As) + ← (diamantes)";
+"postpred.help.input.cardclock.guide.longpress" = "Tras el 3.º swipe, espera 3 segundos sin deslizar. Vault confirma automáticamente y desarchiva la foto de la carta correspondiente. La pantalla negra queda visible hasta que toques cualquier parte.";
 
 "inputs.interface.exclusive.title" = "Entrada exclusiva";
 "inputs.interface.exclusive.body" = "Solo puede haber una interfaz de entrada a la vez entre Sets, Biografía y Notas. Las demás quedan bloqueadas mientras esta está activa:";
@@ -1856,11 +1864,11 @@ Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Not
 "input.guide.compat.number" = "Número / Personalizado";
 "input.guide.compat.number.methods" = "Cuadrícula · Reloj de Números · Bloqueo de Números · Cámara (OCR) · API";
 "input.guide.compat.card" = "Carta";
-"input.guide.compat.card.methods" = "Reloj de Cartas · Bloqueo de Cartas · Cámara (OCR) · API";
+"input.guide.compat.card.methods" = "Reloj de Cartas · Numpad Card · Bloqueo de Cartas · Cámara (OCR) · API";
 "input.guide.covertyping.title" = "Escritura Encubierta";
 "input.guide.covertyping.compat" = "Sets de Palabras";
 "input.guide.covertyping.body" = "Escribes en secreto la palabra elegida por el espectador en la barra de búsqueda de Explorar. En pantalla se muestra una palabra señuelo diferente — la app solo lee lo que tecleas, no lo que aparece. El espectador ve una búsqueda normal de Instagram.";
-"input.guide.covertyping.activate" = "Pulsa la barra de búsqueda en Explorar y escribe la palabra secreta. Un doble espacio la confirma y activa la revelación. La barra muestra una palabra señuelo completamente diferente.";
+"input.guide.covertyping.activate" = "Pulsa la barra de búsqueda en Explorar y escribe la palabra secreta. Pulsa Espacio una vez para confirmar — el espacio desaparece del campo y una vibración sutil confirma que la palabra fue capturada y la revelación activada. La barra sigue mostrando una palabra señuelo.";
 "input.guide.ocr.title" = "Cámara (OCR)";
 "input.guide.ocr.compat" = "Sets de Palabras · Números · Personalizados";
 "input.guide.ocr.body" = "La cámara trasera lee texto en silencio — cartas, palabras escritas, resultados aritméticos, fechas — y envía el resultado a lo que esté usando OCR en ese momento: una predicción, Notes, Bio o cualquier placeholder configurado. Nada aparece en pantalla mientras escanea.";
@@ -1874,13 +1882,18 @@ Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Not
 "input.guide.clock.title" = "Reloj de Números";
 "input.guide.clock.compat" = "Sets de Números · Personalizados";
 "input.guide.clock.body" = "Pantalla completamente negra — como si el teléfono estuviera apagado. Los gestos de deslizamiento codifican dígitos del 0 al 9 usando pares de deslizamientos direccionales: cada dígito requiere exactamente dos deslizamientos seguidos (p. ej. ↑↑ = 0, ↑→ = 1, →→ = 3). El número capturado puede revelar una predicción o rellenar placeholders de Notes/Bio cuando estén configurados para Number Clock.";
-"input.guide.clock.activate" = "La pantalla negra se abre automáticamente cuando el set activo usa Reloj de Números. Desliza pares para construir el número dígito a dígito — cada par completado da una vibración corta. Mantén pulsado para confirmar y activar la revelación.";
+"input.guide.clock.activate" = "La pantalla negra se abre automáticamente cuando el set activo usa Reloj de Números. Desliza pares para construir el número dígito a dígito — cada par completado da una vibración corta. Deja de deslizar durante 3 segundos para confirmar y activar la revelación. Tras la confirmación, toca cualquier parte para cerrar la pantalla negra.";
 "input.guide.clock.tip" = "Misma codificación que la Cuadrícula de Dígitos: si conoces la cuadrícula, el reloj es idéntico. La única diferencia es que funciona en una pantalla completamente negra sin cuadrícula visible.";
 "input.guide.cardclock.title" = "Reloj de Cartas";
 "input.guide.cardclock.compat" = "Sets de Cartas";
-"input.guide.cardclock.body" = "Pantalla completamente negra — igual que el Reloj de Números, pero captura una carta en lugar de un número. Se requieren exactamente 4 deslizamientos: los primeros 2 codifican el valor (A hasta K), los siguientes 2 codifican el palo. La carta capturada puede revelar una predicción o rellenar Notes/Bio con el nombre de la carta en el idioma del dispositivo.";
-"input.guide.cardclock.activate" = "Desliza 1 + 2 para el valor, desliza 3 + 4 para el palo (misma dirección dos veces). Cada par válido da una vibración distinta. Mantén pulsado para confirmar. Un destello de error indica un par inválido.";
+"input.guide.cardclock.body" = "Pantalla completamente negra — igual que el Reloj de Números, pero captura una carta en lugar de un número. Se requieren exactamente 3 deslizamientos: los primeros 2 codifican el valor (A=↑→ 2=→↑ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) y el 3.º es un solo swipe para el palo (↑=♠ →=♥ ↓=♣ ←=♦). La carta capturada puede revelar una predicción o rellenar Notes/Bio con el nombre de la carta en el idioma del dispositivo.";
+"input.guide.cardclock.activate" = "Desliza 1 + 2 para el valor, desliza 3 para el palo (un solo swipe en cualquier dirección). Cada par de valor válido da una vibración distinta; el 3.º swipe confirma que la carta está completa. Deja de deslizar durante 3 segundos para disparar el reveal automáticamente. Tras la confirmación, toca cualquier parte para cerrar la pantalla negra. Un destello de error indica un par de valor inválido.";
 "input.guide.cardclock.tip" = "La tabla completa valor → dirección de deslizamiento se muestra en la pantalla de configuración del set. Memoriza solo las 4–5 cartas que uses con más frecuencia.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Sets de Cartas · Notes · Bio";
+"input.guide.numpadcard.body" = "Un input fullscreen negro para cartas. Al abrir Performance, la pantalla se ve completamente negra. Toca cualquier parte para mostrar un selector privado, elige A-10/J/Q/K y un palo, y la vista se cierra automáticamente mostrando el perfil falso de Instagram. La carta capturada puede revelar un set de Playing Cards o rellenar Notes/Bio con el nombre de la carta en el idioma seleccionado.";
+"input.guide.numpadcard.activate" = "Abre Performance, toca una vez la pantalla negra, selecciona el valor de la carta y después el palo. En cuanto valor + palo están seleccionados, Vault confirma con vibración y cierra la vista.";
+"input.guide.numpadcard.tip" = "Úsalo cuando quieras una entrada de carta más rápida y visual que Card Clock, manteniendo la primera pantalla totalmente negra.";
 "input.guide.lockscreen.title" = "Bloqueo de Números";
 "input.guide.lockscreen.compat" = "Sets de Números · Personalizados";
 "input.guide.lockscreen.body" = "Vault muestra una pantalla de bloqueo falsa de iPhone con teclado PIN. Tú escribes el número secreto primero — luego el espectador puede escribir lo que quiera en el teclado visible. Solo tu secuencia secreta se captura; las pulsaciones del espectador no tienen efecto. La revelación se activa al introducir 4 dígitos.";

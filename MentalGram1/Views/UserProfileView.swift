@@ -702,17 +702,17 @@ struct UserProfileView: View {
                 let offset = followingMagic.effectiveOffset(for: realCount, rawOffset: rawOffset)
                 let offsetMode = followingMagic.offsetMode(for: realCount)
                 let inflated = realCount + offset
-                if useFollowers { magicFollowerText  = formatFollowing(inflated) }
-                else            { magicFollowingText = formatFollowing(inflated) }
+                if useFollowers { magicFollowerText  = formatFollowing(inflated, revealingSmallOffset: offset) }
+                else            { magicFollowingText = formatFollowing(inflated, revealingSmallOffset: offset) }
                 LogManager.shared.info(
                     "Counter visited-deflate prepared @\(currentProfile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) input:\(rawOffset) effectiveOffset:\(offset) mode:\(offsetMode) start:\(inflated) end:\(realCount)",
                     category: .profile
                 )
                 logVisibleCountState(reason: "magic override applied")
                 if followingMagic.transferEnabled {
-                    print("🎩 [TRANSFER] Pre-inflated to \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(offset)) — deflate to real on volume press")
+                    print("🎩 [TRANSFER] Pre-inflated to \(formatFollowing(inflated, revealingSmallOffset: offset)) (real:\(formatFollowing(realCount, revealingSmallOffset: offset)) +\(offset)) — deflate to real on volume press")
                 } else {
-                    print("🎩 [MAGIC] Showing inflated: \(formatFollowing(inflated)) (real:\(formatFollowing(realCount)) +\(offset))")
+                    print("🎩 [MAGIC] Showing inflated: \(formatFollowing(inflated, revealingSmallOffset: offset)) (real:\(formatFollowing(realCount, revealingSmallOffset: offset)) +\(offset))")
                 }
                 VolumeButtonMonitor.shared.startMonitoring()
             }
@@ -832,17 +832,17 @@ struct UserProfileView: View {
     // MARK: - Following Counter Magic
 
     /// Formats a count for the magic countdown display.
-    /// For counts >= 10K, uses K notation (e.g. "206K") so the countdown looks natural.
-    /// For counts < 10K, shows the raw integer (e.g. "1025").
-    private func formatFollowing(_ count: Int) -> String {
-        if count >= 1_000_000 {
-            let value = Double(count) / 1_000_000
-            return value == value.rounded() ? String(format: "%.0fM", value) : String(format: "%.1fM", value)
-        } else if count >= 10_000 {
-            let value = Double(count) / 1_000
-            return value == value.rounded() ? String(format: "%.0fK", value) : String(format: "%.1fK", value)
-        }
-        return "\(count)"
+    /// Counter Glitch shows full exact counts while the override is active so
+    /// small offsets remain visible on 1K+ profiles.
+    private func formatFollowing(_ count: Int, revealingSmallOffset offset: Int? = nil) -> String {
+        formatFullCount(count)
+    }
+
+    private func formatFullCount(_ count: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = Locale(identifier: "en_US")
+        return formatter.string(from: NSNumber(value: count)) ?? "\(count)"
     }
 
     private func launchGlitchOrCountdown() {
@@ -864,10 +864,9 @@ struct UserProfileView: View {
         let realCount = useFollowers ? currentProfile.followerCount : currentProfile.followingCount
         let offset = followingMagic.effectiveOffset(for: realCount, rawOffset: rawOffset)
         let offsetMode = followingMagic.offsetMode(for: realCount)
-        // Step size scales with offset so the animation always finishes in countdownDuration.
-        // For K-mode the minimum step is 100 (= 0.1 K per visual update, smooth appearance).
-        let minStep = realCount >= 10_000 ? 100 : 1
-        let stepSize = max(minStep, offset / 200)
+        // Exact offset mode: animate one visible count at a time, matching the
+        // original Counter Glitch behavior.
+        let stepSize = 1
         let visibleSteps = max(1, offset / stepSize)
         let totalMs = followingMagic.countdownDuration * 1000
         let intervalMs = max(16, totalMs / max(1, visibleSteps))
@@ -888,7 +887,7 @@ struct UserProfileView: View {
 
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
                 current -= stepSize
-                setMagicText(self.formatFollowing(max(current, realCount)))
+                setMagicText(self.formatFollowing(max(current, realCount), revealingSmallOffset: offset))
 
                 if current <= realCount {
                     timer.invalidate()
@@ -902,7 +901,7 @@ struct UserProfileView: View {
                         "Counter visited-deflate completed @\(self.currentProfile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) input:\(rawOffset) effectiveOffset:\(offset) mode:\(offsetMode)",
                         category: .profile
                     )
-                    print("🎩 [TRANSFER] Deflation complete — back to real: \(self.formatFollowing(realCount)), offset \(offset) saved for phase 2")
+                    print("🎩 [TRANSFER] Deflation complete — back to real: \(self.formatFollowing(realCount, revealingSmallOffset: offset)), offset \(offset) saved for phase 2")
                 }
             }
         } else {
@@ -912,7 +911,7 @@ struct UserProfileView: View {
             countdownTimer = Timer.scheduledTimer(withTimeInterval: Double(intervalMs) / 1000.0, repeats: true) { timer in
                 current -= stepSize
                 let displayCurrent = max(current, realCount)
-                setMagicText(self.formatFollowing(displayCurrent))
+                setMagicText(self.formatFollowing(displayCurrent, revealingSmallOffset: offset))
 
                 if displayCurrent <= target {
                     timer.invalidate()
@@ -922,7 +921,7 @@ struct UserProfileView: View {
                     self.followingMagic.clear()
                     VolumeButtonMonitor.shared.stopMonitoring()
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    print("🎩 [MAGIC] Countdown complete — showing real count: \(self.formatFollowing(target))")
+                    print("🎩 [MAGIC] Countdown complete — showing real count: \(self.formatFollowing(target, revealingSmallOffset: offset))")
                 }
             }
         }

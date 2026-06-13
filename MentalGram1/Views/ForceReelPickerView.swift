@@ -13,8 +13,12 @@ struct ForceReelPickerView: View {
     @State private var reels: [InstagramMediaItem] = []
     @State private var cachedImages: [String: UIImage] = [:]
     @State private var isLoading = false
+    @State private var isLoadingMore = false
+    @State private var hasMorePages = false
+    @State private var nextMaxId: String? = nil
     @State private var errorMessage: String?
     @State private var searchedUsername: String = ""
+    @State private var searchedUserId: String = ""
     @State private var lastSearchTime: Date = .distantPast
     @State private var showingRelogin = false
 
@@ -23,6 +27,7 @@ struct ForceReelPickerView: View {
         GridItem(.flexible(), spacing: 1),
         GridItem(.flexible(), spacing: 1)
     ]
+    private let pageSize = 18
 
     var body: some View {
         NavigationView {
@@ -89,11 +94,17 @@ struct ForceReelPickerView: View {
                     // Reels grid
                     ScrollView {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(String(format: String(localized: "force_reel.picker.header"), searchedUsername, reels.count))
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 12)
-                                .padding(.top, 8)
+                            HStack {
+                                Text(String(format: String(localized: "force_reel.picker.header"), searchedUsername, reels.count) + (hasMorePages ? "+" : ""))
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if isLoadingMore {
+                                    ProgressView().scaleEffect(0.7)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.top, 8)
 
                             LazyVGrid(columns: columns, spacing: 1) {
                                 ForEach(reels) { reel in
@@ -103,7 +114,27 @@ struct ForceReelPickerView: View {
                                         isSelected: settings.slots.contains(where: { $0.mediaId == reel.mediaId }),
                                         onTap: { select(reel) }
                                     )
+                                    .onAppear { loadMoreIfNeeded(currentReel: reel) }
                                 }
+                            }
+
+                            if hasMorePages {
+                                Button(action: loadMoreReels) {
+                                    if isLoadingMore {
+                                        ProgressView()
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
+                                    } else {
+                                        Text("Load more reels")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
+                                    }
+                                }
+                                .disabled(isLoadingMore)
+                                .buttonStyle(.bordered)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
                             }
                         }
                     }
@@ -163,7 +194,10 @@ struct ForceReelPickerView: View {
         isLoading = true
         reels = []
         cachedImages = [:]
+        nextMaxId = nil
+        hasMorePages = false
         searchedUsername = username
+        searchedUserId = ""
 
         Task {
             do {
@@ -197,26 +231,25 @@ struct ForceReelPickerView: View {
                 }
 
                 let userId = match.userId
+                await MainActor.run { searchedUserId = userId }
                 print("🎭 [FORCE] Found @\(username) → userId: \(userId)")
 
                 // ANTI-BOT: Random pause between search and reel fetch (1.0–2.5 s)
                 let pause = UInt64.random(in: 1_000_000_000...2_500_000_000)
                 try await Task.sleep(nanoseconds: pause)
 
-                // Fetch reels — keep amount at 18 (same as rest of app)
-                let fetchedReels = try await instagram.getUserReels(userId: userId, amount: 18)
+                let (fetchedReels, nextId) = try await instagram.getUserReelsPage(userId: userId, amount: pageSize)
+                let uniqueFetched = uniqueReels(fetchedReels)
                 await MainActor.run {
-                    reels = fetchedReels
+                    reels = uniqueFetched
+                    nextMaxId = nextId
+                    hasMorePages = nextId != nil
                     isLoading = false
-                    print("🎭 [FORCE] Loaded \(fetchedReels.count) reels for @\(username)")
+                    print("🎭 [FORCE] Loaded \(uniqueFetched.count) reels for @\(username)")
                 }
 
                 // Download thumbnails (CDN, not Instagram API — low risk, no delay needed)
-                for reel in fetchedReels {
-                    if let img = await downloadImage(from: reel.imageURL) {
-                        await MainActor.run { cachedImages[reel.imageURL] = img }
-                    }
-                }
+                await downloadThumbnails(for: uniqueFetched)
             } catch {
                 await MainActor.run {
                     isLoading = false
@@ -227,6 +260,50 @@ struct ForceReelPickerView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func loadMoreReels() {
+        guard let maxId = nextMaxId, !searchedUserId.isEmpty else { return }
+        guard !isLoadingMore else { return }
+        isLoadingMore = true
+
+        Task {
+            do {
+                let pause = UInt64.random(in: 650_000_000...1_200_000_000)
+                try await Task.sleep(nanoseconds: pause)
+
+                let (fetched, nextId) = try await instagram.getUserReelsPage(userId: searchedUserId, amount: pageSize, maxId: maxId)
+                let existingKeys = await MainActor.run {
+                    Set(reels.map { $0.mediaId.isEmpty ? $0.imageURL : $0.mediaId })
+                }
+                let fresh = uniqueReels(fetched.filter {
+                    !existingKeys.contains($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId)
+                })
+
+                await MainActor.run {
+                    reels.append(contentsOf: fresh)
+                    nextMaxId = nextId
+                    hasMorePages = nextId != nil && nextId != maxId
+                    isLoadingMore = false
+                }
+                await downloadThumbnails(for: fresh)
+            } catch {
+                await MainActor.run { isLoadingMore = false }
+                print("⚠️ [FORCE REEL] Pagination error: \(error)")
+            }
+        }
+    }
+
+    private func loadMoreIfNeeded(currentReel: InstagramMediaItem) {
+        guard hasMorePages, !isLoadingMore else { return }
+        let currentKey = currentReel.mediaId.isEmpty ? currentReel.imageURL : currentReel.mediaId
+        guard let index = reels.firstIndex(where: {
+            ($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId) == currentKey
+        }) else { return }
+        let threshold = max(1, Int(Double(reels.count) * 0.65))
+        if index >= threshold {
+            loadMoreReels()
         }
     }
 
@@ -250,6 +327,23 @@ struct ForceReelPickerView: View {
               let url = URL(string: urlString),
               let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
         return UIImage(data: data)
+    }
+
+    private func downloadThumbnails(for items: [InstagramMediaItem]) async {
+        for item in items {
+            guard cachedImages[item.imageURL] == nil else { continue }
+            if let img = await downloadImage(from: item.imageURL) {
+                await MainActor.run { cachedImages[item.imageURL] = img }
+            }
+        }
+    }
+
+    private func uniqueReels(_ items: [InstagramMediaItem]) -> [InstagramMediaItem] {
+        var seen = Set<String>()
+        return items.filter { item in
+            let key = item.mediaId.isEmpty ? item.imageURL : item.mediaId
+            return seen.insert(key).inserted
+        }
     }
 }
 

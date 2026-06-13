@@ -19,6 +19,11 @@ struct FakeHomeScreenGuideView: View {
                             guideBody(String(localized: "guide.fakehome.help.what.body"))
                         }
                         sectionDivider
+                        guideSection(icon: "moon.fill", iconColor: accent,
+                                     title: String(localized: "guide.fakehome.help.screenoff.title", defaultValue: "Fake Screen Off")) {
+                            guideBody(String(localized: "guide.fakehome.help.screenoff.body", defaultValue: "Fake Screen Off uses the same flow as Fake Home Screen, but the cover is pure black. It can stay visible while OCR, Inject/API, biography, notes, or other background inputs keep working underneath. Tap anywhere to reveal Performance."))
+                        }
+                        sectionDivider
                         guideSection(icon: "hand.tap.fill", iconColor: accent,
                                      title: String(localized: "guide.fakehome.help.how.title")) {
                             guideBody(String(localized: "guide.fakehome.help.how.body"))

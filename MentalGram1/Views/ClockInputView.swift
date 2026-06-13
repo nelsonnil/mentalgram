@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 // MARK: - Digit Encoding
 //
@@ -24,26 +25,25 @@ enum ClockInputMode { case number, card }
 /// Number encoding (same as Digit Grid):
 ///   Each digit (0-9) = 2 consecutive swipes.
 ///   0=↑↑  1=↑→  2=→↑  3=→→  4=→↓  5=↓→  6=↓↓  7=↓←  8=←↓  9=←←
-///   No digit-count limit. Swipe pairs, then long-press to confirm → onReveal([digits]).
+///   No digit-count limit. Swipe pairs, then stop swiping for 3 seconds to confirm.
 ///
 /// Card encoding (same clock-face mapping as the grid card input):
-///   4 swipes total = value pair (K=↑↑, A=↑→, 2=→↑, … J=←↑, Q=↑←) + suit pair
-///   (↑↑=♠, →→=♥, ↓↓=♣, ←←=♦). Long-press confirms → onRevealCard("A♥").
-///
-/// After confirming, long-press again to dismiss.
+///   3 swipes total = value pair (A=↑→ 2=→↑ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓)
+///   + single suit swipe (↑=♠ →=♥ ↓=♣ ←=♦).
+///   After the third swipe, stop swiping for 3 seconds to confirm → onRevealCard("Q♣").
 struct ClockInputView: View {
 
     /// Capture mode. Defaults to number for existing call sites.
     var mode: ClockInputMode = .number
 
-    /// Called with the digit array when the user long-presses to confirm (number mode).
+    /// Called with the digit array when the inactivity timer confirms (number mode).
     /// e.g. [3] for "3", [3,6,9] for "369", [4,2] for "42".
     let onReveal: ([Int]) -> Void
 
     /// Called with the card symbol (e.g. "A♥") when confirmed (card mode).
     var onRevealCard: ((String) -> Void)? = nil
 
-    /// Called when the user long-presses after the reveal to dismiss.
+    /// Called when the user taps the black screen after the reveal to dismiss.
     let onDismiss: () -> Void
 
     // ── Swipe buffer (number mode) ────────────────────────────────────────
@@ -51,15 +51,19 @@ struct ClockInputView: View {
     @State private var pendingSwipe: SwipeDir? = nil
     /// Completed digits accumulated so far.
     @State private var digitBuffer: [Int] = []
-    /// True once onReveal has been called (long-press commits and sets this).
+    /// True once onReveal has been called (inactivity timer commits and sets this).
     @State private var revealed = false
 
     // ── Card buffer (card mode) ───────────────────────────────────────────
-    /// Raw swipes accumulated for the card: value pair (idx 0-1) + suit pair (idx 2-3).
+    /// Raw swipes accumulated for the card: value pair (idx 0-1) + single suit (idx 2).
     @State private var cardSwipes: [SwipeDir] = []
 
     // Flash feedback: briefly dims screen on invalid swipe pair
     @State private var flashError = false
+
+    /// Debounced validation task. Restarted after every swipe; commits only after
+    /// 3 seconds without another swipe.
+    @State private var inactivityCommitTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack {
@@ -77,15 +81,16 @@ struct ClockInputView: View {
                     handleSwipe(swipeDirection(from: value))
                 }
         )
-        // Long press:
-        //   • Before reveal  → commit whatever digits are buffered (≥1 digit required)
-        //   • After reveal   → dismiss the overlay
-        .onLongPressGesture(minimumDuration: 1.0) {
+        .onTapGesture {
+            // Once the value has been sent to Instagram, keep the black screen as cover
+            // until the performer intentionally reveals the fake profile.
             if revealed {
                 onDismiss()
-            } else {
-                commitBuffer()
             }
+        }
+        .onDisappear {
+            inactivityCommitTask?.cancel()
+            inactivityCommitTask = nil
         }
     }
 
@@ -132,13 +137,14 @@ struct ClockInputView: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             print("🖤 [CLOCK-INPUT] first swipe \(dir) — waiting for second")
         }
+        scheduleInactivityCommit()
     }
 
     // MARK: - Card swipe processing
     //
-    // Phase 1 (swipes 1-2): value pair — one of the 12 valid card-value pairs.
-    // Phase 2 (swipes 3-4): suit pair  — same direction twice.
-    // Invalid pairs roll back and the offending swipe starts a new attempt.
+    // Phase 1 (swipes 1-2): value pair — 13 valid combos (A–K clock face).
+    // Phase 2 (swipe 3):    single suit — ↑=♠ →=♥ ↓=♣ ←=♦ (always valid).
+    // Invalid value pair resets buffer; suit swipe is always accepted.
 
     private func handleCardSwipe(_ dir: SwipeDir) {
         let idx = cardSwipes.count
@@ -156,36 +162,38 @@ struct ClockInputView: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         case 2:
+            // Single suit swipe — any direction is valid
             cardSwipes.append(dir)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        case 3:
-            if dir == cardSwipes[2] {
-                cardSwipes.append(dir)
-                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                print("🖤 [CLOCK-INPUT] card complete: \(decodedCardSymbol ?? "?")")
-            } else {
-                triggerErrorFlash()
-                cardSwipes = Array(cardSwipes.prefix(2)) + [dir]
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            }
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            print("🖤 [CLOCK-INPUT] card complete: \(decodedCardSymbol ?? "?")")
         default:
             break
         }
+        scheduleInactivityCommit()
     }
 
     private var decodedCardSymbol: String? {
-        guard cardSwipes.count == 4,
-              let val  = SecretNumberManager.decodeCardValue(cardSwipes[0], cardSwipes[1]),
-              let suit = SecretNumberManager.decodeSuit(cardSwipes[2], cardSwipes[3]) else { return nil }
+        guard cardSwipes.count == 3,
+              let val = SecretNumberManager.decodeCardValue(cardSwipes[0], cardSwipes[1]) else { return nil }
+        let suit = SecretNumberManager.decodeSuit(cardSwipes[2])
         return "\(val)\(suit)"
     }
 
-    // MARK: - Commit (long-press)
+    // MARK: - Commit (inactivity)
+
+    private func scheduleInactivityCommit() {
+        inactivityCommitTask?.cancel()
+        inactivityCommitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            commitBuffer()
+        }
+    }
 
     private func commitBuffer() {
         if mode == .card {
             guard let symbol = decodedCardSymbol else {
-                // Card not complete yet — gentle warning haptic
+                // Card not complete yet — keep the black screen waiting for more swipes.
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 return
             }
@@ -193,11 +201,6 @@ struct ClockInputView: View {
             print("📳 [CLOCK-INPUT] Committed card: \(symbol)")
             fireDoubleVibration()
             onRevealCard?(symbol)
-            // Auto-dismiss after a brief pause so the user feels the confirmation
-            // haptics before the black screen disappears — no second long press needed.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                onDismiss()
-            }
             return
         }
 
@@ -213,11 +216,6 @@ struct ClockInputView: View {
         print("📳 [CLOCK-INPUT] Committed: \(number) — digits: \(digitBuffer)")
         fireDoubleVibration()
         onReveal(digitBuffer)
-        // Auto-dismiss after a brief pause so the confirmation haptics complete
-        // before the fake Instagram profile is revealed — no second long press needed.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            onDismiss()
-        }
     }
 
     // MARK: - Error flash

@@ -210,11 +210,13 @@ struct LimitsHelpView: View {
                 VStack(spacing: 0) {
                     tableHeaderRow
                     Divider().background(Color.white.opacity(0.08))
-                    tableDataRow("limits.help.table.row.performance", first: "3",   again: "0 ✓")
+                    tableDataRow("limits.help.table.row.performance", first: "3–5", again: "0–5")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.followers",   first: "1",   again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.profile.new", first: "3–4", again: "0 ✓")
+                    Divider().background(Color.white.opacity(0.06))
+                    tableDataRow("limits.help.table.row.profilepic",  first: "1",   again: "1")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.sa",          first: "2",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
@@ -224,7 +226,7 @@ struct LimitsHelpView: View {
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.reveal",      first: "1",   again: "—")
                     Divider().background(Color.white.opacity(0.06))
-                    tableDataRow("limits.help.table.row.notebio",     first: "1–2", again: "1")
+                    tableDataRow("limits.help.table.row.notebio",     first: "1",   again: "1")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.explore",     first: "1–2", again: "0 ✓")
                 }

@@ -506,6 +506,13 @@
 "postpred.help.howitworks.body2" = "공개를 트리거하면 앱이 해당 사진의 보관을 해제합니다. 사진은 **원래 그리드 위치**에 **원래 날짜**로 다시 나타납니다.";
 "postpred.help.howitworks.info" = "관객은 실제 Instagram 프로필의 실제 게시물을 봅니다. 앱은 보이지 않습니다.";
 "postpred.help.howitworks.archive_reason" = "Instagram은 새 사진을 올린 뒤 예전 날짜로 바꾸는 기능을 허용하지 않습니다. Vault는 예측 이미지를 미리 업로드하고 즉시 보관 처리하여 이를 해결합니다. Instagram은 원래 업로드 날짜와 그리드 위치를 유지하므로, 나중에 보관 해제된 예측 이미지는 처음부터 있었던 오래된 게시물처럼 보입니다. 업로드와 보관은 자동으로 즉시 이루어지기 때문에 관객은 실제 프로필에서 준비용 사진을 보지 못합니다.";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "세트";
 "postpred.help.metric.sets.desc" = "미리 업로드하고 보관한 사진 컬렉션. A-Z 문자 또는 0-9 숫자. 공개 준비 완료.";
 "postpred.help.metric.banks" = "뱅크";
@@ -1254,7 +1261,7 @@
 
 "limits.help.gauge.title" = "시간당 55회 행동 예산";
 "limits.help.gauge.body" = "Instagram은 연결된 앱을 시간당 55회 행동으로 제한합니다. 예산은 60분 롤링 윈도우로 작동합니다 — 각 행동은 실행 후 정확히 60분 후에 만료되므로, 강제 재설정 없이 카운터가 자동으로 감소합니다.";
-"limits.help.gauge.cache" = "처음으로 Performance 또는 팔로워 프로필을 열면 앱이 Instagram에 접속합니다(예산 사용). 이후 방문은 캐시에서 즉시 무료로 로드됩니다.";
+"limits.help.gauge.cache" = "빠른 반복 방문은 캐시를 사용하므로 0일 수 있습니다. 안전 쿨다운 후에는 Performance 또는 팔로워 프로필이 다시 새로고침되어 예산을 사용할 수 있습니다.";
 "limits.help.gauge.hardstop" = "55 한도에 도달하면, 앱은 자동으로 Instagram으로의 모든 추가 요청을 중단합니다. 아무것도 전송되지 않고, 아무것도 실행되지 않습니다 — 예산이 갱신될 때까지 조용히 대기합니다. 아무것도 할 필요가 없습니다.";
 "limits.help.gauge.zone.safe" = "안전 (>20)";
 "limits.help.gauge.zone.low" = "낮음 (8–20)";
@@ -1268,6 +1275,7 @@
 "limits.help.table.row.performance" = "Performance 열기";
 "limits.help.table.row.followers" = "팔로워 목록";
 "limits.help.table.row.profile.new" = "새 팔로워 프로필";
+"limits.help.table.row.profilepic" = "프로필 사진 변경";
 "limits.help.table.row.sa" = "Sync & Archive (사진당)";
 "limits.help.table.row.upload" = "업로드 (사진당)";
 "limits.help.table.row.autoupload" = "자동 업로드 전체 사이클 (사진 1장당)";
@@ -1275,13 +1283,14 @@
 "limits.help.table.row.notebio" = "노트 또는 bio 변경";
 "limits.help.table.row.explore" = "탐색 / 검색";
 "limits.help.sa.auto" = "리빌과 프로필 방문을 포함한 완전한 퍼포먼스 후, 앱은 Sync & Archive 전에 자동으로 짧은 대기 시간을 추가합니다. 이는 정상입니다 — 세션을 보호합니다.";
-"limits.help.table.cache.lost" = "Performance 캐시는 반복 방문 시 무료로 로드됩니다. 다음 경우 캐시가 손실될 수 있습니다: 앱 재설치, 계정 전환, 앱 데이터 삭제, 새 기기로 복원 — 이 경우 첫 번째 진입에 3개 액션이 소요됩니다.";
+"limits.help.table.cache.lost" = "Performance를 열면 보통 프로필 + 게시물에 3개 액션이 들며, Reels/Tagged 캐시를 다시 만들어야 하면 최대 5개까지 들 수 있습니다. 빠른 반복 진입은 0일 수 있지만, 이후 새로고침은 다시 예산을 사용할 수 있습니다. Highlights는 Performance에서 자동으로 새로고침되지 않습니다.";
+"limits.help.table.batch.note" = "사진별 비용은 합산됩니다. 사진 4장의 Sync & Archive = 총 8개 액션. 사진 4장 업로드 = 총 9개(준비 호출 1개 + 사진당 2개). 프로필 사진은 예산 액션 1개로 표시되지만, Instagram에는 이미지 업로드 호출도 전송됩니다.";
 
 "limits.help.profiles.title" = "프로필 방문 — 가장 비용이 많이 드는 행동";
-"limits.help.profiles.body" = "새 팔로워 프로필을 열 때마다 4–5회 행동이 소비됩니다. 같은 프로필의 두 번째 방문은 캐시에서 로드되므로 무료입니다. 그래서 3–4개의 다른 프로필을 빠르게 열면 예산이 소진되고 봇 탐지가 활성화될 수 있습니다.";
+"limits.help.profiles.body" = "새 팔로워 프로필을 열면 보통 3–4개 액션이 소비됩니다. 같은 프로필의 빠른 두 번째 방문은 캐시에서 로드되지만, 이후 새로고침은 다시 예산을 사용할 수 있습니다. 그래서 3–4개의 다른 프로필을 빠르게 열면 예산이 소진되고 봇 탐지가 활성화될 수 있습니다.";
 "limits.help.profiles.max" = "권장 사항: 세션당 최대 2개의 새 프로필만 여세요. Sync & Archive 직전에 새 프로필 방문을 피하세요.";
 "limits.help.reddot.title" = "빨간 점";
-"limits.help.reddot.body" = "행동이 8개 미만으로 남으면 팔로워 목록 헤더의 아이콘에 작은 빨간 점이 나타납니다. 퍼포먼스 중에는 보이지 않으며, 오직 당신만 볼 수 있습니다.";
+"limits.help.reddot.body" = "남은 액션이 8개 미만이면 팔로워 목록 헤더나 Performance의 종이비행기 같은 개인용 제어 아이콘에 작은 빨간 점이 나타납니다. 추가 예산을 쓰기 전에 알려주는 경고입니다.";
 "limits.help.reddot.block" = "예산이 위험 수준일 때 새 프로필을 열려고 하면, 앱이 강한 진동으로 행동을 차단합니다. API 호출이 이루어지지 않아 세션이 안전하게 유지됩니다.";
 "limits.help.reddot.location.followers" = "팔로워 목록";
 "limits.help.reddot.location.performance" = "종이 비행기 아이콘 (Performance)";
@@ -1480,7 +1489,7 @@
 "faq.q.not_instagram.question" = "관중이 왜 앱이 Instagram처럼 생겼냐고 묻습니다. 뭐라고 하나요?";
 "faq.q.not_instagram.answer" = "Performance는 Instagram 프로필의 충실한 시각적 복제본입니다 — 동일한 레이아웃, 동일한 사진, 동일한 카운터. 누군가 묻는다면 Instagram을 확인하는 중이라고 간단히 말하면 됩니다. 표시되는 데이터는 실제이며 계정에서 실시간으로 가져온 것입니다.";
 
-"upload.tip.title" = "업로드 팁";
+"upload.tip.title" = "업로드를 켜 둔 채로 두어도 됩니다";
 "upload.tip.overnight" = "업로드가 활성화된 동안 화면은 계속 켜져 있습니다 — 잠금이나 절전 모드가 절대 발생하지 않습니다. 충전기에 연결하고 밤새 실행하면 10개 이상의 뱅크를 손 하나 안 대고 채울 수 있습니다.";
 "upload.tip.background" = "폰을 사용하고 싶으신가요? 다른 앱으로 자유롭게 전환하세요. 다음 사진을 업로드할 준비가 되면 팝업 알림이 이 화면으로 안내합니다.";
 
@@ -1525,18 +1534,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "스와이프 블라인드";
-"postpred.help.input.clockinput.intro" = "Performance가 열리면 화면이 완전히 **검게** 변합니다 — 전화기가 꺼진 것처럼 보입니다. 필요한 만큼 숫자를 스와이프로 입력한 후 길게 눌러 확인하세요. 관중에게는 아무것도 보이지 않습니다.";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "숫자 인코딩  (숫자 1개 = 스와이프 2회)";
 "postpred.help.input.clockinput.examples.title" = "예시";
-"postpred.help.input.clockinput.example5.note" = "숫자 5 하나 — 스와이프 2회 후 길게 눌러 확인";
-"postpred.help.input.clockinput.example37.note" = "두 자리: 3 (→→) 다음 7 (↓←) — 스와이프 4회 후 길게 누름";
-"postpred.help.input.clockinput.example100.note" = "세 자리: 3 (→→), 6 (↓↓), 9 (←←) — 스와이프 6회 후 길게 누름";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "햅틱 피드백";
 "postpred.help.input.clockinput.haptic.light" = "가벼운 진동 — 스와이프 1회마다 반응";
 "postpred.help.input.clockinput.haptic.medium" = "중간 진동 — 숫자 완성 (스와이프 2회)";
-"postpred.help.input.clockinput.haptic.success" = "강한 이중 진동 — 숫자 확정 (첫 번째 길게 누름)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "오류 진동 + 화면 깜빡임 — 잘못된 쌍; 두 번째 스와이프가 다음 쌍의 첫 번째가 됩니다";
-"postpred.help.input.clockinput.dismiss" = "**첫 번째 길게 누름** (1초)으로 숫자가 확정되고 공개가 시작됩니다. **두 번째 길게 누름**으로 검은 화면이 닫히며 업데이트된 가짜 Instagram 프로필이 즉시 표시됩니다.";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "입력";
@@ -1552,7 +1561,7 @@
 "set.input.lockscreen.help" = "Performance가 열릴 때 가짜 잠금 화면을 표시하여 비밀리에 값을 입력할 수 있습니다. 아래에서 배경화면을 설정하세요.";
 "set.input.digitgrid.help" = "가짜 프로필의 숨겨진 숫자 그리드로 값을 만듭니다. Post Prediction은 게시물 아이콘 또는 길게 누르기로 확정하고, Force Reel은 Search/Explore를 열 때 값을 잠급니다.";
 "set.input.digitgrid.noconfig" = "구성이 필요하지 않습니다.";
-"set.input.clockinput.help" = "Performance를 열면 완전히 검은 화면이 표시됩니다. 스와이프 쌍으로 원하는 자릿수를 입력하고 길게 눌러 확인하세요. 두 번째 길게 누름으로 화면을 닫습니다.";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "구성이 필요하지 않습니다.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1573,22 +1582,22 @@
 "postpred.help.input.grid.encoding.title" = "숫자 인코딩  (Clock Input과 동일)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "Performance에서 그리드 위를 임의 방향으로 스와이프하세요. 항상 4번: 첫 쌍 = 카드 값, 둘째 쌍 = 수트. 길게 눌러 확인.";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "숫자 인코딩  (시계 문자판)";
-"set.input.cardclock.suits" = "수트 인코딩  (같은 방향 두 번)";
-"set.input.cardclock.longpress" = "그리드 아무 곳이나 길게 눌러 확인하세요.";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "구성이 필요 없습니다.";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "카드 클록";
-"postpred.help.input.cardclock.guide.intro" = "Instagram 그리드 위를 임의 방향으로 스와이프 — 항상 4번: 처음 2번은 값(A~K), 마지막 2번은 수트 인코딩. 길게 눌러 확인.";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "숫자 인코딩  (시계 문자판)";
-"postpred.help.input.cardclock.guide.suits" = "수트 인코딩  (같은 방향 두 번)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "예시";
-"postpred.help.input.cardclock.guide.ex.js" = "스페이드 J: ←↑(J값) + ↑↑(스페이드)";
-"postpred.help.input.cardclock.guide.ex.3h" = "하트 3: →→(3값) + →→(하트)";
-"postpred.help.input.cardclock.guide.ex.ad" = "다이아몬드 A: ↑→(A값) + ←←(다이아몬드)";
-"postpred.help.input.cardclock.guide.longpress" = "4번째 스와이프 후 길게 눌러 확인하세요. 해당 카드 사진이 자동으로 공개됩니다.";
+"postpred.help.input.cardclock.guide.ex.js" = "스페이드 J: ↑←(J값) + ↑(스페이드)";
+"postpred.help.input.cardclock.guide.ex.3h" = "하트 3: →→(3값) + →(하트)";
+"postpred.help.input.cardclock.guide.ex.ad" = "다이아몬드 A: ↑→(A값) + ←(다이아몬드)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "단독 입력";
 "inputs.interface.exclusive.body" = "세트, 소개, 노트에서 입력 인터페이스는 한 번에 하나만 사용할 수 있습니다. 이것이 활성화된 동안 나머지는 잠깁니다:";
@@ -1631,7 +1640,7 @@ Set, soGae, noteeseo han beon e hana ui in teopeoiseu yuhyeong man hwalseonghwa 
 "input.guide.covertyping.title" = "커버 타이핑";
 "input.guide.covertyping.compat" = "단어 세트";
 "input.guide.covertyping.body" = "관객이 선택한 단어를 탐색 검색 바에 비밀리에 입력합니다. 화면에는 다른 미끼 단어가 표시됩니다 — 앱은 당신이 입력하는 것만 읽고 화면에 표시되는 것은 읽지 않습니다.";
-"input.guide.covertyping.activate" = "탐색에서 검색 바를 탭하고 비밀 단어를 입력합니다. 더블 스페이스로 확인하고 공개를 트리거합니다. 바는 완전히 다른 미끼 단어를 표시합니다.";
+"input.guide.covertyping.activate" = "탐색에서 검색 바를 탭하고 비밀 단어를 입력합니다. 스페이스 바를 한 번 눌러 확인합니다 — 스페이스가 필드에서 사라지고 미묘한 진동으로 단어가 캡처되고 공개가 트리거되었음을 알 수 있습니다. 바에는 계속해서 미끼 단어가 표시됩니다.";
 "input.guide.ocr.title" = "카메라 (OCR)";
 "input.guide.ocr.compat" = "단어 · 숫자 · 커스텀 세트";
 "input.guide.ocr.body" = "후면 카메라가 프레임 내 텍스트(트럼프 카드, 쓰여진 단어, 계산 결과, 날짜)를 조용히 읽고 결과를 활성 세트로 직접 보냅니다. 스캔 중에는 화면에 아무것도 나타나지 않습니다.";
@@ -1645,12 +1654,12 @@ Set, soGae, noteeseo han beon e hana ui in teopeoiseu yuhyeong man hwalseonghwa 
 "input.guide.clock.title" = "숫자 시계";
 "input.guide.clock.compat" = "숫자 · 커스텀 세트";
 "input.guide.clock.body" = "완전히 검은 화면 — 마치 전화기가 꺼진 것처럼 보입니다. 스와이프 제스처가 방향 쌍을 사용해 숫자 0~9를 인코딩합니다. 각 숫자는 정확히 두 번의 연속 스와이프가 필요합니다 (예: ↑↑ = 0, ↑→ = 1, →→ = 3). 길이 제한 없이 숫자를 입력할 수 있습니다.";
-"input.guide.clock.activate" = "활성 세트가 숫자 시계를 사용하면 검은 화면이 자동으로 열립니다. 쌍으로 스와이프하여 숫자를 한 자리씩 만듭니다. 길게 눌러 확인.";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "숫자 그리드와 동일한 인코딩: 그리드를 알면 시계도 동일합니다. 유일한 차이점은 그리드가 보이지 않는 완전히 검은 화면입니다.";
 "input.guide.cardclock.title" = "카드 시계";
 "input.guide.cardclock.compat" = "카드 세트";
-"input.guide.cardclock.body" = "완전히 검은 화면 — 숫자 시계와 동일하지만 숫자 대신 트럼프 카드를 캡처합니다. 정확히 4번의 스와이프 필요: 처음 2번이 숫자 값(A~K) 인코딩, 다음 2번이 무늬 인코딩. 무늬 인코딩: 같은 방향 두 번 (↑↑ = ♠, →→ = ♥, ↓↓ = ♣, ←← = ♦).";
-"input.guide.cardclock.activate" = "1 + 2번 스와이프로 값을, 3 + 4번 스와이프로 무늬 입력 (같은 방향 두 번). 유효한 각 쌍에 고유한 진동이 납니다. 길게 눌러 확인. 오류 플래시는 유효하지 않은 쌍을 표시합니다.";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "완전한 값 → 방향 테이블은 카드 시계의 세트 설정 화면에 표시됩니다. 가장 자주 사용하는 4~5장 카드만 암기하세요.";
 "input.guide.lockscreen.title" = "숫자 잠금 화면";
 "input.guide.lockscreen.compat" = "숫자 · 커스텀 세트";

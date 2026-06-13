@@ -70,6 +70,7 @@ struct SetDetailView: View {
     let set: PhotoSet
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject var instagram = InstagramService.shared
+    @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     
     @ObservedObject var uploadManager = UploadManager.shared
     
@@ -84,6 +85,19 @@ struct SetDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var deleteTargetSymbol: String? = nil
     @State private var isProcessingSlotPhoto = false
+
+    private func clampedBankIndex(for bankCount: Int) -> Int {
+        guard bankCount > 0 else { return 0 }
+        return min(max(selectedBankIndex, 0), bankCount - 1)
+    }
+
+    private var selectedBankIfAvailable: Bank? {
+        let banks = currentSet.banks
+        guard !banks.isEmpty else { return nil }
+        let safeIndex = clampedBankIndex(for: banks.count)
+        guard banks.indices.contains(safeIndex) else { return nil }
+        return banks[safeIndex]
+    }
 
     // BULK "SELECT ALL" for current bank empty slots
     @State private var bulkSelectedItems: [PhotosPickerItem] = []
@@ -101,6 +115,14 @@ struct SetDetailView: View {
     @State private var showFilledSlotActions = false
     @State private var filledSlotActionSymbol: String? = nil
     @State private var filledSlotActionIsUploaded = false
+
+    // LIST SET
+    @State private var showListImport = false
+    @State private var listRenameSymbol: String? = nil
+    @State private var listRenameText = ""
+    @State private var showListRenameAlert = false
+    @State private var listImportError: String? = nil
+    @State private var listSeparatorSlot: Int = 10
 
     // VERIFY & SYNC state
     @State private var syncArchivePulse = false
@@ -147,6 +169,9 @@ struct SetDetailView: View {
     /// For custom sets, derives labels numerically from existing photos (or defaults to 1 slot).
     /// For word/number sets, returns the model's fixed labels.
     private var effectiveSlotLabels: [String] {
+        if currentSet.type == .list {
+            return currentSet.slotLabels
+        }
         if currentSet.type == .custom {
             let numericSymbols = currentSet.photos.compactMap { Int($0.symbol) }
             let maxSlot = numericSymbols.max() ?? 0
@@ -154,6 +179,69 @@ struct SetDetailView: View {
             return (1...count).map { "\($0)" }
         }
         return currentSet.slotLabels
+    }
+
+    private var listDisplayLabelsBySymbol: [String: String] {
+        guard currentSet.type == .list else { return [:] }
+        let symbols = currentSet.slotLabels
+        let labels = currentSet.listDisplayLabels
+        return Dictionary(uniqueKeysWithValues: symbols.enumerated().map { index, symbol in
+            (symbol, index < labels.count ? labels[index] : "Item \(symbol)")
+        })
+    }
+
+    private var listPreviewColumns: [GridItem] {
+        switch currentSet.resolvedListColumns {
+        case .automatic:
+            return [GridItem(.adaptive(minimum: 150), spacing: 10)]
+        case .two:
+            return Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
+        case .three:
+            return Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+        }
+    }
+
+    private func listPreviewButtonColor(at index: Int) -> Color {
+        let blue = Color(hex: "0A84FF")
+        let green = Color(hex: "30D158")
+        let orange = Color(hex: "FF9500")
+
+        switch currentSet.resolvedListColumns {
+        case .two:
+            return index % 2 == 0 ? blue : green
+        case .three:
+            switch index % 3 {
+            case 0:  return blue
+            case 1:  return green
+            default: return orange
+            }
+        case .automatic:
+            return Color(hex: "64D2FF")
+        }
+    }
+
+    private var listPreviewItems: [(symbol: String, label: String)] {
+        let symbols = currentSet.slotLabels
+        let labels = currentSet.listDisplayLabels
+        return symbols.enumerated().map { index, symbol in
+            (symbol, index < labels.count ? labels[index] : "Item \(symbol)")
+        }
+    }
+
+    private var listPreviewGroups: [[(offset: Int, symbol: String, label: String)]] {
+        var groups: [[(offset: Int, symbol: String, label: String)]] = []
+        var current: [(offset: Int, symbol: String, label: String)] = []
+        let separators = Set(currentSet.resolvedListSeparators)
+
+        for (index, item) in listPreviewItems.enumerated() {
+            current.append((offset: index, symbol: item.symbol, label: item.label))
+            if let slot = Int(item.symbol), separators.contains(slot) {
+                groups.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty { groups.append(current) }
+        return groups
     }
 
     /// Photos that are locally marked as visible (isArchived=false) AND fully uploaded.
@@ -194,6 +282,9 @@ struct SetDetailView: View {
                     if uploadManager.isPhotoRejected {
                         photoRejectedRecoverySection
                     }
+                }
+                if currentSet.type == .list {
+                    listSetControlsSection
                 }
                 banksTabsWithActions
                 // reorderToggleButton — hidden until needed
@@ -386,7 +477,6 @@ struct SetDetailView: View {
     }
 
     @State private var showForceDeleteBankConfirm = false
-    @State private var uploadTipExpanded = false
     /// Task running the smart auto-resume countdown after a network change (A).
     @State private var networkAutoResumeTask: Task<Void, Never>? = nil
 
@@ -409,9 +499,7 @@ struct SetDetailView: View {
             Button {
                 dataManager.removeLastBank(setId: currentSet.id)
                 let newCount = currentSet.banks.count
-                if selectedBankIndex >= newCount {
-                    selectedBankIndex = max(0, newCount - 1)
-                }
+                selectedBankIndex = min(max(selectedBankIndex, 0), max(0, newCount - 1))
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "trash").font(.system(size: 13))
@@ -437,9 +525,7 @@ struct SetDetailView: View {
                 Button("Remove", role: .destructive) {
                     dataManager.removeLastBank(setId: currentSet.id, force: true)
                     let newCount = currentSet.banks.count
-                    if selectedBankIndex >= newCount {
-                        selectedBankIndex = max(0, newCount - 1)
-                    }
+                    selectedBankIndex = min(max(selectedBankIndex, 0), max(0, newCount - 1))
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -493,6 +579,17 @@ struct SetDetailView: View {
 
     private var bodyWithLifecycle: some View {
         bodyWithAlerts
+        // Safety clamp: whenever the bank count changes (add or delete), make sure
+        // selectedBankIndex still points to a valid bank. This prevents the
+        // "Index out of range" crash in photosGridSection that happens when SwiftUI
+        // re-renders the view with the updated bank list before the button action
+        // has a chance to update selectedBankIndex manually.
+        .onChange(of: currentSet.banks.count) { newCount in
+            guard newCount > 0 else { selectedBankIndex = 0; return }
+            if selectedBankIndex >= newCount {
+                selectedBankIndex = newCount - 1
+            }
+        }
         .onChange(of: instagram.networkChangedDuringUpload) { changed in
             guard changed else { return }
             instagram.networkChangedDuringUpload = false
@@ -643,6 +740,14 @@ struct SetDetailView: View {
                     showFilledSlotActions = false
                 }
             }
+            if currentSet.type == .list {
+                Button("Rename Item") {
+                    if let symbol = filledSlotActionSymbol {
+                        startRenamingListItem(symbol)
+                    }
+                    showFilledSlotActions = false
+                }
+            }
             Button("Remove Photo", role: .destructive) {
                 if let symbol = filledSlotActionSymbol {
                     deleteTargetSymbol = symbol
@@ -656,7 +761,7 @@ struct SetDetailView: View {
             }
         } message: {
             if let symbol = filledSlotActionSymbol {
-                Text("Slot \"\(symbol)\"")
+                Text("Slot \"\(displayLabel(for: symbol))\"")
             }
         }
         .confirmationDialog("Add photo for slot", isPresented: $showSlotSourcePicker, titleVisibility: .visible) {
@@ -682,8 +787,28 @@ struct SetDetailView: View {
             }
         } message: {
             if let symbol = slotSourcePickerSymbol {
-                Text("Choose where to get the photo for \"\(symbol)\"")
+                Text("Choose where to get the photo for \"\(displayLabel(for: symbol))\"")
             }
+        }
+        .alert("Rename List Item", isPresented: $showListRenameAlert) {
+            TextField("Item name", text: $listRenameText)
+            Button("Save") {
+                if let symbol = listRenameSymbol {
+                    dataManager.renameListItem(setId: currentSet.id, symbol: symbol, label: listRenameText)
+                }
+                listRenameSymbol = nil
+            }
+            Button("Cancel", role: .cancel) { listRenameSymbol = nil }
+        } message: {
+            Text("This changes the private list button text. The linked media stays attached to the same slot.")
+        }
+        .alert("Import Failed", isPresented: Binding(
+            get: { listImportError != nil },
+            set: { if !$0 { listImportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { listImportError = nil }
+        } message: {
+            Text(listImportError ?? "")
         }
         .sheet(isPresented: $showArchivedPicker) {
             if let symbol = archivedPickerTargetSymbol {
@@ -694,6 +819,13 @@ struct SetDetailView: View {
                     }
                 )
             }
+        }
+        .fileImporter(
+            isPresented: $showListImport,
+            allowedContentTypes: [.plainText, .text, UTType(filenameExtension: "csv") ?? .plainText],
+            allowsMultipleSelection: false
+        ) { result in
+            importListItems(from: result)
         }
         .photosPicker(isPresented: $showDirectGalleryPicker, selection: $slotPickerItem, matching: .images)
         .preferredColorScheme(.dark)
@@ -1921,6 +2053,7 @@ struct SetDetailView: View {
                     
                     // Action buttons
                     actionButtons
+                    uploadInfoBanner
                     
                 } else if uploadManager.activeSetId != nil {
                     // === ANOTHER set is uploading ===
@@ -2323,8 +2456,7 @@ struct SetDetailView: View {
     // MARK: - Upload Info Banner
 
     private var uploadInfoBanner: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header row — entire row is tappable
+        VStack(alignment: .leading, spacing: 11) {
             HStack(spacing: 7) {
                 Image(systemName: "lightbulb.fill")
                     .font(.system(size: 14, weight: .semibold))
@@ -2333,49 +2465,34 @@ struct SetDetailView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(Color(hex: "FFD60A"))
                 Spacer()
-                Image(systemName: uploadTipExpanded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(hex: "FFD60A").opacity(0.7))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 11)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    uploadTipExpanded.toggle()
-                }
             }
 
-            if uploadTipExpanded {
-                VStack(alignment: .leading, spacing: 11) {
-                    HStack(alignment: .top, spacing: 9) {
-                        Image(systemName: "moon.zzz.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.65))
-                            .frame(width: 17, alignment: .top)
-                            .padding(.top, 1)
-                        Text(String(localized: "upload.tip.overnight"))
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.85))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    HStack(alignment: .top, spacing: 9) {
-                        Image(systemName: "bell.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.65))
-                            .frame(width: 17, alignment: .top)
-                            .padding(.top, 1)
-                        Text(String(localized: "upload.tip.background"))
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.85))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 13)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.65))
+                    .frame(width: 17, alignment: .top)
+                    .padding(.top, 1)
+                Text(String(localized: "upload.tip.overnight"))
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.65))
+                    .frame(width: 17, alignment: .top)
+                    .padding(.top, 1)
+                Text(String(localized: "upload.tip.background"))
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(hex: "FFD60A").opacity(0.07))
         .cornerRadius(VaultTheme.CornerRadius.md)
@@ -2439,6 +2556,7 @@ struct SetDetailView: View {
                     // refresh the lockdown countdown without adding a second timer.
                     safetyCountdownTick += 1
                 }
+                uploadInfoBanner
             }
 
             if currentSet.type == .word || currentSet.type == .number {
@@ -2545,9 +2663,9 @@ struct SetDetailView: View {
                 // Tabs — scrollable
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: VaultTheme.Spacing.sm) {
-                        ForEach(currentSet.banks.indices, id: \.self) { index in
+                        ForEach(Array(currentSet.banks.enumerated()), id: \.element.id) { index, bank in
                             Button(action: { selectedBankIndex = index }) {
-                                Text(currentSet.banks[index].name)
+                                Text(bank.name)
                                     .font(.subheadline.weight(selectedBankIndex == index ? .bold : .regular))
                                     .foregroundColor(selectedBankIndex == index ? .white : VaultTheme.Colors.primary)
                                     .padding(.horizontal, VaultTheme.Spacing.lg)
@@ -2583,9 +2701,7 @@ struct SetDetailView: View {
                     Button {
                         dataManager.removeLastBank(setId: currentSet.id)
                         let newCount = currentSet.banks.count  // already decremented by removeLastBank
-                        if selectedBankIndex >= newCount {
-                            selectedBankIndex = max(0, newCount - 1)
-                        }
+                        selectedBankIndex = min(max(selectedBankIndex, 0), max(0, newCount - 1))
                     } label: {
                         Image(systemName: "trash")
                             .font(.system(size: 14, weight: .regular))
@@ -2702,15 +2818,225 @@ struct SetDetailView: View {
     }
     
     // MARK: - Photos Grid
+
+    private var listSetControlsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "list.bullet.rectangle.portrait.fill")
+                    .foregroundColor(Color(hex: "64D2FF"))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("List Set")
+                        .font(.headline)
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Import TXT/CSV labels, then link one photo or video to each item.")
+                        .font(.caption)
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                Spacer()
+                Button {
+                    showListImport = true
+                } label: {
+                    Label("Import TXT/CSV", systemImage: "square.and.arrow.down")
+                        .font(.caption.bold())
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color(hex: "0A84FF"))
+                        .cornerRadius(9)
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 10) {
+                Picker("Columns", selection: Binding(
+                    get: { currentSet.resolvedListColumns },
+                    set: { dataManager.setListLayout(setId: currentSet.id, columns: $0) }
+                )) {
+                    ForEach(ListSetColumns.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Color(hex: "64D2FF"))
+
+                Picker("Button Size", selection: Binding(
+                    get: { currentSet.resolvedListButtonSize },
+                    set: { dataManager.setListLayout(setId: currentSet.id, buttonSize: $0) }
+                )) {
+                    ForEach(ListSetButtonSize.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Color(hex: "64D2FF"))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Group separators")
+                        .font(.caption.bold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    if !currentSet.resolvedListSeparators.isEmpty {
+                        Text(currentSet.resolvedListSeparators.map { "after \($0)" }.joined(separator: ", "))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(Color(hex: "64D2FF"))
+                            .lineLimit(1)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Stepper(value: $listSeparatorSlot, in: 1...max(1, currentSet.listDisplayLabels.count - 1)) {
+                        Text("After slot \(listSeparatorSlot)")
+                            .font(.caption)
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                    .tint(Color(hex: "64D2FF"))
+
+                    Button {
+                        dataManager.addListSeparator(setId: currentSet.id, afterSlot: listSeparatorSlot)
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                            .font(.caption.bold())
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Color(hex: "64D2FF"))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(currentSet.listDisplayLabels.count < 2)
+                    .opacity(currentSet.listDisplayLabels.count < 2 ? 0.5 : 1)
+                }
+
+                if !currentSet.resolvedListSeparators.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(currentSet.resolvedListSeparators, id: \.self) { separator in
+                                Button {
+                                    dataManager.removeListSeparator(setId: currentSet.id, afterSlot: separator)
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Text("After \(separator)")
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 9, weight: .bold))
+                                    }
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundColor(Color(hex: "64D2FF"))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color(hex: "64D2FF").opacity(0.12))
+                                    .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(10)
+
+            if !activeSetSettings.isActive(currentSet.id, type: currentSet.type) {
+                HStack(spacing: 8) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(.orange)
+                    Text("Set this list as active before entering Performance, otherwise the private list will not appear.")
+                        .font(.caption)
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .background(Color.orange.opacity(0.12))
+                .cornerRadius(9)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Performance Preview")
+                        .font(.caption.bold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Spacer()
+                    Text("\(currentSet.listDisplayLabels.count) items")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(Color(hex: "64D2FF"))
+                }
+
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ForEach(Array(listPreviewGroups.enumerated()), id: \.offset) { groupIndex, group in
+                            if groupIndex > 0 {
+                                HStack {
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.22))
+                                        .frame(height: 1)
+                                    Text("GROUP \(groupIndex + 1)")
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.white.opacity(0.48))
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.22))
+                                        .frame(height: 1)
+                                }
+                            }
+
+                            LazyVGrid(columns: listPreviewColumns, spacing: 10) {
+                                ForEach(group, id: \.symbol) { item in
+                                    let buttonColor = listPreviewButtonColor(at: item.offset)
+                                    Text(item.label)
+                                        .font(.system(size: currentSet.resolvedListButtonSize == .large ? 16 : 14, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(3)
+                                        .minimumScaleFactor(0.7)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(minHeight: currentSet.resolvedListButtonSize.minHeight)
+                                        .padding(.horizontal, 8)
+                                        .background(buttonColor.opacity(0.28))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(buttonColor.opacity(0.72), lineWidth: 1)
+                                        )
+                                        .cornerRadius(12)
+                                }
+                            }
+                        }
+                    }
+                    .padding(10)
+                }
+                .frame(height: min(280, max(120, CGFloat(currentSet.listDisplayLabels.count) * 10)))
+                .background(Color.black)
+                .cornerRadius(12)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "hand.tap.fill")
+                    .foregroundColor(Color(hex: "64D2FF"))
+                Text("Long-press any slot below to rename its list item.")
+                    .font(.caption)
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 2)
+        }
+        .padding(14)
+        .background(VaultTheme.Colors.backgroundSecondary)
+        .cornerRadius(12)
+    }
     
     private var photosGridSection: some View {
-        let safeIdx = min(selectedBankIndex, max(0, currentSet.banks.count - 1))
         let photosToShow = currentSet.banks.isEmpty
             ? currentSet.photos
-            : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[safeIdx].id)
+            : selectedBankIfAvailable.map { dataManager.getPhotosForBank(setId: currentSet.id, bankId: $0.id) } ?? []
         
         if isReorderMode {
             return AnyView(reorderableGrid(photos: photosToShow))
+        } else if currentSet.type == .list {
+            return AnyView(slotBasedGrid(
+                photos: photosToShow,
+                overrideLabels: effectiveSlotLabels,
+                displayLabels: listDisplayLabelsBySymbol
+            ))
         } else if currentSet.type == .custom {
             return AnyView(slotBasedGrid(photos: photosToShow, overrideLabels: effectiveSlotLabels))
         } else if currentSet.type == .card {
@@ -2724,7 +3050,11 @@ struct SetDetailView: View {
     
     // MARK: - Slot-Based Grid (Word/Number Reveal)
     
-    private func slotBasedGrid(photos: [SetPhoto], overrideLabels: [String]? = nil) -> some View {
+    private func slotBasedGrid(
+        photos: [SetPhoto],
+        overrideLabels: [String]? = nil,
+        displayLabels: [String: String] = [:]
+    ) -> some View {
         let labels = overrideLabels ?? currentSet.slotLabels
         let photosBySymbol = Dictionary(grouping: photos, by: { $0.symbol })
 
@@ -2798,19 +3128,22 @@ struct SetDetailView: View {
             
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 10)], spacing: 10) {
                 ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
+                    let visibleLabel = displayLabels[label] ?? label
                     if let photo = photosBySymbol[label]?.first, photo.imageData != nil {
                         // FILLED SLOT: has real image data
-                        filledSlotView(photo: photo, label: label, position: index + 1)
+                        filledSlotView(photo: photo, label: label, displayLabel: visibleLabel, position: index + 1)
                     } else {
                         // EMPTY SLOT: no image yet (new set or photo removed)
-                        emptySlotView(label: label, position: index + 1)
+                        emptySlotView(label: label, displayLabel: visibleLabel, position: index + 1)
                     }
                 }
             }
         }
     }
     
-    private func filledSlotView(photo: SetPhoto, label: String, position: Int) -> some View {
+    @ViewBuilder
+    private func filledSlotView(photo: SetPhoto, label: String, displayLabel: String? = nil, position: Int) -> some View {
+        let title = displayLabel ?? label
         VStack(spacing: 4) {
             ZStack {
                 if let imageData = photo.imageData, let uiImage = UIImage(data: imageData) {
@@ -2829,7 +3162,7 @@ struct SetDetailView: View {
                 }
                 
                 // Symbol label badge (top-left)
-                Text(label)
+                Text(currentSet.type == .list ? "\(position)" : label)
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .frame(width: 28, height: 28)
@@ -2850,6 +3183,20 @@ struct SetDetailView: View {
                 filledSlotActionIsUploaded = photo.mediaId != nil
                 showFilledSlotActions = true
             }
+            .contextMenu {
+                if currentSet.type == .list {
+                    Button("Rename Item") { startRenamingListItem(label) }
+                }
+            }
+
+            if currentSet.type == .list {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 100)
+            }
             
             // Status text below photo (only when logged in)
             if instagram.isLoggedIn {
@@ -2858,7 +3205,9 @@ struct SetDetailView: View {
         }
     }
     
-    private func emptySlotView(label: String, position: Int) -> some View {
+    @ViewBuilder
+    private func emptySlotView(label: String, displayLabel: String? = nil, position: Int) -> some View {
+        let title = displayLabel ?? label
         Button(action: {
             slotSourcePickerSymbol = label
             showSlotSourcePicker = true
@@ -2876,9 +3225,13 @@ struct SetDetailView: View {
                     
                     VStack(spacing: 6) {
                         // Symbol label
-                        Text(label)
+                        Text(currentSet.type == .list ? title : label)
                             .font(.system(size: 20, weight: .bold, design: .rounded))
                             .foregroundColor(VaultTheme.Colors.primary.opacity(0.6))
+                            .lineLimit(currentSet.type == .list ? 3 : 1)
+                            .minimumScaleFactor(0.65)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 6)
                         
                         // Plus icon
                         Image(systemName: "plus.circle.fill")
@@ -2888,7 +3241,80 @@ struct SetDetailView: View {
                 }
             }
         }
+        .contextMenu {
+            if currentSet.type == .list {
+                Button("Rename Item") { startRenamingListItem(label) }
+            }
+        }
         .buttonStyle(PlainButtonStyle())
+    }
+
+    private func displayLabel(for symbol: String) -> String {
+        listDisplayLabelsBySymbol[symbol] ?? symbol
+    }
+
+    private func startRenamingListItem(_ symbol: String) {
+        listRenameSymbol = symbol
+        listRenameText = displayLabel(for: symbol)
+        showListRenameAlert = true
+    }
+
+    private func importListItems(from result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let needsSecurity = url.startAccessingSecurityScopedResource()
+            defer {
+                if needsSecurity { url.stopAccessingSecurityScopedResource() }
+            }
+
+            let rawText = try String(contentsOf: url, encoding: .utf8)
+            let labels = parseListImport(rawText, isCSV: url.pathExtension.lowercased() == "csv")
+            guard !labels.isEmpty else {
+                listImportError = "The selected file did not contain any list items."
+                return
+            }
+            dataManager.updateListItems(setId: currentSet.id, labels: labels)
+            LogManager.shared.success("Imported \(labels.count) List Set item(s)", category: .general)
+        } catch {
+            listImportError = error.localizedDescription
+        }
+    }
+
+    private func parseListImport(_ text: String, isCSV: Bool) -> [String] {
+        text
+            .components(separatedBy: .newlines)
+            .map { isCSV ? firstCSVColumn($0) : $0 }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func firstCSVColumn(_ line: String) -> String {
+        var result = ""
+        var isQuoted = false
+        var iterator = line.makeIterator()
+
+        while let char = iterator.next() {
+            if char == "\"" {
+                if isQuoted, let next = iterator.next() {
+                    if next == "\"" {
+                        result.append("\"")
+                    } else if next == "," {
+                        return result
+                    } else {
+                        isQuoted = false
+                        result.append(next)
+                    }
+                } else {
+                    isQuoted.toggle()
+                }
+            } else if char == "," && !isQuoted {
+                return result
+            } else {
+                result.append(char)
+            }
+        }
+
+        return result
     }
     
     @ViewBuilder
@@ -3287,8 +3713,7 @@ struct SetDetailView: View {
             }
             
             // SWAP: Exchange positions directly (A goes to B, B goes to A)
-            let safeBankIdx = min(selectedBankIndex, max(0, currentSet.banks.count - 1))
-            let bankId = currentSet.banks.isEmpty ? nil : currentSet.banks[safeBankIdx].id
+            let bankId = selectedBankIfAvailable?.id
             
             withAnimation(.spring(response: 0.3)) {
                 dataManager.swapPhotos(setId: currentSet.id, bankId: bankId, indexA: fromIndex, indexB: index)
@@ -3315,10 +3740,9 @@ struct SetDetailView: View {
     // MARK: - Duplicate Detection
     
     private func checkConsecutiveDuplicates() {
-        let safeCheckIdx = min(selectedBankIndex, max(0, currentSet.banks.count - 1))
         let photosToCheck = currentSet.banks.isEmpty
             ? currentSet.photos
-            : dataManager.getPhotosForBank(setId: currentSet.id, bankId: currentSet.banks[safeCheckIdx].id)
+            : selectedBankIfAvailable.map { dataManager.getPhotosForBank(setId: currentSet.id, bankId: $0.id) } ?? []
         
         consecutiveDuplicates.removeAll()
         guard photosToCheck.count >= 2 else { return }

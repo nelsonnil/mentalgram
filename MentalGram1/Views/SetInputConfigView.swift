@@ -33,12 +33,20 @@ struct SetInputPicker: View {
         }
     }
 
+    private var configureTitle: String {
+        if selected == .api, let detail = selectionDetail {
+            return "Configure API: \(detail)"
+        }
+        return "Configure \(selected.title)"
+    }
+
     private var accent: Color {
         switch set.type {
         case .word:   return Color(hex: "7C3AED")
         case .number: return Color(hex: "FF9500")
         case .custom: return Color(hex: "F97316")
         case .card:   return Color(hex: "16A34A")
+        case .list:   return Color(hex: "64D2FF")
         }
     }
 
@@ -81,8 +89,10 @@ struct SetInputPicker: View {
                     HStack(spacing: 6) {
                         Image(systemName: "gearshape.fill")
                             .font(.system(size: 14, weight: .semibold))
-                        Text("set.input.configure")
+                        Text(configureTitle)
                             .font(.system(size: 14, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
@@ -154,6 +164,8 @@ struct SetInputConfigSheet: View {
                     case .digitGrid:   DigitGridConfig()
                     case .clockInput:  ClockInputConfig()
                     case .cardClock:   CardClockConfig()
+                    case .numpadCard:  NumpadCardConfig()
+                    case .listInput:   ListInputConfig()
                     }
                 }
                 .padding(VaultTheme.Spacing.lg)
@@ -189,6 +201,32 @@ struct SetInputConfigSheet: View {
                     .foregroundColor(VaultTheme.Colors.textSecondary)
             }
             Spacer()
+        }
+    }
+}
+
+private struct ListInputConfig: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            Text("List Input opens a private full-screen list when Performance starts. Tap one item to close the list and reveal its linked media on the fake Instagram profile.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct NumpadCardConfig: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            Label("set.input.numpadcard.help", systemImage: "rectangle.grid.3x2.fill")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Label("set.input.numpadcard.noconfig", systemImage: "checkmark.seal")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.success)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -476,12 +514,13 @@ private struct CardClockConfig: View {
     private let accent = Color(hex: "16A34A")   // card-set green
 
     private let valueTable: [(String, String)] = [
-        ("A", "↑→"), ("2", "→↑"), ("3", "→→"), ("4", "→↓"),
-        ("5", "↓→"), ("6", "↓↓"), ("7", "↓←"), ("8", "←↓"),
-        ("9", "←←"), ("J", "←↑"), ("Q", "↑←"), ("K", "↑↑"),
+        ("A",  "↑→"), ("2",  "→↑"), ("3",  "→→"), ("4",  "→↓"),
+        ("5",  "↓→"), ("6",  "↓↓"), ("7",  "↓←"), ("8",  "←↓"),
+        ("9",  "←←"), ("10", "←↑"), ("J",  "↑←"), ("Q",  "↑↑"),
+        ("K",  "↑↓"),
     ]
     private let suitTable: [(String, String)] = [
-        ("♠", "↑↑"), ("♥", "→→"), ("♣", "↓↓"), ("♦", "←←"),
+        ("♠", "↑"), ("♥", "→"), ("♣", "↓"), ("♦", "←"),
     ]
 
     var body: some View {

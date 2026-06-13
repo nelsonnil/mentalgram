@@ -69,19 +69,19 @@ class SecretNumberManager: ObservableObject {
 
     // MARK: - Card Clock Input
 
-    /// Raw swipe buffer for the card clock system (max 4: 2 for value + 2 for suit).
+    /// Raw swipe buffer for the card clock system (max 3: 2 for value + 1 for suit).
     @Published var cardSwipeBuffer: [SwipeDir] = []
 
     var hasCardInput:    Bool { !cardSwipeBuffer.isEmpty }
-    var cardInputFull:   Bool { cardSwipeBuffer.count == 4 }
+    var cardInputFull:   Bool { cardSwipeBuffer.count == 3 }
 
-    /// Decode a value swipe-pair into a card face string (A,2–9,J,Q,K), or nil if invalid.
+    /// Decode a value swipe-pair into a card face string (A,2–9,10,J,Q,K), or nil if invalid.
     ///
-    ///  Clock face mapping  (A = 1 o'clock … K = 12/top):
-    ///   K=↑↑  A=↑→  2=→↑  3=→→  4=→↓  5=↓→  6=↓↓  7=↓←  8=←↓  9=←←  J=←↑  Q=↑←
+    ///  Clock face mapping:
+    ///   A=↑→  2=→↑  3=→→  4=→↓  5=↓→  6=↓↓  7=↓←  8=←↓  9=←←
+    ///   10=←↑  J=↑←  Q=↑↑  K=↑↓
     static func decodeCardValue(_ a: SwipeDir, _ b: SwipeDir) -> String? {
         switch (a, b) {
-        case (.up,    .up):    return "K"
         case (.up,    .right): return "A"
         case (.right, .up):    return "2"
         case (.right, .right): return "3"
@@ -91,17 +91,18 @@ class SecretNumberManager: ObservableObject {
         case (.down,  .left):  return "7"
         case (.left,  .down):  return "8"
         case (.left,  .left):  return "9"
-        case (.left,  .up):    return "J"
-        case (.up,    .left):  return "Q"
+        case (.left,  .up):    return "10"
+        case (.up,    .left):  return "J"
+        case (.up,    .up):    return "Q"
+        case (.up,    .down):  return "K"
         default:               return nil
         }
     }
 
-    /// Decode a suit swipe-pair (same direction twice) into a suit symbol, or nil if invalid.
-    ///   ↑↑=♠  →→=♥  ↓↓=♣  ←←=♦
-    static func decodeSuit(_ a: SwipeDir, _ b: SwipeDir) -> String? {
-        guard a == b else { return nil }
-        switch a {
+    /// Decode a single suit swipe into a suit symbol.
+    ///   ↑=♠  →=♥  ↓=♣  ←=♦
+    static func decodeSuit(_ dir: SwipeDir) -> String {
+        switch dir {
         case .up:    return "♠"
         case .right: return "♥"
         case .down:  return "♣"
@@ -109,20 +110,19 @@ class SecretNumberManager: ObservableObject {
         }
     }
 
-    /// Full card symbol if all 4 swipes are present and valid, e.g. "J♠".
+    /// Full card symbol if all 3 swipes are present and valid, e.g. "J♠".
     var decodedCard: String? {
-        guard cardSwipeBuffer.count == 4,
-              let val  = Self.decodeCardValue(cardSwipeBuffer[0], cardSwipeBuffer[1]),
-              let suit = Self.decodeSuit(cardSwipeBuffer[2], cardSwipeBuffer[3]) else { return nil }
+        guard cardSwipeBuffer.count == 3,
+              let val = Self.decodeCardValue(cardSwipeBuffer[0], cardSwipeBuffer[1]) else { return nil }
+        let suit = Self.decodeSuit(cardSwipeBuffer[2])
         return "\(val)\(suit)"
     }
 
     /// Text to overlay on the following counter while the user enters a card.
     ///  0 swipes → nil
-    ///  1 swipe  → "·"          (waiting for 2nd value swipe)
-    ///  2 swipes → "J·"         (value decoded, waiting for suit)
-    ///  3 swipes → "J·"         (waiting for 2nd suit swipe)
-    ///  4 swipes → "J♠"         (complete card)
+    ///  1 swipe  → "·"    (waiting for 2nd value swipe)
+    ///  2 swipes → "Q·"   (value decoded, waiting for single suit swipe)
+    ///  3 swipes → "Q♣"   (complete card)
     var cardDisplayString: String? {
         switch cardSwipeBuffer.count {
         case 0: return nil
@@ -131,9 +131,6 @@ class SecretNumberManager: ObservableObject {
             let val = Self.decodeCardValue(cardSwipeBuffer[0], cardSwipeBuffer[1]) ?? "?"
             return "\(val)·"
         case 3:
-            let val = Self.decodeCardValue(cardSwipeBuffer[0], cardSwipeBuffer[1]) ?? "?"
-            return "\(val)·"
-        case 4:
             return decodedCard ?? "?"
         default: return nil
         }
@@ -141,11 +138,10 @@ class SecretNumberManager: ObservableObject {
 
     /// Record one directional swipe into the card clock buffer.
     ///
-    /// Phase 1 (swipes 1-2): value pair — any of the 12 valid card-value pairs.
-    /// Phase 2 (swipes 3-4): suit pair  — must be the same direction twice.
+    /// Phase 1 (swipes 1-2): value pair — 13 valid combinations (A–K clock face).
+    /// Phase 2 (swipe 3):    single suit swipe — ↑=♠ →=♥ ↓=♣ ←=♦ (always valid).
     ///
-    /// On an invalid pair the buffer rolls back to the last valid partial state
-    /// and the invalid swipe becomes the first of a new attempt.
+    /// On an invalid value pair the buffer resets and the invalid swipe starts a new attempt.
     func addCardSwipe(_ dir: SwipeDir) {
         let idx = cardSwipeBuffer.count
 
@@ -171,25 +167,10 @@ class SecretNumberManager: ObservableObject {
             }
 
         case 2:
-            // First suit swipe — accept any direction
+            // Single suit swipe — any direction is valid (↑=♠ →=♥ ↓=♣ ←=♦)
             cardSwipeBuffer.append(dir)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            print("🃏 [CARD] Suit swipe 1: \(dir)")
-
-        case 3:
-            // Second suit swipe — must equal swipe 3
-            if dir == cardSwipeBuffer[2] {
-                cardSwipeBuffer.append(dir)
-                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                print("🃏 [CARD] Card complete: \(decodedCard ?? "?")")
-            } else {
-                // Invalid suit pair → keep value, restart suit with this swipe
-                UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                let valuePart = Array(cardSwipeBuffer.prefix(2))
-                cardSwipeBuffer = valuePart + [dir]
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                print("🃏 [CARD] Invalid suit pair — keeping value, restarting suit with \(dir)")
-            }
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            print("🃏 [CARD] Card complete: \(decodedCard ?? "?")")
 
         default:
             // Buffer full — ignore until committed

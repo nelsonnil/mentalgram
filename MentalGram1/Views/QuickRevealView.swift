@@ -142,6 +142,7 @@ struct QuickRevealView: View {
         case .number: return "393"
         case .custom: return "7_corazones"
         case .card:   return "J♠"
+        case .list:   return "1"
         }
     }
     
@@ -151,6 +152,7 @@ struct QuickRevealView: View {
         case .number: return "Enter a number (one digit per bank)"
         case .custom: return "Enter the exact filename (without extension)"
         case .card:   return "Enter a card symbol (e.g. A♠, 10♥, K♦)"
+        case .list:   return "Enter the list slot number"
         }
     }
     

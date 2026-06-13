@@ -506,6 +506,13 @@
 "postpred.help.howitworks.body2" = "Wanneer u de onthulling activeert, dearchiveert de app de bijbehorende foto. Deze verschijnt op zijn **oorspronkelijke rasterpositie** met zijn **oorspronkelijke datum**, alsof hij er altijd al was.";
 "postpred.help.howitworks.info" = "De toeschouwer ziet een echte post op een echt Instagram-profiel. Er is geen app zichtbaar, alleen Instagram.";
 "postpred.help.howitworks.archive_reason" = "Instagram laat je geen nieuwe foto uploaden met een oude datum. Vault lost dit op door de voorspelfoto's vooraf te uploaden en meteen te archiveren. Instagram bewaart de oorspronkelijke uploaddatum en positie in het raster, waardoor een later teruggeplaatste voorspelling eruitziet als een oude post die er altijd al stond. Uploaden en archiveren gebeurt automatisch en direct, zodat toeschouwers de voorbereidingsfoto's nooit op je live profiel zien.";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "Sets";
 "postpred.help.metric.sets.desc" = "Fotoverzamelingen die van tevoren zijn geupload en gearchiveerd. Klaar voor onthulling.";
 "postpred.help.metric.banks" = "Banken";
@@ -1252,7 +1259,7 @@
 
 "limits.help.gauge.title" = "Je uurlijks budget van 55 acties";
 "limits.help.gauge.body" = "Instagram beperkt elke verbonden app tot 55 acties per uur. Het budget werkt als een rollend venster van 60 minuten — elke actie verloopt precies 60 minuten nadat die werd uitgevoerd, zodat de teller automatisch daalt zonder een harde reset.";
-"limits.help.gauge.cache" = "De eerste keer dat je Performance of een volgersprofiel opent, neemt de app contact op met Instagram (verbruikt budget). Elke volgende keer laadt het direct uit de cache — gratis.";
+"limits.help.gauge.cache" = "Snelle herhaalbezoeken gebruiken cache en kunnen 0 kosten. Na de veiligheids-cooldown kan Performance of een volgersprofiel opnieuw verversen en budget gebruiken.";
 "limits.help.gauge.hardstop" = "Wanneer de limiet van 55 is bereikt, stopt de app automatisch alle verdere Instagram-verzoeken. Er wordt niets verzonden, niets geactiveerd — ze wacht stil totdat het budget vernieuwd wordt. Je hoeft niets te doen.";
 "limits.help.gauge.zone.safe" = "Veilig (>20)";
 "limits.help.gauge.zone.low" = "Laag (8–20)";
@@ -1266,6 +1273,7 @@
 "limits.help.table.row.performance" = "Performance openen";
 "limits.help.table.row.followers" = "Volgerslijst";
 "limits.help.table.row.profile.new" = "Nieuw volgersprofiel";
+"limits.help.table.row.profilepic" = "Profielfoto wijzigen";
 "limits.help.table.row.sa" = "Sync & Archive (per foto)";
 "limits.help.table.row.upload" = "Upload (per foto)";
 "limits.help.table.row.autoupload" = "Volledige automatische uploadcyclus (per foto)";
@@ -1273,13 +1281,14 @@
 "limits.help.table.row.notebio" = "Notitie of bio wijzigen";
 "limits.help.table.row.explore" = "Verkennen / Zoeken";
 "limits.help.sa.auto" = "Na een volledige performance met onthullingen en profielbezoeken voegt de app automatisch een korte wachttijd toe vóór Sync & Archive. Dit is normaal — het beschermt je sessie.";
-"limits.help.table.cache.lost" = "De Performance-cache laadt gratis bij herhaalde bezoeken. De cache kan verloren gaan bij: herinstallatie, accountwissel, app-gegevens wissen of herstellen op een nieuw apparaat — in die gevallen kost het eerste bezoek 3 acties.";
+"limits.help.table.cache.lost" = "Performance openen kost meestal 3 acties voor profiel + posts, of maximaal 5 als de Reels/Tagged-cache opnieuw moet worden opgebouwd. Snelle herhalingen kunnen 0 kosten, maar latere verversingen kunnen opnieuw budget gebruiken. Highlights worden niet automatisch vernieuwd in Performance.";
+"limits.help.table.batch.note" = "Kosten per foto tellen op. Sync & Archive op 4 foto's = 8 acties totaal. 4 foto's uploaden = 9 totaal (1 voorbereidingsaanroep + 2 per foto). Profielfoto toont 1 budgetactie, hoewel Instagram ook de uploadaanroep van de afbeelding ontvangt.";
 
 "limits.help.profiles.title" = "Profielen bezoeken — de duurste actie";
-"limits.help.profiles.body" = "Een nieuw volgersprofiel openen kost elke keer 4–5 acties. Het tweede bezoek aan hetzelfde profiel is gratis (geladen uit cache). Daarom kan het snel openen van 3–4 verschillende profielen het budget uitputten en botdetectie activeren.";
+"limits.help.profiles.body" = "Een nieuw volgersprofiel openen kost meestal 3–4 acties. Een snel tweede bezoek aan hetzelfde profiel laadt uit cache, maar een latere verversing kan opnieuw budget gebruiken. Daarom kan het snel openen van 3–4 verschillende profielen het budget uitputten en botdetectie activeren.";
 "limits.help.profiles.max" = "Aanbeveling: open maximaal 2 nieuwe profielen per sessie. Vermijd het bezoeken van nieuwe profielen vlak voor een Sync & Archive.";
 "limits.help.reddot.title" = "De rode stip";
-"limits.help.reddot.body" = "Wanneer er minder dan 8 acties overblijven, verschijnt een kleine rode stip op het pictogram in de koptekst van de volgerslijst. Alleen jij ziet het — het is niet zichtbaar tijdens de performance.";
+"limits.help.reddot.body" = "Wanneer er minder dan 8 acties overblijven, verschijnt een kleine rode stip op privé-bedieningsiconen, zoals de koptekst van de volgerslijst of het papieren vliegtuig in Performance. Het waarschuwt je voordat je meer budget gebruikt.";
 "limits.help.reddot.block" = "Als je een nieuw profiel probeert te openen wanneer het budget kritiek is, stopt de app de actie met een sterke trilling. Er wordt geen API-aanroep gedaan — je sessie blijft veilig.";
 "limits.help.reddot.location.followers" = "Volgerslijst";
 "limits.help.reddot.location.performance" = "Papieren vliegtuig (Performance)";
@@ -1475,7 +1484,7 @@
 "faq.q.not_instagram.question" = "Het publiek vraagt waarom de app op Instagram lijkt. Wat zeg ik?";
 "faq.q.not_instagram.answer" = "Performance is een getrouwe visuele replica van je Instagram-profiel — dezelfde lay-out, dezelfde foto's, dezelfde tellers. Als iemand vraagt, kun je gewoon zeggen dat je je Instagram controleert, want de getoonde gegevens zijn echt en live van je account.";
 
-"upload.tip.title" = "Upload-tip";
+"upload.tip.title" = "Je kunt het laten uploaden";
 "upload.tip.overnight" = "Terwijl het uploaden actief is, blijft het scherm aan — je telefoon gaat nooit op slot of dimt. Sluit hem aan en laat hem de hele nacht draaien om 10 of meer banks te vullen zonder hem aan te raken.";
 "upload.tip.background" = "Wil je je telefoon liever gebruiken? Wissel vrij naar een andere app. Een pop-up melding brengt je terug zodra de volgende foto klaar is om te uploaden.";
 
@@ -1568,22 +1577,22 @@
 "postpred.help.input.grid.encoding.title" = "Cijfercodering  (zelfde als Clock Input)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "In Performance veeg in beliebige richting over het raster. Altijd 4 vegen: eerste paar = waarde, tweede paar = kleur. Houd ingedrukt om te bevestigen.";
+"set.input.cardclock.help" = "In Performance veeg op het raster: 2 vegen voor de waarde (A=↑→ … 9=←← 10=↑← J=←↑ Q=↑↑ K=↑↓) + 1 veeg voor het symbool (↑=♠ →=♥ ↓=♣ ←=♦). Druk op volumeknop om te bevestigen.";
 "set.input.cardclock.values" = "Waardecode  (klokwijzerplaat)";
-"set.input.cardclock.suits" = "Kleurcode  (dezelfde richting tweemaal)";
-"set.input.cardclock.longpress" = "Houd ergens op het raster ingedrukt om te bevestigen.";
+"set.input.cardclock.suits" = "Kleurcode  (één veeg)";
+"set.input.cardclock.longpress" = "Druk op volume ↑ of ↓ om te bevestigen.";
 "set.input.cardclock.noconfig" = "Geen configuratie vereist.";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "KAARTKLOK";
-"postpred.help.input.cardclock.guide.intro" = "Veeg in beliebige richting over het Instagram-raster — altijd 4 vegen: de eerste 2 coderen de waarde (A–K), de laatste 2 de kleur. Houd ingedrukt om te bevestigen.";
+"postpred.help.input.cardclock.guide.intro" = "Veeg op het Instagram-raster — 3 vegen totaal: de eerste 2 coderen de waarde (A–K klokwijzerplaat), de 3e is één veeg voor het symbool. Druk op volumeknop om te bevestigen.";
 "postpred.help.input.cardclock.guide.values" = "WAARDECODE  (klokwijzerplaat)";
-"postpred.help.input.cardclock.guide.suits" = "KLEURCODE  (dezelfde richting tweemaal)";
+"postpred.help.input.cardclock.guide.suits" = "KLEURCODE  (één veeg)";
 "postpred.help.input.cardclock.guide.examples" = "VOORBEELDEN";
-"postpred.help.input.cardclock.guide.ex.js" = "Boer Schoppen: ←↑ (waarde J) + ↑↑ (schoppen)";
-"postpred.help.input.cardclock.guide.ex.3h" = "3 Harten: →→ (waarde 3) + →→ (harten)";
-"postpred.help.input.cardclock.guide.ex.ad" = "Aas Ruiten: ↑→ (waarde A) + ←← (ruiten)";
-"postpred.help.input.cardclock.guide.longpress" = "Na de 4e veeg houd ingedrukt om te bevestigen. De bijbehorende kaartfoto wordt automatisch gedearchiveerd.";
+"postpred.help.input.cardclock.guide.ex.js" = "Boer Schoppen: ←↑ (waarde J) + ↑ (schoppen)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Harten: →→ (waarde 3) + → (harten)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Aas Ruiten: ↑→ (waarde A) + ← (ruiten)";
+"postpred.help.input.cardclock.guide.longpress" = "Na de 3e veeg druk op volume ↑ of ↓ om te bevestigen. De bijbehorende kaartfoto wordt automatisch gedearchiveerd.";
 
 "inputs.interface.exclusive.title" = "Exclusieve invoer";
 "inputs.interface.exclusive.body" = "Er kan maar één invoerinterface tegelijk actief zijn voor Sets, Bio en Notities. De andere blijven vergrendeld zolang deze actief is:";
@@ -1626,7 +1635,7 @@ Slechts een interfacetype kan tegelijk actief zijn voor Sets, Bio en Notities. A
 "input.guide.covertyping.title" = "Verborgen Typen";
 "input.guide.covertyping.compat" = "Woordsets";
 "input.guide.covertyping.body" = "Je typt heimelijk het gekozen woord van de toeschouwer in de zoekbalk van Verkennen. Een ander lokwoord wordt op het scherm getoond — de app leest alleen wat jij typt, niet wat wordt weergegeven.";
-"input.guide.covertyping.activate" = "Tik op de zoekbalk in Verkennen en typ het geheime woord. Een dubbele spatie bevestigt het en activeert de onthulling. De balk toont een volledig ander lokwoord.";
+"input.guide.covertyping.activate" = "Tik op de zoekbalk in Verkennen en typ het geheime woord. Druk één keer op Spatie om te bevestigen — de spatie verdwijnt uit het veld en een subtiele trilling bevestigt dat het woord is vastgelegd en de onthulling is getriggerd. De balk blijft een lokwoord tonen.";
 "input.guide.ocr.title" = "Camera (OCR)";
 "input.guide.ocr.compat" = "Woord- · Getal- · Aangepaste sets";
 "input.guide.ocr.body" = "De achtercamera leest stilletjes tekst in het beeld — speelkaarten, geschreven woorden, rekenresultaten, datums — en stuurt het resultaat rechtstreeks naar de actieve set. Niets verschijnt op het scherm tijdens het scannen.";
@@ -1644,8 +1653,8 @@ Slechts een interfacetype kan tegelijk actief zijn voor Sets, Bio en Notities. A
 "input.guide.clock.tip" = "Zelfde codering als het Cijferraster: als je het raster kent, is de klok identiek. Het enige verschil is het volledig zwarte scherm zonder zichtbaar raster.";
 "input.guide.cardclock.title" = "Kaartenklok";
 "input.guide.cardclock.compat" = "Kaartensets";
-"input.guide.cardclock.body" = "Volledig zwart scherm — identiek aan de Nummerklok, maar legt een speelkaart vast in plaats van een getal. Precies 4 vegen vereist: de eerste 2 coderen de waarde (A tot K), de volgende 2 coderen het symbool. Symboolcodering: dezelfde richting tweemaal (↑↑ = ♠, →→ = ♥, ↓↓ = ♣, ←← = ♦).";
-"input.guide.cardclock.activate" = "Veeg 1 + 2 voor de waarde, veeg 3 + 4 voor het symbool (dezelfde richting tweemaal). Elk geldig paar geeft een aparte trilling. Lang indrukken om te bevestigen. Een foutflits signaleert ongeldige paren.";
+"input.guide.cardclock.body" = "Volledig zwart scherm — identiek aan de Nummerklok, maar legt een speelkaart vast in plaats van een getal. Precies 3 vegen vereist: de eerste 2 coderen de waarde (A=↑→ 2=→↑ … 9=←← 10=↑← J=←↑ Q=↑↑ K=↑↓), de 3e is één veeg voor het symbool (↑=♠ →=♥ ↓=♣ ←=♦).";
+"input.guide.cardclock.activate" = "Veeg 1 + 2 voor de waarde, veeg 3 voor het symbool (één richting). Elk geldig waardepaar geeft een aparte trilling; de 3e veeg bevestigt de kaart met een sterke trilling. Druk op volumeknop voor de reveal. Een foutflits signaleert ongeldige waardeparen.";
 "input.guide.cardclock.tip" = "De volledige waarde → richtingstabel is te vinden in de setconfiguratie onder Kaartenklok. Onthoud alleen de 4–5 kaarten die je het vaakst gebruikt.";
 "input.guide.lockscreen.title" = "Nummervergrendeling";
 "input.guide.lockscreen.compat" = "Getal- · Aangepaste sets";

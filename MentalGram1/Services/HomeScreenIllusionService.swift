@@ -1,6 +1,41 @@
 import UIKit
 import Combine
 
+enum PerformanceCoverMode: String, CaseIterable, Identifiable {
+    case off
+    case homeScreen
+    case screenOff
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off: return "Off"
+        case .homeScreen: return "Fake Home Screen"
+        case .screenOff: return "Fake Screen Off"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .off:
+            return "Open Performance directly."
+        case .homeScreen:
+            return "Show your uploaded home screen screenshot first."
+        case .screenOff:
+            return "Show a black screen first, as if the phone were off."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .off: return "xmark.circle"
+        case .homeScreen: return "iphone.homebutton"
+        case .screenOff: return "moon.fill"
+        }
+    }
+}
+
 /// Manages the "Fake Home Screen" screenshot used to overlay Performance view.
 /// The image is stored as JPEG in the app's Documents directory so it survives
 /// app updates and is excluded from iCloud backup.

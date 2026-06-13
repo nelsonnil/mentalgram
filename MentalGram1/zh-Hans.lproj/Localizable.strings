@@ -600,6 +600,13 @@
 "postpred.help.howitworks.body2" = "触发揭示时，应用会取消归档对应的照片。它以**原始网格位置**和**原始日期**重新出现，就像它一直在那里一样。";
 "postpred.help.howitworks.info" = "观众在真实的Instagram个人主页上看到真实的帖子。没有应用可见，只有Instagram。";
 "postpred.help.howitworks.archive_reason" = "Instagram 不允许上传一张新照片并把日期改成过去。Vault 会提前上传预测图片并立即归档。Instagram 会保留每个帖子的原始上传日期和网格位置，所以之后取消归档的预测看起来就像一直存在的旧帖子。上传和归档都是自动且立即完成的，因此观众不会在你的真实主页上看到这些准备照片。";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "合集";
 "postpred.help.metric.sets.desc" = "提前上传并归档的照片集合，字母A-Z或数字0-9，随时可揭示。";
 "postpred.help.metric.banks" = "库";
@@ -945,7 +952,7 @@
 
 "limits.help.gauge.title" = "您每小时 55 次操作预算";
 "limits.help.gauge.body" = "Instagram 将每个连接的应用限制为每小时 55 次操作。预算采用滚动 60 分钟窗口机制，每次操作在执行后正好 60 分钟后到期，因此计数器会自动下降，无需强制重置。";
-"limits.help.gauge.cache" = "首次打开 Performance 或关注者资料时，应用会联系 Instagram（消耗预算）。此后的每次访问都会从缓存中即时免费加载。";
+"limits.help.gauge.cache" = "快速重复访问会使用缓存，可能消耗 0。安全冷却后，Performance 或关注者资料可能会再次刷新并消耗预算。";
 "limits.help.gauge.hardstop" = "当达到 55 次限制时，应用会自动停止向 Instagram 发送任何进一步的请求。不会发送任何内容，不会触发任何操作——它会静默等待，直到预算重置。您无需做任何事情。";
 "limits.help.gauge.zone.safe" = "安全 (>20)";
 "limits.help.gauge.zone.low" = "偏低 (8–20)";
@@ -959,6 +966,7 @@
 "limits.help.table.row.performance" = "打开 Performance";
 "limits.help.table.row.followers" = "关注者列表";
 "limits.help.table.row.profile.new" = "新关注者资料";
+"limits.help.table.row.profilepic" = "更换头像";
 "limits.help.table.row.sa" = "Sync & Archive（每张照片）";
 "limits.help.table.row.upload" = "上传（每张照片）";
 "limits.help.table.row.autoupload" = "自动上传完整周期（每张照片）";
@@ -966,13 +974,14 @@
 "limits.help.table.row.notebio" = "更改备注或简介";
 "limits.help.table.row.explore" = "探索 / 搜索";
 "limits.help.sa.auto" = "在包含揭示和资料访问的完整表演后，应用会在 Sync & Archive 前自动添加短暂等待时间。这是正常的，可以保护您的会话。";
-"limits.help.table.cache.lost" = "Performance 缓存在重复访问时零成本加载。以下情况可能导致缓存丢失：重新安装应用、切换账号、清除应用数据或在新设备上恢复 — 在这些情况下，首次进入需要消耗 3 个操作。";
+"limits.help.table.cache.lost" = "打开 Performance 通常会为资料 + 帖子消耗 3 个操作；如果需要重建 Reels/Tagged 缓存，最多可能消耗 5 个。快速重复进入可能为 0，但之后的刷新可能再次消耗预算。Highlights 不会在 Performance 中自动刷新。";
+"limits.help.table.batch.note" = "按照片计算的成本会累加。4 张照片执行 Sync & Archive = 共 8 个操作。上传 4 张照片 = 共 9 个操作（1 次准备调用 + 每张 2 次）。头像在预算中显示为 1 个操作，但 Instagram 也会收到图片上传调用。";
 
 "limits.help.profiles.title" = "访问资料 — 消耗最多的操作";
-"limits.help.profiles.body" = "每次打开新的关注者资料需要消耗 4–5 次操作。第二次访问同一资料是免费的（从缓存加载）。因此，快速打开 3–4 个不同资料可能会耗尽预算并触发机器人检测。";
+"limits.help.profiles.body" = "打开新的关注者资料通常需要消耗 3–4 个操作。快速第二次访问同一资料会从缓存加载，但之后的刷新可能再次消耗预算。因此，快速打开 3–4 个不同资料可能会耗尽预算并触发机器人检测。";
 "limits.help.profiles.max" = "建议：每次会话最多打开 2 个新资料。避免在 Sync & Archive 前访问新资料。";
 "limits.help.reddot.title" = "红点";
-"limits.help.reddot.body" = "当剩余操作少于 8 次时，关注者列表标题图标上会出现一个小红点。只有您能看到它，在表演过程中不可见。";
+"limits.help.reddot.body" = "当剩余操作少于 8 次时，小红点会出现在私人控制图标上，例如关注者列表标题或 Performance 中的纸飞机图标。它用于在继续消耗预算前提醒你。";
 "limits.help.reddot.block" = "如果在预算处于危险区时尝试打开新资料，应用会以强烈振动阻止该操作。不会发出任何 API 调用，您的会话保持安全。";
 "limits.help.reddot.location.followers" = "关注者列表";
 "limits.help.reddot.location.performance" = "纸飞机图标（Performance）";
@@ -1178,7 +1187,7 @@
 "faq.q.not_instagram.question" = "观众问为什么应用看起来像 Instagram。我怎么回答？";
 "faq.q.not_instagram.answer" = "Performance 是您 Instagram 个人资料的忠实视觉副本 — 相同的布局、相同的照片、相同的计数器。如果有人问，您可以简单地说正在查看自己的 Instagram，因为显示的数据是真实的，直接来自您的账号。";
 
-"upload.tip.title" = "上传技巧";
+"upload.tip.title" = "可以让它继续上传";
 "upload.tip.overnight" = "上传进行中，屏幕将保持常亮 — 手机绝不会锁屏或进入休眠。插上电源，整夜运行，无需触碰即可轻松填满 10 个以上的 Bank。";
 "upload.tip.background" = "想正常使用手机？随时切换到其他 App 即可。当下一张照片准备好上传时，弹窗提醒会带您回到此界面。";
 
@@ -1223,18 +1232,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "盲划输入";
-"postpred.help.input.clockinput.intro" = "打开 Performance 后屏幕完全变**黑** — 模拟手机已关机。滑动输入任意位数的数字，然后长按确认。观众什么都看不到。";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "数字编码  （每个数字 = 2次滑动）";
 "postpred.help.input.clockinput.examples.title" = "示例";
-"postpred.help.input.clockinput.example5.note" = "单个数字 5 — 滑动2次，然后长按确认";
-"postpred.help.input.clockinput.example37.note" = "两位数: 3 (→→) 再 7 (↓←) — 滑动4次，然后长按";
-"postpred.help.input.clockinput.example100.note" = "三位数: 3 (→→)、6 (↓↓)、9 (←←) — 滑动6次，然后长按";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "触觉反馈";
 "postpred.help.input.clockinput.haptic.light" = "轻触 — 每次滑动均有反应";
 "postpred.help.input.clockinput.haptic.medium" = "中等震动 — 一个数字完成（2次滑动）";
-"postpred.help.input.clockinput.haptic.success" = "强烈双震动 — 数字已确认（第1次长按）";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "错误震动 + 屏幕闪烁 — 无效滑动对；第2次滑动成为下一对的第1次";
-"postpred.help.input.clockinput.dismiss" = "**第1次长按**（1秒）确认数字并触发揭示。**第2次长按**关闭黑屏 — 更新后的虚假 Instagram 主页即时显示。";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "输入";
@@ -1250,7 +1259,7 @@
 "set.input.lockscreen.help" = "Performance 开启时显示虚假锁屏，以便秘密输入值。在下方设置壁纸。";
 "set.input.digitgrid.help" = "使用假个人资料上的隐藏数字格建立数值。Post Prediction 可用帖子图标或长按确认；Force Reel 会在打开 Search/Explore 时锁定数值。";
 "set.input.digitgrid.noconfig" = "无需配置。";
-"set.input.clockinput.help" = "打开 Performance 时显示全黑屏幕。通过滑动对输入任意位数的数字，然后长按确认揭示。再次长按关闭屏幕。";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "无需配置。";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1271,22 +1280,22 @@
 "postpred.help.input.grid.encoding.title" = "数字编码（与 Clock Input 相同）";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "在 Performance 中，在照片网格上向任意方向滑动。始终 4 次滑动：前两次 = 牌面值，后两次 = 花色。长按以确认。";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "点数编码  （时钟表盘）";
-"set.input.cardclock.suits" = "花色编码  （同一方向两次）";
-"set.input.cardclock.longpress" = "在网格任意位置长按以确认并触发 reveal。";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "无需配置。";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "牌面时钟";
-"postpred.help.input.cardclock.guide.intro" = "在 Instagram 网格上向任意方向滑动 — 始终 4 次滑动：前 2 次编码牌面值（A–K），后 2 次编码花色。长按以确认。";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "点数编码  （时钟表盘）";
-"postpred.help.input.cardclock.guide.suits" = "花色编码  （同一方向两次）";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "示例";
-"postpred.help.input.cardclock.guide.ex.js" = "黑桃J: ←↑（J值）+ ↑↑（黑桃）";
-"postpred.help.input.cardclock.guide.ex.3h" = "红心3: →→（3值）+ →→（红心）";
-"postpred.help.input.cardclock.guide.ex.ad" = "方块A: ↑→（A值）+ ←←（方块）";
-"postpred.help.input.cardclock.guide.longpress" = "第4次滑动后，长按网格任意位置确认。对应的牌照片自动被取消归档。";
+"postpred.help.input.cardclock.guide.ex.js" = "黑桃J: ↑←（J值）+ ↑（黑桃）";
+"postpred.help.input.cardclock.guide.ex.3h" = "红心3: →→（3值）+ →（红心）";
+"postpred.help.input.cardclock.guide.ex.ad" = "方块A: ↑→（A值）+ ←（方块）";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "独占输入";
 "inputs.interface.exclusive.body" = "在合集、简介和便签中，一次只能使用一个输入界面。激活此项时，其他界面将被锁定：";
@@ -1329,7 +1338,7 @@ He ji, jian jie he bian qian zhong yi ci zhi neng ji huo yi zhong jie mian lei x
 "input.guide.covertyping.title" = "遮盖输入";
 "input.guide.covertyping.compat" = "文字输入";
 "input.guide.covertyping.body" = "你在探索搜索栏中秘密输入观众选择的单词。屏幕上显示的是不同的诱饵词——应用只读取你输入的内容，而不是显示的内容。";
-"input.guide.covertyping.activate" = "在探索中点击搜索栏并输入秘密词。双空格确认并触发揭示。栏中显示完全不同的诱饵词。";
+"input.guide.covertyping.activate" = "在探索中点击搜索栏并输入秘密词。按一次空格键确认 — 空格从字段中消失，细微震动提示词已捕获并触发揭示。栏中继续显示诱饵词。";
 "input.guide.ocr.title" = "摄像头 (OCR)";
 "input.guide.ocr.compat" = "文字 · 数字 · 自定义 · 牌卡";
 "input.guide.ocr.body" = "后置摄像头静默读取画面中的文字——扑克牌、书写的词、计算结果、日期——并将结果直接发送到活动功能。扫描时屏幕上不显示任何内容。";
@@ -1343,12 +1352,12 @@ He ji, jian jie he bian qian zhong yi ci zhi neng ji huo yi zhong jie mian lei x
 "input.guide.clock.title" = "数字时钟";
 "input.guide.clock.compat" = "数字 · 自定义";
 "input.guide.clock.body" = "全黑屏幕——就像手机关机一样。滑动手势使用方向对对数字0到9进行编码：每个数字需要恰好两次连续滑动（例如 ↑↑ = 0，↑→ = 1，→→ = 3）。可以输入任意长度的数字。";
-"input.guide.clock.activate" = "当活动功能使用数字时钟时，黑屏会自动打开。逐对滑动以逐位建立数字。长按确认。";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "与数字格编码相同：如果你熟悉数字格，时钟完全一样。唯一的区别是完全黑屏，没有可见的格子。";
 "input.guide.cardclock.title" = "卡牌时钟";
 "input.guide.cardclock.compat" = "牌卡";
-"input.guide.cardclock.body" = "完全黑屏——与数字时钟相同，但捕获扑克牌而非数字。恰好需要4次滑动：前2次编码牌值（A到K），后2次编码花色。花色编码：同一方向两次（↑↑ = ♠，→→ = ♥，↓↓ = ♣，←← = ♦）。";
-"input.guide.cardclock.activate" = "滑动1+2输入牌值，滑动3+4输入花色（同一方向两次）。每个有效对有独特振动。长按确认。错误闪烁表示无效配对。";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "完整的牌值→方向表格显示在套组配置界面的卡牌时钟中。只需记住最常使用的4到5张牌即可。";
 "input.guide.lockscreen.title" = "数字锁屏";
 "input.guide.lockscreen.compat" = "数字 · 自定义";

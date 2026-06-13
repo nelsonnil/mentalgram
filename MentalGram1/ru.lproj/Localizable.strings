@@ -543,6 +543,13 @@
 "postpred.help.howitworks.body2" = "Когда вы запускаете раскрытие, приложение разархивирует соответствующую фотографию. Она появляется на **исходной позиции в сетке** с **исходной датой**, как будто всегда там была.";
 "postpred.help.howitworks.info" = "Зритель видит реальную публикацию на реальном профиле Instagram. Никакого приложения не видно, только Instagram.";
 "postpred.help.howitworks.archive_reason" = "Instagram не позволяет загрузить новую фотографию и поставить ей старую дату. Vault решает это так: изображения предсказания загружаются заранее и сразу архивируются. Instagram сохраняет исходную дату загрузки и позицию в сетке, поэтому позже разархивированное предсказание выглядит как старый пост, который всегда был на месте. Загрузка и архивирование выполняются автоматически и мгновенно, поэтому зрители никогда не видят подготовительные фото в вашем реальном профиле.";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "Сеты";
 "postpred.help.metric.sets.desc" = "Коллекции фотографий, загруженные и заархивированные заранее. Готовы к раскрытию.";
 "postpred.help.metric.banks" = "Банки";
@@ -901,7 +908,7 @@
 
 "limits.help.gauge.title" = "Ваш часовой бюджет: 55 действий";
 "limits.help.gauge.body" = "Instagram ограничивает каждое подключённое приложение до 55 действий в час. Бюджет работает как скользящее 60-минутное окно — каждое действие истекает ровно через 60 минут после выполнения, поэтому счётчик снижается автоматически без жёсткого сброса.";
-"limits.help.gauge.cache" = "При первом открытии Performance или профиля подписчика приложение связывается с Instagram (расходует бюджет). Каждый последующий визит загружается мгновенно из кэша — бесплатно.";
+"limits.help.gauge.cache" = "Быстрые повторные визиты используют кэш и могут стоить 0. После защитного cooldown Performance или профиль подписчика может обновиться снова и использовать бюджет.";
 "limits.help.gauge.hardstop" = "Когда лимит в 55 достигнут, приложение автоматически прекращает отправку любых запросов к Instagram. Ничего не отправляется, ничего не запускается — оно молча ждёт, пока бюджет не обновится. Вам не нужно ничего делать.";
 "limits.help.gauge.zone.safe" = "Безопасно (>20)";
 "limits.help.gauge.zone.low" = "Низко (8–20)";
@@ -915,6 +922,7 @@
 "limits.help.table.row.performance" = "Открыть Performance";
 "limits.help.table.row.followers" = "Список подписчиков";
 "limits.help.table.row.profile.new" = "Новый профиль подписчика";
+"limits.help.table.row.profilepic" = "Смена фото профиля";
 "limits.help.table.row.sa" = "Sync & Archive (за фото)";
 "limits.help.table.row.upload" = "Загрузка (за фото)";
 "limits.help.table.row.autoupload" = "Полный цикл авто-загрузки (за фото)";
@@ -922,13 +930,14 @@
 "limits.help.table.row.notebio" = "Изменение заметки или bio";
 "limits.help.table.row.explore" = "Поиск / Обзор";
 "limits.help.sa.auto" = "После полного выступления с раскрытиями и визитами профилей приложение автоматически добавляет короткую паузу перед Sync & Archive. Это нормально — это защищает вашу сессию.";
-"limits.help.table.cache.lost" = "Кэш Performance загружается бесплатно при повторных посещениях. Кэш может быть потерян при: переустановке приложения, смене аккаунта, очистке данных или восстановлении на новом устройстве — в этих случаях первый вход стоит 3 действия.";
+"limits.help.table.cache.lost" = "Открытие Performance обычно стоит 3 действия для профиля + публикаций, или до 5, если нужно пересоздать кэш Reels/Tagged. Быстрые повторы могут стоить 0, но более поздние обновления могут снова использовать бюджет. Highlights не обновляются автоматически в Performance.";
+"limits.help.table.batch.note" = "Стоимость за фото суммируется. Sync & Archive для 4 фото = 8 действий всего. Загрузка 4 фото = 9 всего (1 подготовительный запрос + 2 на фото). Фото профиля показывает 1 действие бюджета, хотя Instagram также получает запрос загрузки изображения.";
 
 "limits.help.profiles.title" = "Посещение профилей — самое затратное действие";
-"limits.help.profiles.body" = "Открытие нового профиля подписчика каждый раз стоит 4–5 действий. Второй визит на тот же профиль бесплатный (загружается из кэша). Именно поэтому быстрое открытие 3–4 разных профилей может исчерпать бюджет и вызвать обнаружение бота.";
+"limits.help.profiles.body" = "Открытие нового профиля подписчика обычно стоит 3–4 действия. Быстрый второй визит на тот же профиль загружается из кэша, но более позднее обновление может снова использовать бюджет. Именно поэтому быстрое открытие 3–4 разных профилей может исчерпать бюджет и вызвать обнаружение бота.";
 "limits.help.profiles.max" = "Рекомендация: открывайте не более 2 новых профилей за сессию. Избегайте посещения новых профилей непосредственно перед Sync & Archive.";
 "limits.help.reddot.title" = "Красная точка";
-"limits.help.reddot.body" = "Когда остаётся менее 8 действий, на значке в заголовке списка подписчиков появляется маленькая красная точка. Видите её только вы — во время выступления она не отображается.";
+"limits.help.reddot.body" = "Когда остаётся менее 8 действий, маленькая красная точка появляется на приватных управляющих значках, например в заголовке списка подписчиков или на бумажном самолётике в Performance. Она предупреждает перед новым расходом бюджета.";
 "limits.help.reddot.block" = "Если вы попытаетесь открыть новый профиль при критическом бюджете, приложение заблокирует действие сильной вибрацией. Ни один API-вызов не выполняется — ваша сессия остаётся в безопасности.";
 "limits.help.reddot.location.followers" = "Список подписчиков";
 "limits.help.reddot.location.performance" = "Иконка самолётика (Performance)";
@@ -1134,7 +1143,7 @@
 "faq.q.not_instagram.question" = "Зрители спрашивают, почему приложение похоже на Instagram. Что сказать?";
 "faq.q.not_instagram.answer" = "Performance — это точная визуальная копия вашего профиля Instagram: тот же макет, те же фото, те же счётчики. Если кто-то спросит, можно просто сказать, что вы проверяете свой Instagram, ведь отображаемые данные реальны и поступают напрямую из вашего аккаунта.";
 
-"upload.tip.title" = "Совет по загрузке";
+"upload.tip.title" = "Можно оставить загрузку";
 "upload.tip.overnight" = "Пока загрузка активна, экран остаётся включён — телефон никогда не заблокируется и не потухнет. Подключите его к зарядке и оставьте на всю ночь, чтобы заполнить 10 и более банков, не касаясь его.";
 "upload.tip.background" = "Хотите пользоваться телефоном? Свободно переключайтесь на любое другое приложение. Всплывающее уведомление вернёт вас сюда, когда следующее фото будет готово к загрузке.";
 
@@ -1179,18 +1188,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "СЛЕПОЙ СВАЙП";
-"postpred.help.input.clockinput.intro" = "Когда открывается Performance, экран становится полностью **чёрным** — как будто телефон выключен. Проведите столько пар жестов, сколько нужно, затем нажмите и удержите для подтверждения. Зритель ничего не видит.";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "КОДИРОВКА ЦИФР  (каждая цифра = 2 свайпа)";
 "postpred.help.input.clockinput.examples.title" = "ПРИМЕРЫ";
-"postpred.help.input.clockinput.example5.note" = "Одна цифра 5 — 2 свайпа, затем долгое нажатие для подтверждения";
-"postpred.help.input.clockinput.example37.note" = "Две цифры: 3 (→→) затем 7 (↓←) — 4 свайпа, затем долгое нажатие";
-"postpred.help.input.clockinput.example100.note" = "Три цифры: 3 (→→), 6 (↓↓), 9 (←←) — 6 свайпов, затем долгое нажатие";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "ТАКТИЛЬНЫЙ ОТКЛИК";
 "postpred.help.input.clockinput.haptic.light" = "Лёгкий толчок — каждый свайп зарегистрирован";
 "postpred.help.input.clockinput.haptic.medium" = "Средний пульс — цифра завершена (2 свайпа)";
-"postpred.help.input.clockinput.haptic.success" = "Двойная сильная вибрация — число подтверждено (1-е долгое нажатие)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "Сигнал ошибки + вспышка — неверная пара; 2-й свайп становится 1-м следующей пары";
-"postpred.help.input.clockinput.dismiss" = "**Первое долгое нажатие** (1 с) подтверждает цифры и запускает раскрытие. **Второе долгое нажатие** закрывает чёрный экран — обновлённый фейковый профиль Instagram появляется мгновенно.";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Ввод";
@@ -1206,7 +1215,7 @@
 "set.input.lockscreen.help" = "Показывает фейковый экран блокировки при открытии Performance для тайного ввода значения. Установите обои ниже.";
 "set.input.digitgrid.help" = "Используйте скрытую Сетку Цифр на фальшивом профиле, чтобы построить значение. Post Prediction подтверждается иконкой Публикации или долгим нажатием; Force Reel фиксирует значение при открытии Search/Explore.";
 "set.input.digitgrid.noconfig" = "Настройка не требуется.";
-"set.input.clockinput.help" = "Показывает полностью чёрный экран при открытии Performance. Проводите пары свайпов для ввода любого количества цифр, затем долгое нажатие для подтверждения. Второе долгое нажатие закрывает экран.";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "Настройка не требуется.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1227,22 +1236,22 @@
 "postpred.help.input.grid.encoding.title" = "Кодировка цифр  (как Clock Input)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "В Performance проведите пальцем в любом направлении по сетке. Всегда 4 свайпа: первая пара = значение, вторая = масть. Нажмите и удерживайте для подтверждения.";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "Кодировка значения  (циферблат часов)";
-"set.input.cardclock.suits" = "Кодировка масти  (одинаковое направление дважды)";
-"set.input.cardclock.longpress" = "Нажмите и удерживайте в любом месте сетки для подтверждения.";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "Настройка не требуется.";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "КАРТОЧНЫЕ ЧАСЫ";
-"postpred.help.input.cardclock.guide.intro" = "Проводите пальцем в любом направлении по сетке Instagram — всегда 4 свайпа: первые 2 кодируют значение (A–K), последние 2 — масть. Нажмите и удерживайте для подтверждения.";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "КОДИРОВКА ЗНАЧЕНИЯ  (циферблат часов)";
-"postpred.help.input.cardclock.guide.suits" = "КОДИРОВКА МАСТИ  (одинаковое направление дважды)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "ПРИМЕРЫ";
-"postpred.help.input.cardclock.guide.ex.js" = "Валет Пик: ←↑ (значение J) + ↑↑ (пики)";
-"postpred.help.input.cardclock.guide.ex.3h" = "3 Червей: →→ (значение 3) + →→ (червы)";
-"postpred.help.input.cardclock.guide.ex.ad" = "Туз Бубен: ↑→ (значение A) + ←← (бубны)";
-"postpred.help.input.cardclock.guide.longpress" = "После 4-го свайпа нажмите и удерживайте для подтверждения. Фото карты разархивируется автоматически.";
+"postpred.help.input.cardclock.guide.ex.js" = "Валет Пик: ↑← (значение J) + ↑ (пики)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Червей: →→ (значение 3) + → (червы)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Туз Бубен: ↑→ (значение A) + ← (бубны)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "Эксклюзивный ввод";
 "inputs.interface.exclusive.body" = "Одновременно может работать только один интерфейс ввода для наборов, описания и заметок. Остальные заблокированы, пока активен этот:";
@@ -1285,7 +1294,7 @@ Odnovremenno mozhet byt' aktiven tolko odin tip interfeisa dlya naborov, opisani
 "input.guide.covertyping.title" = "Скрытый Набор";
 "input.guide.covertyping.compat" = "Словарные наборы";
 "input.guide.covertyping.body" = "Ты тайно вводишь выбранное зрителем слово в строку поиска Explore. На экране отображается другое слово-приманка — приложение читает только то, что ты набираешь, а не то, что отображается.";
-"input.guide.covertyping.activate" = "Нажми строку поиска в Explore и введи секретное слово. Двойной пробел подтверждает его и запускает раскрытие. В строке отображается совершенно другое слово-приманка.";
+"input.guide.covertyping.activate" = "Нажми строку поиска в Explore и введи секретное слово. Нажми Пробел один раз для подтверждения — пробел исчезнет из поля, а слабая вибрация подтвердит захват слова и запуск раскрытия. В строке по-прежнему отображается слово-приманка.";
 "input.guide.ocr.title" = "Камера (OCR)";
 "input.guide.ocr.compat" = "Словарные · Числовые · Пользовательские наборы";
 "input.guide.ocr.body" = "Задняя камера бесшумно считывает текст в кадре — игральные карты, написанные слова, результаты вычислений, даты — и отправляет результат прямо в активный набор. Ничего не появляется на экране во время сканирования.";
@@ -1299,12 +1308,12 @@ Odnovremenno mozhet byt' aktiven tolko odin tip interfeisa dlya naborov, opisani
 "input.guide.clock.title" = "Числовые Часы";
 "input.guide.clock.compat" = "Числовые · Пользовательские наборы";
 "input.guide.clock.body" = "Полностью чёрный экран — как будто телефон выключен. Жесты смахивания кодируют цифры 0–9 с помощью пар направленных движений: каждая цифра требует ровно двух последовательных смахиваний (например, ↑↑ = 0, ↑→ = 1, →→ = 3). Можно вводить число любой длины.";
-"input.guide.clock.activate" = "Чёрный экран открывается автоматически, когда активный набор использует Числовые Часы. Смахивайте парами, чтобы строить число цифра за цифрой — каждая завершённая пара даёт короткую вибрацию. Долгое нажатие для подтверждения.";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "Та же кодировка, что и в Сетке Цифр: если вы знаете сетку, часы идентичны. Единственное отличие — полностью чёрный экран без видимой сетки.";
 "input.guide.cardclock.title" = "Карточные Часы";
 "input.guide.cardclock.compat" = "Карточные наборы";
-"input.guide.cardclock.body" = "Полностью чёрный экран — идентичен Числовым Часам, но захватывает игральную карту вместо числа. Требуется ровно 4 смахивания: первые 2 кодируют значение (от Т до К), следующие 2 кодируют масть. Кодировка масти: одинаковое направление дважды (↑↑ = ♠, →→ = ♥, ↓↓ = ♣, ←← = ♦).";
-"input.guide.cardclock.activate" = "Смахните 1 + 2 для значения, смахните 3 + 4 для масти (одинаковое направление дважды). Каждая допустимая пара даёт особую вибрацию. Долгое нажатие для подтверждения. Вспышка ошибки сигнализирует о неверных парах.";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "Полная таблица значение → направление показана в конфигурации набора под Карточными Часами. Запомните только 4–5 карт, которые используете чаще всего.";
 "input.guide.lockscreen.title" = "Числовой Экран Блокировки";
 "input.guide.lockscreen.compat" = "Числовые · Пользовательские наборы";

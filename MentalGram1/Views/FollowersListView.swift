@@ -376,14 +376,21 @@ struct FollowersListView: View {
                                         // Deseleccionar — eliminar del cache también
                                         localSelectedIds.remove(at: idx)
                                         dateForce.preloadedProfiles.removeValue(forKey: follower.userId)
+                                        dateForce.selectedFollowerHints.removeValue(forKey: follower.userId)
                                     } else {
                                         // Seleccionar — añadir al array (orden preservado)
                                         localSelectedIds.append(follower.userId)
-                                        // Pre-cargar perfil completo en background
+                                        dateForce.selectedFollowerHints[follower.userId] = (
+                                            username: follower.username,
+                                            fullName: follower.fullName,
+                                            profilePicURL: follower.profilePicURL
+                                        )
+                                        // Pre-cargar solo contadores/foto en background.
+                                        // Date Force no necesita posts, followed-by ni friendship status.
                                         Task {
-                                            if let p = try? await instagram.getProfileInfo(
+                                            if let p = await instagram.getDateForceProfileCounts(
+                                                username: follower.username,
                                                 userId: follower.userId,
-                                                usernameHint: follower.username,
                                                 fullNameHint: follower.fullName,
                                                 profilePicURLHint: follower.profilePicURL
                                             ) {

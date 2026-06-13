@@ -9,6 +9,7 @@ struct HomeView: View {
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject private var urlAction = URLActionManager.shared
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
+    @ObservedObject private var integrations = IntegrationsSettings.shared
     @State private var selectedTab = 1 // Start on Sets tab
     @State private var showingCreateSet = false
     @State private var showingExplore = false
@@ -32,6 +33,7 @@ struct HomeView: View {
     @State private var budgetWarningUsed: Int = 0
     @State private var budgetWarningRemaining: Int = 55
     @State private var budgetWarningRenewal: Date? = nil
+    @State private var showListInputConflictAlert = false
     
     /// Custom binding that intercepts tab switches to Performance (0)
     /// and shows the pre-check alert if there are visible photos.
@@ -200,6 +202,15 @@ struct HomeView: View {
                 Text("\(visiblePhotosToArchive.count) photo(s) from your active sets are still visible on Instagram.\n\nActive sets: \(sets)\n\nArchive them before performing?")
             }
         }
+        .alert("Input conflict", isPresented: $showListInputConflictAlert) {
+            Button("Go to Settings") {
+                selectedTab = 2
+                updateTabBarAppearance(forTab: 2)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(listInputConflictMessage)
+        }
         .sheet(isPresented: $showArchiveProgressSheet) {
             archiveProgressView
         }
@@ -260,7 +271,8 @@ struct HomeView: View {
         let activeIds = [activeSetSettings.activeWordSetId,
                          activeSetSettings.activeNumberSetId,
                          activeSetSettings.activeCustomSetId,
-                         activeSetSettings.activeCardSetId].compactMap { $0 }
+                         activeSetSettings.activeCardSetId,
+                         activeSetSettings.activeListSetId].compactMap { $0 }
         print("🔍 [PRE-PERF] Checking \(activeIds.count) active set(s) for visible photos")
         for setId in activeIds {
             guard let photoSet = dataManager.sets.first(where: { $0.id == setId }) else {
@@ -282,11 +294,25 @@ struct HomeView: View {
         let activeIds = [activeSetSettings.activeWordSetId,
                          activeSetSettings.activeNumberSetId,
                          activeSetSettings.activeCustomSetId,
-                         activeSetSettings.activeCardSetId].compactMap { $0 }
+                         activeSetSettings.activeCardSetId,
+                         activeSetSettings.activeListSetId].compactMap { $0 }
         let names = activeIds.compactMap { id in
             dataManager.sets.first(where: { $0.id == id })?.name
         }
         return names.joined(separator: ", ")
+    }
+
+    private var listInputConflictLocations: [String] {
+        guard activeSetSettings.activeListSetId != nil else { return [] }
+        return integrations.bioNoteInterfaceLocations(matching: [
+            .numberClock, .cardClock, .cardNumpad, .numberLockscreen, .cardLockscreen
+        ])
+    }
+
+    private var listInputConflictMessage: String {
+        let locations = listInputConflictLocations
+        let list = locations.isEmpty ? "" : "\n\nActive conflicts:\n" + locations.joined(separator: "\n")
+        return "List Input cannot be used at the same time as fullscreen card, Clock, or Lockscreen inputs in Biography or Notes.\n\nDisable one of those inputs before entering Performance.\(list)"
     }
 
     private func requestPerformanceEntry() {
@@ -303,6 +329,11 @@ struct HomeView: View {
         // Gate: require Limits & Safety to be read before first Performance entry
         guard limitsGuideRead else {
             showLimitsGate = true
+            return
+        }
+
+        if !listInputConflictLocations.isEmpty {
+            showListInputConflictAlert = true
             return
         }
 
@@ -686,9 +717,6 @@ struct SetsListView: View {
                                 .padding(.horizontal, VaultTheme.Spacing.lg)
                         }
 
-                        postPredictionToggleCard
-                            .padding(.horizontal, VaultTheme.Spacing.lg)
-
                         if dataManager.sets.isEmpty {
                             EmptyStateView(
                                 icon: "square.stack.3d.up.slash.fill",
@@ -905,6 +933,7 @@ struct SetRowView: View {
         case .number: return Color(hex: "FF9500")  // orange
         case .custom: return Color(hex: "F97316")  // orange
         case .card:   return Color(hex: "16A34A")  // green
+        case .list:   return Color(hex: "64D2FF")  // cyan
         }
     }
     
@@ -914,6 +943,7 @@ struct SetRowView: View {
         case .number: return [Color(hex: "FF9500"), Color(hex: "C2670A")]
         case .custom: return [Color(hex: "F97316"), Color(hex: "EA580C")]
         case .card:   return [Color(hex: "16A34A"), Color(hex: "15803D")]
+        case .list:   return [Color(hex: "64D2FF"), Color(hex: "0A84FF")]
         }
     }
 
@@ -923,6 +953,7 @@ struct SetRowView: View {
         case .number: return "123.rectangle.fill"
         case .custom: return "square.grid.2x2.fill"
         case .card:   return "suit.spade.fill"
+        case .list:   return "list.bullet.rectangle.portrait.fill"
         }
     }
 
@@ -1106,6 +1137,34 @@ struct SetRowView: View {
                         }
                         SetURLSchemeRow(set: set)
                     }
+
+                    // ── Edit set detail ─
+                    Divider()
+                        .background(Color.white.opacity(0.06))
+                        .padding(.top, 4)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "icloud.and.arrow.up.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(typeAccent)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Upload to Instagram")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(typeAccent)
+                            Text(set.type == .list ? "Add media to list items, then upload/archive the set." : "Add media to slots, then upload/archive the set.")
+                                .font(.system(size: 11))
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(typeAccent.opacity(0.8))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(typeAccent.opacity(0.10))
+                    .cornerRadius(9)
                 }
             }
             .padding(.leading, isActive ? 8 : 0)
@@ -1129,7 +1188,7 @@ struct SetURLSchemeRow: View {
         guard let mode = set.type.revealURLTemplate else { return "" }
         switch set.type {
         case .word:           return "vault://reveal?\(mode)=<word>&set=\(safeName)"
-        case .number, .custom: return "vault://reveal?\(mode)=<value>&set=\(safeName)"
+        case .number, .custom, .list: return "vault://reveal?\(mode)=<value>&set=\(safeName)"
         case .card:           return "vault://reveal?\(mode)=<card>&set=\(safeName)"
         }
     }
@@ -1708,6 +1767,8 @@ struct SettingsView: View {
     // Top-level auto-input mode per target (off/clipboard/api/ocr)
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
+    @AppStorage("note_feature_enabled") private var noteFeatureEnabled: Bool = true
+    @AppStorage("bio_feature_enabled")  private var bioFeatureEnabled:  Bool = true
 
     // Text templates — user writes "My prediction is {word}" and the app
     // replaces {word} with the detected/fetched word at send time.
@@ -1717,6 +1778,7 @@ struct SettingsView: View {
     @AppStorage("bio_template_3") private var bioTemplate3: String = ""
     @AppStorage("bio_template_4") private var bioTemplate4: String = ""
     @AppStorage("bio_active_slot") private var bioActiveSlot: Int = 0
+    @AppStorage("bio_acrostic_enabled") private var bioAcrosticEnabled: Bool = false
 
     private var activeBioBinding: Binding<String> {
         switch bioActiveSlot {
@@ -2023,7 +2085,6 @@ struct SettingsView: View {
         settingsSectionLabel("TRICKS", icon: "wand.and.stars", color: Self.colorTricks)
         accentedSection(color: Self.colorTricks) {
             ForceReelSettingsCard()
-            ForcePostSettingsCard()
             ForceNumberRevealSettingsCard()
             FollowingMagicSettingsCard()
             DateForceSettingsCard()
@@ -2224,13 +2285,24 @@ struct SettingsView: View {
                         title: "Note", subtitle: "Visible above your profile picture for 24h",
                         isExpanded: $noteExpanded,
                         helpAction: { showNoteHelp = true }) {
+            modernToggleRow(
+                icon: "power",
+                iconColor: Self.colorProfile,
+                title: "Enable Notes",
+                detail: "When off, Notes will not send manually or from Performance inputs.",
+                isOn: $noteFeatureEnabled
+            )
+            if !noteFeatureEnabled {
+                modernStatusRow("Notes disabled", color: VaultTheme.Colors.warning, icon: "pause.circle.fill")
+            }
+            modernDivider()
             // ── Text field (= template) ──────────────────────────────────────
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Write a note… or use {text1}", text: $noteTemplate)
                     .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
                     .padding(VaultTheme.Spacing.md)
                     .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
-                    .disabled(isSendingNote)
+                    .disabled(isSendingNote || !noteFeatureEnabled)
                     .focused($noteFieldFocused)
                     .submitLabel(.done)
                     .onSubmit { noteFieldFocused = false }
@@ -2259,6 +2331,8 @@ struct SettingsView: View {
                                 .cornerRadius(7)
                         }
                         .buttonStyle(.plain)
+                        .disabled(!noteFeatureEnabled)
+                        .opacity(noteFeatureEnabled ? 1.0 : 0.45)
                     }
                     Spacer()
                     Text("\(noteTemplate.count)/60")
@@ -2269,10 +2343,12 @@ struct SettingsView: View {
                 // ── Per-placeholder source pickers (dynamic) ──────────────────
                 InlineSourcePickerView(target: "note", template: noteTemplate, accentColor: Self.colorProfile)
             }
+            .disabled(!noteFeatureEnabled)
+            .opacity(noteFeatureEnabled ? 1.0 : 0.45)
 
             modernActionButton(title: isSendingNote ? "Sending…" : "Send Note",
                                icon: "paperplane.fill", loading: isSendingNote,
-                               enabled: !noteTemplate.isEmpty && !isSendingNote && !instagram.isLocked && getNoteCooldownSeconds() == 0,
+                               enabled: noteFeatureEnabled && !noteTemplate.isEmpty && !isSendingNote && !instagram.isLocked && getNoteCooldownSeconds() == 0,
                                action: sendNote)
             if let msg = getDuplicateNoteWarningMessage() {
                 modernStatusRow(msg, color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill")
@@ -2294,6 +2370,17 @@ struct SettingsView: View {
                         isExpanded: $bioExpanded,
                         helpAction: { showBioHelp = true }) {
             let currentBio = ProfileCacheService.shared.cachedProfile?.biography ?? ""
+            modernToggleRow(
+                icon: "power",
+                iconColor: Self.colorProfile,
+                title: "Enable Biography",
+                detail: "When off, Biography will not update manually or from Performance inputs.",
+                isOn: $bioFeatureEnabled
+            )
+            if !bioFeatureEnabled {
+                modernStatusRow("Biography disabled", color: VaultTheme.Colors.warning, icon: "pause.circle.fill")
+            }
+            modernDivider()
             VStack(alignment: .leading, spacing: 6) {
 
                 // ── T1 / T2 / T3 / T4 template slot selector ──────────────────
@@ -2312,67 +2399,109 @@ struct SettingsView: View {
                                 .cornerRadius(8)
                         }
                         .buttonStyle(.plain)
+                        .disabled(!bioFeatureEnabled)
+                        .opacity(bioFeatureEnabled ? 1.0 : 0.45)
                     }
                 }
 
-                // ── Text editor (= active template slot) ──────────────────────
-                ZStack(alignment: .topLeading) {
-                    if activeBioBinding.wrappedValue.isEmpty {
-                        Text(currentBio.isEmpty ? String(localized: "Write your biography…") : currentBio)
-                            .font(VaultTheme.Typography.body())
-                            .foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.5))
-                            .padding(.horizontal, VaultTheme.Spacing.md).padding(.vertical, VaultTheme.Spacing.md)
-                            .allowsHitTesting(false)
+                // ── Text editor OR acrostic-mode banner ───────────────────────
+                if bioAcrosticEnabled {
+                    // When acrostic is ON the template is irrelevant — show an
+                    // informational banner instead of the editable field.
+                    HStack(spacing: 10) {
+                        Image(systemName: "text.badge.star")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(hex: "F472B6"))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "Acrostic Mode active"))
+                                .font(VaultTheme.Typography.captionBold())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Text(String(localized: "The word received from the source below will be converted automatically into an acrostic poem."))
+                                .font(VaultTheme.Typography.captionSmall())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    TextEditor(text: activeBioBinding)
-                        .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
-                        .frame(minHeight: 80, maxHeight: 120)
-                        .padding(.horizontal, VaultTheme.Spacing.sm).padding(.vertical, 4)
-                        .scrollContentBackground(.hidden).background(Color.clear)
-                        .focused($bioFieldFocused).disabled(isSendingBio)
-                        .toolbar {
-                            ToolbarItemGroup(placement: .keyboard) {
-                                if bioFieldFocused {
-                                    Spacer()
-                                    Button("Done") { bioFieldFocused = false }
-                                        .fontWeight(.semibold)
+                    .padding(VaultTheme.Spacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(hex: "F472B6").opacity(0.10))
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.sm)
+                            .stroke(Color(hex: "F472B6").opacity(0.35), lineWidth: 1)
+                    )
+                } else {
+                    ZStack(alignment: .topLeading) {
+                        if activeBioBinding.wrappedValue.isEmpty {
+                            Text(currentBio.isEmpty ? String(localized: "Write your biography…") : currentBio)
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.5))
+                                .padding(.horizontal, VaultTheme.Spacing.md).padding(.vertical, VaultTheme.Spacing.md)
+                                .allowsHitTesting(false)
+                        }
+                        TextEditor(text: activeBioBinding)
+                            .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
+                            .frame(minHeight: 80, maxHeight: 120)
+                            .padding(.horizontal, VaultTheme.Spacing.sm).padding(.vertical, 4)
+                            .scrollContentBackground(.hidden).background(Color.clear)
+                            .focused($bioFieldFocused).disabled(isSendingBio || !bioFeatureEnabled)
+                            .toolbar {
+                                ToolbarItemGroup(placement: .keyboard) {
+                                    if bioFieldFocused {
+                                        Spacer()
+                                        Button("Done") { bioFieldFocused = false }
+                                            .fontWeight(.semibold)
+                                    }
                                 }
                             }
-                        }
-                        .onChange(of: activeBioBinding.wrappedValue) { if $0.count > 150 { activeBioBinding.wrappedValue = String($0.prefix(150)) } }
-                }
-                .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
-
-                // ── Insert buttons + char counter (no ↩ — TextEditor handles line breaks)
-                HStack(spacing: 6) {
-                    ForEach(["{text1}", "{text2}", "{text3}"], id: \.self) { token in
-                        Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                                activeBioBinding.wrappedValue += token
-                            }
-                        } label: {
-                            Text(token)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10).padding(.vertical, 7)
-                                .background(bioTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
-                                .cornerRadius(7)
-                        }
-                        .buttonStyle(.plain)
+                            .onChange(of: activeBioBinding.wrappedValue) { if $0.count > 150 { activeBioBinding.wrappedValue = String($0.prefix(150)) } }
                     }
-                    Spacer()
-                    Text("\(bioTemplate.count)/150")
-                        .font(VaultTheme.Typography.captionSmall())
-                        .foregroundColor(bioTemplate.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                    .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
+
+                    // ── Insert buttons + char counter ──────────────────────────
+                    HStack(spacing: 6) {
+                        ForEach(["{text1}", "{text2}", "{text3}"], id: \.self) { token in
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                    activeBioBinding.wrappedValue += token
+                                }
+                            } label: {
+                                Text(token)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .background(bioTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
+                                    .cornerRadius(7)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!bioFeatureEnabled)
+                            .opacity(bioFeatureEnabled ? 1.0 : 0.45)
+                        }
+                        Spacer()
+                        Text("\(bioTemplate.count)/150")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(bioTemplate.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                    }
                 }
 
-                // ── Per-placeholder input pickers (dynamic) ───────────────────
-                InlineSourcePickerView(target: "bio", template: bioTemplate, accentColor: Self.colorProfile)
+                // ── Per-placeholder input pickers ─────────────────────────────
+                // In acrostic mode always show {text1} picker so the source
+                // (API / OCR) can be configured.
+                InlineSourcePickerView(
+                    target: "bio",
+                    template: bioAcrosticEnabled ? "{text1}" : bioTemplate,
+                    accentColor: Self.colorProfile
+                )
+
+                // ── Acrostic mode toggle ───────────────────────────────────────
+                acrosticToggleRow
             }
+            .disabled(!bioFeatureEnabled)
+            .opacity(bioFeatureEnabled ? 1.0 : 0.45)
 
             modernActionButton(title: isSendingBio ? "Updating…" : "Update Biography",
                                icon: "checkmark.circle.fill", loading: isSendingBio,
-                               enabled: !bioTemplate.isEmpty && !isSendingBio && !instagram.isLocked) {
+                               enabled: bioFeatureEnabled && (!bioTemplate.isEmpty || bioAcrosticEnabled) && !isSendingBio && !instagram.isLocked) {
                 bioFieldFocused = false; sendBiography()
             }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
@@ -2383,6 +2512,81 @@ struct SettingsView: View {
         })
     }
 
+
+    // MARK: - Acrostic Toggle Row
+
+    private var acrosticToggleRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "text.badge.star")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(bioAcrosticEnabled ? Self.colorProfile : VaultTheme.Colors.textSecondary)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(String(localized: "Acrostic Mode"))
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+
+                // Live example in device language with first-letter highlight
+                acrosticExampleLine
+                    .font(.system(size: 11))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $bioAcrosticEnabled)
+                .toggleStyle(SwitchToggleStyle(tint: Self.colorProfile))
+                .labelsHidden()
+        }
+        .padding(.horizontal, VaultTheme.Spacing.md)
+        .padding(.vertical, VaultTheme.Spacing.sm)
+        .background(Color(hex: bioAcrosticEnabled ? "#1C1C1E" : "#2C2C2E"))
+        .cornerRadius(VaultTheme.CornerRadius.sm)
+        .animation(.easeInOut(duration: 0.2), value: bioAcrosticEnabled)
+    }
+
+    // Builds "STAR → Stone · Tree · Arrow · River" with first letter of each word in orange
+    private var acrosticExampleLine: Text {
+        let exampleWord = acrosticExampleWord
+        let pairs = AcrosticEngine.preview(word: exampleWord)
+
+        var line = Text(exampleWord + " → ")
+            .foregroundColor(VaultTheme.Colors.textSecondary)
+
+        for (idx, pair) in pairs.enumerated() {
+            let first  = String(pair.word.prefix(1))
+            let rest   = String(pair.word.dropFirst())
+            line = line
+                + Text(first).foregroundColor(.orange).bold()
+                + Text(rest).foregroundColor(VaultTheme.Colors.textSecondary)
+            if idx < pairs.count - 1 {
+                line = line + Text(" · ").foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.4))
+            }
+        }
+        return line
+    }
+
+    // Picks a 4-letter example word that makes sense in the current language
+    private var acrosticExampleWord: String {
+        let lang = Locale.current.language.languageCode?.identifier ?? "en"
+        switch lang {
+        case "es": return "VASO"
+        case "fr": return "REVE"
+        case "de": return "LICHT"
+        case "it": return "MARE"
+        case "pt": return "ALMA"
+        case "nl": return "LICHT"
+        case "pl": return "NURT"
+        case "ru": return "ДУША"
+        case "ja": return "HANA"
+        case "ko": return "MOND"
+        case "hi": return "JAL"
+        case "th": return "FAH"
+        case "vi": return "SONG"
+        default:   return "STAR"
+        }
+    }
 
     // MARK: - Section accent colors (internal so CollapsibleCard structs can reference them)
     static let colorAccount     = Color(hex: "#0A84FF")
@@ -2952,6 +3156,11 @@ struct SettingsView: View {
     }
     
     private func sendNote() {
+        guard noteFeatureEnabled else {
+            noteMessage = "Notes are disabled. Enable Notes before sending."
+            showingNoteAlert = true
+            return
+        }
         guard !noteTemplate.isEmpty else { return }
         guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
             noteMessage = uploadWriteBlockedMessage
@@ -3015,6 +3224,11 @@ struct SettingsView: View {
     }
 
     private func sendBiography() {
+        guard bioFeatureEnabled else {
+            bioMessage = "Biography is disabled. Enable Biography before updating."
+            showingBioAlert = true
+            return
+        }
         guard !bioTemplate.isEmpty else { return }
         guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
             bioMessage = uploadWriteBlockedMessage
@@ -3042,6 +3256,18 @@ struct SettingsView: View {
                     // Expand \n escapes
                     resolved = resolved.replacingOccurrences(of: "\\n", with: "\n")
                 }
+
+                // ── Acrostic transformation ────────────────────────────────────
+                // When acrostic mode is on and the resolved text is a single word
+                // (letters only, no spaces), convert it to an acrostic poem.
+                if bioAcrosticEnabled {
+                    let trimmed = resolved.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let isWord = !trimmed.isEmpty && trimmed.rangeOfCharacter(from: .whitespaces) == nil
+                    if isWord, let poem = AcrosticEngine.build(word: trimmed) {
+                        resolved = poem
+                    }
+                }
+
                 let textToSend = String(resolved.prefix(150))
                 let success = try await instagram.changeBiography(text: textToSend)
                 await MainActor.run {
@@ -3174,6 +3400,7 @@ private struct InlineSourcePickerView: View {
         case .cardLockscreen:   return "lock.rectangle.stack.fill"
         case .numberClock:      return "hand.draw.fill"
         case .cardClock:        return "clock.fill"
+        case .cardNumpad:       return "rectangle.grid.3x2.fill"
         default:                return nil
         }
     }
@@ -3281,7 +3508,11 @@ private struct InlineSourcePickerView: View {
                 // Card Clock / Card Lockscreen: explain the capture and the localized output
                 if usedKinds.contains(.cardClock) {
                     inputHintBanner(icon: "clock.fill", color: Color(hex: "FF9F0A"),
-                                    text: "Card Clock shows a black screen in Performance. Swipe the value pair + suit pair, then long-press to confirm. The card name (e.g. \"3 of hearts\") fills this placeholder, and an active card set unarchives that card automatically.")
+                                    text: "Card Clock shows a black screen in Performance. 2 swipes for value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm; the black screen stays until you tap anywhere. The card name (e.g. \"3 of hearts\") fills this placeholder, and an active card set unarchives that card automatically.")
+                }
+                if usedKinds.contains(.cardNumpad) {
+                    inputHintBanner(icon: "rectangle.grid.3x2.fill", color: Color(hex: "16A34A"),
+                                    text: "Numpad Card starts as a black screen in Performance. Tap anywhere to reveal the card pad, choose a value and a suit, then the pad disappears. The localized card name fills this placeholder, and an active card set unarchives that card automatically.")
                 }
                 if usedKinds.contains(.cardLockscreen) {
                     inputHintBanner(icon: "lock.rectangle.stack.fill", color: Color(hex: "FF9F0A"),
@@ -4401,7 +4632,7 @@ struct FollowingMagicSettingsCard: View {
                     Spacer()
                 Toggle("", isOn: $settings.isEnabled).labelsHidden()
                 }
-            Text("Swipe the grid to secretly build a number (1–100), then open Explore. When you visit an audience member's profile the selected counter appears inflated. Press a volume button to start the countdown back to the real number.\n\nProfiles with 10K+ followers: each unit counts as 1K automatically (e.g. input 6 on a 200K profile → shows 206K → counts down to 200K).")
+            Text("Swipe the grid to secretly build a number (1–100), then open Explore. When you visit an audience member's profile the selected counter appears inflated by that exact number. Press a volume button to start the countdown back to the real number.\n\nDuring the glitch, Vault shows the full counter value so small changes remain visible even on profiles above 1K.")
                     .font(VaultTheme.Typography.caption())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
 
@@ -5091,17 +5322,32 @@ private struct BackupCard: View {
 struct FakeHomeScreenCard: View {
     @Binding var showingPicker: Bool
     @ObservedObject private var illusionService = HomeScreenIllusionService.shared
+    @AppStorage("performanceCoverMode") private var performanceCoverModeRaw = PerformanceCoverMode.off.rawValue
+    @AppStorage("fakeHomeScreenEnabled") private var legacyFakeHomeScreenEnabled = false
     @State private var isExpanded = false
     @State private var showingHelp = false
 
     private static let accent = SettingsView.colorData
 
+    private var selectedMode: PerformanceCoverMode {
+        get {
+            if UserDefaults.standard.object(forKey: "performanceCoverMode") == nil && legacyFakeHomeScreenEnabled {
+                return .homeScreen
+            }
+            return PerformanceCoverMode(rawValue: performanceCoverModeRaw) ?? .off
+        }
+        nonmutating set {
+            performanceCoverModeRaw = newValue.rawValue
+            legacyFakeHomeScreenEnabled = newValue == .homeScreen
+        }
+    }
+
     var body: some View {
         CollapsibleCard(
             icon: "iphone",
             iconColor: Self.accent,
-            title: "Fake Home Screen",
-            subtitle: "Show a home screen screenshot when Performance opens",
+            title: "Performance Cover",
+            subtitle: "Choose what appears before Performance is revealed",
             isExpanded: $isExpanded,
             trailing: {
                 Button { showingHelp = true } label: {
@@ -5114,7 +5360,14 @@ struct FakeHomeScreenCard: View {
         ) {
             infoRow
             modernDivider()
-            imagePickerRow
+            modeSelector
+            if selectedMode == .homeScreen {
+                modernDivider()
+                imagePickerRow
+            } else if selectedMode == .screenOff {
+                modernDivider()
+                screenOffInfoRow
+            }
         }
         .sheet(isPresented: $showingHelp) {
             FakeHomeScreenHelpSheet()
@@ -5132,16 +5385,76 @@ struct FakeHomeScreenCard: View {
                     .foregroundColor(.white)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(String(localized: "fakehome.autoactive.title"))
+                Text(selectedMode.title)
                     .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textPrimary)
-                Text(String(localized: "fakehome.autoactive.body"))
+                Text(selectedMode.subtitle)
                     .font(VaultTheme.Typography.caption())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
+    }
+
+    @ViewBuilder private var modeSelector: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            Text("Cover mode")
+                .font(VaultTheme.Typography.bodyBold())
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+
+            ForEach(PerformanceCoverMode.allCases) { mode in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        selectedMode = mode
+                    }
+                } label: {
+                    HStack(spacing: VaultTheme.Spacing.md) {
+                        Image(systemName: selectedMode == mode ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(selectedMode == mode ? Self.accent : VaultTheme.Colors.textSecondary)
+                        Image(systemName: mode.icon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                            .frame(width: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(mode.title)
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Text(mode.subtitle)
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(VaultTheme.Spacing.sm)
+                    .background(selectedMode == mode ? Self.accent.opacity(0.10) : Color.clear)
+                    .cornerRadius(VaultTheme.CornerRadius.sm)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder private var screenOffInfoRow: some View {
+        HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.black)
+                .frame(width: 52, height: 92)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(hex: "#3A3A3C"), lineWidth: 1)
+                )
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Fake Screen Off")
+                    .font(VaultTheme.Typography.bodyBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Text("Shows a black screen when Performance opens. Tap anywhere to reveal the profile, using the same flow as Fake Home Screen.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder private var imagePickerRow: some View {
@@ -5223,15 +5536,15 @@ private struct FakeHomeScreenHelpSheet: View {
                     helpSection(
                         icon: "iphone.homebutton",
                         iconColor: SettingsView.colorData,
-                        title: "What is Fake Home Screen?",
-                        body: "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally."
+                        title: "What is Performance Cover?",
+                        body: "When you open Performance, the app can first show a cover screen before revealing your profile. Choose Fake Home Screen for a real screenshot, or Fake Screen Off for a black screen that looks like the phone is off."
                     )
 
                     helpSection(
                         icon: "hand.tap.fill",
                         iconColor: SettingsView.colorData,
                         title: "How to use it",
-                        body: "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.\n\n2. Upload it here using \"Select screenshot\".\n\n3. Enable the toggle.\n\n4. Next time you open Performance, that screenshot appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile."
+                        body: "1. Select a cover mode.\n\n2. For Fake Home Screen, upload a screenshot with the Instagram icon visible.\n\n3. For Fake Screen Off, no image is needed.\n\n4. Next time you open Performance, tap anywhere on the cover to reveal your profile."
                     )
 
                     helpSection(
@@ -5243,7 +5556,7 @@ private struct FakeHomeScreenHelpSheet: View {
                 }
                 .padding(20)
             }
-            .navigationTitle("Fake Home Screen")
+            .navigationTitle("Performance Cover")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

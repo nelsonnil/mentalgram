@@ -506,6 +506,13 @@
 "postpred.help.howitworks.body2" = "公開をトリガーすると、アプリは対応する写真のアーカイブを解除します。**元のグリッド位置**に、**元の日付**で再表示されます。";
 "postpred.help.howitworks.info" = "観客は本物のInstagramプロフィール上の本物の投稿を見ます。アプリは見えません。";
 "postpred.help.howitworks.archive_reason" = "Instagramでは、新しい写真をアップロードして過去の日付にすることはできません。Vaultは予測用の画像を事前にアップロードし、すぐにアーカイブすることでこれを解決します。Instagramは元のアップロード日とグリッド上の位置を保持するため、後でアーカイブ解除された予測は、最初からそこにあった古い投稿のように見えます。アップロードとアーカイブは自動かつ即時に行われるため、観客が準備用の写真を実際のプロフィールで見ることはありません。";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "セット";
 "postpred.help.metric.sets.desc" = "事前にアップロードしアーカイブした写真コレクション。A～Zの文字または0～9の数字。公開準備済み。";
 "postpred.help.metric.banks" = "バンク";
@@ -1253,7 +1260,7 @@
 
 "limits.help.gauge.title" = "1時間あたり55アクションの予算";
 "limits.help.gauge.body" = "Instagramは接続されたアプリを1時間あたり55アクションに制限しています。予算は60分のローリングウィンドウとして機能します — 各アクションは実行から正確に60分後に失効するため、強制リセットなしにカウンターが自動的に下がります。";
-"limits.help.gauge.cache" = "PerformanceやフォロワーのプロフィールをはじめてInstagramにアクセスすると（予算を使用）、以降の訪問はキャッシュから瞬時に無料で読み込まれます。";
+"limits.help.gauge.cache" = "短時間の再訪問はキャッシュを使うため0になることがあります。安全クールダウン後は、Performanceやフォロワープロフィールが再更新され、再び予算を使う場合があります。";
 "limits.help.gauge.hardstop" = "55のリミットに達すると、アプリは自動的にInstagramへのすべてのリクエストを停止します。何も送信されず、何も実行されません — 予算が更新されるまで静かに待機します。何もする必要はありません。";
 "limits.help.gauge.zone.safe" = "安全 (>20)";
 "limits.help.gauge.zone.low" = "低 (8–20)";
@@ -1267,6 +1274,7 @@
 "limits.help.table.row.performance" = "Performanceを開く";
 "limits.help.table.row.followers" = "フォロワーリスト";
 "limits.help.table.row.profile.new" = "新規フォロワープロフィール";
+"limits.help.table.row.profilepic" = "プロフィール写真を変更";
 "limits.help.table.row.sa" = "Sync & Archive（写真1枚）";
 "limits.help.table.row.upload" = "アップロード（写真1枚）";
 "limits.help.table.row.autoupload" = "自動アップロード全サイクル（写真1枚あたり）";
@@ -1274,13 +1282,14 @@
 "limits.help.table.row.notebio" = "ノートまたはbio変更";
 "limits.help.table.row.explore" = "探索 / 検索";
 "limits.help.sa.auto" = "リビールとプロフィール訪問を含む完全なパフォーマンスの後、アプリはSync & Archiveの前に自動的に短い待機時間を追加します。これは正常です — セッションを保護します。";
-"limits.help.table.cache.lost" = "Performanceキャッシュは2回目以降ゼロコストで読み込みます。キャッシュが失われる場合：アプリの再インストール、アカウント切替、アプリデータの削除、新しいデバイスへの復元。その場合、最初の起動に3アクション消費します。";
+"limits.help.table.cache.lost" = "Performanceを開くと通常、プロフィール＋投稿で3アクション消費します。Reels/Taggedのキャッシュ再構築が必要な場合は最大5です。短時間の再入場は0になることがありますが、後の更新では再び予算を使う場合があります。HighlightsはPerformanceで自動更新されません。";
+"limits.help.table.batch.note" = "写真ごとのコストは合計されます。4枚でSync & Archive = 合計8アクション。4枚アップロード = 合計9（準備1回 + 写真ごとに2回）。プロフィール写真は予算上1アクションと表示されますが、Instagramには画像アップロードの呼び出しも送られます。";
 
 "limits.help.profiles.title" = "プロフィール訪問 — 最もコストの高いアクション";
-"limits.help.profiles.body" = "新しいフォロワープロフィールを開くと毎回4〜5アクションかかります。同じプロフィールの2回目の訪問はキャッシュから読み込まれるため無料です。3〜4種類のプロフィールを素早く開くと予算が枯渇し、ボット検出が発動する場合があります。";
+"limits.help.profiles.body" = "新しいフォロワープロフィールを開くと通常3〜4アクションかかります。同じプロフィールへの短時間の2回目訪問はキャッシュから読み込まれますが、後の更新では再び予算を使う場合があります。3〜4種類のプロフィールを素早く開くと予算が枯渇し、ボット検出が発動する場合があります。";
 "limits.help.profiles.max" = "推奨：1セッションにつき新規プロフィールは最大2つまで。Sync & Archiveの直前に新規プロフィールを訪問することを避けてください。";
 "limits.help.reddot.title" = "赤いドット";
-"limits.help.reddot.body" = "残りアクションが8未満になると、フォロワーリストのヘッダーアイコンに小さな赤いドットが表示されます。あなただけが見えます — パフォーマンス中は表示されません。";
+"limits.help.reddot.body" = "残りアクションが8未満になると、フォロワーリストのヘッダーやPerformanceの紙飛行機など、あなた用の操作アイコンに小さな赤いドットが表示されます。追加の予算消費前に警告するためのものです。";
 "limits.help.reddot.block" = "予算が危険域のときに新しいプロフィールを開こうとすると、アプリは強い振動でアクションを停止します。APIコールは実行されず、セッションは安全に保たれます。";
 "limits.help.reddot.location.followers" = "フォロワーリスト";
 "limits.help.reddot.location.performance" = "紙飛行機アイコン（Performance）";
@@ -1476,7 +1485,7 @@
 "faq.q.not_instagram.question" = "観客がなぜアプリがInstagramに似ているか聞いてきます。何と言えばいいですか？";
 "faq.q.not_instagram.answer" = "Performanceはあなたのインスタグラムプロフィールの忠実な視覚的レプリカです — 同じレイアウト、同じ写真、同じカウンター。誰かが聞いたら、インスタグラムを確認していると言えばいいだけです。表示されているデータはアカウントからリアルタイムで取得した本物のデータです。";
 
-"upload.tip.title" = "アップロードのヒント";
+"upload.tip.title" = "アップロードしたまま放置できます";
 "upload.tip.overnight" = "アップロード中は画面がオンのまま維持されます — スリープやロックは一切起きません。充電しながら一晩放置するだけで、手を触れずに10バンク以上を自動で埋めることができます。";
 "upload.tip.background" = "スマホを使いたいですか？他のアプリに自由に切り替えてOKです。次の写真のアップロード準備ができたら、ポップアップ通知でここに戻れます。";
 
@@ -1569,22 +1578,22 @@
 "postpred.help.input.grid.encoding.title" = "桁のエンコード（Clock Inputと同じ）";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "Performanceで、フォトグリッド上を任意の方向にスワイプします。常に4スワイプ：最初のペア=カード値、2番目=スート。長押しで確定。";
+"set.input.cardclock.help" = "Performanceで、フォトグリッド上をスワイプします。3回のスワイプ：最初2回=カード値（A=↑→ … 9=←← 10=↑← J=←↑ Q=↑↑ K=↑↓）、3回目=スート（↑=♠ →=♥ ↓=♣ ←=♦）。音量ボタンで確定。";
 "set.input.cardclock.values" = "数値エンコード  （時計の文字盤）";
-"set.input.cardclock.suits" = "スートエンコード  （同じ方向を2回）";
-"set.input.cardclock.longpress" = "グリッド上を長押しして確定・リビールします。";
+"set.input.cardclock.suits" = "スートエンコード  （1回スワイプ）";
+"set.input.cardclock.longpress" = "音量↑または↓ボタンを押して確定・リビールします。";
 "set.input.cardclock.noconfig" = "設定は不要です。";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "カードクロック";
-"postpred.help.input.cardclock.guide.intro" = "Instagramの写真グリッド上を任意の方向にスワイプ — 常に4回：最初の2回でカード値（A〜K）、後の2回でスートをエンコード。長押しで確定。";
+"postpred.help.input.cardclock.guide.intro" = "Instagramの写真グリッド上をスワイプ — 合計3回：最初の2回でカード値（A〜K 時計の文字盤）、3回目の1回でスートをエンコード。音量ボタンで確定。";
 "postpred.help.input.cardclock.guide.values" = "数値エンコード  （時計の文字盤）";
-"postpred.help.input.cardclock.guide.suits" = "スートエンコード  （同じ方向を2回）";
+"postpred.help.input.cardclock.guide.suits" = "スートエンコード  （1回スワイプ）";
 "postpred.help.input.cardclock.guide.examples" = "例";
-"postpred.help.input.cardclock.guide.ex.js" = "スペードのJ: ←↑（J値）＋↑↑（スペード）";
-"postpred.help.input.cardclock.guide.ex.3h" = "ハートの3: →→（3値）＋→→（ハート）";
-"postpred.help.input.cardclock.guide.ex.ad" = "ダイヤのA: ↑→（A値）＋←←（ダイヤ）";
-"postpred.help.input.cardclock.guide.longpress" = "4回目のスワイプ後、グリッド上を長押しして確定。該当カードの写真が自動的にリビールされます。";
+"postpred.help.input.cardclock.guide.ex.js" = "スペードのJ: ←↑（J値）＋↑（スペード）";
+"postpred.help.input.cardclock.guide.ex.3h" = "ハートの3: →→（3値）＋→（ハート）";
+"postpred.help.input.cardclock.guide.ex.ad" = "ダイヤのA: ↑→（A値）＋←（ダイヤ）";
+"postpred.help.input.cardclock.guide.longpress" = "3回目のスワイプ後、音量↑または↓ボタンを押して確定。該当カードの写真が自動的にリビールされます。";
 
 "inputs.interface.exclusive.title" = "排他的な入力";
 "inputs.interface.exclusive.body" = "セット・プロフィール・ノートで同時に使える入力インターフェースは1つだけです。これが有効な間、他はロックされます:";
@@ -1627,7 +1636,7 @@ Setto, profairu, noto de douji ni tsukaeru intafeisu wa hitotsu dake desu. Tsuzu
 "input.guide.covertyping.title" = "カバータイピング";
 "input.guide.covertyping.compat" = "単語セット";
 "input.guide.covertyping.body" = "スペクテーターが選んだ単語を探索検索バーに秘密裏に入力します。画面には別のおとり単語が表示され、アプリは入力したものだけを読み取ります。";
-"input.guide.covertyping.activate" = "探索で検索バーをタップし、秘密の単語を入力します。ダブルスペースで確認し、リビールを起動します。バーにはまったく異なるおとり単語が表示されます。";
+"input.guide.covertyping.activate" = "探索で検索バーをタップし、秘密の単語を入力します。スペースキーを1回押して確認します — スペースはフィールドから消え、わずかな振動で単語がキャプチャされてリビールが起動したことが伝わります。バーには引き続きおとり単語が表示されます。";
 "input.guide.ocr.title" = "カメラ (OCR)";
 "input.guide.ocr.compat" = "単語 · 数字 · カスタムセット";
 "input.guide.ocr.body" = "バックカメラがフレーム内のテキストを静かに読み取り（トランプ、書かれた言葉、計算結果、日付）、結果を直接アクティブセットに送信します。スキャン中は画面に何も表示されません。";
@@ -1645,8 +1654,8 @@ Setto, profairu, noto de douji ni tsukaeru intafeisu wa hitotsu dake desu. Tsuzu
 "input.guide.clock.tip" = "数字グリッドと同じエンコード：グリッドを知っていれば、クロックは同一です。唯一の違いは完全に黒い画面で視覚的なグリッドがないことです。";
 "input.guide.cardclock.title" = "カードクロック";
 "input.guide.cardclock.compat" = "カードセット";
-"input.guide.cardclock.body" = "完全に真っ黒な画面 — 数字クロックと同じ見た目ですが、数字の代わりにトランプをキャプチャします。正確に4回のスワイプが必要：最初の2回が数値（AからK）をエンコード、次の2回がスートをエンコード。スートのエンコード：同じ方向を2回（↑↑ = ♠、→→ = ♥、↓↓ = ♣、←← = ♦）。";
-"input.guide.cardclock.activate" = "1 + 2回スワイプして数値を、3 + 4回スワイプしてスートを入力（同じ方向を2回）。各有効なペアに独自の振動があります。長押しで確認。エラーフラッシュは無効なペアを示します。";
+"input.guide.cardclock.body" = "完全に真っ黒な画面 — 数字クロックと同じ見た目ですが、数字の代わりにトランプをキャプチャします。正確に3回のスワイプが必要：最初の2回が数値（A=↑→ 2=→↑ … 9=←← 10=↑← J=←↑ Q=↑↑ K=↑↓）をエンコード、3回目の1回がスート（↑=♠ →=♥ ↓=♣ ←=♦）。";
+"input.guide.cardclock.activate" = "1 + 2回スワイプして数値を入力し、3回目でスートを1回スワイプ。有効な数値ペアごとに独自の振動、3回目で強い振動が確定を知らせます。音量ボタンで確定。エラーフラッシュは無効な数値ペアを示します。";
 "input.guide.cardclock.tip" = "完全な数値→方向テーブルは、カードクロックのセット設定画面に表示されています。最もよく使う4〜5枚のカードだけを覚えてください。";
 "input.guide.lockscreen.title" = "数字ロック画面";
 "input.guide.lockscreen.compat" = "数字 · カスタムセット";

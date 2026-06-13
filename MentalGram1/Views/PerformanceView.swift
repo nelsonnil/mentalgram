@@ -22,13 +22,16 @@ struct PerformanceView: View {
     @AppStorage("noteTopInputMode") private var noteTopInputMode: String = "off"
     @AppStorage("bioTopInputMode")  private var bioTopInputMode:  String = "off"
     @AppStorage("ppTopInputMode")   private var ppTopInputMode:   String = "off"
+    @AppStorage("note_feature_enabled") private var noteFeatureEnabled: Bool = true
+    @AppStorage("bio_feature_enabled")  private var bioFeatureEnabled:  Bool = true
     // Text templates — user-defined wrappers with {word} token
     @AppStorage("note_template")   private var noteTemplate:  String = ""
     @AppStorage("bio_template")    private var bioTemplate1:  String = ""
     @AppStorage("bio_template_2")  private var bioTemplate2:  String = ""
     @AppStorage("bio_template_3")  private var bioTemplate3:  String = ""
     @AppStorage("bio_template_4")  private var bioTemplate4:  String = ""
-    @AppStorage("bio_active_slot") private var bioActiveSlot: Int = 0
+    @AppStorage("bio_active_slot")      private var bioActiveSlot: Int = 0
+    @AppStorage("bio_acrostic_enabled") private var bioAcrosticEnabled: Bool = false
 
     private var bioTemplate: String {
         switch bioActiveSlot {
@@ -50,6 +53,8 @@ struct PerformanceView: View {
     @State private var pendingOCRWord: String? = nil
     /// Set by URL scheme handler; observed by InstagramProfileView to trigger custom-set slot reveal.
     @State private var pendingSlotReveal: Int? = nil
+    /// Set by List Set private selector; observed by InstagramProfileView to reveal that slot.
+    @State private var pendingListReveal: Int? = nil
     /// Set by URL scheme handler; observed by InstagramProfileView to trigger playing-card reveal.
     @State private var pendingCardReveal: String? = nil
     /// Set by the fake lockscreen; observed by InstagramProfileView to route number/custom/card reveals.
@@ -102,8 +107,42 @@ struct PerformanceView: View {
 
     // MARK: - Fake Home Screen illusion
     @AppStorage("fakeHomeScreenEnabled") private var fakeHomeScreenEnabled = false
+    @AppStorage("performanceCoverMode") private var performanceCoverModeRaw = PerformanceCoverMode.off.rawValue
     @ObservedObject private var illusionService = HomeScreenIllusionService.shared
     @State private var showingHomeScreenIllusion = false
+    @State private var showingScreenOffCover = false
+    @State private var performanceCoverWasShown = false
+
+    private var effectivePerformanceCoverMode: PerformanceCoverMode {
+        if UserDefaults.standard.object(forKey: "performanceCoverMode") == nil && fakeHomeScreenEnabled {
+            return .homeScreen
+        }
+        return PerformanceCoverMode(rawValue: performanceCoverModeRaw) ?? .off
+    }
+
+    private var shouldShowPerformanceCover: Bool {
+        switch effectivePerformanceCoverMode {
+        case .off:
+            return false
+        case .homeScreen:
+            return illusionService.hasImage
+        case .screenOff:
+            return true
+        }
+    }
+
+    private func presentPerformanceCoverIfNeeded() {
+        guard shouldShowPerformanceCover, !performanceCoverWasShown else { return }
+        performanceCoverWasShown = true
+        switch effectivePerformanceCoverMode {
+        case .homeScreen:
+            showingHomeScreenIllusion = true
+        case .screenOff:
+            showingScreenOffCover = true
+        case .off:
+            break
+        }
+    }
 
     // MARK: - Fake Lockscreen input
     @State private var showingLockscreen = false
@@ -115,6 +154,38 @@ struct PerformanceView: View {
     @State private var showingClockInput = false
     /// Prevents re-presenting the black screen when onAppear re-fires after dismiss.
     @State private var clockInputWasShown = false
+
+    // MARK: - Card Numpad input
+    @State private var showingCardNumpad = false
+    /// Prevents re-presenting the card selector when onAppear re-fires after dismiss.
+    @State private var cardNumpadWasShown = false
+
+    // MARK: - List Set input
+    @State private var showingListInput = false
+    @State private var listInputWasShown = false
+
+    private var activeListSet: PhotoSet? {
+        guard ActiveSetSettings.shared.isPostPredictionEnabled,
+              let activeId = ActiveSetSettings.shared.activeListSetId else { return nil }
+        return DataManager.shared.sets.first { $0.id == activeId && $0.type == .list }
+    }
+
+    private func resetFullscreenInputPresentationFlags() {
+        lockscreenWasShown = false
+        clockInputWasShown = false
+        cardNumpadWasShown = false
+        listInputWasShown = false
+        showingLockscreen = false
+        showingClockInput = false
+        showingCardNumpad = false
+        showingListInput = false
+    }
+
+    private func resetPerformanceCoverPresentationFlags() {
+        performanceCoverWasShown = false
+        showingHomeScreenIllusion = false
+        showingScreenOffCover = false
+    }
 
     /// True when the black swipe-clock screen should appear on Performance open.
     /// Covers: PP clockInput mode, active number/custom set using Clock Input, OR
@@ -135,6 +206,13 @@ struct PerformanceView: View {
     /// number. Decided by the single active interface kind (only one can be active at a time).
     private var isClockCardMode: Bool {
         integrations.interfaceKindsInUse().contains(.cardClock)
+    }
+
+    /// True when Performance should start on the black tap-to-show card numpad.
+    /// Covers an active Playing Cards set using Numpad Card, or Notes/Bio placeholders
+    /// configured to receive a localized card name from that interface.
+    private var isCardNumpadActive: Bool {
+        integrations.interfaceKindsInUse().contains(.cardNumpad)
     }
 
     /// True when the fake lockscreen should appear on Performance open.
@@ -301,19 +379,25 @@ struct PerformanceView: View {
                 )
                 .zIndex(899)
         }
-        if showingHomeScreenIllusion, let screenshot = illusionService.screenshot {
+    }
+
+    @ViewBuilder private var performanceCoverOverlay: some View {
+        if showingHomeScreenIllusion,
+           effectivePerformanceCoverMode == .homeScreen,
+           let screenshot = illusionService.screenshot {
             Image(uiImage: screenshot)
                 .resizable()
                 .scaledToFill()
-                .frame(width: UIScreen.main.bounds.width,
-                       height: UIScreen.main.bounds.height)
-                .clipped()
-                .ignoresSafeArea(.all)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    withAnimation(.easeIn(duration: 0.12)) { showingHomeScreenIllusion = false }
-                }
-                .zIndex(999)
+            .frame(width: UIScreen.main.bounds.width,
+                   height: UIScreen.main.bounds.height)
+            .background(Color.black.ignoresSafeArea(.all))
+            .clipped()
+            .ignoresSafeArea(.all)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeIn(duration: 0.12)) { showingHomeScreenIllusion = false }
+            }
+            .zIndex(10_000)
         }
     }
 
@@ -324,19 +408,8 @@ struct PerformanceView: View {
                 isHome: !showingExplore, isSearch: showingExplore,
                 onHomePress: {},
                 onSearchPress: {
-                    // Capture buffer ONCE before any consumer resets it.
-                    // FollowingMagic's captureFromBuffer() calls reset() internally,
-                    // which would empty the buffer before ForceReel can read it.
                     let capturedDigits = SecretNumberManager.shared.digitBuffer
-                    let capturedNumber = capturedDigits.reduce(0) { $0 * 10 + $1 }
-
-                    if FollowingMagicSettings.shared.isEnabled && !capturedDigits.isEmpty {
-                        FollowingMagicSettings.shared.captureFromBuffer(source: "grid")
-                    }
-                    if ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel && capturedNumber > 0 {
-                        ForceReelSettings.shared.pendingPosition = capturedNumber
-                        print("🎭 [FORCE] Position captured: \(capturedNumber)")
-                        // Buffer may already be reset by FollowingMagic above; only reset if still populated.
+                    if captureGridSideEffects(digits: capturedDigits, source: "search") {
                         if SecretNumberManager.shared.hasDigits {
                             SecretNumberManager.shared.reset()
                         }
@@ -350,6 +423,29 @@ struct PerformanceView: View {
         )
     }
 
+    @discardableResult
+    private func captureGridSideEffects(digits: [Int], source: String) -> Bool {
+        guard !digits.isEmpty else { return false }
+
+        let capturedNumber = digits.reduce(0) { $0 * 10 + $1 }
+        var didCapture = false
+
+        if FollowingMagicSettings.shared.isEnabled {
+            FollowingMagicSettings.shared.capture(digits: digits, source: source)
+            didCapture = true
+        }
+
+        if ForceReelSettings.shared.isEnabled,
+           ForceReelSettings.shared.hasReel,
+           capturedNumber > 0 {
+            ForceReelSettings.shared.pendingPosition = capturedNumber
+            print("🎭 [FORCE] Position captured from \(source): \(capturedNumber)")
+            didCapture = true
+        }
+
+        return didCapture
+    }
+
     private func instagramProfileView(profile: InstagramProfile) -> some View {
         InstagramProfileView(
             profile: profile,
@@ -357,6 +453,7 @@ struct PerformanceView: View {
             onRefresh: loadProfileSync,
             onAsyncRefresh: handlePerformancePullToRefresh,
             onPlusPress: { selectedTab = 1 },
+            highlightsLoadedOnce: $highlightsLoadedOnce,
             mediaURLs: allMediaURLs,
             onMediaAppear: loadMoreIfNeeded,
             onAutoFollowedByTap: { handleAutoFollowedByTap() },
@@ -455,6 +552,7 @@ struct PerformanceView: View {
             },
             pendingOCRWord: $pendingOCRWord,
             pendingSlotReveal: $pendingSlotReveal,
+            pendingListReveal: $pendingListReveal,
             pendingCardReveal: $pendingCardReveal,
             pendingLockscreenDigits: $pendingLockscreenDigits,
             onTabSelected: { tab in handleTabSelected(tab) },
@@ -466,6 +564,8 @@ struct PerformanceView: View {
 
     /// Called by InstagramProfileView whenever the Posts/Reels/Tagged tab changes.
     /// Loads reels or tagged content on first tap, without blocking the UI.
+    private let secondaryTabVisibleMinimum = 12
+
     private func handleTabSelected(_ tab: Int) {
         guard let profile else { return }
         switch tab {
@@ -474,26 +574,40 @@ struct PerformanceView: View {
             // visible — this handles the case where iOS purged the Caches/ directory
             // (thumbnails lost) and the CDN URLs expired so re-download also failed.
             let hasReelImages = profile.cachedReelURLs.contains { cachedImages[$0] != nil }
-            guard !reelsLoadedOnce || !hasReelImages else { return }
+            let needsVisibleMinimum = profile.cachedReelURLs.count < secondaryTabVisibleMinimum
+            guard !reelsLoadedOnce || !hasReelImages || needsVisibleMinimum else { return }
             reelsLoadedOnce = true
-            Task { await fetchReelsIfNeeded(for: profile, forceIfNoImages: !hasReelImages) }
+            Task {
+                await fetchReelsIfNeeded(
+                    for: profile,
+                    forceIfNoImages: !hasReelImages,
+                    ensureVisibleMinimum: needsVisibleMinimum
+                )
+            }
         case 2:
             let hasTaggedImages = profile.cachedTaggedURLs.contains { cachedImages[$0] != nil }
-            guard !taggedLoadedOnce || !hasTaggedImages else { return }
+            let needsVisibleMinimum = profile.cachedTaggedURLs.count < secondaryTabVisibleMinimum
+            guard !taggedLoadedOnce || !hasTaggedImages || needsVisibleMinimum else { return }
             taggedLoadedOnce = true
-            Task { await fetchTaggedIfNeeded(for: profile, forceIfNoImages: !hasTaggedImages) }
+            Task {
+                await fetchTaggedIfNeeded(
+                    for: profile,
+                    forceIfNoImages: !hasTaggedImages,
+                    ensureVisibleMinimum: needsVisibleMinimum
+                )
+            }
         default:
             break
         }
     }
 
-    /// Schedules a background preload of reels and tagged so they are cached
+    /// Schedules a background preload of reels, tagged, and highlights so they are cached
     /// before the user swipes to those tabs. Safe to call multiple times —
-    /// `fetchReelsIfNeeded` and `fetchTaggedIfNeeded` skip when already cached.
+    /// each fetch helper skips when already cached.
     /// Delay is intentionally staggered to avoid competing with the posts
     /// download burst that just finished.
     private func scheduleBackgroundReelsTaggedPreload(for cached: InstagramProfile) {
-        // Already both loaded → nothing to do
+        // Already loaded → nothing to do
         let reelsPaginationKey = "reels_paginated_\(cached.userId)"
         let alreadyPaginatedReels = UserDefaults.standard.bool(forKey: reelsPaginationKey)
         let reelsReady = !cached.cachedReelURLs.isEmpty
@@ -505,11 +619,15 @@ struct PerformanceView: View {
         let taggedReady = !cached.cachedTaggedURLs.isEmpty
             && !(cached.cachedTaggedURLs.count == 18 && !alreadyPaginatedTagged)
 
-        guard !reelsReady || !taggedReady else {
-            print("🎬 [BG] Reels + tagged already cached — skipping preload")
+        let highlightsReady = cached.cachedHighlights.isEmpty
+            ? highlightsCheckIsFresh(for: cached.userId)
+            : cachedHighlightCoversAreReady(cached.cachedHighlights)
+
+        guard !reelsReady || !taggedReady || !highlightsReady else {
+            print("🎬 [BG] Reels + tagged + highlights already cached — skipping preload")
             return
         }
-        print("🎬 [BG] Scheduling background preload — reelsReady:\(reelsReady) taggedReady:\(taggedReady)")
+        print("🎬 [BG] Scheduling background preload — reelsReady:\(reelsReady) taggedReady:\(taggedReady) highlightsReady:\(highlightsReady)")
 
         Task { @MainActor in
             // Delay to let the posts download burst settle first (anti-bot)
@@ -518,7 +636,7 @@ struct PerformanceView: View {
                   !instagram.isSessionChallenged,
                   !instagram.isUploadingProfilePic,
                   instagram.isLoggedIn else {
-                print("🚫 [BG] Reels/tagged preload deferred — locked/challenged/uploading")
+                print("🚫 [BG] Reels/tagged/highlights preload deferred — locked/challenged/uploading")
                 return
             }
             guard let current = profile else { return }
@@ -538,41 +656,55 @@ struct PerformanceView: View {
                 taggedLoadedOnce = true
                 await fetchTaggedIfNeeded(for: current2)
             }
-            // Fetch story highlights if not yet cached (1 GET — /highlights/tray/)
-            guard let current3 = profile, current3.cachedHighlights.isEmpty else { return }
-            guard !instagram.isLocked, !instagram.isSessionChallenged else { return }
-            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_200_000_000...2_000_000_000))
-            guard !instagram.isLocked, !instagram.isSessionChallenged else { return }
-            print("🌟 [BG] Auto-preloading story highlights in background…")
-            if let fetched = try? await instagram.getUserHighlights(userId: current3.userId),
-               !fetched.isEmpty,
-               let latest = profile {
-                let updated = InstagramProfile(
-                    userId: latest.userId, username: latest.username,
-                    fullName: latest.fullName, biography: latest.biography,
-                    externalUrl: latest.externalUrl, profilePicURL: latest.profilePicURL,
-                    isVerified: latest.isVerified, isPrivate: latest.isPrivate,
-                    followerCount: latest.followerCount, followingCount: latest.followingCount,
-                    mediaCount: latest.mediaCount, followedBy: latest.followedBy,
-                    isFollowing: latest.isFollowing, isFollowRequested: latest.isFollowRequested,
-                    cachedAt: latest.cachedAt, cachedMediaURLs: latest.cachedMediaURLs,
-                    cachedReelURLs: latest.cachedReelURLs, cachedTaggedURLs: latest.cachedTaggedURLs,
-                    cachedHighlights: fetched,
-                    cachedMediaItems: latest.cachedMediaItems, cachedReelItems: latest.cachedReelItems,
-                    cachedNextMaxId: latest.cachedNextMaxId
-                )
-                profile = updated
-                ProfileCacheService.shared.saveProfile(updated)
-                print("🌟 [BG] Highlights loaded: \(fetched.count) — downloading cover images…")
-                for h in fetched {
-                    if let img = await downloadImage(from: h.coverImageURL) {
-                        cachedImages[h.coverImageURL] = img
-                        ProfileCacheService.shared.saveImage(img, forURL: h.coverImageURL)
-                    }
-                }
-                print("🌟 [BG] Highlight covers downloaded (\(fetched.count))")
+            // Fetch highlights if not yet cached (lazy, like reels/tagged).
+            guard let current3 = profile else { return }
+            let highlightCoversReady = !current3.cachedHighlights.isEmpty
+                && cachedHighlightCoversAreReady(current3.cachedHighlights)
+            if !current3.cachedHighlights.isEmpty && !highlightCoversReady {
+                print("🌟 [BG] Highlight covers missing — refreshing metadata…")
+                await fetchHighlightsIfNeeded(for: current3)
+            } else if current3.cachedHighlights.isEmpty && !highlightsCheckIsFresh(for: current3.userId) {
+                print("🌟 [BG] Highlights not cached — auto-fetching…")
+                await fetchHighlightsIfNeeded(for: current3)
+            } else if current3.cachedHighlights.isEmpty {
+                print("🌟 [BG] Highlights checked recently — skipping empty refresh")
+                highlightsLoadedOnce = true
+            } else {
+                print("🌟 [BG] Highlights already cached (\(current3.cachedHighlights.count)) — skipping fetch")
+                highlightsLoadedOnce = true
             }
         }
+    }
+
+    private func highlightsCheckIsFresh(for userId: String) -> Bool {
+        let key = "highlights_checked_at_\(userId)"
+        let last = UserDefaults.standard.double(forKey: key)
+        guard last > 0 else { return false }
+        return Date().timeIntervalSince1970 - last < 12 * 60 * 60
+    }
+
+    private func markHighlightsChecked(for userId: String) {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "highlights_checked_at_\(userId)")
+    }
+
+    @MainActor
+    private func cachedHighlightCoversAreReady(_ highlights: [InstagramHighlight]) -> Bool {
+        guard !highlights.isEmpty else { return false }
+        var allReady = true
+        for highlight in highlights {
+            let url = highlight.coverImageURL
+            guard !url.isEmpty else {
+                allReady = false
+                continue
+            }
+            if cachedImages[url] != nil { continue }
+            if let image = ProfileCacheService.shared.loadImage(forURL: url) {
+                cachedImages[url] = image
+            } else {
+                allReady = false
+            }
+        }
+        return allReady
     }
 
     /// Fetches reels for the own profile tab. Safe to call on-demand.
@@ -580,7 +712,11 @@ struct PerformanceView: View {
     ///   cached — used when iOS purged the image cache and CDN URLs have expired,
     ///   so a fresh URL set is needed before thumbnails can be re-downloaded.
     @MainActor
-    private func fetchReelsIfNeeded(for cached: InstagramProfile, forceIfNoImages: Bool = false) async {
+    private func fetchReelsIfNeeded(
+        for cached: InstagramProfile,
+        forceIfNoImages: Bool = false,
+        ensureVisibleMinimum: Bool = false
+    ) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
         guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
@@ -593,14 +729,18 @@ struct PerformanceView: View {
         //  a) No cache at all (first load)
         //  b) URLs exist but items list is missing (old cache before cachedReelItems was added)
         //  c) Exactly 10 items cached — that was the hard server cap before pagination was added.
-        //  d) forceIfNoImages=true: URLs cached but no images visible (e.g. iOS purged Caches/
+        //  d) ensureVisibleMinimum=true: user opened Reels and the grid has fewer
+        //     than 12 items, so allow one extra page only now.
+        //  e) forceIfNoImages=true: URLs cached but no images visible (e.g. iOS purged Caches/
         //     and CDN URLs expired — fresh URLs are needed so downloads can succeed).
         let reelsPaginationKey = "reels_paginated_\(cached.userId)"
         let alreadyPaginated = UserDefaults.standard.bool(forKey: reelsPaginationKey)
         let looksLikeOldSinglePage = cached.cachedReelItems.count == 10 && !alreadyPaginated
+        let needsVisibleMinimum = ensureVisibleMinimum && cached.cachedReelURLs.count < secondaryTabVisibleMinimum
         let needsFetch = cached.cachedReelURLs.isEmpty
                       || cached.cachedReelItems.isEmpty
                       || looksLikeOldSinglePage
+                      || needsVisibleMinimum
                       || forceIfNoImages
         guard needsFetch else {
             print("🎬 [REELS] Already cached (\(cached.cachedReelURLs.count) URLs, \(cached.cachedReelItems.count) items) — skipping fetch")
@@ -609,27 +749,60 @@ struct PerformanceView: View {
         if forceIfNoImages {
             print("🎬 [REELS] No visible images — forcing fresh URL fetch (CDN may have expired)")
         }
-        print("🎬 [REELS] Lazy-loading reels for first tab visit…")
+        print("🎬 [REELS] Lazy-loading reels progressively (page by page)…")
         do {
-            // Random human-like delay before the new API call.
+            // Random human-like delay before the first API call.
             try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
-            let items = try await instagram.getUserReels(userId: cached.userId, amount: 50)
-            let reelURLs = items.map { $0.imageURL }
-            var updated = cached
-            updated.cachedReelURLs = reelURLs
-            updated.cachedReelItems = items
-            profile = updated
-            ProfileCacheService.shared.saveProfile(updated)
-            // Mark paginated fetch done so we never re-fetch just because count==10
-            UserDefaults.standard.set(true, forKey: "reels_paginated_\(cached.userId)")
-            // Download thumbnails
-            for url in reelURLs where cachedImages[url] == nil {
-                if let img = await downloadImage(from: url) {
-                    cachedImages[url] = img
-                    ProfileCacheService.shared.saveImage(img, forURL: url)
+
+            let reelsPaginationKey = "reels_paginated_\(cached.userId)"
+            let maxPages = ensureVisibleMinimum ? 2 : 1
+            var allItems: [InstagramMediaItem] = []
+            var nextCursor: String? = nil
+            var page = 0
+
+            repeat {
+                let (pageItems, nextId) = try await instagram.getUserReelsPage(
+                    userId: cached.userId,
+                    amount: 50,
+                    maxId: nextCursor
+                )
+                guard !pageItems.isEmpty else { break }
+
+                allItems += pageItems
+
+                // ── Show this page in the grid immediately ──────────────────────
+                var updated = profile ?? cached
+                updated.cachedReelURLs  = allItems.map { $0.imageURL }
+                updated.cachedReelItems = allItems
+                profile = updated
+
+                // Download thumbnails for this page only — they fill in one by one
+                // while the next page (if any) is being fetched.
+                let pageURLs = pageItems.map { $0.imageURL }
+                for url in pageURLs where cachedImages[url] == nil {
+                    if let img = await downloadImage(from: url) {
+                        cachedImages[url] = img
+                        ProfileCacheService.shared.saveImage(img, forURL: url)
+                    }
                 }
-            }
-            LogManager.shared.info("Reels lazy-loaded: \(reelURLs.count) items", category: .general)
+
+                nextCursor = nextId
+                page += 1
+
+                // Anti-bot: small pause between pages
+                if nextCursor != nil && page < maxPages {
+                    try? await Task.sleep(nanoseconds: UInt64.random(in: 600_000_000...1_200_000_000))
+                }
+            } while nextCursor != nil && page < maxPages
+
+            // Persist final state
+            var final = profile ?? cached
+            final.cachedReelURLs  = allItems.map { $0.imageURL }
+            final.cachedReelItems = allItems
+            profile = final
+            ProfileCacheService.shared.saveProfile(final)
+            UserDefaults.standard.set(true, forKey: reelsPaginationKey)
+            LogManager.shared.info("Reels lazy-loaded: \(allItems.count) items (\(page) page(s))", category: .general)
         } catch {
             reelsLoadedOnce = false // allow retry on next tab visit
             print("⚠️ [REELS] Lazy load failed (non-critical): \(error)")
@@ -640,7 +813,11 @@ struct PerformanceView: View {
     /// - Parameter forceIfNoImages: when true, re-fetches even if URLs are already
     ///   cached — used when iOS purged the image cache and CDN URLs have expired.
     @MainActor
-    private func fetchTaggedIfNeeded(for cached: InstagramProfile, forceIfNoImages: Bool = false) async {
+    private func fetchTaggedIfNeeded(
+        for cached: InstagramProfile,
+        forceIfNoImages: Bool = false,
+        ensureVisibleMinimum: Bool = false
+    ) async {
         guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return }
         guard !instagram.isUploadingProfilePic else { return }
         guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
@@ -652,7 +829,8 @@ struct PerformanceView: View {
         let taggedPaginationKey = "tagged_paginated_\(cached.userId)"
         let taggedAlreadyPaginated = UserDefaults.standard.bool(forKey: taggedPaginationKey)
         let taggedLooksOld = cached.cachedTaggedURLs.count == 18 && !taggedAlreadyPaginated
-        guard cached.cachedTaggedURLs.isEmpty || taggedLooksOld || forceIfNoImages else {
+        let needsVisibleMinimum = ensureVisibleMinimum && cached.cachedTaggedURLs.count < secondaryTabVisibleMinimum
+        guard cached.cachedTaggedURLs.isEmpty || taggedLooksOld || needsVisibleMinimum || forceIfNoImages else {
             print("🏷️ [TAGGED] Already cached (\(cached.cachedTaggedURLs.count)) — skipping fetch")
             return
         }
@@ -662,7 +840,12 @@ struct PerformanceView: View {
         print("🏷️ [TAGGED] Lazy-loading tagged for first tab visit…")
         do {
             try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
-            let items = try await instagram.getUserTagged(userId: cached.userId, amount: 50)
+            let items = try await instagram.getUserTagged(
+                userId: cached.userId,
+                amount: 50,
+                maxPages: ensureVisibleMinimum ? 2 : 1,
+                minimumItems: ensureVisibleMinimum ? secondaryTabVisibleMinimum : 0
+            )
             let taggedURLs = items.map { $0.imageURL }
             var updated = cached
             updated.cachedTaggedURLs = taggedURLs
@@ -680,6 +863,60 @@ struct PerformanceView: View {
             taggedLoadedOnce = false
             print("⚠️ [TAGGED] Lazy load failed (non-critical): \(error)")
         }
+    }
+
+    /// Fetches story highlights for the own profile. Safe to call on-demand.
+    @MainActor
+    private func fetchHighlightsIfNeeded(for cached: InstagramProfile) async {
+        guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else {
+            highlightsLoadedOnce = true
+            return
+        }
+        guard !instagram.isUploadingProfilePic else {
+            highlightsLoadedOnce = true
+            return
+        }
+        guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
+            let rate = instagram.checkRateLimit()
+            print("🛡️ [HIGHLIGHTS] Lazy load skipped near rate budget (\(rate.actionsUsed)/55)")
+            highlightsLoadedOnce = true
+            return
+        }
+        if !cached.cachedHighlights.isEmpty && cachedHighlightCoversAreReady(cached.cachedHighlights) {
+            print("🌟 [HIGHLIGHTS] Already cached (\(cached.cachedHighlights.count)) with cover images — skipping fetch")
+            highlightsLoadedOnce = true
+            return
+        }
+        print("🌟 [HIGHLIGHTS] Lazy-loading highlights…")
+        do {
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
+            let items = try await instagram.getUserHighlights(userId: cached.userId)
+            if items.isEmpty {
+                print("🌟 [HIGHLIGHTS] Fetch returned 0 items — preserving existing cache and retrying later")
+                LogManager.shared.warning("Highlights fetch returned 0 items; preserving cache and leaving retry available", category: .general)
+                highlightsLoadedOnce = true
+                return
+            } else {
+                markHighlightsChecked(for: cached.userId)
+            }
+            var updated = cached
+            updated.cachedHighlights = items
+            profile = updated
+            ProfileCacheService.shared.saveProfile(updated)
+            // Download cover images
+            for highlight in items {
+                let url = highlight.coverImageURL
+                if cachedImages[url] == nil, let img = await downloadImage(from: url) {
+                    cachedImages[url] = img
+                    ProfileCacheService.shared.saveImage(img, forURL: url)
+                }
+            }
+            print("🌟 [HIGHLIGHTS] Loaded \(items.count) highlights")
+            LogManager.shared.info("Highlights lazy-loaded: \(items.count) items", category: .general)
+        } catch {
+            print("⚠️ [HIGHLIGHTS] Lazy load failed (non-critical): \(error)")
+        }
+        highlightsLoadedOnce = true
     }
 
     // MARK: - OCR modifiers (split out to reduce body complexity for the Swift type-checker)
@@ -707,8 +944,8 @@ struct PerformanceView: View {
                     return
                 }
                 // OCR is active when any slot has .ocr as its source, OR legacy OCR mode is set
-                let noteOcr     = integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr"
-                let bioOcr      = integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr"
+                let noteOcr     = noteFeatureEnabled && (integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr")
+                let bioOcr      = bioFeatureEnabled && (integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr")
                 let postPredOcr = ppTopInputMode == "ocr"
                 guard noteOcr || bioOcr || postPredOcr else { return }
                 if ocrCoordinator.isRunning {
@@ -741,8 +978,8 @@ struct PerformanceView: View {
                 // to avoid concurrent API calls that could trigger bot detection.
                 Task {
                     // Active when legacy OCR mode is set OR any slot has .ocr as its source
-                    let hasBio  = bioTopInputMode  == "ocr" || integrations.ocrSlot(for: "bio")  != nil
-                    let hasNote = noteTopInputMode == "ocr" || integrations.ocrSlot(for: "note") != nil
+                    let hasBio  = bioFeatureEnabled && (bioTopInputMode  == "ocr" || integrations.ocrSlot(for: "bio")  != nil)
+                    let hasNote = noteFeatureEnabled && (noteTopInputMode == "ocr" || integrations.ocrSlot(for: "note") != nil)
                     let hasPost = ppTopInputMode == "ocr"
 
                     if hasBio {
@@ -774,6 +1011,24 @@ struct PerformanceView: View {
     var body: some View {
         ZStack {
             ocrModifiers
+            if showingListInput, let set = activeListSet {
+                ListSetInputView(
+                    set: set,
+                    onSettingsPress: {
+                        showingListInput = false
+                        selectedTab = 1
+                    },
+                    onSelect: { symbol in
+                        showingListInput = false
+                        if let slot = Int(symbol) {
+                            pendingListReveal = slot
+                        }
+                        presentPerformanceCoverIfNeeded()
+                    }
+                )
+                .zIndex(1200)
+            }
+            performanceCoverOverlay
             // NOTE: The background full-profile pre-loader has been retired. Performance
             // now loads its profile the same way UserProfileView (from Explore) does:
             // cache first, then one getProfileInfo() call if needed. The 90-second
@@ -805,16 +1060,19 @@ struct PerformanceView: View {
                     selectedSpectator = nil
                 })
             }
+            .fullScreenCover(isPresented: $showingScreenOffCover) {
+                ScreenOffCoverView {
+                    showingScreenOffCover = false
+                }
+            }
             .fullScreenCover(isPresented: $showingLockscreen) {
                 LockscreenInputView { digits in
                     showingLockscreen = false
                     if !digits.isEmpty {
                         pendingLockscreenDigits = digits
                     }
-                    // If fake home screen is also enabled, show it next
-                    if fakeHomeScreenEnabled && illusionService.hasImage {
-                        showingHomeScreenIllusion = true
-                    }
+                    // If a performance cover is also enabled, show it next.
+                    presentPerformanceCoverIfNeeded()
                 }
             }
             .fullScreenCover(isPresented: $showingClockInput) {
@@ -828,6 +1086,16 @@ struct PerformanceView: View {
                     },
                     onDismiss: {
                         showingClockInput = false
+                    }
+                )
+            }
+            .fullScreenCover(isPresented: $showingCardNumpad) {
+                CardNumpadInputView(
+                    onSelect: { symbol in
+                        pendingCardReveal = symbol
+                    },
+                    onDismiss: {
+                        showingCardNumpad = false
                     }
                 )
             }
@@ -948,24 +1216,37 @@ struct PerformanceView: View {
             // which would instantly re-present the lockscreen in an infinite loop.
             let lockscreenActive = isLockscreenActive
             let clockActive      = isClockInputActive
+            let cardNumpadActive = isCardNumpadActive
+            let listActive       = activeListSet != nil
             let interfaceKinds   = integrations.interfaceKindsInUse()
-            print("🎩 [PERF] onAppear — lockscreenActive=\(lockscreenActive) clockActive=\(clockActive) interfaceKinds=\(interfaceKinds) lockscreenWasShown=\(lockscreenWasShown) clockInputWasShown=\(clockInputWasShown)")
+            print("🎩 [PERF] onAppear — listActive=\(listActive) lockscreenActive=\(lockscreenActive) cardNumpadActive=\(cardNumpadActive) clockActive=\(clockActive) interfaceKinds=\(interfaceKinds) listInputWasShown=\(listInputWasShown) lockscreenWasShown=\(lockscreenWasShown) cardNumpadWasShown=\(cardNumpadWasShown) clockInputWasShown=\(clockInputWasShown)")
 
-            if !lockscreenWasShown && lockscreenActive {
+            if !listInputWasShown && listActive {
+                listInputWasShown = true
+                showingListInput = true
+                print("📋 [LIST-SET] Showing private list selector")
+            }
+            else if !lockscreenWasShown && lockscreenActive {
                 lockscreenWasShown = true
                 showingLockscreen = true
                 print("🔒 [LOCKSCREEN] Showing fake lockscreen for secret input")
             }
+            else if !cardNumpadWasShown && !lockscreenWasShown && cardNumpadActive {
+                cardNumpadWasShown = true
+                showingCardNumpad = true
+                print("🃏 [CARD-NUMPAD] Showing black card selector")
+            }
             // Show clock input black screen if mode is active (and lockscreen isn't)
-            else if !clockInputWasShown && !lockscreenWasShown && clockActive {
+            else if !clockInputWasShown && !lockscreenWasShown && !cardNumpadWasShown && clockActive {
                 clockInputWasShown = true
                 showingClockInput = true
                 print("🖤 [CLOCK-INPUT] Showing black screen for swipe digit input")
             }
-            // Show fake home screen if enabled and image is available
-            else if fakeHomeScreenEnabled && illusionService.hasImage && !showingLockscreen && !showingClockInput {
-                showingHomeScreenIllusion = true
-                print("🏠 [ILLUSION] Fake home screen active — tap to reveal profile")
+            // Show performance cover if enabled. Fake Home Screen uses the uploaded
+            // screenshot; Fake Screen Off uses the same tap-to-reveal flow with black.
+            else if shouldShowPerformanceCover && !performanceCoverWasShown && !showingLockscreen && !showingClockInput && !showingCardNumpad && !showingListInput {
+                presentPerformanceCoverIfNeeded()
+                print("🏠 [ILLUSION] \(effectivePerformanceCoverMode.title) active — tap to reveal profile")
             }
 
             // Anti-bot: if a set upload is actively running, pause it while we're here.
@@ -994,8 +1275,8 @@ struct PerformanceView: View {
             // uses OCR as its source (even if the legacy top-level mode is "off").
             let hasPlaceholderOCR = integrations.interfaceKindsInUse().contains(.ocr)
             let needsVolume = FollowingMagicSettings.shared.isEnabled
-                || noteTopInputMode == "ocr"
-                || bioTopInputMode  == "ocr"
+                || (noteFeatureEnabled && noteTopInputMode == "ocr")
+                || (bioFeatureEnabled && bioTopInputMode  == "ocr")
                 || ppTopInputMode == "ocr"
                 || hasPlaceholderOCR
             if needsVolume {
@@ -1455,9 +1736,12 @@ struct PerformanceView: View {
             }
         }
         .onDisappear {
+            guard selectedTab != 0 else {
+                print("🎩 [PERF] Transient onDisappear while still in Performance — keeping cover/OCR/API active")
+                return
+            }
             // Reset one-shot flags so they fire again on the next entry into Performance
-            lockscreenWasShown  = false
-            clockInputWasShown  = false
+            resetFullscreenInputPresentationFlags()
             performanceEntryRecorded = false
 
             // Stop volume monitoring and OCR when leaving Performance
@@ -1471,6 +1755,26 @@ struct PerformanceView: View {
 
             // Anti-bot: if we auto-paused an upload on appear, signal SetDetailView to resume it.
             // Only resume if the upload is still in .paused state (user didn't cancel/error).
+            if didAutoPauseUpload && uploadManager.isPaused {
+                uploadManager.autoResumePending = true
+                print("▶️ [PERF] Leaving Performance — signalling upload to auto-resume")
+                LogManager.shared.info("Upload auto-resume pending: leaving Performance view", category: .general)
+            }
+            didAutoPauseUpload = false
+        }
+        .onChange(of: selectedTab) { tab in
+            guard tab != 0 else { return }
+            // TabView can keep PerformanceView alive, so onDisappear is not always
+            // enough. Reset the one-shot fullscreen input flags when the user leaves
+            // Performance so Card Numpad / Lockscreen / Clock / List show again next time.
+            resetFullscreenInputPresentationFlags()
+            resetPerformanceCoverPresentationFlags()
+            performanceEntryRecorded = false
+            print("🎩 [TRANSFER] Performance tab changed — stopping monitoring (transferOffset:\(FollowingMagicSettings.shared.transferOffset))")
+            VolumeButtonMonitor.shared.stopMonitoring()
+            ocrCoordinator.stop()
+            stopApiPolling()
+            uploadManager.isPausedByPerformance = false
             if didAutoPauseUpload && uploadManager.isPaused {
                 uploadManager.autoResumePending = true
                 print("▶️ [PERF] Leaving Performance — signalling upload to auto-resume")
@@ -1650,25 +1954,32 @@ struct PerformanceView: View {
             return
         }
 
-        // ── Custom Set reveal via vault://reveal?slot= ────────────────────────
+        // ── Custom/List Set reveal via vault://reveal?slot= ───────────────────
         if mode == "reveal_slot" {
             guard let slot = Int(text), (1...100).contains(slot) else {
                 print("⚠️ [URL] Invalid slot value: \"\(text)\"")
                 return
             }
-            guard let activeId = ActiveSetSettings.shared.activeCustomSetId,
-                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) else {
-                print("🚫 [URL] Custom slot reveal: no active custom set")
-                LogManager.shared.warning("URL custom reveal: no active custom set", category: .general)
+            let activeSettings = ActiveSetSettings.shared
+            guard let activeId = activeSettings.activeCustomSetId ?? activeSettings.activeListSetId,
+                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && ($0.type == .custom || $0.type == .list) }) else {
+                print("🚫 [URL] Slot reveal: no active custom/list set")
+                LogManager.shared.warning("URL slot reveal: no active custom/list set", category: .general)
                 return
             }
             if UploadManager.shared.isActive && !didAutoPauseUpload {
                 print("⚠️ [URL] Custom slot reveal blocked: upload is active and not paused by Performance")
                 return
             }
-            print("📲 [URL] Custom slot reveal: slot=\(slot) from '\(activeSet.name)'")
-            LogManager.shared.info("URL reveal → custom slot \(slot) from '\(activeSet.name)'", category: .general)
-            await MainActor.run { pendingSlotReveal = slot }
+            print("📲 [URL] Slot reveal: slot=\(slot) from '\(activeSet.name)'")
+            LogManager.shared.info("URL reveal → slot \(slot) from '\(activeSet.name)'", category: .general)
+            await MainActor.run {
+                if activeSet.type == .list {
+                    pendingListReveal = slot
+                } else {
+                    pendingSlotReveal = slot
+                }
+            }
             return
         }
 
@@ -1693,6 +2004,12 @@ struct PerformanceView: View {
             print("📲 [URL] Card reveal: \(symbol) from '\(activeSet.name)'")
             LogManager.shared.info("URL reveal → card \(symbol) from '\(activeSet.name)'", category: .general)
             await MainActor.run { pendingCardReveal = symbol }
+            return
+        }
+
+        if (mode == "note" && !noteFeatureEnabled) || (mode == "bio" && !bioFeatureEnabled) {
+            print("⏭️ [URL] \(mode) disabled — skipping")
+            LogManager.shared.info("URL scheme \(mode) skipped because feature is disabled", category: .general)
             return
         }
 
@@ -1760,6 +2077,10 @@ struct PerformanceView: View {
 
     private func applyClipboardAutoMode() async {
         guard clipboardAutoMode == "note" || clipboardAutoMode == "bio" else { return }
+        guard targetFeatureEnabled(clipboardAutoMode) else {
+            print("⏭️ [CLIPBOARD] \(clipboardAutoMode) disabled — skipping")
+            return
+        }
         guard !instagram.isLocked else {
             print("🚫 [CLIPBOARD] Lockdown active — skipping clipboard auto-mode")
             return
@@ -1810,9 +2131,10 @@ struct PerformanceView: View {
                 }
             } else {
                 let composed = applyTemplate(text, template: bioTemplate)
-                let final = truncateAtWordBoundary(composed, limit: 150)
-                if final.count < composed.count {
-                    print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(composed.count)→\(final.count) chars")
+                let acrosticComposed = applyAcrosticIfNeeded(composed)
+                let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
+                if final.count < acrosticComposed.count {
+                    print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(acrosticComposed.count)→\(final.count) chars")
                 }
                 // Optimistic: show bio immediately
                 await MainActor.run {
@@ -1850,8 +2172,16 @@ struct PerformanceView: View {
 
     // MARK: - Magic API Auto-Mode
 
+    private func targetFeatureEnabled(_ target: String) -> Bool {
+        target == "note" ? noteFeatureEnabled : bioFeatureEnabled
+    }
+
     /// Fetches a value from the configured API source and applies it as note or biography.
     private func applyApiAutoMode(target: String, preloadedValue: String? = nil) async {
+        guard targetFeatureEnabled(target) else {
+            print("⏭️ [API AUTO] \(target) disabled — skipping")
+            return
+        }
         guard instagram.isLoggedIn, !instagram.isLocked else {
             print("🚫 [API AUTO] Lockdown active or not logged in — skipping")
             return
@@ -1945,7 +2275,8 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let final = truncateAtWordBoundary(composed, limit: 150)
+                let acrosticComposed = applyAcrosticIfNeeded(composed)
+                let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
                 // Optimistic: update bio in fake profile instantly, before API confirms
                 await MainActor.run {
                     if let current = profile {
@@ -2102,7 +2433,22 @@ struct PerformanceView: View {
         await MainActor.run { pendingOCRWord = cleaned }
     }
 
+    // Applies Acrostic Mode if enabled and the text is a single word.
+    // Returns the acrostic poem, or the original text if conditions are not met.
+    private func applyAcrosticIfNeeded(_ text: String) -> String {
+        guard bioAcrosticEnabled else { return text }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.rangeOfCharacter(from: .whitespaces) == nil else { return text }
+        guard let poem = AcrosticEngine.build(word: trimmed) else { return text }
+        print("🔤 [ACROSTIC] '\(trimmed)' → poem (\(poem.count) chars)")
+        return poem
+    }
+
     private func applyOCRResult(text: String, target: String) async {
+        guard targetFeatureEnabled(target) else {
+            print("⏭️ [OCR] \(target) disabled — skipping")
+            return
+        }
         guard instagram.isLoggedIn, !instagram.isLocked else {
             print("🚫 [OCR] Not logged in or lockdown active — skipping")
             return
@@ -2157,7 +2503,8 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let final = truncateAtWordBoundary(composed, limit: 150)
+                let acrosticComposed = applyAcrosticIfNeeded(composed)
+                let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
 
                 // ── Optimistic UI update (fake profile shows result instantly) ────────
                 // Pin pendingBioText so that a concurrent loadProfile (fetching the old
@@ -2230,6 +2577,10 @@ struct PerformanceView: View {
     private let interfaceCaptureCooldown: TimeInterval = 90
 
     private func applyInterfaceCaptureToTarget(value: String, kinds: Set<InterfaceKind>, target: String) async {
+        guard targetFeatureEnabled(target) else {
+            print("⏭️ [INPUT] \(target) disabled — skipping")
+            return
+        }
         guard instagram.isLoggedIn, !instagram.isLocked else { return }
         // Don't stack a note/bio POST on top of a running upload (anti-bot).
         guard !UploadManager.shared.isActive else { return }
@@ -2513,7 +2864,7 @@ struct PerformanceView: View {
         }
     }
     
-    /// Fetches reels, tagged and highlights in background, updates the cached profile
+    /// Fetches reels and tagged in background, preserving cached highlights.
     @MainActor
     private func fetchAndUpdateReelsTagged(for cached: InstagramProfile) async {
         guard instagram.isLoggedIn else { return }
@@ -2545,14 +2896,11 @@ struct PerformanceView: View {
 
             let tagged     = try await instagram.getUserTagged(userId: cached.userId, amount: 50)
             guard !instagram.isLocked else { return }
-            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
-
-            let highlights = (try? await instagram.getUserHighlights(userId: cached.userId)) ?? cached.cachedHighlights
 
             let reelURLs     = reels.map { $0.imageURL }
             let taggedURLs   = tagged.map { $0.imageURL }
 
-            print("📦 [CACHE] Background fetch: \(reelURLs.count) reels, \(taggedURLs.count) tagged, \(highlights.count) highlights")
+            print("📦 [CACHE] Background fetch: \(reelURLs.count) reels, \(taggedURLs.count) tagged, highlights preserved:\(cached.cachedHighlights.count)")
 
             // Build updated profile preserving all existing data
             let updated = InstagramProfile(
@@ -2566,7 +2914,7 @@ struct PerformanceView: View {
                 cachedMediaURLs: cached.cachedMediaURLs,
                 cachedReelURLs: reelURLs,
                 cachedTaggedURLs: taggedURLs,
-                cachedHighlights: highlights,
+                cachedHighlights: cached.cachedHighlights,
                 cachedReelItems: reels,
                 cachedNextMaxId: cached.cachedNextMaxId
             )
@@ -2574,8 +2922,9 @@ struct PerformanceView: View {
             self.profile = updated
             ProfileCacheService.shared.saveProfile(updated)
 
-            // Download thumbnails for reels + tagged + highlight covers
-            let allNew = reelURLs + taggedURLs + highlights.map { $0.coverImageURL }
+            // Download thumbnails for reels + tagged only. Highlight covers are
+            // downloaded when they are explicitly rebuilt outside Performance.
+            let allNew = reelURLs + taggedURLs
             for url in allNew {
                 if let img = await downloadImage(from: url) {
                     cachedImages[url] = img
@@ -2702,6 +3051,27 @@ struct PerformanceView: View {
                 let fetchedProfile = try await instagram.getProfileInfo()
                 
                     if let fetchedProfile = fetchedProfile {
+                var mergedProfile = fetchedProfile
+                let preservedProfile = self.profile ?? ProfileCacheService.shared.loadProfile()
+                if let preservedProfile {
+                    // getProfileInfo() intentionally refreshes only the visible profile
+                    // surface (header/followers/posts). Preserve secondary tabs so a
+                    // Performance entry refresh does not wipe cached Reels/Tagged/Highlights
+                    // and briefly show Instagram's empty-state placeholders.
+                    if mergedProfile.cachedReelURLs.isEmpty && !preservedProfile.cachedReelURLs.isEmpty {
+                        mergedProfile.cachedReelURLs = preservedProfile.cachedReelURLs
+                        mergedProfile.cachedReelItems = preservedProfile.cachedReelItems
+                    }
+                    if mergedProfile.cachedReelItems.isEmpty && !preservedProfile.cachedReelItems.isEmpty {
+                        mergedProfile.cachedReelItems = preservedProfile.cachedReelItems
+                    }
+                    if mergedProfile.cachedTaggedURLs.isEmpty && !preservedProfile.cachedTaggedURLs.isEmpty {
+                        mergedProfile.cachedTaggedURLs = preservedProfile.cachedTaggedURLs
+                    }
+                    if mergedProfile.cachedHighlights.isEmpty && !preservedProfile.cachedHighlights.isEmpty {
+                        mergedProfile.cachedHighlights = preservedProfile.cachedHighlights
+                    }
+                }
                 // Keep the user-scoped image cache during refresh so existing thumbnails
                 // remain visible while fresh metadata is saved over the old profile.json.
                 mediaItemsByURL.removeAll()
@@ -2713,7 +3083,7 @@ struct PerformanceView: View {
                 // Copy the cached image to the new URL key BEFORE updating self.profile
                 // so the header never flashes a blank/placeholder between the two URLs.
                 let oldPicURL = self.profile?.profilePicURL ?? ""
-                let newPicURL = fetchedProfile.profilePicURL
+                let newPicURL = mergedProfile.profilePicURL
                 if !newPicURL.isEmpty, newPicURL != oldPicURL {
                     let bridged = cachedImages[oldPicURL]
                         ?? ProfileCacheService.shared.loadImage(forURL: oldPicURL)
@@ -2723,14 +3093,14 @@ struct PerformanceView: View {
                     }
                 }
 
-                        self.profile = fetchedProfile
+                        self.profile = mergedProfile
                 // ── Preserve pagination tail — don't collapse the grid ─────────────
                 // loadProfile returns only page-1 items (typically 12). If the grid
                 // already shows 24 items (from cache + silent refresh + pagination),
                 // overwriting with 12 would cause a visible collapse and then re-grow.
                 // Keep the tail items from the previous allMediaURLs; they use old CDN
                 // URL tokens that remain valid within the session.
-                let newFirst = fetchedProfile.cachedMediaURLs
+                let newFirst = mergedProfile.cachedMediaURLs
                 if allMediaURLs.count > newFirst.count {
                     let tail = Array(allMediaURLs.suffix(allMediaURLs.count - newFirst.count))
                     self.allMediaURLs = newFirst + tail
@@ -2740,45 +3110,45 @@ struct PerformanceView: View {
                 // Seed the pagination cursor so the first scroll-triggered call
                 // fetches page 2 directly instead of re-loading page 1.
                 if self.nextMaxId == nil {
-                    self.nextMaxId = fetchedProfile.cachedNextMaxId
+                    self.nextMaxId = mergedProfile.cachedNextMaxId
                 }
                 self.hasMorePages = true
                 // Populate post viewer data (likes/comments already in items, 0 extra API calls)
-                for item in fetchedProfile.cachedMediaItems {
+                for item in mergedProfile.cachedMediaItems {
                     mediaItemsByURL[item.imageURL] = item
                 }
                 // If the full refresh already brought reels/tagged, mark them as loaded
                 // so the lazy-tab loader doesn't make redundant API calls.
                 // For reels we also require the full items (with videoURL); without
                 // them the grid would show static thumbnails instead of video.
-                if !fetchedProfile.cachedReelURLs.isEmpty && !fetchedProfile.cachedReelItems.isEmpty {
+                if !mergedProfile.cachedReelURLs.isEmpty && !mergedProfile.cachedReelItems.isEmpty {
                     reelsLoadedOnce = true
                 }
-                if !fetchedProfile.cachedTaggedURLs.isEmpty { taggedLoadedOnce = true }
-                // Highlights come from the background preload, not loadProfile.
-                // Mark as loaded if they were preserved from cache in the fetched profile.
-                if !fetchedProfile.cachedHighlights.isEmpty { highlightsLoadedOnce = true }
-                        ProfileCacheService.shared.saveProfile(fetchedProfile)
+                if !mergedProfile.cachedTaggedURLs.isEmpty { taggedLoadedOnce = true }
+                // Highlights are preserved from cache; Performance no longer rebuilds
+                // them automatically to avoid a hidden extra API action during a show.
+                if !mergedProfile.cachedHighlights.isEmpty { highlightsLoadedOnce = true }
+                        ProfileCacheService.shared.saveProfile(mergedProfile)
                 // Migrate the locally-captured pending pic to the new CDN URL key
                 // BEFORE clearing it. Instagram may return a different CDN URL on
                 // each profile refresh, so without this the new URL would momentarily
                 // have no image → brief flash/spinner between pendingProfilePic=nil
                 // and the async download completing.
                 if let pendingPic = ProfileCacheService.shared.pendingProfilePic,
-                   !fetchedProfile.profilePicURL.isEmpty {
-                    cachedImages[fetchedProfile.profilePicURL] = pendingPic
-                    ProfileCacheService.shared.saveImage(pendingPic, forURL: fetchedProfile.profilePicURL)
+                   !mergedProfile.profilePicURL.isEmpty {
+                    cachedImages[mergedProfile.profilePicURL] = pendingPic
+                    ProfileCacheService.shared.saveImage(pendingPic, forURL: mergedProfile.profilePicURL)
                     print("⚡️ [PERF] Pending profile pic migrated to new CDN URL — no flash on transition")
                 }
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
                 ProfileCacheService.shared.pendingProfilePic = nil
-                        downloadAndCacheImages(profile: fetchedProfile)
+                        downloadAndCacheImages(profile: mergedProfile)
                 // Background preload reels + tagged so they are ready before
                 // the user swipes to those tabs. Uses the same fetchReelsIfNeeded /
                 // fetchTaggedIfNeeded that tab-swipe uses, so the logic is
                 // identical: skip if already cached, respect anti-bot budget.
                 // Delay 5s to avoid competing with the posts download burst.
-                scheduleBackgroundReelsTaggedPreload(for: fetchedProfile)
+                scheduleBackgroundReelsTaggedPreload(for: mergedProfile)
                     } else {
                         print("⚠️ [PERF] getProfileInfo returned nil — profile data unavailable")
                         LogManager.shared.error("loadProfile: getProfileInfo returned nil for userId \(instagram.session.userId)", category: .general)
@@ -3949,12 +4319,29 @@ struct PerformanceView: View {
                             }
                             print("⚡️ [AUTO] \(cached.username) from cache — no API call")
                         } else {
-                            // Not in cache yet — fetch from API with rate-limit delay
+                            // Not in cache yet — fetch only Date Force counts when possible.
                             if needsAPIDelay {
                                 try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_400_000_000))
                             }
                             needsAPIDelay = true
-                            if let p = try? await instagram.getProfileInfo(userId: userId) {
+                            if let hint = dateForce.selectedFollowerHints[userId],
+                               let p = await instagram.getDateForceProfileCounts(
+                                   username: hint.username,
+                                   userId: userId,
+                                   fullNameHint: hint.fullName,
+                                   profilePicURLHint: hint.profilePicURL
+                               ) {
+                                await MainActor.run {
+                                    dateForce.appendAutoSpectator(
+                                        username: p.username,
+                                        userId: p.userId,
+                                        profilePicURL: p.profilePicURL,
+                                        followingCount: p.followingCount,
+                                        followerCount: p.followerCount
+                                    )
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                            } else if let p = try? await instagram.getProfileInfo(userId: userId) {
                                 await MainActor.run {
                                     dateForce.appendAutoSpectator(
                                         username: p.username,
@@ -3987,17 +4374,17 @@ struct PerformanceView: View {
                         if i > 0 {
                             try? await Task.sleep(nanoseconds: UInt64.random(in: 700_000_000...1_500_000_000))
                         }
-                        if let p = try? await instagram.getProfileInfo(
+                        if let p = await instagram.getDateForceProfileCounts(
+                            username: follower.username,
                             userId: follower.userId,
-                            usernameHint: follower.username,
                             fullNameHint: follower.fullName,
                             profilePicURLHint: follower.profilePicURL
                         ) {
                             await MainActor.run {
                                 dateForce.appendAutoSpectator(
-                                    username: follower.username,
-                                    userId: follower.userId,
-                                    profilePicURL: follower.profilePicURL,
+                                    username: p.username,
+                                    userId: p.userId,
+                                    profilePicURL: p.profilePicURL,
                                     followingCount: p.followingCount,
                                     followerCount: p.followerCount
                                 )
@@ -4023,6 +4410,202 @@ struct PerformanceView: View {
 
 }
 
+private struct ScreenOffCoverView: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Color.black
+            .ignoresSafeArea(.all)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onTap)
+            .statusBarHidden(true)
+            .persistentSystemOverlays(.hidden)
+    }
+}
+
+// MARK: - List Set Input View
+
+struct ListSetInputView: View {
+    let set: PhotoSet
+    let onSettingsPress: () -> Void
+    let onSelect: (String) -> Void
+    @State private var listVisible = false
+
+    private var columns: [GridItem] {
+        switch set.resolvedListColumns {
+        case .automatic:
+            return [GridItem(.adaptive(minimum: 150), spacing: 12)]
+        case .two:
+            return Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+        case .three:
+            return Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+        }
+    }
+
+    private var items: [(symbol: String, label: String)] {
+        let symbols = set.slotLabels
+        let labels = set.listDisplayLabels
+        if symbols.isEmpty {
+            let fallbackCount = max(labels.count, set.photos.compactMap { Int($0.symbol) }.max() ?? 0, 1)
+            return (1...fallbackCount).map { index in
+                let label = index <= labels.count ? labels[index - 1] : "Item \(index)"
+                return ("\(index)", label)
+            }
+        }
+        return symbols.enumerated().map { index, symbol in
+            (symbol, index < labels.count ? labels[index] : "Item \(symbol)")
+        }
+    }
+
+    private var groups: [[(offset: Int, symbol: String, label: String)]] {
+        var result: [[(offset: Int, symbol: String, label: String)]] = []
+        var current: [(offset: Int, symbol: String, label: String)] = []
+        let separators = Set(set.resolvedListSeparators)
+
+        for (index, item) in items.enumerated() {
+            current.append((offset: index, symbol: item.symbol, label: item.label))
+            if let slot = Int(item.symbol), separators.contains(slot) {
+                result.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty { result.append(current) }
+        return result
+    }
+
+    private func buttonColor(at index: Int) -> Color {
+        let blue = Color(hex: "0A84FF")
+        let green = Color(hex: "30D158")
+        let orange = Color(hex: "FF9500")
+
+        switch set.resolvedListColumns {
+        case .two:
+            return index % 2 == 0 ? blue : green
+        case .three:
+            switch index % 3 {
+            case 0:  return blue
+            case 1:  return green
+            default: return orange
+            }
+        case .automatic:
+            return Color(hex: "64D2FF")
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if listVisible {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(set.name)
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.white)
+                        Text("Tap one item to reveal its linked media.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.62))
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            ForEach(Array(groups.enumerated()), id: \.offset) { groupIndex, group in
+                                if groupIndex > 0 {
+                                    HStack {
+                                        Rectangle()
+                                            .fill(Color.white.opacity(0.24))
+                                            .frame(height: 1)
+                                        Text("GROUP \(groupIndex + 1)")
+                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.white.opacity(0.52))
+                                        Rectangle()
+                                            .fill(Color.white.opacity(0.24))
+                                            .frame(height: 1)
+                                    }
+                                }
+
+                                LazyVGrid(columns: columns, spacing: 12) {
+                                    ForEach(group, id: \.symbol) { item in
+                                        let color = buttonColor(at: item.offset)
+                                        Button {
+                                            onSelect(item.symbol)
+                                        } label: {
+                                            Text(item.label)
+                                                .font(.system(size: set.resolvedListButtonSize == .large ? 17 : 15, weight: .semibold))
+                                                .foregroundColor(.white)
+                                                .multilineTextAlignment(.center)
+                                                .lineLimit(3)
+                                                .minimumScaleFactor(0.7)
+                                                .frame(maxWidth: .infinity)
+                                                .frame(minHeight: set.resolvedListButtonSize.minHeight)
+                                                .padding(.horizontal, 10)
+                                                .background(color.opacity(0.30))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 14)
+                                                        .stroke(color.opacity(0.78), lineWidth: 1)
+                                                )
+                                                .cornerRadius(14)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .contentShape(Rectangle())
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 28)
+                    }
+                }
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+            }
+
+            if listVisible {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            onSettingsPress()
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 54, height: 54)
+                                .background(Color.white.opacity(0.14))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                                )
+                                .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 4)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Settings")
+
+                        Spacer()
+                    }
+                    .padding(.leading, 18)
+                    .padding(.bottom, 22)
+                }
+                .transition(.opacity)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !listVisible else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                listVisible = true
+            }
+                }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+    }
+}
+
 // MARK: - Instagram Profile View
 
 struct InstagramProfileView: View {
@@ -4031,6 +4614,7 @@ struct InstagramProfileView: View {
     let onRefresh: () -> Void          // sync — used by header button
     let onAsyncRefresh: () async -> Void  // async — used by pull-to-refresh
     let onPlusPress: () -> Void
+    @Binding var highlightsLoadedOnce: Bool
     @State private var selectedTab = 0
 
     // Infinite scroll support
@@ -4097,6 +4681,8 @@ struct InstagramProfileView: View {
     @Binding var pendingOCRWord: String?
     /// Set by PerformanceView URL-scheme handler; triggers a custom-set slot reveal.
     @Binding var pendingSlotReveal: Int?
+    /// Set by PerformanceView List Set selector; triggers a list slot reveal.
+    @Binding var pendingListReveal: Int?
     /// Set by PerformanceView URL-scheme handler; triggers a playing-card reveal.
     @Binding var pendingCardReveal: String?
     /// Set by PerformanceView after the fake lockscreen commits hidden digits.
@@ -4146,6 +4732,30 @@ struct InstagramProfileView: View {
     @ObservedObject private var volumeMonitor      = VolumeButtonMonitor.shared
     @State private var followingOverride: String?   = nil
     @State private var followerOverride: String?    = nil
+
+    @discardableResult
+    private func captureGridSideEffects(digits: [Int], source: String) -> Bool {
+        guard !digits.isEmpty else { return false }
+
+        let capturedNumber = digits.reduce(0) { $0 * 10 + $1 }
+        var didCapture = false
+
+        if FollowingMagicSettings.shared.isEnabled {
+            FollowingMagicSettings.shared.capture(digits: digits, source: source)
+            didCapture = true
+        }
+
+        if ForceReelSettings.shared.isEnabled,
+           ForceReelSettings.shared.hasReel,
+           capturedNumber > 0 {
+            ForceReelSettings.shared.pendingPosition = capturedNumber
+            print("🎭 [FORCE] Position captured from \(source): \(capturedNumber)")
+            didCapture = true
+        }
+
+        return didCapture
+    }
+
     // Transfer effect: inflate own profile after deflating a searched one
     @State private var transferCountdownTimer: Timer? = nil
     @State private var showTransferGlitch = false
@@ -4173,6 +4783,45 @@ struct InstagramProfileView: View {
             "Visible counts (\(reason)) @\(profile.username) real followers:\(profile.followerCount) following:\(profile.followingCount) followerOverride:\(followerOverride ?? "nil") followingOverride:\(followingOverride ?? "nil") transferOffset:\(followingMagic.transferOffset) transferCounting:\(followingMagic.isTransferCounting)",
             category: .profile
         )
+    }
+
+    private var activeDigitGridSet: PhotoSet? {
+        if let activeId = ActiveSetSettings.shared.activeSetId,
+           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId }),
+           (activeSet.type == .number || activeSet.type == .custom),
+           (activeSet.resolvedInputMethod == .digitGrid || ForceNumberRevealSettings.shared.isEnabled) {
+            return activeSet
+        }
+
+        return nil
+    }
+
+    private var isDigitGridInputActive: Bool {
+        activeDigitGridSet != nil
+    }
+
+    private var shouldCaptureDigitGridCellInput: Bool {
+        isDigitGridInputActive
+            || followingMagic.isEnabled
+            || (ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel)
+            || ForceNumberRevealSettings.shared.isEnabled
+    }
+
+    private var activeCardClockSet: PhotoSet? {
+        guard let activeId = ActiveSetSettings.shared.activeCardSetId,
+              let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
+              activeSet.resolvedInputMethod == .cardClock else {
+            return nil
+        }
+        return activeSet
+    }
+
+    private var isCardClockGridInputActive: Bool {
+        activeCardClockSet != nil
+    }
+
+    private var isSecretGridInputActive: Bool {
+        shouldCaptureDigitGridCellInput || isCardClockGridInputActive
     }
     
     var body: some View {
@@ -4351,6 +5000,21 @@ struct InstagramProfileView: View {
             showOCRPeek(label: "#\(slot)")
             Task { await revealByCustomSlot(slot, fromSet: activeSet) }
         }
+        // ── List Set private selector reveal ────────────────────────────────────
+        .onChange(of: pendingListReveal) { slot in
+            guard let slot = slot else { return }
+            pendingListReveal = nil
+            guard let activeId = ActiveSetSettings.shared.activeListSetId,
+                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .list }) else {
+                print("⚠️ [LIST-SET] pendingListReveal: no active list set")
+                return
+            }
+            let label = activeSet.listDisplayLabels.indices.contains(slot - 1)
+                ? activeSet.listDisplayLabels[slot - 1]
+                : "#\(slot)"
+            showOCRPeek(label: label)
+            Task { await revealByCustomSlot(slot, fromSet: activeSet) }
+        }
         // ── URL-scheme: Playing Card reveal ─────────────────────────────────────
         .onChange(of: pendingCardReveal) { symbol in
             guard let symbol = symbol, !symbol.isEmpty else { return }
@@ -4360,10 +5024,10 @@ struct InstagramProfileView: View {
                 return
             }
             // Feed the localized card name into any bio/note slot configured for a card
-            // interface (Card Clock black screen or Card Lockscreen, or URL scheme).
+            // interface (Card Clock, Numpad Card, Card Lockscreen, or URL scheme).
             if let comp = cardComponents(fromSymbol: symbol) {
                 onInterfaceCapture?(localizedCardName(value: comp.value, suit: comp.suit),
-                                    [.cardClock, .cardLockscreen])
+                                    [.cardClock, .cardNumpad, .cardLockscreen])
             }
             // Unarchive the matching slot only when a card set is active.
             guard let activeId = ActiveSetSettings.shared.activeCardSetId,
@@ -4677,6 +5341,10 @@ struct InstagramProfileView: View {
                     }
                     .responsiveHorizontalPadding()
                     
+                    // Only render the highlights row when real highlights exist.
+                    // The background fetch still runs, but empty/loading states stay hidden
+                    // so profiles without highlights never show gray placeholder circles.
+                    if !profile.cachedHighlights.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
                     let storySize: CGFloat = seAdapt(56, 64)
@@ -4689,25 +5357,15 @@ struct InstagramProfileView: View {
                             .font(.system(size: seAdapt(10, 12)))
                             .foregroundColor(Color(UIColor.label))
                     }
-                    if profile.cachedHighlights.isEmpty {
-                            ForEach(0..<4, id: \.self) { _ in
-                                VStack(spacing: 4) {
-                                Circle().fill(Color.gray.opacity(0.2)).frame(width: storySize, height: storySize)
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.gray.opacity(0.2))
-                                    .frame(width: seAdapt(36, 44), height: 10)
-                            }
-                        }
-                    } else {
                         ForEach(profile.cachedHighlights) { highlight in
                             StoryHighlightCell(highlight: highlight,
                                                image: cachedImages[highlight.coverImageURL])
                                 }
-                            }
                         }
                         .responsiveHorizontalPadding()
                     }
                     .padding(.vertical, 8)
+                    }
                 }
                 .padding(.vertical, 12)
     }
@@ -4743,6 +5401,7 @@ struct InstagramProfileView: View {
                     mediaItemsByURL: mediaItemsByURL,
                     onMediaAppear: onMediaAppear,
                     onTapIndex: { index in
+                        guard !isSecretGridInputActive else { return }
                         lastPostViewerIndex = index
                         lastDismissedViewerWasPosts = true
                         activeViewer = .posts(index: index)
@@ -4754,6 +5413,7 @@ struct InstagramProfileView: View {
                     cachedImages: cachedImages,
                     reelItems: profile.cachedReelItems,
                     onTapIndex: { index in
+                        guard !isSecretGridInputActive else { return }
                         activeViewer = .reels(index: index)
                     }
                 )
@@ -4766,6 +5426,7 @@ struct InstagramProfileView: View {
                         cachedImages: cachedImages,
                         mediaItemsByURL: mediaItemsByURL,
                         onTapIndex: { index in
+                            guard !isSecretGridInputActive else { return }
                             activeViewer = .tagged(index: index)
                         }
                     )
@@ -4863,36 +5524,63 @@ struct InstagramProfileView: View {
 
     // MARK: - Secret number gesture handling
 
-    /// Detect the dominant direction of a drag and feed it into the pair-swipe encoder.
-    /// Horizontal swipes also cycle the visible tab (so the grid visually changes).
+    /// Grid gestures have two independent modes:
+    /// - Card Clock captures directions.
+    /// - Digit Grid captures the cell where the swipe starts.
     private func handleGridSwipe(_ value: DragGesture.Value) {
         let dx    = value.translation.width
         let dy    = value.translation.height
         let absDx = abs(dx)
         let absDy = abs(dy)
         let minDist: CGFloat = 40
+        print("🔢 [GRID SWIPE] digitSet:\(activeDigitGridSet?.name ?? "nil") cardSet:\(activeCardClockSet?.name ?? "nil") captureCell:\(shouldCaptureDigitGridCellInput) followingMagic:\(followingMagic.isEnabled) forceReel:\(ForceReelSettings.shared.isEnabled)/\(ForceReelSettings.shared.hasReel) forceGrid:\(ForceNumberRevealSettings.shared.isEnabled)/\(ForceNumberRevealSettings.shared.gridSwipeEnabled)")
 
-        let dir: SwipeDir
+        if let activeSet = activeCardClockSet {
+            let dir: SwipeDir
+            if absDx >= absDy {
+                guard absDx > minDist else { return }
+                dir = dx > 0 ? .right : .left
+            } else {
+                guard absDy > minDist else { return }
+                dir = dy > 0 ? .down : .up
+            }
+
+            print("🔢 [CARD CLOCK] \(activeSet.name): \(dir)")
+            secretManager.addCardSwipe(dir)
+            updateFollowingOverride()
+
+            if absDx >= absDy {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    selectedTab = tabAfterSecretSwipe(dx: dx)
+                }
+            }
+            return
+        }
+
+        if shouldCaptureDigitGridCellInput {
+            let gridWidth = UIScreen.main.bounds.width
+            let digit = SecretNumberManager.digit(
+                x: value.startLocation.x,
+                y: value.startLocation.y,
+                gridWidth: gridWidth
+            )
+            print("🔢 [DIGIT GRID] Cell swipe start x:\(Int(value.startLocation.x)) y:\(Int(value.startLocation.y)) → \(digit)")
+            secretManager.addDigit(digit)
+            updateFollowingOverride()
+
+            // Horizontal swipes remain visible camouflage: the magician appears
+            // to move between Posts/Reels/Tagged while the start cell secretly
+            // contributes the digit.
+            if absDx >= absDy, absDx > minDist {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    selectedTab = tabAfterSecretSwipe(dx: dx)
+                }
+            }
+            return
+        }
+
         if absDx >= absDy {
             guard absDx > minDist else { return }
-            dir = dx > 0 ? .right : .left
-        } else {
-            guard absDy > minDist else { return }
-            dir = dy > 0 ? .down : .up
-        }
-
-        // Route to card clock buffer when the active set is a card set using Card Clock input
-        if let activeId = ActiveSetSettings.shared.activeCardSetId,
-           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
-           activeSet.resolvedInputMethod == .cardClock {
-            secretManager.addCardSwipe(dir)
-        } else {
-            secretManager.addSwipe(dir)
-        }
-        updateFollowingOverride()
-
-        // Only cycle the tab on horizontal swipes so vertical swipes feel natural.
-        if absDx >= absDy {
             withAnimation(.easeInOut(duration: 0.18)) {
                 selectedTab = tabAfterSecretSwipe(dx: dx)
             }
@@ -4909,8 +5597,7 @@ struct InstagramProfileView: View {
     /// Commit whatever digits are in the buffer — called by long press on the grid.
     /// Mirrors the reveal logic of the Posts tab button.
     private func commitDigitReveal() {
-        guard ForceNumberRevealSettings.shared.isEnabled,
-              ForceNumberRevealSettings.shared.gridSwipeEnabled else { return }
+        guard isDigitGridInputActive || isCardClockGridInputActive else { return }
 
         // ── Card Clock Input ──────────────────────────────────────────────────
         if let activeId = ActiveSetSettings.shared.activeCardSetId,
@@ -4935,10 +5622,10 @@ struct InstagramProfileView: View {
 
         guard secretManager.hasDigits else { return }
 
-        if let activeId = ActiveSetSettings.shared.activeNumberSetId,
-           let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
+        if let activeSet = activeDigitGridSet, activeSet.type == .number {
             let digits     = secretManager.digitBuffer
             let digitLabel = digits.map(String.init).joined()
+            captureGridSideEffects(digits: digits, source: "post-prediction")
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
             guard !UploadManager.shared.isActive else {
@@ -4948,9 +5635,9 @@ struct InstagramProfileView: View {
             showOCRPeek(number: digitLabel)
             Task { await revealByDigits(digits, fromSet: activeSet) }
 
-        } else if let activeId = ActiveSetSettings.shared.activeCustomSetId,
-                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
+        } else if let activeSet = activeDigitGridSet, activeSet.type == .custom {
             let slot = secretManager.digitBuffer.reduce(0) { $0 * 10 + $1 }
+            captureGridSideEffects(digits: secretManager.digitBuffer, source: "post-prediction")
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
             guard !UploadManager.shared.isActive else {
@@ -5002,7 +5689,7 @@ struct InstagramProfileView: View {
             followerOverride  = nil
         } else if followingMagic.targetFollowers {
             followingOverride = nil
-            followerOverride  = secretManager.followingDisplayString(originalCount: profile.followerCount)
+            followerOverride = secretManager.followingDisplayString(originalCount: profile.followerCount)
         } else {
             followerOverride  = nil
             followingOverride = secretManager.followingDisplayString(originalCount: profile.followingCount)
@@ -5019,7 +5706,7 @@ struct InstagramProfileView: View {
         let realCount = useFollowers ? profile.followerCount : profile.followingCount
         let offsetMode = followingMagic.offsetMode(for: realCount)
         let startCount = max(0, realCount - offset)
-        let text = formatMagicCount(startCount)
+        let text = formatMagicCount(startCount, revealingSmallOffset: offset)
 
         if useFollowers {
             followerOverride = text
@@ -5045,11 +5732,8 @@ struct InstagramProfileView: View {
             : profile.followingCount
         let offsetMode = followingMagic.offsetMode(for: realCount)
         let startCount = max(0, realCount - offset)
-        // Step size scales with the animation range so it always finishes in countdownDuration.
-        // K-mode minimum is 100 (= 0.1 K per visual update).
         let range = max(1, realCount - startCount)
-        let minStep = realCount >= 10_000 ? 100 : 1
-        let stepSize = max(minStep, range / 200)
+        let stepSize = 1
         let visibleSteps = max(1, range / stepSize)
         let totalMs    = followingMagic.countdownDuration * 1000
         let intervalMs = max(16, totalMs / max(1, visibleSteps))
@@ -5069,7 +5753,7 @@ struct InstagramProfileView: View {
         ) { timer in
             current += stepSize
             let displayCurrent = min(current, realCount)
-            let text = self.formatMagicCount(displayCurrent)
+            let text = self.formatMagicCount(displayCurrent, revealingSmallOffset: offset)
             if useFollowers {
                 self.followerOverride  = text
                 self.followingOverride = nil
@@ -5090,20 +5774,19 @@ struct InstagramProfileView: View {
                     "Counter own-inflate completed @\(self.profile.username) target:\(useFollowers ? "followers" : "following") real:\(realCount) effectiveOffset:\(offset) mode:\(offsetMode)",
                     category: .profile
                 )
-                print("🎩 [TRANSFER] Inflation complete — back to real: \(self.formatMagicCount(realCount))")
+                print("🎩 [TRANSFER] Inflation complete — back to real: \(self.formatMagicCount(realCount, revealingSmallOffset: offset))")
             }
         }
     }
 
-    /// Formats a count for magic counter display, matching StatView for 4-digit values.
-    private func formatMagicCount(_ count: Int) -> String {
-        if count >= 1_000_000 {
-            let value = Double(count) / 1_000_000
-            return value == value.rounded() ? String(format: "%.0fM", value) : String(format: "%.1fM", value)
-        } else if count >= 10_000 {
-            let value = Double(count) / 1_000
-            return value == value.rounded() ? String(format: "%.0fK", value) : String(format: "%.1fK", value)
-        }
+    /// Formats a count for magic counter display.
+    /// Counter Glitch shows full exact counts while the override is active so
+    /// small offsets remain visible on 1K+ profiles.
+    private func formatMagicCount(_ count: Int, revealingSmallOffset offset: Int? = nil) -> String {
+        formatFullCount(count)
+    }
+
+    private func formatFullCount(_ count: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.locale = Locale(identifier: "en_US")
@@ -5514,8 +6197,10 @@ struct InstagramProfileView: View {
     // MARK: - OCR Post Prediction: reveal by letters (word set)
 
     /// Reveals a word by unarchiving one photo per letter from the active word set.
-    /// Letters are reversed so the spectator reads top→bottom = left→right word order.
-    /// e.g. "hola" → reversed ["a","l","o","h"] → a→bank1, l→bank2, o→bank3, h→bank4
+    /// LTR words are reversed before unarchiving so Instagram's newest-first grid
+    /// renders them in normal reading order. RTL alphabets keep their logical order,
+    /// so the final grid reads correctly from right to left.
+    /// e.g. "hola" → reversed ["a","l","o","h"] → final grid [h,o,l,a]
     ///
     /// Flow:
     ///  Phase 1 — Preparation (sync): find all photos, insert local images instantly into grid.
@@ -5524,8 +6209,11 @@ struct InstagramProfileView: View {
     private func revealByLetters(_ word: String, fromSet set: PhotoSet) async {
         let dm          = DataManager.shared
         let instagram   = InstagramService.shared
-        let letters     = word.lowercased().reversed().map { String($0) }
         let alphabet    = set.selectedAlphabet ?? .latin
+        let normalizedWord = word.lowercased()
+        let letters: [String] = alphabet.isRightToLeft
+            ? normalizedWord.map { String($0) }
+            : normalizedWord.reversed().map { String($0) }
         let sortedBanks = set.banks.sorted { $0.position < $1.position }
 
         await MainActor.run { instagram.isRevealOperationActive = true }
@@ -5809,14 +6497,15 @@ struct InstagramHeaderView: View {
             .frame(width: 34, alignment: .leading)
 
             HStack(spacing: 4) {
-                if isVerified {
-                    IGIcon(asset: "instagram_verified", fallback: "checkmark.seal.fill", size: 16, color: .blue)
-                }
                 Text(username)
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundColor(Color(UIColor.label))
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
+                if isVerified {
+                    InstagramVerifiedBadge(size: 18)
+                        .padding(.leading, 1)
+                }
                 IGIcon(asset: "instagram_chevron_down", fallback: "chevron.down", size: 12)
             }
             .frame(maxWidth: .infinity)
@@ -5850,6 +6539,25 @@ struct InstagramHeaderView: View {
             print("📐 [LAYOUT] \(message)")
             LogManager.shared.info(message, category: .general)
         }
+    }
+}
+
+private struct InstagramVerifiedBadge: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "seal.fill")
+                .resizable()
+                .scaledToFit()
+                .foregroundColor(Color(red: 0.0, green: 0.58, blue: 0.95))
+            Image(systemName: "checkmark")
+                .font(.system(size: size * 0.48, weight: .black))
+                .foregroundColor(.black.opacity(0.78))
+                .offset(y: size * 0.01)
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel("Verified")
     }
 }
 
@@ -6224,7 +6932,12 @@ struct TabButton: View {
                         .frame(height: 1),
                     alignment: .bottom
                 )
+                // Ensure the full 44pt area captures taps, not just the icon bounds.
+                // Without this, taps in the empty space below the icon fall through
+                // to the first grid cell — on small screens (Mini) this opens post 0.
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -6359,13 +7072,22 @@ struct PostScrollView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var resolvedItems: [String: InstagramMediaItem] = [:]
     @State private var hasForceActivated: Bool = false
+    /// Display order of posts. While the Force Post trick is armed the forced post
+    /// is REMOVED from this list (it can never be seen by scrolling). When the
+    /// spectator's flick ends, ScrollViewInterceptor inserts it exactly at the
+    /// natural landing slot via `insertForcedPost`. nil = original order.
+    @State private var displayURLs: [String]? = nil
 
-    private var forcedPostIndex: Int? {
-        mediaURLs.firstIndex(where: isForcedPostURL)
+    private var urls: [String] { displayURLs ?? mediaURLs }
+
+    /// A force post exists in the original media list.
+    private var forceConfigured: Bool {
+        mediaURLs.contains(where: isForcedPostURL)
     }
 
-    private var isForceActive: Bool {
-        forcedPostIndex != nil
+    /// Index of the forced post in the CURRENT display list (nil while hidden).
+    private var forcedPostIndex: Int? {
+        urls.firstIndex(where: isForcedPostURL)
     }
 
     private func isForcedPostURL(_ url: String) -> Bool {
@@ -6375,6 +7097,21 @@ struct PostScrollView: View {
         }
         if let forcePostURL, url == forcePostURL { return true }
         return false
+    }
+
+    /// Inserts the hidden forced post at `requested` so it sits exactly where the
+    /// current flick will stop. Called by ScrollViewInterceptor at finger-lift;
+    /// the slot is always below the visible viewport, so nothing changes on screen.
+    private func insertForcedPost(atIndex requested: Int) -> Int {
+        var list = urls
+        if let existing = list.firstIndex(where: isForcedPostURL) { return existing }
+        guard let forcedURL = mediaURLs.first(where: isForcedPostURL) else { return -1 }
+        let target = min(max(requested, 0), list.count)
+        list.insert(forcedURL, at: target)
+        var tx = Transaction()
+        tx.disablesAnimations = true
+        withTransaction(tx) { displayURLs = list }
+        return target
     }
 
     private func postID(_ index: Int) -> String { "post_\(index)" }
@@ -6389,7 +7126,7 @@ struct PostScrollView: View {
                         // already has a fallback (forcedIndex × avg row height) for the
                         // case where the forced card hasn't been materialised yet.
                         LazyVStack(spacing: 0) {
-                            ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
+                            ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
                                 PostCardView(
                                     url: url,
                                     item: resolvedItems[url],
@@ -6399,26 +7136,52 @@ struct PostScrollView: View {
                                 )
                                 .id(postID(index))
                                 .accessibilityIdentifier(isForcedPostURL(url) ? "forced_post_card" : "")
+                                .background {
+                                    // Real UIKit marker → lets the interceptor read the
+                                    // forced card's exact position on every device.
+                                    if isForcedPostURL(url) { ForcedCardMarker() }
+                                }
                                 Divider().background(Color(UIColor.separator))
                             }
                         }
                     }
 
-                    if isForceActive, let forcedPostIndex {
+                    if forceConfigured {
                         ScrollViewInterceptor(
-                            forcedIndex: forcedPostIndex,
-                            totalPostCount: mediaURLs.count,
+                            forcedIndex: forcedPostIndex ?? -1,
+                            totalPostCount: urls.count,
                             hasActivated: $hasForceActivated,
-                            isActive: isForceActive,
-                            forcedThumbnail: forcedThumbnail
+                            isActive: forceConfigured,
+                            forcedThumbnail: forcedThumbnail,
+                            insertForcedPost: { requested in
+                                insertForcedPost(atIndex: requested)
+                            }
                         )
                         .frame(width: 0, height: 0)
                     }
                 }
                 .onAppear {
                     resolvedItems = mediaItemsByURL
+
+                    // Hide the forced post from the feed: it must be IMPOSSIBLE to
+                    // see it by scrolling. It reappears only at the landing slot of
+                    // the spectator's flick. If the spectator tapped the forced post
+                    // itself from the grid, keep the list intact (it's already shown).
+                    let tappedURL = mediaURLs.indices.contains(initialIndex) ? mediaURLs[initialIndex] : nil
+                    if displayURLs == nil,
+                       forceConfigured,
+                       let tappedURL, !isForcedPostURL(tappedURL) {
+                        var tx = Transaction()
+                        tx.disablesAnimations = true
+                        withTransaction(tx) {
+                            displayURLs = mediaURLs.filter { !isForcedPostURL($0) }
+                        }
+                    }
+
+                    // Map the tapped post to its index in the (possibly filtered) list.
+                    let startIndex = tappedURL.flatMap { u in urls.firstIndex(of: u) } ?? initialIndex
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        proxy.scrollTo(postID(initialIndex), anchor: .top)
+                        proxy.scrollTo(postID(startIndex), anchor: .top)
                     }
                     let missingCount = mediaURLs.filter { mediaItemsByURL[$0] == nil }.count
                     if missingCount > 0 {
@@ -6682,8 +7445,7 @@ private struct PostCardView: View {
 private struct IGNavButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(configuration.isPressed ? 0.5 : 1.0)
-            .scaleEffect(configuration.isPressed ? 0.84 : 1.0)
+            .opacity(configuration.isPressed ? 0.62 : 1.0)
             .animation(.easeInOut(duration: 0.11), value: configuration.isPressed)
     }
 }
@@ -6754,10 +7516,8 @@ struct InstagramBottomBar: View {
     }
 
     var body: some View {
-        // Content area height is fixed at 46 pt; pill adds 10 pt padding each side
-        // → total pill height ≈ 66 pt → capsule cornerRadius ≈ 33 pt.
-        // The indicator uses cornerRadius 28 (= 33 − 5) for concentric curvature,
-        // and expands to fill almost the full pill height (4 pt margin top/bottom).
+        // Keep the fake bar close to the native tab bar proportions: wide slots,
+        // slightly taller capsule, and no pressed-scale shrink.
         HStack(spacing: 0) {
             Button(action: onHomePress) {
                 navItem(asset: "instagram_home", fallback: "house", isActive: isHome)
@@ -6790,11 +7550,11 @@ struct InstagramBottomBar: View {
             }
             .buttonStyle(IGNavButtonStyle())
         }
-        .frame(height: 46)          // fixed content height → pill height = 66 pt
-        .padding(.vertical, 10)
+        .frame(height: 54)
+        .padding(.vertical, 4)
         .igGlassPill(isDark: colorScheme == .dark)
-        .padding(.horizontal, 26)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
     }
 
     /// Icon centred in an equal-width slot. The indicator background expands to
@@ -6809,8 +7569,8 @@ struct InstagramBottomBar: View {
         showRedDot: Bool = false
     ) -> some View {
         ZStack {
-            // Dot is anchored relative to the 24 pt icon, not the full slot
-            IGIcon(asset: asset, fallback: fallback, size: 24)
+            // Dot is anchored relative to the icon, not the full slot
+            IGIcon(asset: asset, fallback: fallback, size: 26)
                 .overlay(alignment: .bottomTrailing) {
                     if showRedDot {
                         Circle()
@@ -6827,8 +7587,8 @@ struct InstagramBottomBar: View {
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(Color.black.opacity(isActive ? 0.11 : 0))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 2)
+                .padding(.vertical, 1)
         )
     }
 
@@ -6840,17 +7600,17 @@ struct InstagramBottomBar: View {
                 if showRevealRing {
                     Circle()
                         .stroke(storyRingGradient, lineWidth: 2.5)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 34, height: 34)
                 }
                 // White gap between ring and photo (Instagram-style)
                 Circle()
                     .fill(Color(UIColor.igPageBackground))
-                    .frame(width: showRevealRing ? 29 : 28, height: showRevealRing ? 29 : 28)
+                    .frame(width: showRevealRing ? 31 : 30, height: showRevealRing ? 31 : 30)
                 // Profile picture
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: 26, height: 26)
+                    .frame(width: 28, height: 28)
                     .clipShape(Circle())
                     .overlay(
                         Circle()
@@ -6859,7 +7619,7 @@ struct InstagramBottomBar: View {
             }
         } else {
             Image(systemName: "person.crop.circle")
-                .font(.system(size: 26))
+                .font(.system(size: 28))
                 .foregroundColor(Color(UIColor.label))
         }
     }

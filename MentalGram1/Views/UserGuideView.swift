@@ -8,6 +8,11 @@ struct UserGuideView: View {
     @State private var activeSheet: GuideSheet? = nil
     @State private var communityPasswordCopied = false
 
+    // PDF export
+    @StateObject private var pdfExporter = UserGuidePDFExporter()
+    @State private var pdfURL: URL? = nil
+    @State private var showShareSheet = false
+
     private enum GuideSheet: Identifiable {
         case introduction
         case limits
@@ -15,9 +20,7 @@ struct UserGuideView: View {
         case profilePicture
         case note
         case biography
-        case forcePost
         case forceReel
-        case postPrediction
         case counterGlitch
         case dateForce
         case fakeHomeScreen
@@ -34,16 +37,14 @@ struct UserGuideView: View {
             case .profilePicture:  return 3
             case .note:            return 4
             case .biography:       return 5
-            case .forcePost:       return 6
-            case .forceReel:       return 7
-            case .postPrediction:  return 8
-            case .counterGlitch:   return 9
-            case .dateForce:       return 10
-            case .fakeHomeScreen:  return 11
-            case .lockscreenInput: return 12
-            case .amnesiaCarousel: return 13
-            case .faq:             return 14
-            case .inputMethods:    return 15
+            case .forceReel:       return 6
+            case .counterGlitch:   return 7
+            case .dateForce:       return 8
+            case .fakeHomeScreen:  return 9
+            case .lockscreenInput: return 10
+            case .amnesiaCarousel: return 11
+            case .faq:             return 12
+            case .inputMethods:    return 13
             }
         }
     }
@@ -61,6 +62,30 @@ struct UserGuideView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+
+                    // PDF notice banner
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "arrow.up.doc.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(hex: "FF9F0A"))
+                            .padding(.top, 1)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Quick Reference PDF available")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Text("The PDF export (↑ top right) is a condensed reference guide. For full instructions with interactive demos and step-by-step animations, use the sections below or watch the tutorial video.")
+                                .font(.system(size: 12))
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(14)
+                    .background(Color(hex: "FF9F0A").opacity(0.08))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(hex: "FF9F0A").opacity(0.25), lineWidth: 1)
+                    )
 
                     // GETTING STARTED
                     guideSectionLabel("GETTING STARTED", icon: "star.fill", color: colorStart)
@@ -138,31 +163,12 @@ struct UserGuideView: View {
                     guideSectionLabel("TRICKS", icon: "wand.and.stars", color: colorTricks)
                     guideCardGroup {
                         guideRow(
-                            icon: "hand.point.up.left.fill",
-                            iconColor: colorTricks,
-                            title: "Force Post",
-                            subtitle: "Force a scroll to stop on a specific post",
-                            isFirst: true, isLast: false
-                        ) { activeSheet = .forcePost }
-
-                        guideDivider
-                        guideRow(
                             icon: "square.grid.2x2",
                             iconColor: colorTricks,
                             title: "Force Reel",
                             subtitle: "Force a specific reel to appear in Explore",
-                            isFirst: false, isLast: false
+                            isFirst: true, isLast: false
                         ) { activeSheet = .forceReel }
-
-                        guideDivider
-                        guideRow(
-                            icon: "number.circle.fill",
-                            iconColor: colorTricks,
-                            title: "Post Prediction",
-                            subtitle: "Unarchive photos from the active set to reveal a prediction",
-                            badge: "⭐ Sets",
-                            isFirst: false, isLast: false
-                        ) { activeSheet = .postPrediction }
 
                         guideDivider
                         guideRow(
@@ -192,16 +198,19 @@ struct UserGuideView: View {
                         ) { activeSheet = .amnesiaCarousel }
                     }
 
-                    // FAQ
-                    guideSectionLabel("guide.faq.section", icon: "questionmark.circle.fill", color: Color(hex: "64D2FF"))
-                    guideCardGroup {
-                        guideRow(
-                            icon: "questionmark.circle.fill",
-                            iconColor: Color(hex: "64D2FF"),
-                            title: "guide.faq.row.title",
-                            subtitle: "guide.faq.row.subtitle",
-                            isFirst: true, isLast: true
-                        ) { activeSheet = .faq }
+                    // FAQ is temporarily hidden from the guide list. Keep the sheet
+                    // and translations in place so it can be re-enabled quickly.
+                    if false {
+                        guideSectionLabel("guide.faq.section", icon: "questionmark.circle.fill", color: Color(hex: "64D2FF"))
+                        guideCardGroup {
+                            guideRow(
+                                icon: "questionmark.circle.fill",
+                                iconColor: Color(hex: "64D2FF"),
+                                title: "guide.faq.row.title",
+                                subtitle: "guide.faq.row.subtitle",
+                                isFirst: true, isLast: true
+                            ) { activeSheet = .faq }
+                        }
                     }
 
                     // CAMOUFLAGE
@@ -313,8 +322,38 @@ struct UserGuideView: View {
         }
         .navigationTitle("User Guide")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task {
+                        if let url = await pdfExporter.export() {
+                            pdfURL = url
+                            showShareSheet = true
+                        }
+                    }
+                } label: {
+                    if pdfExporter.isExporting {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "arrow.up.doc.fill")
+                            .font(.system(size: 15, weight: .medium))
+                    }
+                }
+                .disabled(pdfExporter.isExporting)
+                .help("Export PDF")
+            }
+        }
         .sheet(item: $activeSheet) { sheet in
             sheetContent(for: sheet)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = pdfURL {
+                ShareSheetView(items: [url]) {
+                    showShareSheet = false
+                }
+                .ignoresSafeArea()
+            }
         }
     }
 
@@ -335,12 +374,8 @@ struct UserGuideView: View {
             NoteHelpView(onClose: { activeSheet = nil })
         case .biography:
             BiographyHelpView(onClose: { activeSheet = nil })
-        case .forcePost:
-            ForcePostHelpView(onClose: { activeSheet = nil })
         case .forceReel:
             ForceReelHelpView(onClose: { activeSheet = nil })
-        case .postPrediction:
-            PostPredictionHelpView(onClose: { activeSheet = nil })
         case .counterGlitch:
             CounterGlitchHelpView(onClose: { activeSheet = nil })
         case .dateForce:

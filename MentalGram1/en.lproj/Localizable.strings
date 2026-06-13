@@ -875,7 +875,7 @@
 
 "limits.help.gauge.title" = "Your 55-action hourly budget";
 "limits.help.gauge.body" = "Instagram limits each connected app to 55 actions per hour. The budget works as a rolling 60-minute window — each action expires exactly 60 minutes after it was made, so the counter drops automatically over time without any hard reset.";
-"limits.help.gauge.cache" = "The first time you open Performance or a follower's profile the app contacts Instagram (uses budget). Every repeat visit loads instantly from cache at zero cost.";
+"limits.help.gauge.cache" = "Quick repeat visits use cache and can cost 0. After the safety cooldown, Performance or a follower profile may refresh again and use budget to keep the fake Instagram data current.";
 "limits.help.gauge.hardstop" = "When the limit of 55 is reached, the app automatically stops making any further Instagram requests. Nothing is sent, nothing is triggered — it waits silently until the budget renews. You don't need to do anything.";
 "limits.help.gauge.zone.safe" = "Safe (>20)";
 "limits.help.gauge.zone.low" = "Low (8–20)";
@@ -889,6 +889,7 @@
 "limits.help.table.row.performance" = "Open Performance";
 "limits.help.table.row.followers" = "Followers list";
 "limits.help.table.row.profile.new" = "New follower profile";
+"limits.help.table.row.profilepic" = "Profile picture change";
 "limits.help.table.row.sa" = "Sync & Archive (per photo)";
 "limits.help.table.row.upload" = "Upload (per photo)";
 "limits.help.table.row.autoupload" = "Auto-upload full cycle (per photo)";
@@ -896,14 +897,14 @@
 "limits.help.table.row.notebio" = "Note or bio change";
 "limits.help.table.row.explore" = "Explore / Search";
 "limits.help.sa.auto" = "After a full performance with reveals and profile visits, the app automatically adds a short waiting period before Sync & Archive. This is normal — it protects your session.";
-"limits.help.table.cache.lost" = "Performance cache loads at zero cost on repeat visits. Cache may be lost on: fresh install, account switch, clearing app data, or restoring to a new device — in those cases the first entry costs 3 actions.";
-"limits.help.table.batch.note" = "Per-photo costs multiply. Sync & Archive on 4 photos = 8 actions total. Uploading 4 photos = 9 total (1 setup call + 2 per photo). The table shows the cost per photo — not the total for your whole set.";
+"limits.help.table.cache.lost" = "Opening Performance usually costs 3 actions for profile + posts, or up to 5 if Reels/Tagged cache must be rebuilt. Fast repeat entries can be 0, but later refreshes may use budget again. Highlights are not refreshed automatically in Performance.";
+"limits.help.table.batch.note" = "Per-photo costs multiply. Sync & Archive on 4 photos = 8 actions total. Uploading 4 photos = 9 total (1 setup call + 2 per photo). Profile picture shows 1 budget action, although Instagram also receives the image upload call.";
 
 "limits.help.profiles.title" = "Visiting profiles — the most expensive action";
-"limits.help.profiles.body" = "Opening a new follower profile costs 3–4 actions every time. The second visit to the same profile is free (loaded from cache). This is why opening 3–4 different profiles in quick succession can exhaust the budget and trigger bot detection.";
+"limits.help.profiles.body" = "Opening a new follower profile usually costs 3–4 actions. A quick second visit to the same profile loads from cache, but a later refresh can use budget again. This is why opening 3–4 different profiles in quick succession can exhaust the budget and trigger bot detection.";
 "limits.help.profiles.max" = "Recommended: open at most 2 new profiles per session. Avoid visiting new profiles right before Sync & Archive.";
 "limits.help.reddot.title" = "The red dot";
-"limits.help.reddot.body" = "When fewer than 8 actions remain, a small red dot appears on the icon in the followers list header. Only you will see it — it is not visible during the performance itself.";
+"limits.help.reddot.body" = "When fewer than 8 actions remain, a small red dot appears on private control icons such as the followers list header or the paper plane in Performance. Only you should notice it — it is there to warn you before spending more budget.";
 "limits.help.reddot.block" = "If you try to open a new profile when the budget is critical, the app stops the action with a strong vibration. No API call is made — your session stays safe.";
 "limits.help.reddot.location.followers" = "Followers list";
 "limits.help.reddot.location.performance" = "Paper plane icon (Performance)";
@@ -921,18 +922,22 @@
 // ── Guide: Camouflage section ──
 "guide.section.camouflage" = "CAMOUFLAGE";
 
-"guide.fakehome.title" = "Fake Home Screen";
-"guide.fakehome.subtitle" = "Show a home screen screenshot when Performance opens";
-"guide.fakehome.help.what.title" = "What is Fake Home Screen?";
-"guide.fakehome.help.what.body" = "When you open Performance, instead of going straight to your profile, the app first shows a screenshot of your real iPhone home screen. To an observer it looks like you just opened the Instagram app normally.";
+"guide.fakehome.title" = "Performance Cover";
+"guide.fakehome.subtitle" = "Show a fake home screen or black screen before Performance";
+"guide.fakehome.help.what.title" = "What is Performance Cover?";
+"guide.fakehome.help.what.body" = "Performance Cover shows a full-screen cover before your fake Instagram profile appears. Choose Fake Home Screen to show a real home screen screenshot, or Fake Screen Off to show a black screen as if the phone were off.";
+"guide.fakehome.help.screenoff.title" = "Fake Screen Off";
+"guide.fakehome.help.screenoff.body" = "Fake Screen Off uses the same flow as Fake Home Screen, but the cover is pure black. It can stay visible while OCR, Inject/API, biography, notes, or other background inputs keep working underneath. Tap anywhere to reveal Performance.";
 "guide.fakehome.help.how.title" = "How to use it";
-"guide.fakehome.help.how.body" = "1. Take a real screenshot of your iPhone home screen making sure the Instagram icon is visible.
+"guide.fakehome.help.how.body" = "1. In Settings, open Performance Cover and choose Off, Fake Home Screen, or Fake Screen Off.
 
-2. Upload it in Settings › Data › Fake Home Screen.
+2. For Fake Home Screen, upload a real iPhone home screen screenshot with the Instagram icon visible.
 
-3. Once a screenshot is loaded, the fake home screen activates automatically. Next time you open Performance, it appears full screen — tap anywhere (ideally right on the Instagram icon) to reveal your profile.";
+3. For Fake Screen Off, no image is needed — the app shows a pure black screen.
+
+4. Open Performance. Tap anywhere on the cover to reveal your profile.";
 "guide.fakehome.help.why.title" = "Why use it?";
-"guide.fakehome.help.why.body" = "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears, making the experience look completely natural.";
+"guide.fakehome.help.why.body" = "It creates a natural pause before the reveal. Fake Home Screen looks like you are opening Instagram normally; Fake Screen Off looks like the phone was off until you tap it.";
 
 "guide.lockscreen.title" = "Lockscreen Input";
 "guide.lockscreen.subtitle" = "Fake iOS lockscreen for secret digit entry";
@@ -1106,11 +1111,7 @@
 "faq.q.not_instagram.question" = "The audience asks why the app looks like Instagram. What do I say?";
 "faq.q.not_instagram.answer" = "Performance is a faithful visual replica of your Instagram profile — same layout, same photos, same counts. If anyone asks, you can simply say you are checking your Instagram, because the data shown is real and live from your account.";
 
-"upload.tip.title" = "Uploading tip";
-"upload.tip.overnight" = "While uploading is active, the screen stays on — your phone will never lock or dim. Plug it in and let it run overnight to silently fill 10 or more banks without touching it.";
-"upload.tip.background" = "Prefer to use your phone? You can switch to any other app freely. A pop-up alert will bring you back to this screen whenever the next photo is ready to upload.";
-
-"upload.tip.title" = "Uploading tip";
+"upload.tip.title" = "You can leave it uploading";
 "upload.tip.overnight" = "While uploading is active, the screen stays on — your phone will never lock or dim. Plug it in and let it run overnight to silently fill 10 or more banks without touching it.";
 "upload.tip.background" = "Prefer to use your phone? You can switch to any other app freely. A pop-up alert will bring you back to this screen whenever the next photo is ready to upload.";
 
@@ -1155,18 +1156,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "CLOCK INPUT";
-"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then long-press to confirm. The spectator sees nothing.";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "DIGIT ENCODING  (each digit = 2 swipes)";
 "postpred.help.input.clockinput.examples.title" = "EXAMPLES";
-"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then long-press to confirm";
-"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→) then 7 (↓←) — 4 swipes, then long-press";
-"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then long-press";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "HAPTIC FEEDBACK";
 "postpred.help.input.clockinput.haptic.light" = "Light tap — each individual swipe registered";
 "postpred.help.input.clockinput.haptic.medium" = "Medium pulse — digit completed (2 swipes)";
-"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed (1st long-press)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "Error buzz + screen flash — invalid swipe pair; second swipe becomes first of next pair";
-"postpred.help.input.clockinput.dismiss" = "**First long-press** (1 s) commits the digits and triggers the reveal. **Second long-press** dismisses the black screen — the updated fake Instagram profile (with unarchived photos) appears instantly.";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "Input";
@@ -1182,7 +1183,7 @@
 "set.input.lockscreen.help" = "Shows a fake lock screen when Performance opens so you can enter the value secretly. Set a wallpaper below.";
 "set.input.digitgrid.help" = "Use the hidden Digit Grid on the fake profile to build the value. Post Prediction commits with the Posts icon or long press; Force Reel locks the value when you open Search/Explore.";
 "set.input.digitgrid.noconfig" = "No configuration required.";
-"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then long-press to confirm the reveal. A second long-press dismisses the screen.";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "No configuration required.";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1203,22 +1204,24 @@
 "postpred.help.input.grid.encoding.title" = "Digit Encoding  (same as Clock Input)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "In Performance, swipe in any direction on the photo grid. 4 swipes always: first pair = card value, second pair = suit. Long-press to confirm.";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "Value encoding  (clock face)";
-"set.input.cardclock.suits" = "Suit encoding  (same direction twice)";
-"set.input.cardclock.longpress" = "Long-press anywhere on the grid to confirm and reveal.";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "No configuration required.";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "CARD CLOCK";
-"postpred.help.input.cardclock.guide.intro" = "Swipe in any direction on the fake Instagram photo grid — 4 swipes always: first 2 encode the card value (A–K), last 2 encode the suit. Long-press to confirm and trigger the reveal.";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "VALUE ENCODING  (clock face)";
-"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (same direction twice)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "EXAMPLES";
-"postpred.help.input.cardclock.guide.ex.js" = "Jack of Spades: ←↑ (J value) + ↑↑ (spades)";
-"postpred.help.input.cardclock.guide.ex.3h" = "3 of Hearts: →→ (3 value) + →→ (hearts)";
-"postpred.help.input.cardclock.guide.ex.ad" = "Ace of Diamonds: ↑→ (Ace value) + ←← (diamonds)";
-"postpred.help.input.cardclock.guide.longpress" = "After the 4th swipe, long-press anywhere on the grid to confirm. The matching card photo unarchives automatically.";
+"postpred.help.input.cardclock.guide.ex.js" = "Jack of Spades: ↑← (J value) + ↑ (spades)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 of Hearts: →→ (3 value) + → (hearts)";
+"postpred.help.input.cardclock.guide.ex.ad" = "Ace of Diamonds: ↑→ (Ace value) + ← (diamonds)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "Exclusive input";
 "inputs.interface.exclusive.body" = "Only one input interface can run at a time across Sets, Bio and Notes. The others stay locked while this one is active:";
@@ -1251,13 +1254,13 @@
 "input.guide.compat.number" = "Number / Custom";
 "input.guide.compat.number.methods" = "Digit Grid · Number Clock · Number Lockscreen · Camera (OCR) · API";
 "input.guide.compat.card" = "Card";
-"input.guide.compat.card.methods" = "Card Clock · Card Lockscreen · Camera (OCR) · API";
+"input.guide.compat.card.methods" = "Card Clock · Numpad Card · Card Lockscreen · Camera (OCR) · API";
 
 // Cover Typing
 "input.guide.covertyping.title" = "Cover Typing";
 "input.guide.covertyping.compat" = "Word sets";
 "input.guide.covertyping.body" = "You secretly type the spectator's chosen word into the Explore search bar. A different decoy word is shown on screen — the app reads only what you type, not what is displayed. The spectator sees a normal Instagram search with no suspicious activity.";
-"input.guide.covertyping.activate" = "Tap the search bar in Explore and type the secret word. A double space confirms it and triggers the reveal. The bar shows a completely different decoy word so the spectator sees nothing unusual.";
+"input.guide.covertyping.activate" = "Tap the search bar in Explore and type the secret word. Press Space once to confirm — the space disappears from the field and a subtle vibration lets you know the word was captured and the reveal triggered. The bar keeps showing a decoy word so the spectator sees nothing unusual.";
 
 // Camera OCR
 "input.guide.ocr.title" = "Camera (OCR)";
@@ -1277,15 +1280,20 @@
 "input.guide.clock.title" = "Number Clock";
 "input.guide.clock.compat" = "Number · Custom sets";
 "input.guide.clock.body" = "A completely black fullscreen screen — as if the phone is off. Swipe gestures encode digits 0–9 using pairs of directional swipes: each digit requires exactly two swipes in sequence (e.g. ↑↑ = 0, ↑→ = 1, →→ = 3). The captured number can reveal a prediction or fill Notes/Bio placeholders when those are configured for Number Clock.";
-"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Long press to confirm and fire the reveal.";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "Same swipe encoding as the Digit Grid: if you know the grid, the clock is identical. The only difference is it works on a completely black screen with no visual grid.";
 
 // Card Clock
 "input.guide.cardclock.title" = "Card Clock";
 "input.guide.cardclock.compat" = "Card sets";
-"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 4 swipes are required: the first 2 encode the card value (A through K), the next 2 encode the suit. The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
-"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 + 4 for the suit (same direction twice). Each valid pair gives a distinct vibration. Long press confirms. An error flash (brief dim) signals an invalid pair so you can retry.";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "The full value → swipe direction table is shown in the set configuration screen under Card Clock. Memorise only the 4–5 cards you use most often.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 
 // Number Lockscreen
 "input.guide.lockscreen.title" = "Number Lockscreen";

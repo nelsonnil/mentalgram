@@ -532,6 +532,13 @@
 "postpred.help.howitworks.body2" = "เมื่อคุณเปิดใช้การเปิดเผย แอปจะยกเลิกการเก็บถาวรภาพที่ตรงกัน มันปรากฏขึ้นที่**ตำแหน่งกริดเดิม**พร้อม**วันที่เดิม**";
 "postpred.help.howitworks.info" = "ผู้ชมเห็นโพสต์จริงบนโปรไฟล์ Instagram จริง ไม่มีแอปให้เห็น";
 "postpred.help.howitworks.archive_reason" = "Instagram ไม่อนุญาตให้อัปโหลดรูปใหม่แล้วเปลี่ยนให้เป็นวันที่เก่าได้ Vault จึงอัปโหลดภาพคำทำนายไว้ล่วงหน้าแล้วเก็บเข้าคลังทันที Instagram จะคงวันที่อัปโหลดเดิมและตำแหน่งในกริดไว้ ดังนั้นเมื่อยกเลิกการเก็บเข้าคลังในภายหลัง ภาพคำทำนายจะดูเหมือนโพสต์เก่าที่อยู่ตรงนั้นมาตลอด การอัปโหลดและเก็บเข้าคลังทำโดยอัตโนมัติและทันที ผู้ชมจึงไม่เห็นภาพเตรียมการเหล่านี้บนโปรไฟล์จริงของคุณ";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "เซต";
 "postpred.help.metric.sets.desc" = "คอลเลกชันภาพถ่ายที่อัพโหลดและเก็บถาวรล่วงหน้า พร้อมเปิดเผย";
 "postpred.help.metric.banks" = "แบงก์";
@@ -892,7 +899,7 @@
 
 "limits.help.gauge.title" = "งบประมาณ 55 การกระทำต่อชั่วโมงของคุณ";
 "limits.help.gauge.body" = "Instagram จำกัดแต่ละแอปที่เชื่อมต่อไว้ที่ 55 การกระทำต่อชั่วโมง งบประมาณทำงานเป็นหน้าต่างเลื่อน 60 นาที — การกระทำแต่ละอย่างจะหมดอายุหลังจาก 60 นาทีพอดี ดังนั้นตัวนับจะลดลงโดยอัตโนมัติโดยไม่ต้องรีเซ็ต";
-"limits.help.gauge.cache" = "ครั้งแรกที่คุณเปิด Performance หรือโปรไฟล์ผู้ติดตาม แอปจะติดต่อ Instagram (ใช้งบประมาณ) การเข้าชมครั้งต่อไปจะโหลดจากแคชทันทีโดยไม่มีค่าใช้จ่าย";
+"limits.help.gauge.cache" = "การเข้าซ้ำอย่างรวดเร็วใช้แคชและอาจใช้ 0 หลังจาก cooldown ความปลอดภัย Performance หรือโปรไฟล์ผู้ติดตามอาจรีเฟรชอีกครั้งและใช้งบประมาณ";
 "limits.help.gauge.hardstop" = "เมื่อถึงขีดจำกัด 55 ครั้ง แอปจะหยุดส่งคำขอใดๆ ไปยัง Instagram โดยอัตโนมัติ ไม่มีอะไรถูกส่งออกไปหรือถูกเรียกใช้งาน — แอปจะรอเงียบๆ จนกว่างบประมาณจะต่ออายุ คุณไม่ต้องทำอะไรทั้งนั้น";
 "limits.help.gauge.zone.safe" = "ปลอดภัย (>20)";
 "limits.help.gauge.zone.low" = "ต่ำ (8–20)";
@@ -906,6 +913,7 @@
 "limits.help.table.row.performance" = "เปิด Performance";
 "limits.help.table.row.followers" = "รายการผู้ติดตาม";
 "limits.help.table.row.profile.new" = "โปรไฟล์ผู้ติดตามใหม่";
+"limits.help.table.row.profilepic" = "เปลี่ยนรูปโปรไฟล์";
 "limits.help.table.row.sa" = "Sync & Archive (ต่อภาพ)";
 "limits.help.table.row.upload" = "อัปโหลด (ต่อภาพ)";
 "limits.help.table.row.autoupload" = "รอบการอัปโหลดอัตโนมัติเต็มรูปแบบ (ต่อรูป)";
@@ -913,13 +921,14 @@
 "limits.help.table.row.notebio" = "เปลี่ยนโน้ตหรือ bio";
 "limits.help.table.row.explore" = "สำรวจ / ค้นหา";
 "limits.help.sa.auto" = "หลังจากการแสดงที่สมบูรณ์พร้อมการเปิดเผยและการเยี่ยมชมโปรไฟล์ แอปจะเพิ่มช่วงรอสั้นๆ อัตโนมัติก่อน Sync & Archive นี่เป็นเรื่องปกติ — เพื่อปกป้องเซสชันของคุณ";
-"limits.help.table.cache.lost" = "แคช Performance โหลดโดยไม่มีค่าใช้จ่ายในการเยี่ยมชมซ้ำ แคชอาจสูญหายเมื่อ: ติดตั้งแอปใหม่ เปลี่ยนบัญชี ล้างข้อมูลแอป หรือกู้คืนในอุปกรณ์ใหม่ — ในกรณีเหล่านี้การเข้าครั้งแรกใช้ 3 การกระทำ";
+"limits.help.table.cache.lost" = "การเปิด Performance โดยปกติใช้ 3 การกระทำสำหรับโปรไฟล์ + โพสต์ หรือสูงสุด 5 หากต้องสร้างแคช Reels/Tagged ใหม่ การเข้าซ้ำอย่างรวดเร็วอาจเป็น 0 แต่การรีเฟรชภายหลังอาจใช้งบประมาณอีกครั้ง Highlights จะไม่รีเฟรชอัตโนมัติใน Performance";
+"limits.help.table.batch.note" = "ต้นทุนต่อรูปจะถูกรวมกัน Sync & Archive กับ 4 รูป = รวม 8 การกระทำ อัปโหลด 4 รูป = รวม 9 (1 การเรียกเตรียม + 2 ต่อรูป) รูปโปรไฟล์แสดงเป็น 1 การกระทำในงบประมาณ แม้ว่า Instagram จะได้รับการเรียกอัปโหลดรูปด้วย";
 
 "limits.help.profiles.title" = "การเยี่ยมชมโปรไฟล์ — การกระทำที่แพงที่สุด";
-"limits.help.profiles.body" = "การเปิดโปรไฟล์ผู้ติดตามใหม่จะใช้ 4–5 การกระทำทุกครั้ง การเยี่ยมชมโปรไฟล์เดิมครั้งที่สองจะฟรี (โหลดจากแคช) นั่นคือเหตุผลที่การเปิด 3–4 โปรไฟล์ต่างกันอย่างรวดเร็วอาจใช้งบประมาณหมดและกระตุ้นการตรวจจับบอท";
+"limits.help.profiles.body" = "การเปิดโปรไฟล์ผู้ติดตามใหม่โดยปกติใช้ 3–4 การกระทำ การเข้าซ้ำอย่างรวดเร็วในโปรไฟล์เดิมจะโหลดจากแคช แต่การรีเฟรชภายหลังอาจใช้งบประมาณอีกครั้ง นั่นคือเหตุผลที่การเปิด 3–4 โปรไฟล์ต่างกันอย่างรวดเร็วอาจใช้งบประมาณหมดและกระตุ้นการตรวจจับบอท";
 "limits.help.profiles.max" = "แนะนำ: เปิดโปรไฟล์ใหม่ได้สูงสุด 2 โปรไฟล์ต่อเซสชัน หลีกเลี่ยงการเยี่ยมชมโปรไฟล์ใหม่ก่อน Sync & Archive";
 "limits.help.reddot.title" = "จุดสีแดง";
-"limits.help.reddot.body" = "เมื่อเหลือการกระทำน้อยกว่า 8 ครั้ง จะปรากฏจุดสีแดงเล็กๆ บนไอคอนในส่วนหัวของรายการผู้ติดตาม เฉพาะคุณเท่านั้นที่มองเห็น — ไม่ปรากฏระหว่างการแสดง";
+"limits.help.reddot.body" = "เมื่อเหลือการกระทำน้อยกว่า 8 ครั้ง จุดสีแดงเล็กๆ จะปรากฏบนไอคอนควบคุมส่วนตัว เช่น ส่วนหัวของรายการผู้ติดตามหรือไอคอนเครื่องบินกระดาษใน Performance เพื่อเตือนก่อนใช้งบประมาณเพิ่ม";
 "limits.help.reddot.block" = "หากคุณพยายามเปิดโปรไฟล์ใหม่เมื่องบประมาณอยู่ในระดับวิกฤต แอปจะหยุดการกระทำด้วยการสั่นสะเทือนอย่างแรง ไม่มีการเรียก API — เซสชันของคุณยังคงปลอดภัย";
 "limits.help.reddot.location.followers" = "รายการผู้ติดตาม";
 "limits.help.reddot.location.performance" = "ไอคอนเครื่องบินกระดาษ (Performance)";
@@ -1125,7 +1134,7 @@
 "faq.q.not_instagram.question" = "ผู้ชมถามว่าทำไมแอปถึงดูเหมือน Instagram จะพูดอย่างไร?";
 "faq.q.not_instagram.answer" = "Performance คือแบบจำลองภาพที่แท้จริงของโปรไฟล์ Instagram ของคุณ เลย์เอาต์เดียวกัน รูปภาพเดียวกัน ตัวนับเดียวกัน หากใครถาม คุณสามารถพูดได้ว่ากำลังตรวจสอบ Instagram ของคุณ เพราะข้อมูลที่แสดงเป็นข้อมูลจริงและสดจากบัญชีของคุณ";
 
-"upload.tip.title" = "เคล็ดลับการอัปโหลด";
+"upload.tip.title" = "ปล่อยให้อัปโหลดต่อได้";
 "upload.tip.overnight" = "ขณะอัปโหลดอยู่ หน้าจอจะติดตลอด — โทรศัพท์จะไม่ล็อกหรือหรี่แสงเด็ดขาด เสียบชาร์จแล้วปล่อยทิ้งไว้ทั้งคืน ระบบจะเติม Bank ได้ 10 ขึ้นไปโดยไม่ต้องแตะ";
 "upload.tip.background" = "ต้องการใช้โทรศัพท์อยู่ใช่ไหม? สลับไปแอปอื่นได้เลย เมื่อรูปภาพถัดไปพร้อมอัปโหลด การแจ้งเตือนแบบป๊อปอัปจะพาคุณกลับมาที่นี่";
 
@@ -1170,18 +1179,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "สไวป์แบบบลายด์";
-"postpred.help.input.clockinput.intro" = "เมื่อเปิด Performance หน้าจอจะเป็น**สีดำ**สนิท — เหมือนโทรศัพท์ดับ ปัดเพื่อป้อนตัวเลขให้ครบแล้วกดค้างเพื่อยืนยัน ผู้ชมไม่เห็นอะไรเลย";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "การเข้ารหัสตัวเลข  (1 ตัวเลข = 2 ปัด)";
 "postpred.help.input.clockinput.examples.title" = "ตัวอย่าง";
-"postpred.help.input.clockinput.example5.note" = "ตัวเลขเดียว 5 — ปัด 2 ครั้ง แล้วกดค้างเพื่อยืนยัน";
-"postpred.help.input.clockinput.example37.note" = "สองหลัก: 3 (→→) แล้ว 7 (↓←) — ปัด 4 ครั้ง แล้วกดค้าง";
-"postpred.help.input.clockinput.example100.note" = "สามหลัก: 3 (→→), 6 (↓↓), 9 (←←) — ปัด 6 ครั้ง แล้วกดค้าง";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "การสั่นสะเทือน";
 "postpred.help.input.clockinput.haptic.light" = "สั่นเบา — รับรู้ทุกการปัด";
 "postpred.help.input.clockinput.haptic.medium" = "สั่นกลาง — ป้อนตัวเลขครบ (2 ปัด)";
-"postpred.help.input.clockinput.haptic.success" = "สั่นแรงสองครั้ง — ยืนยันตัวเลขแล้ว (กดค้างครั้งที่ 1)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "สั่นแสดงข้อผิดพลาด + หน้าจอกะพริบ — คู่ไม่ถูกต้อง การปัดครั้งที่ 2 กลายเป็นครั้งที่ 1 ของคู่ถัดไป";
-"postpred.help.input.clockinput.dismiss" = "**กดค้างครั้งที่ 1** (1 วินาที) ยืนยันตัวเลขและเริ่มการเปิดเผย **กดค้างครั้งที่ 2** ปิดหน้าจอดำ — โปรไฟล์ Instagram ปลอมที่อัปเดตแล้วปรากฏทันที";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "อินพุต";
@@ -1197,7 +1206,7 @@
 "set.input.lockscreen.help" = "แสดงหน้าจอล็อกปลอมเมื่อ Performance เปิด เพื่อกรอกค่าแบบลับ ตั้งวอลเปเปอร์ด้านล่าง";
 "set.input.digitgrid.help" = "ใช้ Digit Grid ที่ซ่อนอยู่บนโปรไฟล์ปลอมเพื่อสร้างค่า Post Prediction ยืนยันด้วยไอคอน Posts หรือกดค้าง; Force Reel จะล็อกค่าเมื่อเปิด Search/Explore";
 "set.input.digitgrid.noconfig" = "ไม่ต้องการการตั้งค่า";
-"set.input.clockinput.help" = "แสดงหน้าจอสีดำสนิทเมื่อเปิด Performance ปัดเป็นคู่เพื่อป้อนตัวเลขให้ครบ แล้วกดค้างเพื่อยืนยัน กดค้างครั้งที่สองเพื่อปิดหน้าจอ";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "ไม่ต้องการการตั้งค่า";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1218,22 +1227,22 @@
 "postpred.help.input.grid.encoding.title" = "การเข้ารหัสตัวเลข  (เหมือน Clock Input)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "ใน Performance ให้ปัดนิ้วในทิศทางใดก็ได้บนกริด เสมอ 4 ครั้ง: คู่แรก = ค่า คู่ที่สอง = ดอกไพ่ กดค้างเพื่อยืนยัน";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "การเข้ารหัสค่า  (หน้าปัดนาฬิกา)";
-"set.input.cardclock.suits" = "การเข้ารหัสดอก  (ทิศทางเดียวกันสองครั้ง)";
-"set.input.cardclock.longpress" = "กดค้างที่ใดก็ได้บนกริดเพื่อยืนยัน";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "ไม่ต้องตั้งค่า";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "นาฬิกาไพ่";
-"postpred.help.input.cardclock.guide.intro" = "ปัดนิ้วในทิศทางใดก็ได้บนกริด Instagram — เสมอ 4 ครั้ง: 2 ครั้งแรกระบุค่า (A–K) 2 ครั้งหลังระบุดอก กดค้างเพื่อยืนยัน";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "การเข้ารหัสค่า  (หน้าปัดนาฬิกา)";
-"postpred.help.input.cardclock.guide.suits" = "การเข้ารหัสดอก  (ทิศทางเดียวกันสองครั้ง)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "ตัวอย่าง";
-"postpred.help.input.cardclock.guide.ex.js" = "J โพดำ: ←↑ (ค่า J) + ↑↑ (โพดำ)";
-"postpred.help.input.cardclock.guide.ex.3h" = "3 ใจแดง: →→ (ค่า 3) + →→ (ใจแดง)";
-"postpred.help.input.cardclock.guide.ex.ad" = "A ข้าวหลามตัด: ↑→ (ค่า A) + ←← (ข้าวหลามตัด)";
-"postpred.help.input.cardclock.guide.longpress" = "หลังจากปัดครั้งที่ 4 กดค้างเพื่อยืนยัน ภาพไพ่ที่ตรงกันจะถูกเปิดเผยโดยอัตโนมัติ";
+"postpred.help.input.cardclock.guide.ex.js" = "J โพดำ: ↑← (ค่า J) + ↑ (โพดำ)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 ใจแดง: →→ (ค่า 3) + → (ใจแดง)";
+"postpred.help.input.cardclock.guide.ex.ad" = "A ข้าวหลามตัด: ↑→ (ค่า A) + ← (ข้าวหลามตัด)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "อินพุตเฉพาะ";
 "inputs.interface.exclusive.body" = "ใช้อินเทอร์เฟซอินพุตได้ครั้งละหนึ่งรายการสำหรับชุด ไบโอ และโน้ต รายการอื่นจะถูกล็อกขณะที่รายการนี้ทำงาน:";
@@ -1276,7 +1285,7 @@ Chai interface dai khrae nueng prapet tho khriang samrap Sets, Bio lae Notes. Da
 "input.guide.covertyping.title" = "การพิมพ์ลับ";
 "input.guide.covertyping.compat" = "ชุดคำ";
 "input.guide.covertyping.body" = "คุณพิมพ์คำที่ผู้ชมเลือกอย่างลับๆ ในแถบค้นหา Explore คำหลอกลวงอื่นจะปรากฏบนหน้าจอ — แอพอ่านเฉพาะสิ่งที่คุณพิมพ์เท่านั้น";
-"input.guide.covertyping.activate" = "แตะแถบค้นหาใน Explore แล้วพิมพ์คำลับ เว้นวรรคสองครั้งเพื่อยืนยันและเปิดใช้การเปิดเผย";
+"input.guide.covertyping.activate" = "แตะแถบค้นหาใน Explore แล้วพิมพ์คำลับ กดสเปซหนึ่งครั้งเพื่อยืนยัน — สเปซจะหายไปจากช่องและการสั่นสะเทือนเบาๆ จะยืนยันว่าคำถูกบันทึกและการเปิดเผยถูกเปิดใช้งาน";
 "input.guide.ocr.title" = "กล้อง (OCR)";
 "input.guide.ocr.compat" = "ชุดคำ · ตัวเลข · กำหนดเอง";
 "input.guide.ocr.body" = "กล้องหลังอ่านข้อความในเฟรมอย่างเงียบๆ — ไพ่ คำที่เขียน ผลการคำนวณ วันที่ — และส่งผลลัพธ์ไปยังชุดที่ใช้งานอยู่โดยตรง ไม่มีอะไรปรากฏบนหน้าจอระหว่างการสแกน";
@@ -1290,12 +1299,12 @@ Chai interface dai khrae nueng prapet tho khriang samrap Sets, Bio lae Notes. Da
 "input.guide.clock.title" = "นาฬิกาตัวเลข";
 "input.guide.clock.compat" = "ชุดตัวเลข · กำหนดเอง";
 "input.guide.clock.body" = "หน้าจอดำสนิท — เหมือนโทรศัพท์ดับ รูปแบบการปัดจะเข้ารหัสตัวเลข 0-9 โดยใช้คู่ทิศทาง: แต่ละหลักต้องการปัดต่อเนื่อง 2 ครั้ง (เช่น ↑↑ = 0, ↑→ = 1, →→ = 3) คุณสามารถป้อนตัวเลขความยาวใดก็ได้";
-"input.guide.clock.activate" = "หน้าจอดำเปิดอัตโนมัติเมื่อชุดที่ใช้งานอยู่ใช้นาฬิกาตัวเลข ปัดเป็นคู่เพื่อสร้างตัวเลขทีละหลัก กดค้างเพื่อยืนยัน";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "การเข้ารหัสเหมือนกับกริดตัวเลข: ถ้าคุณรู้กริด นาฬิกาก็เหมือนกัน ความแตกต่างเพียงอย่างเดียวคือหน้าจอดำสนิทโดยไม่มีกริดให้เห็น";
 "input.guide.cardclock.title" = "นาฬิกาไพ่";
 "input.guide.cardclock.compat" = "ชุดไพ่";
-"input.guide.cardclock.body" = "หน้าจอดำสนิท — เหมือนนาฬิกาตัวเลข แต่บันทึกไพ่แทนตัวเลข ต้องปัด 4 ครั้งพอดี: 2 ครั้งแรกเข้ารหัสค่า (A ถึง K) อีก 2 ครั้งเข้ารหัสดอก การเข้ารหัสดอก: ทิศทางเดิม 2 ครั้ง (↑↑ = ♠, →→ = ♥, ↓↓ = ♣, ←← = ♦)";
-"input.guide.cardclock.activate" = "ปัด 1+2 สำหรับค่า ปัด 3+4 สำหรับดอก (ทิศทางเดิม 2 ครั้ง) แต่ละคู่ที่ถูกต้องจะสั่นแตกต่างกัน กดค้างเพื่อยืนยัน แฟลชข้อผิดพลาดแสดงคู่ที่ไม่ถูกต้อง";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "ตารางค่า → ทิศทางแบบเต็มแสดงในหน้าจอการตั้งค่าชุดใต้นาฬิกาไพ่ จำเพียง 4-5 ใบที่ใช้บ่อยที่สุด";
 "input.guide.lockscreen.title" = "ล็อคหน้าจอตัวเลข";
 "input.guide.lockscreen.compat" = "ชุดตัวเลข · กำหนดเอง";

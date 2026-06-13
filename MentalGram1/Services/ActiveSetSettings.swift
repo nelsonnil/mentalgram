@@ -56,6 +56,7 @@ class ActiveSetSettings: ObservableObject {
     var activeNumberSetId: UUID? { activeSetType == .number ? activeSetId : nil }
     var activeCustomSetId: UUID? { activeSetType == .custom ? activeSetId : nil }
     var activeCardSetId: UUID?   { activeSetType == .card   ? activeSetId : nil }
+    var activeListSetId: UUID?   { activeSetType == .list   ? activeSetId : nil }
 
     // MARK: - Helpers
 

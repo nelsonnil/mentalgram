@@ -532,6 +532,13 @@
 "postpred.help.howitworks.body2" = "जब आप प्रकटीकरण शुरू करते हैं, ऐप संबंधित फोटो का संग्रह हटा देती है। वह **मूल ग्रिड स्थिति** पर, **मूल तारीख** के साथ फिर दिखती है।";
 "postpred.help.howitworks.info" = "दर्शक एक असली Instagram प्रोफाइल पर एक असली पोस्ट देखता है। कोई ऐप दिखाई नहीं देती।";
 "postpred.help.howitworks.archive_reason" = "Instagram नई फोटो अपलोड करके उसे पुरानी तारीख देने की अनुमति नहीं देता। Vault भविष्यवाणी वाली तस्वीरों को पहले से अपलोड करके तुरंत archive कर देता है। Instagram मूल अपलोड तारीख और grid position को बनाए रखता है, इसलिए बाद में unarchive की गई prediction ऐसी दिखती है जैसे वह पुरानी पोस्ट हमेशा से वहीं थी। Upload और archive अपने आप और तुरंत होते हैं, इसलिए दर्शक आपके असली profile पर तैयारी वाली तस्वीरें कभी नहीं देखते।";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "postpred.help.metric.sets" = "सेट";
 "postpred.help.metric.sets.desc" = "फोटो का संग्रह पहले से अपलोड और संग्रहित, प्रकटीकरण के लिए तैयार।";
 "postpred.help.metric.banks" = "बैंक";
@@ -892,7 +899,7 @@
 
 "limits.help.gauge.title" = "आपका प्रति घंटे 55 एक्शन का बजट";
 "limits.help.gauge.body" = "Instagram हर कनेक्टेड ऐप को प्रति घंटे 55 एक्शन तक सीमित करता है। बजट 60 मिनट की रोलिंग विंडो के रूप में काम करता है — हर एक्शन ठीक 60 मिनट बाद एक्सपायर होता है, इसलिए काउंटर बिना किसी हार्ड रीसेट के अपने आप कम होता जाता है।";
-"limits.help.gauge.cache" = "पहली बार Performance या किसी फॉलोअर की प्रोफ़ाइल खोलने पर ऐप Instagram से संपर्क करता है (बजट उपयोग करता है)। बाद की हर विज़िट कैश से तुरंत मुफ्त में लोड होती है।";
+"limits.help.gauge.cache" = "तेज़ दोबारा विज़िट कैश का उपयोग करती हैं और 0 खर्च हो सकता है। सुरक्षा cooldown के बाद Performance या फॉलोअर प्रोफ़ाइल फिर से रिफ्रेश हो सकती है और बजट उपयोग कर सकती है।";
 "limits.help.gauge.hardstop" = "जब 55 की सीमा पहुंच जाती है, तो ऐप स्वचालित रूप से Instagram पर कोई भी अतिरिक्त अनुरोध भेजना बंद कर देता है। कुछ भी नहीं भेजा जाता, कुछ भी ट्रिगर नहीं होता — यह चुपचाप इंतजार करता है जब तक बजट नवीनीकृत नहीं हो जाता। आपको कुछ नहीं करना है।";
 "limits.help.gauge.zone.safe" = "सुरक्षित (>20)";
 "limits.help.gauge.zone.low" = "कम (8–20)";
@@ -906,6 +913,7 @@
 "limits.help.table.row.performance" = "Performance खोलें";
 "limits.help.table.row.followers" = "फॉलोअर्स लिस्ट";
 "limits.help.table.row.profile.new" = "नया फॉलोअर प्रोफ़ाइल";
+"limits.help.table.row.profilepic" = "प्रोफ़ाइल फोटो बदलें";
 "limits.help.table.row.sa" = "Sync & Archive (प्रति फ़ोटो)";
 "limits.help.table.row.upload" = "अपलोड (प्रति फ़ोटो)";
 "limits.help.table.row.autoupload" = "ऑटो-अपलोड पूरा चक्र (प्रति फ़ोटो)";
@@ -913,13 +921,14 @@
 "limits.help.table.row.notebio" = "नोट या बायो बदलें";
 "limits.help.table.row.explore" = "एक्सप्लोर / सर्च";
 "limits.help.sa.auto" = "रिवील और प्रोफ़ाइल विज़िट के साथ पूरे परफॉर्मेंस के बाद, ऐप Sync & Archive से पहले स्वचालित रूप से एक छोटी प्रतीक्षा अवधि जोड़ता है। यह सामान्य है — यह आपके सेशन को सुरक्षित रखता है।";
-"limits.help.table.cache.lost" = "Performance कैश रिपीट विज़िट पर बिना किसी लागत के लोड होता है। कैश इन स्थितियों में खो सकता है: ऐप रीइंस्टॉल, अकाउंट स्विच, ऐप डेटा क्लियर, या नए डिवाइस पर रिस्टोर — उन स्थितियों में पहली एंट्री 3 एक्शन लेती है।";
+"limits.help.table.cache.lost" = "Performance खोलने में आमतौर पर प्रोफ़ाइल + पोस्ट के लिए 3 एक्शन लगते हैं, या Reels/Tagged कैश फिर से बनाना पड़े तो अधिकतम 5। तेज़ दोहराव 0 हो सकते हैं, लेकिन बाद के रिफ्रेश फिर से बजट उपयोग कर सकते हैं। Highlights Performance में अपने आप रिफ्रेश नहीं होते।";
+"limits.help.table.batch.note" = "प्रति फ़ोटो लागत जुड़ती है। 4 फ़ोटो पर Sync & Archive = कुल 8 एक्शन। 4 फ़ोटो अपलोड करना = कुल 9 (1 तैयारी कॉल + प्रति फ़ोटो 2)। प्रोफ़ाइल फोटो बजट में 1 एक्शन दिखाती है, हालांकि Instagram को इमेज अपलोड कॉल भी मिलती है।";
 
 "limits.help.profiles.title" = "प्रोफ़ाइल विज़िट — सबसे महंगा एक्शन";
-"limits.help.profiles.body" = "एक नई फॉलोअर प्रोफ़ाइल खोलने पर हर बार 4–5 एक्शन खर्च होते हैं। उसी प्रोफ़ाइल की दूसरी विज़िट कैश से मुफ्त है। इसीलिए 3–4 अलग-अलग प्रोफ़ाइल तेजी से खोलने से बजट खत्म हो सकता है और बॉट डिटेक्शन ट्रिगर हो सकती है।";
+"limits.help.profiles.body" = "नई फॉलोअर प्रोफ़ाइल खोलने पर आमतौर पर 3–4 एक्शन खर्च होते हैं। उसी प्रोफ़ाइल की तेज़ दूसरी विज़िट कैश से लोड होती है, लेकिन बाद का रिफ्रेश फिर से बजट उपयोग कर सकता है। इसीलिए 3–4 अलग-अलग प्रोफ़ाइल तेजी से खोलने से बजट खत्म हो सकता है और बॉट डिटेक्शन ट्रिगर हो सकती है।";
 "limits.help.profiles.max" = "सुझाव: प्रति सेशन अधिकतम 2 नई प्रोफ़ाइल खोलें। Sync & Archive से ठीक पहले नई प्रोफ़ाइल विज़िट करने से बचें।";
 "limits.help.reddot.title" = "लाल बिंदु";
-"limits.help.reddot.body" = "जब 8 से कम एक्शन बचते हैं, तो फॉलोअर्स लिस्ट हेडर के आइकन पर एक छोटा लाल बिंदु दिखाई देता है। केवल आप इसे देख सकते हैं — परफॉर्मेंस के दौरान यह दिखाई नहीं देता।";
+"limits.help.reddot.body" = "जब 8 से कम एक्शन बचते हैं, तो निजी कंट्रोल आइकन पर एक छोटा लाल बिंदु दिखाई देता है, जैसे फॉलोअर्स लिस्ट हेडर या Performance में पेपर प्लेन। यह और बजट खर्च करने से पहले चेतावनी देता है।";
 "limits.help.reddot.block" = "अगर बजट खतरनाक स्तर पर हो तो नई प्रोफ़ाइल खोलने की कोशिश करने पर ऐप तेज वाइब्रेशन के साथ एक्शन रोक देता है। कोई API कॉल नहीं होती — आपका सेशन सुरक्षित रहता है।";
 "limits.help.reddot.location.followers" = "फॉलोअर्स लिस्ट";
 "limits.help.reddot.location.performance" = "कागज़ी हवाई जहाज़ (Performance)";
@@ -1125,7 +1134,7 @@
 "faq.q.not_instagram.question" = "दर्शक पूछते हैं कि ऐप Instagram जैसी क्यों दिखती है। क्या कहूँ?";
 "faq.q.not_instagram.answer" = "Performance आपके Instagram प्रोफ़ाइल की एक वफ़ादार दृश्य प्रतिकृति है — वही लेआउट, वही फ़ोटो, वही काउंटर। अगर कोई पूछे, तो आप बस कह सकते हैं कि आप अपना Instagram चेक कर रहे हैं, क्योंकि दिखाया गया डेटा वास्तविक है और आपके अकाउंट से लाइव है।";
 
-"upload.tip.title" = "अपलोड टिप";
+"upload.tip.title" = "आप इसे अपलोड होते छोड़ सकते हैं";
 "upload.tip.overnight" = "अपलोड सक्रिय रहने के दौरान स्क्रीन चालू रहती है — फोन कभी लॉक या डिम नहीं होगा। इसे चार्जर पर लगाएं और रात भर चलने दें, बिना छुए 10 या अधिक बैंक भरे जाएंगे।";
 "upload.tip.background" = "फोन इस्तेमाल करना चाहते हैं? किसी भी अन्य ऐप पर स्वतंत्र रूप से जाएं। जब अगली फोटो अपलोड के लिए तैयार होगी, तो एक पॉप-अप अलर्ट आपको यहां वापस लाएगा।";
 
@@ -1170,18 +1179,18 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "स्वाइप ब्लाइंड";
-"postpred.help.input.clockinput.intro" = "Performance खुलने पर स्क्रीन पूरी तरह **काली** हो जाती है — जैसे फ़ोन बंद हो। जितने अंक चाहिए उतने स्वाइप करें, फिर लंबे दबाव से पुष्टि करें। दर्शक कुछ नहीं देखते।";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "अंक एन्कोडिंग  (प्रत्येक अंक = 2 स्वाइप)";
 "postpred.help.input.clockinput.examples.title" = "उदाहरण";
-"postpred.help.input.clockinput.example5.note" = "एकल अंक 5 — 2 स्वाइप, फिर लंबा दबाव";
-"postpred.help.input.clockinput.example37.note" = "दो अंक: 3 (→→) फिर 7 (↓←) — 4 स्वाइप, फिर लंबा दबाव";
-"postpred.help.input.clockinput.example100.note" = "तीन अंक: 3 (→→), 6 (↓↓), 9 (←←) — 6 स्वाइप, फिर लंबा दबाव";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "हैप्टिक फ़ीडबैक";
 "postpred.help.input.clockinput.haptic.light" = "हल्का स्पर्श — प्रत्येक स्वाइप पंजीकृत";
 "postpred.help.input.clockinput.haptic.medium" = "मध्यम स्पंदन — अंक पूर्ण (2 स्वाइप)";
-"postpred.help.input.clockinput.haptic.success" = "दोहरी तेज़ वाइब्रेशन — संख्या पुष्ट (पहला लंबा दबाव)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "त्रुटि वाइब्रेशन + फ्लैश — अमान्य जोड़ी; दूसरा स्वाइप अगली जोड़ी का पहला बन जाता है";
-"postpred.help.input.clockinput.dismiss" = "**पहला लंबा दबाव** (1 सेकंड) अंकों की पुष्टि करता है और खुलासा शुरू करता है। **दूसरा लंबा दबाव** काली स्क्रीन बंद करता है — अपडेट किया गया नकली Instagram प्रोफ़ाइल तुरंत दिखता है।";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
 // MARK: - Set Input Picker
 "set.input.label" = "इनपुट";
@@ -1197,7 +1206,7 @@
 "set.input.lockscreen.help" = "Performance खुलने पर नकली लॉक स्क्रीन दिखाता है ताकि आप गुप्त रूप से मान दर्ज कर सकें। नीचे वॉलपेपर सेट करें।";
 "set.input.digitgrid.help" = "नकली प्रोफ़ाइल पर छिपे हुए Digit Grid से मान बनाएं। Post Prediction Posts आइकन या लंबे दबाव से पुष्टि करता है; Force Reel Search/Explore खोलते समय मान लॉक करता है।";
 "set.input.digitgrid.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
-"set.input.clockinput.help" = "Performance खुलने पर पूरी तरह काली स्क्रीन दिखाता है। स्वाइप जोड़ियों से अंक दर्ज करें, फिर लंबे दबाव से पुष्टि करें। दूसरे लंबे दबाव से स्क्रीन बंद होती है।";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
 
 // MARK: - Fake Home Screen & Lockscreen & Post Prediction set-picker
@@ -1218,22 +1227,22 @@
 "postpred.help.input.grid.encoding.title" = "अंक एन्कोडिंग  (Clock Input जैसी)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "Performance में, फ़ोटो ग्रिड पर किसी भी दिशा में स्वाइप करें। हमेशा 4 स्वाइप: पहला जोड़ा = मान, दूसरा = सूट। पुष्टि के लिए लंबे समय तक दबाएं।";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "मूल्य कोडिंग  (घड़ी की डायल)";
-"set.input.cardclock.suits" = "सूट कोडिंग  (एक ही दिशा दो बार)";
-"set.input.cardclock.longpress" = "पुष्टि के लिए ग्रिड पर कहीं भी लंबे समय तक दबाएं।";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "कोई कॉन्फ़िगरेशन आवश्यक नहीं।";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "कार्ड क्लॉक";
-"postpred.help.input.cardclock.guide.intro" = "Instagram ग्रिड पर किसी भी दिशा में स्वाइप करें — हमेशा 4 बार: पहले 2 मान (A–K) कोड करते हैं, अंतिम 2 सूट। पुष्टि के लिए लंबे समय तक दबाएं।";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "मूल्य कोडिंग  (घड़ी की डायल)";
-"postpred.help.input.cardclock.guide.suits" = "सूट कोडिंग  (एक ही दिशा दो बार)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "उदाहरण";
-"postpred.help.input.cardclock.guide.ex.js" = "स्पेड्स का जैक: ←↑ (J मान) + ↑↑ (स्पेड्स)";
-"postpred.help.input.cardclock.guide.ex.3h" = "हार्ट्स का 3: →→ (3 मान) + →→ (हार्ट्स)";
-"postpred.help.input.cardclock.guide.ex.ad" = "डायमंड का इक्का: ↑→ (A मान) + ←← (डायमंड)";
-"postpred.help.input.cardclock.guide.longpress" = "4वें स्वाइप के बाद पुष्टि के लिए लंबे समय तक दबाएं। संबंधित कार्ड फोटो स्वचालित रूप से प्रकट होती है।";
+"postpred.help.input.cardclock.guide.ex.js" = "स्पेड्स का जैक: ↑← (J मान) + ↑ (स्पेड्स)";
+"postpred.help.input.cardclock.guide.ex.3h" = "हार्ट्स का 3: →→ (3 मान) + → (हार्ट्स)";
+"postpred.help.input.cardclock.guide.ex.ad" = "डायमंड का इक्का: ↑→ (A मान) + ← (डायमंड)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "अनन्य इनपुट";
 "inputs.interface.exclusive.body" = "सेट, बायो और नोट्स में एक समय पर केवल एक इनपुट इंटरफ़ेस चल सकता है। यह सक्रिय रहने पर बाकी लॉक रहते हैं:";
@@ -1276,7 +1285,7 @@ Sets, Bio aur Notes mein ek samay par keval ek interface prakar sakriy ho sakta 
 "input.guide.covertyping.title" = "कवर टाइपिंग";
 "input.guide.covertyping.compat" = "शब्द सेट";
 "input.guide.covertyping.body" = "आप Explore सर्च बार में दर्शक द्वारा चुने गए शब्द को गुप्त रूप से टाइप करते हैं। स्क्रीन पर एक अलग डिकॉय शब्द दिखाया जाता है — ऐप केवल वही पढ़ता है जो आप टाइप करते हैं।";
-"input.guide.covertyping.activate" = "Explore में सर्च बार टैप करें और गुप्त शब्द टाइप करें। डबल स्पेस इसे कन्फर्म करता है और रिवील ट्रिगर करता है।";
+"input.guide.covertyping.activate" = "Explore में सर्च बार टैप करें और गुप्त शब्द टाइप करें। एक बार Space दबाएं — Space फ़ील्ड से गायब हो जाएगा और एक हल्की वाइब्रेशन बताएगी कि शब्द कैप्चर हो गया और रिवील ट्रिगर हो गई।";
 "input.guide.ocr.title" = "कैमरा (OCR)";
 "input.guide.ocr.compat" = "शब्द · नंबर · कस्टम सेट";
 "input.guide.ocr.body" = "बैक कैमरा फ्रेम में टेक्स्ट — ताश के पत्ते, लिखे हुए शब्द, गणित के परिणाम, तारीखें — चुपचाप पढ़ता है और परिणाम सीधे सक्रिय सेट में भेजता है।";
@@ -1290,12 +1299,12 @@ Sets, Bio aur Notes mein ek samay par keval ek interface prakar sakriy ho sakta 
 "input.guide.clock.title" = "नंबर क्लॉक";
 "input.guide.clock.compat" = "नंबर · कस्टम सेट";
 "input.guide.clock.body" = "पूरी तरह काली स्क्रीन — जैसे फ़ोन बंद हो। स्वाइप जेस्चर दिशात्मक जोड़ों का उपयोग करके अंक 0-9 एनकोड करते हैं: प्रत्येक अंक को ठीक दो लगातार स्वाइप की आवश्यकता होती है (जैसे ↑↑ = 0, ↑→ = 1, →→ = 3)। आप किसी भी लंबाई की संख्या दर्ज कर सकते हैं।";
-"input.guide.clock.activate" = "जब सक्रिय सेट नंबर क्लॉक का उपयोग करता है तो काली स्क्रीन स्वचालित रूप से खुलती है। अंक-दर-अंक संख्या बनाने के लिए जोड़ों में स्वाइप करें। पुष्टि करने के लिए लंबे समय तक दबाएं।";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "अंक ग्रिड के समान एनकोडिंग: यदि आप ग्रिड जानते हैं, तो क्लॉक समान है। एकमात्र अंतर कोई दृश्यमान ग्रिड के बिना पूरी तरह काली स्क्रीन है।";
 "input.guide.cardclock.title" = "कार्ड क्लॉक";
 "input.guide.cardclock.compat" = "कार्ड सेट";
-"input.guide.cardclock.body" = "पूरी तरह काली स्क्रीन — नंबर क्लॉक जैसी, लेकिन संख्या के बजाय ताश का पत्ता कैप्चर करती है। ठीक 4 स्वाइप आवश्यक: पहले 2 मूल्य एनकोड करते हैं (A से K), अगले 2 सूट एनकोड करते हैं। सूट एनकोडिंग: एक ही दिशा दो बार (↑↑ = ♠, →→ = ♥, ↓↓ = ♣, ←← = ♦)।";
-"input.guide.cardclock.activate" = "मूल्य के लिए 1+2 स्वाइप करें, सूट के लिए 3+4 स्वाइप करें (एक ही दिशा दो बार)। प्रत्येक वैध जोड़े पर अलग वाइब्रेशन होती है। पुष्टि के लिए लंबे समय तक दबाएं।";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "पूर्ण मूल्य → दिशा तालिका सेट कॉन्फिगरेशन में कार्ड क्लॉक के अंतर्गत दिखाई गई है। केवल उन 4-5 पत्तों को याद करें जिनका आप सबसे अधिक उपयोग करते हैं।";
 "input.guide.lockscreen.title" = "नंबर लॉकस्क्रीन";
 "input.guide.lockscreen.compat" = "नंबर · कस्टम सेट";

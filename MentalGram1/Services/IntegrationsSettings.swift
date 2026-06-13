@@ -43,13 +43,14 @@ enum AutoInputMode: String, CaseIterable {
 /// only be in one mode at a time (numbers OR cards), so e.g. a Number Lockscreen and a
 /// Card Lockscreen cannot coexist.
 enum InterfaceKind: String, Hashable {
-    case ocr, numberClock, cardClock, numberLockscreen, cardLockscreen
+    case ocr, numberClock, cardClock, cardNumpad, numberLockscreen, cardLockscreen
 
     var displayName: String {
         switch self {
         case .ocr:              return "Camera (OCR)"
         case .numberClock:      return "Number Clock"
         case .cardClock:        return "Card Clock"
+        case .cardNumpad:       return "Numpad Card"
         case .numberLockscreen: return "Number Lockscreen"
         case .cardLockscreen:   return "Card Lockscreen"
         }
@@ -69,6 +70,7 @@ enum ApiSource: Int, CaseIterable {
     case numberClock      = 7   // interface: black screen swipe → number
     case cardClock        = 8   // interface: black screen swipe → card (value+suit)
     case cardLockscreen   = 9   // interface: fake lockscreen card code → card (value+suit)
+    case cardNumpad       = 10  // interface: black screen tap-to-show card selector
 
     var displayName: String {
         switch self {
@@ -82,6 +84,7 @@ enum ApiSource: Int, CaseIterable {
         case .numberClock:      return "Number Clock"
         case .cardClock:        return "Card Clock"
         case .cardLockscreen:   return "Card Lockscreen"
+        case .cardNumpad:       return "Numpad Card"
         }
     }
 
@@ -93,6 +96,7 @@ enum ApiSource: Int, CaseIterable {
         case .numberClock:      return .numberClock
         case .cardClock:        return .cardClock
         case .cardLockscreen:   return .cardLockscreen
+        case .cardNumpad:       return .cardNumpad
         default:                return nil
         }
     }
@@ -227,7 +231,7 @@ final class IntegrationsSettings: ObservableObject {
         case .custom2: return await loadCustomApiPayload(url: customApi2Url, field: customApi2Field)
         case .custom3: return await loadCustomApiPayload(url: customApi3Url, field: customApi3Field)
         // Interface-family sources are captured live at performance, never polled here.
-        case .ocr, .numberLockscreen, .cardLockscreen, .numberClock, .cardClock: return nil
+        case .ocr, .numberLockscreen, .cardLockscreen, .numberClock, .cardClock, .cardNumpad: return nil
         }
     }
 
@@ -240,6 +244,7 @@ final class IntegrationsSettings: ObservableObject {
     /// Fetches API-polled placeholder values in parallel (skips .ocr — that is event-driven).
     /// Pass `ocrValues` to inject already-captured OCR words into the correct slots.
     func fetchTemplatePlaceholders(for target: String, ocrValues: [String: String] = [:]) async -> [String: String] {
+        guard targetIsEnabled(target) else { return [:] }
         let s1 = target == "note" ? noteText1Source : bioText1Source
         let s2 = target == "note" ? noteText2Source : bioText2Source
         let s3 = target == "note" ? noteText3Source : bioText3Source
@@ -262,11 +267,13 @@ final class IntegrationsSettings: ObservableObject {
 
     /// Returns true if any placeholder source is configured for the given target (excluding .none).
     func hasTemplateSources(for target: String) -> Bool {
-        activeTokenSourceEntries.contains { $0.target == target && $0.source != .none }
+        guard targetIsEnabled(target) else { return false }
+        return activeTokenSourceEntries.contains { $0.target == target && $0.source != .none }
     }
 
     /// Returns which slot (1/2/3) is assigned to OCR for the given target, or nil if none.
     func ocrSlot(for target: String) -> Int? {
+        guard targetIsEnabled(target) else { return nil }
         let sources = target == "note"
             ? [noteText1Source, noteText2Source, noteText3Source]
             : [bioText1Source,  bioText2Source,  bioText3Source]
@@ -292,6 +299,7 @@ final class IntegrationsSettings: ObservableObject {
         case .ocr:        return .ocr
         case .clockInput: return .numberClock
         case .cardClock:  return .cardClock
+        case .numpadCard: return .cardNumpad
         case .lockscreen: return set.type == .card ? .cardLockscreen : .numberLockscreen
         default:          return nil
         }
@@ -307,7 +315,15 @@ final class IntegrationsSettings: ObservableObject {
     /// This prevents stale hidden slots (e.g. user removed {text2}) from keeping
     /// Lockscreen/Clock/OCR blocked forever.
     private var activeTokenSourceEntries: [(target: String, token: String, source: ApiSource)] {
-        allTokenSourceEntries.filter { tokenIsUsed(target: $0.target, token: $0.token) }
+        allTokenSourceEntries.filter {
+            targetIsEnabled($0.target) && tokenIsUsed(target: $0.target, token: $0.token)
+        }
+    }
+
+    private func targetIsEnabled(_ target: String) -> Bool {
+        let key = target == "note" ? "note_feature_enabled" : "bio_feature_enabled"
+        guard UserDefaults.standard.object(forKey: key) != nil else { return true }
+        return UserDefaults.standard.bool(forKey: key)
     }
 
     private func tokenIsUsed(target: String, token: String) -> Bool {
@@ -377,6 +393,18 @@ final class IntegrationsSettings: ObservableObject {
             locations.append("\(tLabel) \(e.token) (\(k.displayName))")
         }
         return locations
+    }
+
+    /// Human-readable Bio/Notes locations whose active template slots use one of
+    /// the requested interface kinds. Used by Performance entry gates such as
+    /// List Input, which cannot share the first fullscreen/private input screen.
+    func bioNoteInterfaceLocations(matching kinds: Set<InterfaceKind>) -> [String] {
+        let targetLabels = ["bio": "Biography", "note": "Notes"]
+        return activeTokenSourceEntries.compactMap { entry in
+            guard let kind = entry.source.interfaceKind, kinds.contains(kind) else { return nil }
+            let target = targetLabels[entry.target] ?? entry.target
+            return "\(target) \(entry.token) (\(kind.displayName))"
+        }
     }
 
     /// Clears all interface-family sources across bio and notes that conflict with

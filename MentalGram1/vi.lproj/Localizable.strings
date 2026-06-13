@@ -108,7 +108,7 @@
 "upload.slot" = "Ô \"%@\"";
 "upload.choose_source" = "Chọn nguồn ảnh cho \"%@\"";
 "upload.instantly_reveal" = "Bỏ lưu trữ và hiện ảnh ngay lập tức";
-"upload.tip.title" = "Mẹo tải lên";
+"upload.tip.title" = "Bạn có thể để máy tiếp tục tải lên";
 "upload.tip.overnight" = "Khi đang tải lên, màn hình luôn bật — điện thoại sẽ không khóa hay tắt. Cắm sạc và để chạy qua đêm để âm thầm điền 10 ngân hàng trở lên mà không cần chạm vào.";
 "upload.tip.background" = "Muốn dùng điện thoại? Bạn có thể chuyển sang ứng dụng khác tự do. Một thông báo bật lên sẽ đưa bạn trở lại màn hình này khi ảnh tiếp theo sẵn sàng để tải lên.";
 
@@ -650,7 +650,7 @@
 "limits.help.session.contact" = "Nếu phát hiện bot tiếp tục xảy ra, liên hệ nhà phát triển và chia sẻ nhật ký của bạn (Cài đặt → Xuất nhật ký). Điều này giúp phân tích vấn đề và cải thiện bảo vệ cho mọi người.";
 "limits.help.gauge.title" = "Ngân sách 55 hành động theo giờ của bạn";
 "limits.help.gauge.body" = "Instagram giới hạn mỗi ứng dụng kết nối ở 55 hành động mỗi giờ. Ngân sách hoạt động như cửa sổ 60 phút liên tục — mỗi hành động hết hạn đúng 60 phút sau khi thực hiện, vì vậy bộ đếm giảm tự động theo thời gian mà không cần đặt lại cứng.";
-"limits.help.gauge.cache" = "Lần đầu tiên bạn mở Trình diễn hoặc hồ sơ người theo dõi, ứng dụng liên hệ Instagram (dùng ngân sách). Mỗi lần truy cập lại tải ngay từ cache không tốn gì.";
+"limits.help.gauge.cache" = "Những lần vào lại nhanh dùng cache và có thể tốn 0. Sau cooldown an toàn, Trình diễn hoặc hồ sơ người theo dõi có thể làm mới lại và dùng ngân sách.";
 "limits.help.gauge.hardstop" = "Khi đạt giới hạn 55, ứng dụng tự động ngừng thực hiện bất kỳ yêu cầu Instagram nào nữa. Không có gì được gửi, không có gì được kích hoạt — nó chờ âm thầm cho đến khi ngân sách gia hạn. Bạn không cần làm gì.";
 "limits.help.gauge.zone.safe" = "An toàn (>20)";
 "limits.help.gauge.zone.low" = "Thấp (8–20)";
@@ -663,6 +663,7 @@
 "limits.help.table.row.performance" = "Mở Trình diễn (hồ sơ + bộ nhớ đệm nền)";
 "limits.help.table.row.followers" = "Danh sách người theo dõi";
 "limits.help.table.row.profile.new" = "Hồ sơ người theo dõi mới";
+"limits.help.table.row.profilepic" = "Đổi ảnh hồ sơ";
 "limits.help.table.row.sa" = "Đồng bộ & Lưu trữ (mỗi ảnh)";
 "limits.help.table.row.upload" = "Tải lên (mỗi ảnh)";
 "limits.help.table.row.autoupload" = "Tự động tải lên mỗi ảnh (tải + lưu trữ)";
@@ -670,12 +671,13 @@
 "limits.help.table.row.notebio" = "Thay đổi ghi chú hoặc tiểu sử";
 "limits.help.table.row.explore" = "Explore / Tìm kiếm";
 "limits.help.sa.auto" = "Sau buổi diễn đầy đủ với tiết lộ và truy cập hồ sơ, ứng dụng tự động thêm thời gian chờ ngắn trước Đồng bộ & Lưu trữ. Điều này bình thường — nó bảo vệ phiên của bạn.";
-"limits.help.table.cache.lost" = "Cache Trình diễn tải không tốn gì khi truy cập lại. Cache có thể bị mất khi: cài mới, chuyển tài khoản, xóa dữ liệu ứng dụng hoặc khôi phục sang thiết bị mới — trong những trường hợp đó lần vào đầu tiên tốn 3 hành động.";
+"limits.help.table.cache.lost" = "Mở Trình diễn thường tốn 3 hành động cho hồ sơ + bài đăng, hoặc tối đa 5 nếu cần tạo lại cache Reels/Tagged. Lần vào lại nhanh có thể tốn 0, nhưng các lần làm mới sau đó có thể dùng ngân sách lại. Highlights không tự động làm mới trong Trình diễn.";
+"limits.help.table.batch.note" = "Chi phí theo ảnh sẽ cộng dồn. Sync & Archive trên 4 ảnh = tổng 8 hành động. Tải 4 ảnh lên = tổng 9 (1 lệnh chuẩn bị + 2 mỗi ảnh). Ảnh hồ sơ hiển thị 1 hành động ngân sách, dù Instagram cũng nhận lệnh tải ảnh lên.";
 "limits.help.profiles.title" = "Truy cập hồ sơ — hành động tốn kém nhất";
-"limits.help.profiles.body" = "Mở hồ sơ người theo dõi mới tốn 4–5 hành động mỗi lần. Lần truy cập thứ hai cùng hồ sơ là miễn phí (tải từ cache). Đây là lý do tại sao mở 3–4 hồ sơ khác nhau nhanh chóng có thể cạn kiệt ngân sách và kích hoạt phát hiện bot.";
+"limits.help.profiles.body" = "Mở hồ sơ người theo dõi mới thường tốn 3–4 hành động. Lần truy cập lại nhanh cùng hồ sơ tải từ cache, nhưng lần làm mới sau đó có thể dùng ngân sách lại. Đây là lý do tại sao mở 3–4 hồ sơ khác nhau nhanh chóng có thể cạn kiệt ngân sách và kích hoạt phát hiện bot.";
 "limits.help.profiles.max" = "Khuyến nghị: mở tối đa 2 hồ sơ mới mỗi phiên. Tránh truy cập hồ sơ mới ngay trước Đồng bộ & Lưu trữ.";
 "limits.help.reddot.title" = "Chấm đỏ";
-"limits.help.reddot.body" = "Khi còn ít hơn 8 hành động, một chấm đỏ nhỏ xuất hiện trên biểu tượng trong tiêu đề danh sách người theo dõi. Chỉ bạn thấy nó — không hiển thị trong buổi diễn.";
+"limits.help.reddot.body" = "Khi còn ít hơn 8 hành động, một chấm đỏ nhỏ xuất hiện trên các biểu tượng điều khiển riêng tư như tiêu đề danh sách người theo dõi hoặc máy bay giấy trong Trình diễn. Nó cảnh báo bạn trước khi dùng thêm ngân sách.";
 "limits.help.reddot.block" = "Nếu bạn cố mở hồ sơ mới khi ngân sách ở mức nguy cấp, ứng dụng dừng hành động với rung mạnh. Không có cuộc gọi API nào được thực hiện — phiên của bạn vẫn an toàn.";
 "limits.help.reddot.location.followers" = "Danh sách người theo dõi";
 "limits.help.reddot.location.performance" = "Biểu tượng máy bay giấy (Trình diễn)";
@@ -739,20 +741,20 @@
 
 // MARK: - Post Prediction Help — Swipe Blind Input
 "postpred.help.input.clockinput.label" = "VUỐT MÙ";
-"postpred.help.input.clockinput.intro" = "Khi Performance mở ra, màn hình chuyển hoàn toàn sang **màu đen** — giả lập điện thoại đã tắt. Vuốt để nhập bao nhiêu chữ số tùy ý, rồi nhấn giữ để xác nhận. Khán giả không thấy gì.";
+"postpred.help.input.clockinput.intro" = "When Performance opens the screen goes completely **black** — simulating the phone is off. Swipe to enter as many digits as you need, then stop swiping for 3 seconds to confirm automatically. The spectator sees nothing.";
 "postpred.help.input.clockinput.encoding.title" = "MÃ HÓA CHỮ SỐ  (mỗi chữ số = 2 lần vuốt)";
 "postpred.help.input.clockinput.examples.title" = "VÍ DỤ";
-"postpred.help.input.clockinput.example5.note" = "Một chữ số 5 — 2 lần vuốt, rồi nhấn giữ để xác nhận";
-"postpred.help.input.clockinput.example37.note" = "Hai chữ số: 3 (→→) rồi 7 (↓←) — 4 lần vuốt, rồi nhấn giữ";
-"postpred.help.input.clockinput.example100.note" = "Ba chữ số: 3 (→→), 6 (↓↓), 9 (←←) — 6 lần vuốt, rồi nhấn giữ";
+"postpred.help.input.clockinput.example5.note" = "Single digit 5 — 2 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example37.note" = "Two digits: 3 (→→), then 7 (↓←) — 4 swipes, then wait 3 seconds without swiping";
+"postpred.help.input.clockinput.example100.note" = "Three digits: 3 (→→), 6 (↓↓), 9 (←←) — 6 swipes, then wait 3 seconds without swiping";
 "postpred.help.input.clockinput.haptic.title" = "PHẢN HỒI RUNG";
 "postpred.help.input.clockinput.haptic.light" = "Rung nhẹ — mỗi lần vuốt được ghi nhận";
 "postpred.help.input.clockinput.haptic.medium" = "Rung vừa — hoàn thành một chữ số (2 lần vuốt)";
-"postpred.help.input.clockinput.haptic.success" = "Rung mạnh đôi — số đã xác nhận (nhấn giữ lần 1)";
+"postpred.help.input.clockinput.haptic.success" = "Double strong vibration — number committed after 3 seconds of no swipes";
 "postpred.help.input.clockinput.haptic.error" = "Rung lỗi + màn hình chớp — cặp không hợp lệ; lần vuốt 2 trở thành lần 1 của cặp tiếp theo";
-"postpred.help.input.clockinput.dismiss" = "**Nhấn giữ lần 1** (1 giây) xác nhận các chữ số và kích hoạt tiết lộ. **Nhấn giữ lần 2** đóng màn hình đen — hồ sơ Instagram giả đã cập nhật hiện ngay lập tức.";
+"postpred.help.input.clockinput.dismiss" = "After 3 seconds without another swipe, Vault commits the digits and triggers the reveal while keeping the black screen visible. Tap anywhere to dismiss it — the updated fake Instagram profile appears instantly.";
 
-"set.input.clockinput.help" = "Hiển thị màn hình đen hoàn toàn khi mở Performance. Vuốt theo cặp để nhập bao nhiêu chữ số tùy ý, rồi nhấn giữ để xác nhận. Nhấn giữ lần hai để đóng màn hình.";
+"set.input.clockinput.help" = "Shows a completely black screen when Performance opens. Swipe pairs to enter any number of digits, then stop swiping for 3 seconds to confirm. The black screen stays visible until you tap anywhere to dismiss it.";
 "set.input.clockinput.noconfig" = "Không cần cấu hình.";
 
 // MARK: - Cooldown Anti-Bot Banner
@@ -769,22 +771,22 @@
 "postpred.help.input.grid.encoding.title" = "Mã hóa chữ số  (giống Clock Input)";
 
 // MARK: - Card Clock Input config
-"set.input.cardclock.help" = "Trong Performance, vuốt theo bất kỳ hướng nào trên lưới. Luôn 4 vuốt: cặp đầu = giá trị, cặp sau = chất. Nhấn giữ để xác nhận.";
+"set.input.cardclock.help" = "In Performance, swipe on the black screen: 2 swipes for the card value (A=↑→ … 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓) + 1 swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). Stop swiping for 3 seconds to confirm.";
 "set.input.cardclock.values" = "Mã hóa giá trị  (mặt đồng hồ)";
-"set.input.cardclock.suits" = "Mã hóa chất  (cùng hướng hai lần)";
-"set.input.cardclock.longpress" = "Nhấn giữ bất kỳ vị trí nào trên lưới để xác nhận.";
+"set.input.cardclock.suits" = "Suit encoding  (single swipe)";
+"set.input.cardclock.longpress" = "After the last swipe, wait 3 seconds without swiping to confirm. Tap anywhere after confirmation to dismiss the black screen.";
 "set.input.cardclock.noconfig" = "Không cần cấu hình.";
 
 // MARK: - Card Clock user guide
 "postpred.help.input.cardclock.label" = "ĐỒNG HỒ BÀI";
-"postpred.help.input.cardclock.guide.intro" = "Vuốt theo bất kỳ hướng nào trên lưới Instagram — luôn 4 vuốt: 2 đầu mã hóa giá trị (A–K), 2 cuối mã hóa chất. Nhấn giữ để xác nhận.";
+"postpred.help.input.cardclock.guide.intro" = "Swipe on the black screen — 3 swipes total: first 2 encode the card value (A–K clock face), 3rd encodes the suit with a single swipe. Stop swiping for 3 seconds to confirm and trigger the reveal.";
 "postpred.help.input.cardclock.guide.values" = "MÃ HÓA GIÁ TRỊ  (mặt đồng hồ)";
-"postpred.help.input.cardclock.guide.suits" = "MÃ HÓA CHẤT  (cùng hướng hai lần)";
+"postpred.help.input.cardclock.guide.suits" = "SUIT ENCODING  (single swipe)";
 "postpred.help.input.cardclock.guide.examples" = "VÍ DỤ";
-"postpred.help.input.cardclock.guide.ex.js" = "J Bích: ←↑ (giá trị J) + ↑↑ (bích)";
-"postpred.help.input.cardclock.guide.ex.3h" = "3 Cơ: →→ (giá trị 3) + →→ (cơ)";
-"postpred.help.input.cardclock.guide.ex.ad" = "A Rô: ↑→ (giá trị A) + ←← (rô)";
-"postpred.help.input.cardclock.guide.longpress" = "Sau lần vuốt thứ 4, nhấn giữ để xác nhận. Ảnh lá bài tương ứng sẽ tự động được hiển thị.";
+"postpred.help.input.cardclock.guide.ex.js" = "J Bích: ↑← (giá trị J) + ↑ (bích)";
+"postpred.help.input.cardclock.guide.ex.3h" = "3 Cơ: →→ (giá trị 3) + → (cơ)";
+"postpred.help.input.cardclock.guide.ex.ad" = "A Rô: ↑→ (giá trị A) + ← (rô)";
+"postpred.help.input.cardclock.guide.longpress" = "After the 3rd swipe, wait 3 seconds without swiping. Vault confirms automatically and unarchives the matching card photo. The black screen stays visible until you tap anywhere.";
 
 "inputs.interface.exclusive.title" = "Nhập độc quyền";
 "inputs.interface.exclusive.body" = "Chỉ một giao diện nhập có thể hoạt động cùng lúc trên Set, Tiểu sử và Ghi chú. Các giao diện khác bị khoá khi giao diện này đang hoạt động:";
@@ -827,7 +829,7 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "input.guide.covertyping.title" = "Gõ Ẩn";
 "input.guide.covertyping.compat" = "Bộ từ";
 "input.guide.covertyping.body" = "Bạn bí mật gõ từ mà khán giả chọn vào thanh tìm kiếm Khám phá. Một từ mồi khác được hiển thị trên màn hình — ứng dụng chỉ đọc những gì bạn gõ, không phải những gì được hiển thị.";
-"input.guide.covertyping.activate" = "Nhấn vào thanh tìm kiếm trong Khám phá và gõ từ bí mật. Khoảng trắng đôi xác nhận và kích hoạt tiết lộ.";
+"input.guide.covertyping.activate" = "Nhấn vào thanh tìm kiếm trong Khám phá và gõ từ bí mật. Nhấn Dấu cách một lần để xác nhận — dấu cách biến mất khỏi trường và một rung động nhẹ xác nhận từ đã được ghi lại và tiết lộ được kích hoạt.";
 "input.guide.ocr.title" = "Camera (OCR)";
 "input.guide.ocr.compat" = "Bộ Từ · Số · Tùy chỉnh";
 "input.guide.ocr.body" = "Camera sau lặng lẽ đọc văn bản trong khung — quân bài, từ viết, kết quả tính toán, ngày tháng — và gửi kết quả trực tiếp đến bộ đang hoạt động. Không có gì xuất hiện trên màn hình khi đang quét.";
@@ -841,12 +843,12 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "input.guide.clock.title" = "Đồng Hồ Số";
 "input.guide.clock.compat" = "Bộ Số · Tùy chỉnh";
 "input.guide.clock.body" = "Màn hình hoàn toàn đen — như thể điện thoại đang tắt. Các cử chỉ vuốt mã hóa các chữ số 0-9 sử dụng các cặp hướng: mỗi chữ số cần chính xác hai lần vuốt liên tiếp (ví dụ ↑↑ = 0, ↑→ = 1, →→ = 3). Bạn có thể nhập số có độ dài bất kỳ.";
-"input.guide.clock.activate" = "Màn hình đen tự động mở khi bộ đang hoạt động sử dụng Đồng Hồ Số. Vuốt theo cặp để xây dựng số từng chữ số. Nhấn giữ để xác nhận.";
+"input.guide.clock.activate" = "The black screen opens automatically when the active set uses Number Clock. Swipe pairs to build your number digit by digit — each completed pair gives a short vibration. Stop swiping for 3 seconds to confirm and fire the reveal. Tap anywhere after confirmation to dismiss the black screen.";
 "input.guide.clock.tip" = "Mã hóa giống Lưới Chữ Số: nếu bạn biết lưới, đồng hồ giống hệt. Sự khác biệt duy nhất là màn hình hoàn toàn đen không có lưới hiển thị.";
 "input.guide.cardclock.title" = "Đồng Hồ Bài";
 "input.guide.cardclock.compat" = "Bộ Bài";
-"input.guide.cardclock.body" = "Màn hình hoàn toàn đen — giống Đồng Hồ Số nhưng thu thập quân bài thay vì số. Cần đúng 4 lần vuốt: 2 lần đầu mã hóa giá trị (A đến K), 2 lần tiếp theo mã hóa chất. Mã hóa chất: cùng hướng hai lần (↑↑ = ♠, →→ = ♥, ↓↓ = ♣, ←← = ♦).";
-"input.guide.cardclock.activate" = "Vuốt 1+2 cho giá trị, vuốt 3+4 cho chất (cùng hướng hai lần). Mỗi cặp hợp lệ tạo rung riêng biệt. Nhấn giữ để xác nhận. Nhấp nháy lỗi báo hiệu các cặp không hợp lệ.";
+"input.guide.cardclock.body" = "A completely black screen — same look as Number Clock, but captures a playing card instead of a number. Exactly 3 swipes are required: the first 2 encode the card value using a clock-face layout (A=↑→ 2=→↑ 3=→→ 4=→↓ 5=↓→ 6=↓↓ 7=↓← 8=←↓ 9=←← 10=←↑ J=↑← Q=↑↑ K=↑↓), the 3rd is a single swipe for the suit (↑=♠ →=♥ ↓=♣ ←=♦). The captured card can reveal a card prediction or fill Notes/Bio placeholders with the localized card name.";
+"input.guide.cardclock.activate" = "Swipe 1 + 2 for the value, swipe 3 for the suit (single directional swipe). Each completed value pair gives a distinct vibration; the 3rd swipe triggers a strong vibration for the completed card. Stop swiping for 3 seconds to confirm the reveal automatically. Tap anywhere after confirmation to dismiss the black screen. An error flash (brief dim) signals an invalid value pair so you can retry.";
 "input.guide.cardclock.tip" = "Bảng đầy đủ giá trị → hướng được hiển thị trong cấu hình bộ dưới Đồng Hồ Bài. Chỉ cần ghi nhớ 4-5 quân bài bạn dùng thường xuyên nhất.";
 "input.guide.lockscreen.title" = "Màn Hình Khóa Số";
 "input.guide.lockscreen.compat" = "Bộ Số · Tùy chỉnh";
@@ -874,3 +876,10 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Khi khán giả mở Khám phá, reel bạn đã chọn trước xuất hiện đúng ở vị trí tương ứng với chữ số được thu thập — không thể phân biệt với feed Khám phá thực sự.";
 "postpred.help.howitworks.archive_reason" = "Instagram không cho phép tải một ảnh mới lên rồi đặt nó thành ngày cũ. Vault giải quyết bằng cách tải ảnh dự đoán lên trước và lưu trữ ngay lập tức. Instagram vẫn giữ ngày tải lên ban đầu và vị trí trong lưới, nên khi dự đoán được bỏ lưu trữ sau đó, nó trông như một bài đăng cũ đã luôn ở đó. Việc tải lên và lưu trữ diễn ra tự động và ngay lập tức, vì vậy khán giả không bao giờ thấy các ảnh chuẩn bị trên hồ sơ thật của bạn.";
+"set.input.numpadcard.help" = "Performance opens on a black screen. Tap anywhere to show an elegant card pad, choose the value and suit, and the pad disappears. The localized card name can fill Notes/Bio and an active Playing Cards set reveals that card.";
+"set.input.numpadcard.noconfig" = "No configuration required.";
+"input.guide.numpadcard.title" = "Numpad Card";
+"input.guide.numpadcard.compat" = "Card sets · Notes · Bio";
+"input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
+"input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
+"input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";

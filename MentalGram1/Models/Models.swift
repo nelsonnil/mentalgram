@@ -372,6 +372,17 @@ enum AlphabetType: String, Codable, CaseIterable {
 
     var count: Int { characters.count }
 
+    /// Alphabets that are read right-to-left. Used by word reveals to preserve
+    /// the visual reading direction when Instagram places newly unarchived posts first.
+    var isRightToLeft: Bool {
+        switch self {
+        case .arabic, .hebrew, .persian:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Find the index of a character in this alphabet (case-insensitive for latin)
     func indexFor(_ char: String) -> Int? {
         let upper = char.uppercased()
@@ -386,6 +397,7 @@ enum SetType: String, Codable, CaseIterable {
     case number = "number"
     case custom = "custom"
     case card   = "card"
+    case list   = "list"
 
     // 52 labels ordered by suit: A♠ 2♠ … K♠ | A♥ … K♥ | A♣ … K♣ | A♦ … K♦
     static let cardSlotLabels: [String] = {
@@ -400,6 +412,7 @@ enum SetType: String, Codable, CaseIterable {
         case .number: return "number"
         case .custom: return "square.grid.2x2"
         case .card:   return "suit.spade.fill"
+        case .list:   return "list.bullet.rectangle.portrait.fill"
         }
     }
     
@@ -409,6 +422,7 @@ enum SetType: String, Codable, CaseIterable {
         case .number: return String(localized: "Number Reveal")
         case .custom: return String(localized: "Custom Set")
         case .card:   return String(localized: "Playing Cards")
+        case .list:   return String(localized: "List Set")
         }
     }
     
@@ -418,6 +432,7 @@ enum SetType: String, Codable, CaseIterable {
         case .number: return String(localized: "Multiple banks of digits (0-9)")
         case .custom: return String(localized: "Single bank of custom images")
         case .card:   return String(localized: "52-card deck (A–K × ♠♥♣♦)")
+        case .list:   return String(localized: "Tap a named list item to reveal its image")
         }
     }
     
@@ -428,6 +443,7 @@ enum SetType: String, Codable, CaseIterable {
         case .word:   return alphabet?.count ?? 26
         case .custom: return 0
         case .card:   return 52
+        case .list:   return 0
         }
     }
     
@@ -438,6 +454,7 @@ enum SetType: String, Codable, CaseIterable {
         case .word:   return alphabet?.characters ?? AlphabetType.latin.characters
         case .custom: return []
         case .card:   return SetType.cardSlotLabels
+        case .list:   return []
         }
     }
 
@@ -449,6 +466,44 @@ enum SetType: String, Codable, CaseIterable {
         case .number: return "slot"
         case .custom: return "slot"
         case .card:   return "card"
+        case .list:   return "slot"
+        }
+    }
+}
+
+enum ListSetColumns: String, Codable, CaseIterable, Identifiable {
+    case automatic = "automatic"
+    case two = "two"
+    case three = "three"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .automatic: return "Auto"
+        case .two:       return "2 Columns"
+        case .three:     return "3 Columns"
+        }
+    }
+}
+
+enum ListSetButtonSize: String, Codable, CaseIterable, Identifiable {
+    case normal = "normal"
+    case large = "large"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .normal: return "Normal"
+        case .large:  return "Large"
+        }
+    }
+
+    var minHeight: CGFloat {
+        switch self {
+        case .normal: return 54
+        case .large:  return 68
         }
     }
 }
@@ -504,6 +559,13 @@ struct PhotoSet: Identifiable, Codable {
     var targetBankCount: Int?  // How many banks the user requested at creation time
     /// Per-set input method. Nil = use the type default.
     var inputMethod: InputMethod?
+    /// Visible labels for List Set slots. Internal symbols stay numeric ("1", "2"...).
+    var listItems: [String]? = nil
+    var listColumns: ListSetColumns? = nil
+    var listButtonSize: ListSetButtonSize? = nil
+    /// Slot numbers after which the List Set inserts a visual group separator.
+    /// Example: [10, 30] creates groups 1...10, 11...30, 31...end.
+    var listSeparators: [Int]? = nil
 
     /// The effective input method: explicit selection, or the type's default.
     var resolvedInputMethod: InputMethod {
@@ -525,7 +587,31 @@ struct PhotoSet: Identifiable, Codable {
     
     /// Labels for each slot
     var slotLabels: [String] {
-        type.slotLabels(alphabet: selectedAlphabet)
+        if type == .list {
+            let count = max(listItems?.count ?? 0, photos.compactMap { Int($0.symbol) }.max() ?? 0)
+            return count > 0 ? (1...count).map { "\($0)" } : []
+        }
+        return type.slotLabels(alphabet: selectedAlphabet)
+    }
+
+    var listDisplayLabels: [String] {
+        guard type == .list else { return slotLabels }
+        let symbols = slotLabels
+        let labels = listItems ?? []
+        return symbols.enumerated().map { index, symbol in
+            let label = index < labels.count ? labels[index].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            return label.isEmpty ? "Item \(symbol)" : label
+        }
+    }
+
+    var resolvedListColumns: ListSetColumns { listColumns ?? .automatic }
+    var resolvedListButtonSize: ListSetButtonSize { listButtonSize ?? .normal }
+    var resolvedListSeparators: [Int] {
+        guard type == .list else { return [] }
+        let count = listDisplayLabels.count
+        return Array(Set(listSeparators ?? []))
+            .filter { $0 > 0 && $0 < count }
+            .sorted()
     }
 }
 
@@ -722,6 +808,8 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
     case lockscreen  = "lockscreen"   // Number/Custom/Card: fake lockscreen entry
     case clockInput  = "clockInput"   // Number/Custom: black screen swipe digit entry
     case cardClock   = "cardClock"    // Card: clock-face swipe pairs (4 swipes → value+suit)
+    case numpadCard  = "numpadCard"   // Card: black screen tap-to-show value+suit selector
+    case listInput   = "listInput"    // List: visible private list selection
 
     var id: String { rawValue }
 
@@ -734,6 +822,8 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .lockscreen:  return "Lockscreen"
         case .clockInput:  return "Clock Input"
         case .cardClock:   return "Card Clock"
+        case .numpadCard:  return "Numpad Card"
+        case .listInput:   return "List Input"
         }
     }
 
@@ -746,6 +836,8 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .lockscreen:  return "Fake lock screen for digit or card entry"
         case .clockInput:  return "Black screen swipe encoding for digit entry"
         case .cardClock:   return "4 directional swipes encode value + suit"
+        case .numpadCard:  return "Black screen tap selector for value + suit"
+        case .listInput:   return "Tap a private list item to reveal its linked media"
         }
     }
 
@@ -758,6 +850,8 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .lockscreen:  return "lock.fill"
         case .clockInput:  return "hand.draw.fill"
         case .cardClock:   return "clock.fill"
+        case .numpadCard:  return "rectangle.grid.3x2.fill"
+        case .listInput:   return "list.bullet.rectangle.portrait.fill"
         }
     }
 
@@ -777,6 +871,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .lockscreen: return .numberLockscreen
         case .clockInput: return .numberClock
         case .cardClock:  return .cardClock
+        case .numpadCard: return .cardNumpad
         default:          return nil
         }
     }
@@ -787,7 +882,8 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .word:   return [.coverTyping, .api, .ocr]
         case .number: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
         case .custom: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
-        case .card:   return [.cardClock, .lockscreen]
+        case .card:   return [.cardClock, .numpadCard, .lockscreen]
+        case .list:   return [.listInput]
         }
     }
 
@@ -798,6 +894,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .number: return .digitGrid
         case .custom: return .digitGrid
         case .card:   return .cardClock
+        case .list:   return .listInput
         }
     }
 }

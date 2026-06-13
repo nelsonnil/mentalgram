@@ -201,6 +201,19 @@ struct PostPredictionHelpView: View {
                     PPBadgeItem(label: "URL",         color: Color(hex: "FB923C"))
                 ]
             )
+
+            PPSetTypeRow(
+                icon: "list.bullet.rectangle.portrait.fill", color: Color(hex: "64D2FF"),
+                title: "List Set",
+                description: "Create a private list of named choices. Each item is linked to one photo or video. Performance opens on a black screen; tap once to show the private list, then tap an item to reveal its media.",
+                badges: [
+                    PPBadgeItem(label: "List Input", color: Color(hex: "64D2FF")),
+                    PPBadgeItem(label: "TXT/CSV",    color: Color(hex: "A78BFA")),
+                    PPBadgeItem(label: "URL",        color: Color(hex: "FB923C"))
+                ]
+            )
+
+            PPListSetGuide()
         }
     }
 
@@ -225,7 +238,14 @@ struct PostPredictionHelpView: View {
             PPInputMethodSummary(
                 title: "Playing Card predictions",
                 color: Color(hex: "16A34A"),
-                methods: ["Card Clock", "Card Lockscreen", "Camera (OCR)", "URL Scheme"]
+                methods: ["Card Clock", "Numpad Card", "Card Lockscreen", "Camera (OCR)", "URL Scheme"]
+            )
+            PPInfoBox(text: "For Playing Cards, Numpad Card is the visual black-screen option: Performance opens black, you tap to show the private card pad, choose value + suit, and Vault closes the pad to reveal the fake Instagram profile with the selected card.")
+
+            PPInputMethodSummary(
+                title: "List Set predictions",
+                color: Color(hex: "64D2FF"),
+                methods: ["List Input", "URL Scheme"]
             )
 
             HStack(alignment: .top, spacing: 10) {
@@ -233,7 +253,7 @@ struct PostPredictionHelpView: View {
                     .font(.system(size: 13))
                     .foregroundColor(Color(hex: "FF9F0A"))
                     .padding(.top, 1)
-                Text("Important: confirmation depends on the input. Digit Grid and Card Clock can be committed from the Instagram grid, while Cover Typing confirms with Space, OCR confirms automatically, and API/URL reveals when the external value arrives.")
+                Text("Important: confirmation depends on the input. Digit Grid confirms from the Instagram grid, Number/Card Clock confirm automatically after 3 seconds without another swipe, Numpad Card confirms after choosing value + suit, Cover Typing confirms with Space, OCR confirms automatically, API/URL reveals when the external value arrives, and List Input first opens black, then reveals after you tap a private list item.")
                     .font(VaultTheme.Typography.caption())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -293,6 +313,8 @@ struct PostPredictionHelpView: View {
                     )
                 ]
             )
+
+            PPOrangeRingConfirmationBox()
         }
     }
 
@@ -308,6 +330,7 @@ struct PostPredictionHelpView: View {
             HStack(spacing: 8) {
                 PPBadge(item: PPBadgeItem(label: "Playing Cards", color: Color(hex: "16A34A")))
                 PPBadge(item: PPBadgeItem(label: "Custom",        color: Color(hex: "F97316")))
+                PPBadge(item: PPBadgeItem(label: "List Set",      color: Color(hex: "64D2FF")))
             }
 
             // Step 1
@@ -608,6 +631,183 @@ private struct PPInputMethodSummary: View {
     }
 }
 
+private struct PPListSetGuide: View {
+    private let accent = Color(hex: "64D2FF")
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            HStack(spacing: 8) {
+                Image(systemName: "list.bullet.rectangle.portrait.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(accent)
+                Text("List Set: private selection screen")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+            }
+
+            Text("Use List Set when the prediction is chosen from a visible list instead of being encoded with swipes, OCR, API or cards. The spectator never sees this list: Performance first opens on a clean black screen, then you tap anywhere to display the private list.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            PPListSetVisualExample()
+
+            VStack(alignment: .leading, spacing: 10) {
+                PPListSetStep(number: 1, color: accent, title: "Create the list", bodyText: "Create a new Set and choose List Set. Pick the number of items you need, for example 50 or 100. The app creates default labels like Item 1, Item 2, Item 3, so the list can be previewed before importing any file.")
+                PPListSetStep(number: 2, color: accent, title: "Rename or import", bodyText: "You can long-press a slot to rename one item manually, or import TXT/CSV. TXT uses one line per item. CSV uses the first column of each row. Empty lines are ignored.")
+                PPListSetStep(number: 3, color: accent, title: "Choose the layout", bodyText: "Use the Performance Preview to test Auto, 2 columns or 3 columns, and Normal or Large buttons. This helps decide whether a big list is readable before using it live.")
+                PPListSetStep(number: 4, color: accent, title: "Add media and upload", bodyText: "Open Upload to Instagram from the set card. Add one photo or video to each list item, then upload and archive the set exactly like other Post Prediction sets.")
+                PPListSetStep(number: 5, color: accent, title: "Perform", bodyText: "Set the List Set as active. When you enter Performance, the screen is completely black. Tap anywhere to show the private list, then tap the chosen item once. The list closes immediately and the linked media is revealed on the fake Instagram profile.")
+                PPListSetStep(number: 6, color: accent, title: "Wait for confirmation", bodyText: "After the real Instagram unarchive succeeds, wait for the double vibration and the blinking orange ring on the profile picture. That means the media is live on real Instagram, not only visible in the fake grid.")
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color(hex: "FF9F0A"))
+                    .padding(.top, 1)
+                Text("Compatibility: List Input uses its own private fullscreen interface. It cannot be used at the same time as Number/Card Clock or Number/Card Lockscreen in Biography or Notes. If there is a conflict, Performance shows a popup and asks you to disable one of the inputs.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(Color(hex: "FF9F0A").opacity(0.07))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color(hex: "FF9F0A").opacity(0.25), lineWidth: 1)
+            )
+        }
+        .padding(VaultTheme.Spacing.md)
+        .background(accent.opacity(0.05))
+        .cornerRadius(VaultTheme.CornerRadius.md)
+        .overlay(
+            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                .stroke(accent.opacity(0.22), lineWidth: 1)
+        )
+    }
+}
+
+private struct PPListSetVisualExample: View {
+    private let groups: [(title: String, items: [String])] = [
+        ("HOROSCOPE", ["Aries", "Leo", "Virgo", "Scorpio", "Pisces", "Gemini"]),
+        ("FAMOUS", ["Messi", "Taylor", "Elvis", "Madonna", "Jordan", "Ronaldo"]),
+        ("CARDS", ["A♠", "7♥", "K♦", "Q♣", "10♠", "3♥"])
+    ]
+
+    private let colors = [Color(hex: "0A84FF"), Color(hex: "30D158"), Color(hex: "FF9500")]
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 7), count: 3)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(hex: "64D2FF"))
+                Text("Example private list")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+                Text("3 columns + separators")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "64D2FF"))
+            }
+
+            VStack(spacing: 12) {
+                ForEach(Array(groups.enumerated()), id: \.offset) { groupIndex, group in
+                    if groupIndex > 0 {
+                        HStack {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.22))
+                                .frame(height: 1)
+                            Text(group.title)
+                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.55))
+                            Rectangle()
+                                .fill(Color.white.opacity(0.22))
+                                .frame(height: 1)
+                        }
+                    } else {
+                        HStack {
+                            Text(group.title)
+                                .font(.system(size: 9, weight: .black, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.55))
+                            Rectangle()
+                                .fill(Color.white.opacity(0.22))
+                                .frame(height: 1)
+                        }
+                    }
+
+                    LazyVGrid(columns: columns, spacing: 7) {
+                        ForEach(Array(group.items.enumerated()), id: \.offset) { index, item in
+                            let color = colors[index % colors.count]
+                            Text(item)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 34)
+                                .background(color.opacity(0.30))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 9)
+                                        .stroke(color.opacity(0.78), lineWidth: 1)
+                                )
+                                .cornerRadius(9)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.black)
+            .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color(hex: "64D2FF").opacity(0.22), lineWidth: 1)
+            )
+
+            Text("Each button can be linked to a different uploaded photo or video. Separators make big lists easier to scan during the secret selection.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(VaultTheme.Colors.backgroundSecondary)
+        .cornerRadius(12)
+    }
+}
+
+private struct PPListSetStep: View {
+    let number: Int
+    let color: Color
+    let title: String
+    let bodyText: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.16))
+                    .frame(width: 26, height: 26)
+                Text("\(number)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(color)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Text(bodyText)
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 // MARK: - PPGridCaseRow (one grid sub-case inside the Grid Input block)
 
 private struct PPGridCaseRow: View {
@@ -868,6 +1068,63 @@ private struct PPTipRow: View {
                 .font(VaultTheme.Typography.body())
                 .foregroundColor(VaultTheme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct PPOrangeRingConfirmationBox: View {
+    @State private var blink = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                Color(red: 0.99, green: 0.78, blue: 0.12),
+                                Color(red: 0.99, green: 0.42, blue: 0.13),
+                                Color(red: 0.90, green: 0.14, blue: 0.49),
+                                Color(red: 0.99, green: 0.78, blue: 0.12)
+                            ],
+                            center: .center
+                        ),
+                        lineWidth: blink ? 4 : 2
+                    )
+                    .frame(width: blink ? 50 : 44, height: blink ? 50 : 44)
+                    .opacity(blink ? 1.0 : 0.45)
+                Circle()
+                    .fill(VaultTheme.Colors.backgroundSecondary)
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.85))
+                    )
+            }
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Confirmation signal")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Color(hex: "FF9F0A"))
+                Text("For Post Prediction, wait for the double vibration and the blinking orange ring on the profile picture. That means the photos are already unarchived on real Instagram, not only inserted in the fake grid.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(Color(hex: "FF9F0A").opacity(0.10))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(hex: "FF9F0A").opacity(0.30), lineWidth: 1)
+        )
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true)) {
+                blink = true
+            }
         }
     }
 }
@@ -2241,22 +2498,22 @@ private struct PPBanksDemo: View {
 }
 
 // MARK: - ── PPCardClockDescription ───────────────────────────────────────────
-// Explains the Card Clock input: 4 directional swipes encode value + suit of
-// any playing card (A–K × ♠♥♣♦). Long-press on the grid to confirm.
+// Explains the Card Clock input: 3 directional swipes encode value + suit of
+// any playing card (A–K × ♠♥♣♦). A 3-second pause confirms automatically.
 
 private struct PPCardClockDescription: View {
 
     private let accent = Color(hex: "16A34A")
 
     private let valueRows: [[(String, String)]] = [
-        [("A","↑→"),("2","→↑"),("3","→→"),("4","→↓"),("5","↓→"),("6","↓↓")],
-        [("7","↓←"),("8","←↓"),("9","←←"),("J","←↑"),("Q","↑←"),("K","↑↑")]
+        [("A","↑→"),("2","→↑"),("3","→→"),("4","→↓"),("5","↓→"),("6","↓↓"),("7","↓←")],
+        [("8","←↓"),("9","←←"),("10","←↑"),("J","↑←"),("Q","↑↑"),("K","↑↓")]
     ]
     private let suits: [(String, String, Color)] = [
-        ("♠","↑↑", Color(UIColor.label)),
-        ("♥","→→", .red),
-        ("♣","↓↓", Color(UIColor.label)),
-        ("♦","←←", .red)
+        ("♠","↑", Color(UIColor.label)),
+        ("♥","→", .red),
+        ("♣","↓", Color(UIColor.label)),
+        ("♦","←", .red)
     ]
 
     var body: some View {
@@ -2336,11 +2593,11 @@ private struct PPCardClockDescription: View {
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(accent).tracking(0.5)
 
-                PPSwipeExample(number: "J♠", swipes: "←↑  ↑↑",
+                PPSwipeExample(number: "J♠", swipes: "↑←  ↑",
                                noteKey: "postpred.help.input.cardclock.guide.ex.js")
-                PPSwipeExample(number: "3♥", swipes: "→→  →→",
+                PPSwipeExample(number: "3♥", swipes: "→→  →",
                                noteKey: "postpred.help.input.cardclock.guide.ex.3h")
-                PPSwipeExample(number: "A♦", swipes: "↑→  ←←",
+                PPSwipeExample(number: "A♦", swipes: "↑→  ←",
                                noteKey: "postpred.help.input.cardclock.guide.ex.ad")
             }
 

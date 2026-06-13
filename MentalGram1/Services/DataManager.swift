@@ -59,6 +59,7 @@ class DataManager: ObservableObject {
             case .number: return (0...9).map { "\($0)" }
             case .custom: return []
             case .card:   return SetType.cardSlotLabels
+            case .list:   return (1...max(bankCount, 1)).map { "\($0)" }
             }
         }()
 
@@ -147,6 +148,23 @@ class DataManager: ObservableObject {
                     ))
                 }
             }
+        } else if type == .list {
+            let count = max(bankCount, 1)
+            for i in 1...count {
+                setPhotos.append(SetPhoto(
+                    id: UUID(),
+                    setId: setId,
+                    symbol: "\(i)",
+                    filename: "list_\(i).jpg",
+                    imageData: nil,
+                    mediaId: nil,
+                    isArchived: false,
+                    uploadDate: nil,
+                    lastCommentId: nil,
+                    uploadStatus: .pending,
+                    errorMessage: nil
+                ))
+            }
         } else {
             // Custom type: create numbered placeholder slots (1…bankCount) or use provided photos
             if photos.isEmpty {
@@ -193,7 +211,12 @@ class DataManager: ObservableObject {
             photos: setPhotos,
             createdAt: Date(),
             selectedAlphabet: selectedAlphabet,
-            targetBankCount: (type == .word || type == .number) ? bankCount : nil
+            targetBankCount: (type == .word || type == .number) ? bankCount : nil,
+            inputMethod: nil,
+            listItems: type == .list ? (1...max(bankCount, 1)).map { "Item \($0)" } : nil,
+            listColumns: type == .list ? .automatic : nil,
+            listButtonSize: type == .list ? .normal : nil,
+            listSeparators: type == .list ? [] : nil
         )
         
         sets.append(newSet)
@@ -502,6 +525,82 @@ class DataManager: ObservableObject {
         guard let idx = sets.firstIndex(where: { $0.id == id }) else { return }
         sets[idx].inputMethod = method
         saveSets()
+    }
+
+    func updateListItems(setId: UUID, labels: [String]) {
+        guard let idx = sets.firstIndex(where: { $0.id == setId }), sets[idx].type == .list else { return }
+        let cleaned = labels
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return }
+
+        var photosBySymbol = Dictionary(uniqueKeysWithValues: sets[idx].photos.map { ($0.symbol, $0) })
+        let existingCount = sets[idx].photos.compactMap { Int($0.symbol) }.max() ?? 0
+        let targetCount = cleaned.count
+
+        if targetCount > existingCount {
+            for i in (existingCount + 1)...targetCount {
+                let symbol = "\(i)"
+                photosBySymbol[symbol] = SetPhoto(
+                    id: UUID(),
+                    setId: setId,
+                    symbol: symbol,
+                    filename: "list_\(i).jpg",
+                    imageData: nil,
+                    mediaId: nil,
+                    isArchived: false,
+                    uploadDate: nil,
+                    lastCommentId: nil,
+                    uploadStatus: .pending,
+                    errorMessage: nil
+                )
+            }
+        }
+
+        sets[idx].listItems = cleaned
+        sets[idx].photos = (1...targetCount).compactMap { photosBySymbol["\($0)"] }
+        sets[idx].listSeparators = sets[idx].resolvedListSeparators.filter { $0 < targetCount }
+        saveSets()
+        objectWillChange.send()
+    }
+
+    func renameListItem(setId: UUID, symbol: String, label: String) {
+        guard let idx = sets.firstIndex(where: { $0.id == setId }), sets[idx].type == .list else { return }
+        guard let slot = Int(symbol), slot > 0 else { return }
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var items = sets[idx].listItems ?? sets[idx].listDisplayLabels
+        while items.count < slot { items.append("Item \(items.count + 1)") }
+        items[slot - 1] = trimmed
+        sets[idx].listItems = items
+        saveSets()
+        objectWillChange.send()
+    }
+
+    func setListLayout(setId: UUID, columns: ListSetColumns? = nil, buttonSize: ListSetButtonSize? = nil) {
+        guard let idx = sets.firstIndex(where: { $0.id == setId }), sets[idx].type == .list else { return }
+        if let columns { sets[idx].listColumns = columns }
+        if let buttonSize { sets[idx].listButtonSize = buttonSize }
+        saveSets()
+        objectWillChange.send()
+    }
+
+    func addListSeparator(setId: UUID, afterSlot slot: Int) {
+        guard let idx = sets.firstIndex(where: { $0.id == setId }), sets[idx].type == .list else { return }
+        let count = sets[idx].listDisplayLabels.count
+        guard slot > 0, slot < count else { return }
+        var separators = Set(sets[idx].resolvedListSeparators)
+        separators.insert(slot)
+        sets[idx].listSeparators = Array(separators).sorted()
+        saveSets()
+        objectWillChange.send()
+    }
+
+    func removeListSeparator(setId: UUID, afterSlot slot: Int) {
+        guard let idx = sets.firstIndex(where: { $0.id == setId }), sets[idx].type == .list else { return }
+        sets[idx].listSeparators = sets[idx].resolvedListSeparators.filter { $0 != slot }
+        saveSets()
+        objectWillChange.send()
     }
 
     /// Returns the active set's resolved input method, or nil when no set is active.

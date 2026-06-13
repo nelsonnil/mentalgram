@@ -88,6 +88,10 @@ class DateForceSettings: ObservableObject {
     /// time the user opens a reel, the data is already available with no delay.
     var preloadedProfiles: [String: (username: String, userId: String, profilePicURL: String?, followerCount: Int, followingCount: Int)] = [:]
 
+    /// Basic follower metadata captured at selection time. Used as a lightweight
+    /// fallback to fetch only counts if the preload has not finished yet.
+    var selectedFollowerHints: [String: (username: String, fullName: String, profilePicURL: String?)] = [:]
+
     @Published private(set) var spectators: [DateForceSpectator] = []
 
     /// Auto mode: which group is currently displayed in PerformanceView.

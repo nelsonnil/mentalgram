@@ -148,9 +148,9 @@ struct CreateSetView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(VaultTheme.Colors.cardBorder.opacity(0.3))
                         .cornerRadius(VaultTheme.CornerRadius.sm)
-                    } else if selectedType == .custom {
+                    } else if selectedType == .custom || selectedType == .list {
                         VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
-                            Text("Number of image slots")
+                            Text(selectedType == .list ? "Number of list items" : "Number of image slots")
                                 .font(.headline)
                                 .foregroundColor(VaultTheme.Colors.textPrimary)
                             Stepper(value: $bankCount, in: 1...100) {
@@ -160,7 +160,9 @@ struct CreateSetView: View {
                                     .foregroundColor(VaultTheme.Colors.textSecondary)
                             }
                             .tint(VaultTheme.Colors.primary)
-                            Text("Each slot holds one image (up to 100). Select with 1–3 grid swipes.")
+                            Text(selectedType == .list
+                                 ? "You can import TXT/CSV labels or rename items after creating the set."
+                                 : "Each slot holds one image (up to 100). Select with 1–3 grid swipes.")
                                 .font(.caption)
                                 .foregroundColor(VaultTheme.Colors.textSecondary)
                         }

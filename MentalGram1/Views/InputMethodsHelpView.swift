@@ -124,9 +124,9 @@ struct InputMethodsHelpView: View {
                             IMCardClockEncoding()
                             IMSwipeExamples(
                                 examples: [
-                                    ("J\u{2660}", "←↑  ↑↑", "Jack of Spades"),
-                                    ("3\u{2665}", "→→  →→", "3 of Hearts"),
-                                    ("A\u{2666}", "↑→  ←←", "Ace of Diamonds")
+                                    ("J\u{2660}", "↑←  ↑", "Jack of Spades"),
+                                    ("3\u{2665}", "→→  →", "3 of Hearts"),
+                                    ("A\u{2666}", "↑→  ←", "Ace of Diamonds")
                                 ],
                                 color: Color(hex: "16A34A")
                             )
@@ -140,6 +140,28 @@ struct InputMethodsHelpView: View {
                                 icon: "lightbulb.fill",
                                 color: Color(hex: "FF9F0A"),
                                 text: String(localized: "input.guide.cardclock.tip")
+                            )
+                        }
+
+                        sectionDivider
+
+                        richMethodSection(
+                            icon: "rectangle.grid.3x2.fill",
+                            title: String(localized: "input.guide.numpadcard.title"),
+                            compatLabel: String(localized: "input.guide.numpadcard.compat"),
+                            color: Color(hex: "16A34A")
+                        ) {
+                            imBody(String(localized: "input.guide.numpadcard.body"))
+                            IMCardNumpadDemo()
+                            instructionBox(
+                                icon: "hand.tap.fill",
+                                color: Color(hex: "16A34A"),
+                                text: String(localized: "input.guide.numpadcard.activate")
+                            )
+                            instructionBox(
+                                icon: "lightbulb.fill",
+                                color: Color(hex: "FF9F0A"),
+                                text: String(localized: "input.guide.numpadcard.tip")
                             )
                         }
 
@@ -469,10 +491,10 @@ private struct IMDigitPairEncodingTable: View {
 private struct IMCardClockEncoding: View {
     private let accent = Color(hex: "16A34A")
     private let valueRows: [[(String, String)]] = [
-        [("A", "↑→"), ("2", "→↑"), ("3", "→→"), ("4", "→↓"), ("5", "↓→"), ("6", "↓↓")],
-        [("7", "↓←"), ("8", "←↓"), ("9", "←←"), ("J", "←↑"), ("Q", "↑←"), ("K", "↑↑")]
+        [("A", "↑→"), ("2", "→↑"), ("3", "→→"), ("4", "→↓"), ("5", "↓→"), ("6", "↓↓"), ("7", "↓←")],
+        [("8", "←↓"), ("9", "←←"), ("10", "←↑"), ("J", "↑←"), ("Q", "↑↑"), ("K", "↑↓")]
     ]
-    private let suits: [(String, String)] = [("♠", "↑↑"), ("♥", "→→"), ("♣", "↓↓"), ("♦", "←←")]
+    private let suits: [(String, String)] = [("♠", "↑"), ("♥", "→"), ("♣", "↓"), ("♦", "←")]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -748,6 +770,95 @@ private struct IMGridInputDemo: View {
                 activeCell = 6
                 enteredDigits = [3, 0, 7]
                 try? await Task.sleep(nanoseconds: 1_300_000_000)
+            }
+        }
+    }
+}
+
+private struct IMCardNumpadDemo: View {
+    private let color = Color(hex: "16A34A")
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                IMNumpadPhonePreview(phase: .black)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(color)
+                IMNumpadPhonePreview(phase: .pad)
+            }
+            Text("Real flow: black screen → tap anywhere → value + suit pad → automatic close")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(color.opacity(0.22), lineWidth: 1))
+    }
+
+    private enum Phase { case black, pad }
+
+    private struct IMNumpadPhonePreview: View {
+        let phase: Phase
+        private let firstRow = ["A", "2", "3", "4", "5"]
+        private let secondRow = ["6", "7", "8", "9", "10"]
+        private let faceRow = ["J", "Q", "K"]
+        private let suits = ["♠", "♥", "♣", "♦"]
+
+        var body: some View {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.black)
+                    .frame(height: 216)
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.14), lineWidth: 1))
+
+                if phase == .black {
+                    VStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 34, height: 34)
+                        Text("tap")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.30))
+                    }
+                } else {
+                    VStack(spacing: 8) {
+                        Text("A♠")
+                            .font(.system(size: 20, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white)
+                        valueRow(firstRow, selected: "A")
+                        valueRow(secondRow, selected: nil)
+                        valueRow(faceRow, selected: nil)
+                        HStack(spacing: 5) {
+                            ForEach(suits, id: \.self) { suit in
+                                Text(suit)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(suit == "♠" ? .black : ((suit == "♥" || suit == "♦") ? Color(hex: "FF453A") : .white.opacity(0.82)))
+                                    .frame(height: 28)
+                                    .frame(maxWidth: .infinity)
+                                    .background(suit == "♠" ? Color.white : Color.white.opacity(0.10))
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                    .padding(10)
+                }
+            }
+        }
+
+        private func valueRow(_ values: [String], selected: String?) -> some View {
+            HStack(spacing: 5) {
+                ForEach(values, id: \.self) { value in
+                    Text(value)
+                        .font(.system(size: value == "10" ? 10 : 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(value == selected ? .black : .white)
+                        .frame(height: values.count == 3 ? 24 : 25)
+                        .frame(maxWidth: .infinity)
+                        .background(value == selected ? Color.white : Color.white.opacity(0.10))
+                        .cornerRadius(8)
+                }
             }
         }
     }

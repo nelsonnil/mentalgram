@@ -77,7 +77,7 @@ struct CounterGlitchHelpView: View {
             CGHMetric(icon: "hand.point.left.fill", color: Color(hex: "6366F1"), label: "Número secreto vía Digit Grid",
                       desc: "El número se introduce con el mismo Digit Grid explicado en Input Methods: el mapa visual 1-9 + fila de 0 permite construir el valor mientras el perfil parece normal.")
             CGHMetric(icon: "plus.circle.fill", color: VaultTheme.Colors.primary, label: "Inflado invisible",
-                      desc: "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. En perfiles con 10K+, cada unidad cuenta como 1K (input 6 en 200K → muestra 206K → baja a 200K).")
+                      desc: "El perfil abierto muestra real + número_espectador. Si el real es 500 y el espectador dijo 37, verá 537. Durante el glitch, Vault muestra el contador completo para que cambios pequeños sigan siendo visibles incluso en perfiles por encima de 1K.")
             CGHMetric(icon: "bolt.fill", color: Color(hex: "F97316"), label: "Glitch + cuenta regresiva",
                       desc: "Al pulsar el botón de volumen: efecto glitch (distorsión de señal) y luego el contador baja de 537 a 500 en ~6 segundos.")
             CGHMetric(icon: "checkmark.seal.fill", color: VaultTheme.Colors.success, label: "La convicción",
@@ -182,7 +182,7 @@ struct CounterGlitchHelpView: View {
             CGHTip(icon: "arrow.left.arrow.right.circle", color: Color(hex: "F97316"),
                    text: "**Transfer mode** funciona mejor en shows pequeños donde el público puede ver ambos perfiles y el \"viaje\" del número.")
             CGHTip(icon: "k.circle.fill", color: Color(hex: "BF5AF2"),
-                   text: "**Perfiles con 10K+.** El offset se multiplica ×1000 automáticamente. Pide un número del 1–10 al espectador y la cuenta regresiva baja en unidades de K (206K → 200K).")
+                   text: "**Contadores grandes.** El efecto usa el número exacto introducido. Durante el glitch se muestra el contador completo para que el movimiento no quede oculto por la abreviación K/M.")
         }
     }
 

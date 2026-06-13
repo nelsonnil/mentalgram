@@ -58,9 +58,7 @@ class FollowingMagicSettings: ObservableObject {
         self.transferOffset = UserDefaults.standard.integer(forKey: "followingMagicTransferOffset")
     }
 
-    /// Captures a digit sequence as the raw pending offset used by Counter Glitch.
-    /// The raw input is kept untouched; the effective offset is computed later
-    /// from the real profile count so K-mode is explicit and logged.
+    /// Captures a digit sequence as the exact pending offset used by Counter Glitch.
     @discardableResult
     func capture(digits: [Int], source: String) -> Int? {
         guard !digits.isEmpty else { return nil }
@@ -87,19 +85,15 @@ class FollowingMagicSettings: ObservableObject {
     }
 
     /// Converts the raw input into the effective animation offset.
-    /// For large accounts, performers ask for 1-10 and input e.g. 06, which should
-    /// display as 206K -> 200K. The stored input remains 6; only the effect uses 6000.
+    /// Counter Glitch uses exact offsets (1-100), matching the original behavior.
     func effectiveOffset(for realCount: Int, rawOffset: Int? = nil) -> Int {
         let input = rawOffset ?? pendingOffset
         guard input > 0 else { return 0 }
-        if realCount >= 10_000 {
-            return input * 1_000
-        }
         return input
     }
 
     func offsetMode(for realCount: Int) -> String {
-        realCount >= 10_000 ? "k" : "exact"
+        "exact"
     }
 
     /// Clears the pending offset after the trick is revealed.

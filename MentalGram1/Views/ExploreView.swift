@@ -39,6 +39,10 @@ struct ExploreView: View {
     @State private var revealTask: Task<Void, Never>?
     // Debounce duplicate space triggers (keyboard can fire onChange multiple times)
     @State private var lastSpaceTriggerTime: Date = .distantPast
+    /// Set to true right before secretInputBuffer is cleared after a space-reveal,
+    /// so the safety-reset guard in handleSearchTextChange doesn't wipe the visible
+    /// masked text that the magician still needs to tap into a profile.
+    @State private var revealJustTriggered: Bool = false
     // Debounce task for plain-text search (fires 600ms after last keypress)
     @State private var searchDebounceTask: Task<Void, Never>?
     
@@ -303,7 +307,14 @@ struct ExploreView: View {
                 LogManager.shared.info("Visited profile UI presented with progressive header — uid:\(userId) @\(snapshot.username)", category: .general)
             }
         }
+        .onChange(of: showingExplore) { isOpen in
+            if isOpen {
+                updateMaskTextCache()
+            }
+        }
         .onAppear {
+            updateMaskTextCache()
+
             // If cache has old count (not multiple of 3), clear and force full reload
             let currentCount = exploreManager.exploreMedia.count
             if currentCount > 0 && currentCount % 3 != 0 {
@@ -535,11 +546,43 @@ struct ExploreView: View {
     }
     
     // MARK: - Secret Input Logic
+
+    private var activeCoverTypingSet: PhotoSet? {
+        guard ActiveSetSettings.shared.isPostPredictionEnabled,
+              let activeId = ActiveSetSettings.shared.activeWordSetId,
+              let set = dataManager.sets.first(where: { $0.id == activeId && $0.type == .word }),
+              set.resolvedInputMethod == .coverTyping else {
+            return nil
+        }
+        return set
+    }
+
+    private var shouldUseSecretMask: Bool {
+        secretInputSettings.isEnabled || activeCoverTypingSet != nil
+    }
+
+    private func maskText(latestFollowerUsername: String?) -> String {
+        guard shouldUseSecretMask else { return "" }
+        switch secretInputSettings.mode {
+        case .latestFollower:
+            return latestFollowerUsername?.lowercased() ?? "user"
+        case .customUsername:
+            let custom = secretInputSettings.customUsername
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return custom.isEmpty ? "user" : custom
+        }
+    }
     
     private func updateMaskTextCache() {
         // Custom mode — no async needed.
         guard secretInputSettings.mode == .latestFollower else {
-            maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: nil)
+            maskTextCache = maskText(latestFollowerUsername: nil)
+            return
+        }
+
+        guard shouldUseSecretMask else {
+            maskTextCache = ""
             return
         }
 
@@ -559,7 +602,7 @@ struct ExploreView: View {
         let cacheFresh = cachedUsername != nil && cacheAge < ttl
 
         // Show cached value (or generic fallback) instantly.
-        maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: cachedUsername)
+        maskTextCache = maskText(latestFollowerUsername: cachedUsername)
 
         // Skip network refresh if cache is fresh enough.
         guard !cacheFresh else { return }
@@ -576,7 +619,20 @@ struct ExploreView: View {
                 UserDefaults.standard.set(username, forKey: cacheKey)
                 UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: timestampKey)
                 await MainActor.run {
-                    maskTextCache = secretInputSettings.getMaskText(latestFollowerUsername: username)
+                    let newMask = maskText(latestFollowerUsername: username)
+                    // If the mask changes while the user is already typing, the diff
+                    // algorithm would compare against the wrong mask and corrupt
+                    // secretInputBuffer (real chars would be replaced by mask chars).
+                    // Reset the search field so the user gets a clean slate with the
+                    // correct mask — this prevents "copper" being revealed instead of
+                    // the actual secret word.
+                    if newMask != maskTextCache && !searchText.isEmpty {
+                        isUpdatingMask = true
+                        searchText = ""
+                        isUpdatingMask = false
+                        secretInputBuffer = ""
+                    }
+                    maskTextCache = newMask
                 }
             } catch {
                 // Fallback already in place from the synchronous step above.
@@ -626,14 +682,60 @@ struct ExploreView: View {
         }
 
         // ── Cover typing ACTIVE ───────────────────────────────────────────────
-        let expectedLength = secretInputBuffer.count
+        // Safety: if secretInputBuffer is empty but multiple characters already exist
+        // in the field, the mask activated AFTER the user had already typed some text
+        // (e.g. background fetch just completed). Those characters weren't tracked so
+        // secretInputBuffer doesn't know about them. Reset the field to start clean.
+        // NOTE: newValue.count > 1 (not just non-empty) so we never kill the very first
+        // keystroke, which legitimately arrives with an empty buffer.
+        // EXCEPTION: skip reset right after a space-reveal — the field intentionally
+        // keeps the masked text visible so the magician can tap into the profile.
+        if secretInputBuffer.isEmpty && newValue.count > 1 {
+            if revealJustTriggered {
+                revealJustTriggered = false  // consume the flag, allow this onChange through
+            } else {
+                isUpdatingMask = true
+                searchText = ""
+                isUpdatingMask = false
+                return
+            }
+        }
+
+        // When the secret buffer exceeds the mask length the visible field is capped
+        // at maskTextCache.count — use the VISIBLE length as the comparison base so
+        // add/delete counts are calculated against what iOS actually shows, not the
+        // larger internal buffer.
+        let visibleLength = maskTextCache.isEmpty
+            ? secretInputBuffer.count
+            : min(secretInputBuffer.count, maskTextCache.count)
+        let expectedLength = visibleLength
 
         if newValue.count > expectedLength {
-            // User typed new character(s)
-            let newChars = String(newValue.suffix(newValue.count - expectedLength))
+            // Character(s) added.
+            // Use a diff against the OLD mask (buildMaskedText BEFORE buffer update)
+            // to find WHICH characters were inserted and WHERE.
+            // This is cursor-position-safe: it works regardless of where iOS placed
+            // the cursor (end, middle, beginning) — a critical fix for cases where
+            // the user taps to reposition the cursor mid-mask, then types or spaces.
+            let addedCount = newValue.count - expectedLength
+            let newArr = Array(newValue)
+            let oldArr = Array(buildMaskedText())   // current mask before any update
+
+            // Find the first divergence point between old mask and new field value
+            var insertPos = 0
+            let scanLimit = min(oldArr.count, newArr.count)
+            while insertPos < scanLimit && newArr[insertPos] == oldArr[insertPos] {
+                insertPos += 1
+            }
+
+            // Extract the inserted substring at the divergence point
+            let endPos = min(insertPos + addedCount, newArr.count)
+            let insertedChars = endPos > insertPos
+                ? String(newArr[insertPos..<endPos])
+                : String(newValue.suffix(addedCount))   // safe fallback
 
             var hasSpace = false
-            for char in newChars {
+            for char in insertedChars {
                 if char == " " {
                     hasSpace = true
                 } else {
@@ -696,19 +798,22 @@ struct ExploreView: View {
                 isSearching = false
             }
         }
-        // newValue.count == expectedLength → our own programmatic update, ignore
+        // newValue.count == expectedLength → our own programmatic mask update, ignore
     }
     
-    /// Build the masked text that the spectator sees
+    /// Build the masked text that the spectator sees.
+    /// Capped at maskTextCache.count so the visible field never grows beyond the
+    /// mask word — typing "camaleon" with mask "nelson" shows "nelson" the whole
+    /// time once all 6 mask characters are filled in.
     private func buildMaskedText() -> String {
         guard !secretInputBuffer.isEmpty, !maskTextCache.isEmpty else {
             return secretInputBuffer
         }
-        
+
+        let visibleCount = min(secretInputBuffer.count, maskTextCache.count)
         var result = ""
-        for i in 0..<secretInputBuffer.count {
-            let maskIndex = i % maskTextCache.count
-            let char = maskTextCache[maskTextCache.index(maskTextCache.startIndex, offsetBy: maskIndex)]
+        for i in 0..<visibleCount {
+            let char = maskTextCache[maskTextCache.index(maskTextCache.startIndex, offsetBy: i)]
             result.append(char)
         }
         return result
@@ -742,9 +847,14 @@ struct ExploreView: View {
             return
         }
         
-        // NOTE: Do NOT clear searchText or secretInputBuffer!
-        // The masked text stays visible so the magician can tap to enter the follower's profile.
-        // The spectator sees a normal username search.
+        // NOTE: Do NOT clear searchText — the masked text stays visible so the
+        // magician can tap to enter the follower's profile after the reveal.
+        // DO reset secretInputBuffer so a second covert-typing attempt in the same
+        // session doesn't accumulate leftover chars from the first word.
+        // Flag prevents the safety-reset guard from wiping the visible masked text
+        // when onChange fires with an empty buffer after this reset.
+        revealJustTriggered = true
+        secretInputBuffer = ""
         
         // Haptic feedback to confirm transmission (subtle, only magician feels it)
         let generator = UIImpactFeedbackGenerator(style: .medium)

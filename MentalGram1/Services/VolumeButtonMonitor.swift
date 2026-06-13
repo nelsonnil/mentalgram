@@ -24,6 +24,9 @@ class VolumeButtonMonitor: ObservableObject {
     private var isResetting = false
     private var hasPrepared = false
 
+    /// True while the KVO observation is active (i.e. volume buttons are being tracked).
+    var isMonitoring: Bool { volumeObservation != nil }
+
     private init() {}
 
     // MARK: - Public API

@@ -2886,6 +2886,48 @@ class InstagramService: ObservableObject {
         }
     }
 
+    /// Lightweight profile-count fetch for Date Force.
+    /// Uses the public profile header endpoint only; it avoids loading posts,
+    /// followed-by, friendship status, reels, tagged, or highlights.
+    func getDateForceProfileCounts(
+        username: String,
+        userId: String,
+        fullNameHint: String? = nil,
+        profilePicURLHint: String? = nil
+    ) async -> (username: String, userId: String, profilePicURL: String?, followerCount: Int, followingCount: Int)? {
+        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedUsername.isEmpty else { return nil }
+
+        guard let user = await fetchWebProfileInfoFallback(username: trimmedUsername) else {
+            print("⚠️ [DATE FORCE] Lightweight counts failed for @\(trimmedUsername)")
+            return nil
+        }
+
+        let resolvedUsername = (user["username"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedUserId = (user["id"] as? String)
+            ?? (user["pk"] as? String)
+            ?? userId
+        let profilePicURL = ((user["profile_pic_url"] as? String)?.isEmpty == false)
+            ? user["profile_pic_url"] as? String
+            : profilePicURLHint
+        let followerCount = Self.robustInt(user["follower_count"])
+        let followingCount = Self.robustInt(user["following_count"])
+
+        guard followerCount > 0 || followingCount > 0 else {
+            print("⚠️ [DATE FORCE] Lightweight counts empty for @\(trimmedUsername)")
+            return nil
+        }
+
+        print("⚡️ [DATE FORCE] Lightweight counts @\(resolvedUsername ?? trimmedUsername): followers=\(followerCount) following=\(followingCount)")
+        return (
+            username: resolvedUsername?.isEmpty == false ? resolvedUsername! : trimmedUsername,
+            userId: resolvedUserId,
+            profilePicURL: profilePicURL,
+            followerCount: followerCount,
+            followingCount: followingCount
+        )
+    }
+
     private func shouldPreferWebCount(api: Int, web: Int) -> Bool {
         guard web > 0 else { return false }
         if api <= 0 { return true }
@@ -3268,8 +3310,9 @@ class InstagramService: ObservableObject {
         print("📊 [PROFILE] Should fetch protected data: \(shouldFetchProtectedData)")
 
         // ── PROGRESSIVE RENDER ─────────────────────────────────────────────────
-        // For own profile, the chain below makes 5 sequential API calls with
-        // 1.2s anti-bot pauses between each (~10s total). The header is already
+        // For own profile, the chain below makes only the core API calls
+        // (header/followers/posts). Reels, tagged, and highlights are cached
+        // separately so opening Performance stays predictable. The header is already
         // usable right now, so push it to the UI immediately. PerformanceView
         // listens for `ownProfileHeaderReady` and paints the header + cached
         // grid while reels/tagged/highlights load in the background.
@@ -3327,7 +3370,7 @@ class InstagramService: ObservableObject {
                 // user kills the app before the heavy chain finishes.
                 ProfileCacheService.shared.saveProfile(snapshotWithItems)
                 print("⚡ [PROFILE] Header snapshot emitted early — @\(headerUsername) followers:\(headerFollowers) following:\(headerFollowing) media:\(headerMediaCount) pic:\(headerPicURL.isEmpty ? "EMPTY" : "OK")")
-                LogManager.shared.info("Own profile header snapshot broadcast — UI can paint before heavy chain (5 calls / ~10s)", category: .profile)
+                LogManager.shared.info("Own profile header snapshot broadcast — UI can paint before the core profile chain finishes", category: .profile)
 
                 let snapshotForNotif = snapshotWithItems
                 await MainActor.run {
@@ -3350,7 +3393,7 @@ class InstagramService: ObservableObject {
         var initialNextMaxId: String? = nil   // cursor saved so the first pagination skips page 1
 
         if shouldFetchProtectedData {
-            print("✅ [PROFILE] Fetching followers, media, reels, tagged & highlights (profile is accessible)")
+            print("✅ [PROFILE] Fetching followers and media (profile is accessible)")
             LogManager.shared.info("Profile protected data fetch allowed", category: .profile)
 
             if isOwnProfile {
@@ -3847,17 +3890,75 @@ class InstagramService: ObservableObject {
     }
     
     // MARK: - Get User Reels
+
+    func getUserReelsPage(
+        userId: String? = nil,
+        amount: Int = 18,
+        maxId: String? = nil
+    ) async throws -> ([InstagramMediaItem], String?) {
+        let uid = userId ?? session.userId
+        print("🎬 [REELS] Fetching reels page for user ID: \(uid), maxId: \(maxId ?? "none")")
+
+        var body: [String: String] = [
+            "target_user_id": uid,
+            "page_size": String(amount),
+            "include_feed_video": "true"
+        ]
+        if let maxId, !maxId.isEmpty {
+            body["max_id"] = maxId
+        }
+
+        let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [REELS] Failed to parse reels page response")
+            return ([], nil)
+        }
+
+        let rawList: [[String: Any]]
+        if let items = json["items"] as? [[String: Any]] {
+            rawList = items
+        } else if let items = json["clips_items"] as? [[String: Any]] {
+            rawList = items
+        } else {
+            print("⚠️ [REELS] No items key found in page. Keys: \(json.keys.sorted().joined(separator: ", "))")
+            return ([], nil)
+        }
+
+        var parsed: [InstagramMediaItem] = []
+        for item in rawList {
+            let media = item["media"] as? [String: Any] ?? item
+            guard let mediaItem = parseMediaItem(media) else { continue }
+            parsed.append(mediaItem)
+        }
+
+        let pagingInfo = json["paging_info"] as? [String: Any]
+        let moreAvailable = pagingInfo?["more_available"] as? Bool
+            ?? (json["more_available"] as? Bool)
+            ?? false
+        let nextCursor = pagingInfo?["max_id"] as? String
+            ?? json["next_max_id"] as? String
+
+        let next = moreAvailable && nextCursor != maxId ? nextCursor : nil
+        print("🎬 [REELS] Page parsed: \(parsed.count), next:\(next != nil ? "yes" : "none")")
+        return (parsed, next)
+    }
     
-    /// Fetches up to `maxTotal` reels for a user, paginating internally (max 2 pages)
-    /// if the first response has `more_available`. Callers get a flat list.
-    func getUserReels(userId: String? = nil, amount: Int = 50, maxTotal: Int = 50) async throws -> [InstagramMediaItem] {
+    /// Fetches reels for a user. By default this is one page; callers can allow a
+    /// second page only when the first page does not fill the visible grid.
+    func getUserReels(
+        userId: String? = nil,
+        amount: Int = 50,
+        maxTotal: Int = 50,
+        maxPages: Int = 1,
+        minimumItems: Int = 0
+    ) async throws -> [InstagramMediaItem] {
         let uid = userId ?? session.userId
         print("🎬 [REELS] Fetching reels for user ID: \(uid)")
 
         var allItems: [InstagramMediaItem] = []
         var pagingMaxId: String? = nil
         var page = 0
-        let maxPages = 2   // never more than 2 API calls for reels
+        let pageLimit = max(1, maxPages)
 
         repeat {
             var body: [String: String] = [
@@ -3912,12 +4013,18 @@ class InstagramService: ObservableObject {
 
             page += 1
 
-            // Human delay before fetching page 2+
-            if pagingMaxId != nil && allItems.count < maxTotal {
-                try? await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            // Human delay before fetching page 2+. When the user has actually
+            // swiped into Reels and the first page has fewer than the visible grid
+            // minimum, keep this short so cells fill quickly.
+            if pagingMaxId != nil && page < pageLimit && allItems.count < minimumItems {
+                let delay = UInt64.random(in: 800_000_000...1_400_000_000)
+                try? await Task.sleep(nanoseconds: delay)
             }
 
-        } while pagingMaxId != nil && allItems.count < maxTotal && page < maxPages
+        } while pagingMaxId != nil
+            && allItems.count < maxTotal
+            && page < pageLimit
+            && allItems.count < minimumItems
 
         let result = Array(allItems.prefix(maxTotal))
         print("🎬 [REELS] Total parsed: \(result.count) reels (\(page) page(s))")
@@ -3926,16 +4033,22 @@ class InstagramService: ObservableObject {
     
     // MARK: - Get User Tagged Posts
     
-    /// Fetches up to `maxTotal` tagged posts, paginating internally (max 2 pages)
-    /// if the first response has `more_available`. Callers get a flat list.
-    func getUserTagged(userId: String? = nil, amount: Int = 50, maxTotal: Int = 50) async throws -> [InstagramMediaItem] {
+    /// Fetches tagged posts. By default this is one page; callers can allow a
+    /// second page only when the first page does not fill the visible grid.
+    func getUserTagged(
+        userId: String? = nil,
+        amount: Int = 50,
+        maxTotal: Int = 50,
+        maxPages: Int = 1,
+        minimumItems: Int = 0
+    ) async throws -> [InstagramMediaItem] {
         let uid = userId ?? session.userId
         print("🏷️ [TAGGED] Fetching tagged posts for user ID: \(uid)")
 
         var allItems: [InstagramMediaItem] = []
         var nextMaxId: String? = nil
         var page = 0
-        let maxPages = 2
+        let pageLimit = max(1, maxPages)
 
         repeat {
             var path = "/usertags/\(uid)/feed/?count=\(amount)"
@@ -3974,11 +4087,15 @@ class InstagramService: ObservableObject {
 
             page += 1
 
-            if nextMaxId != nil && allItems.count < maxTotal {
-                try? await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            if nextMaxId != nil && page < pageLimit && allItems.count < minimumItems {
+                let delay = UInt64.random(in: 800_000_000...1_400_000_000)
+                try? await Task.sleep(nanoseconds: delay)
             }
 
-        } while nextMaxId != nil && allItems.count < maxTotal && page < maxPages
+        } while nextMaxId != nil
+            && allItems.count < maxTotal
+            && page < pageLimit
+            && allItems.count < minimumItems
 
         let result = Array(allItems.prefix(maxTotal))
         print("🏷️ [TAGGED] Total parsed: \(result.count) tagged posts (\(page) page(s))")
@@ -3993,32 +4110,79 @@ class InstagramService: ObservableObject {
 
         let data = try await apiRequest(method: "GET", path: "/highlights/\(uid)/highlights_tray/")
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tray = json["tray"] as? [[String: Any]] else {
-            print("⚠️ [HIGHLIGHTS] No tray found in response")
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let raw = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+            print("⚠️ [HIGHLIGHTS] Invalid JSON response: \(raw.prefix(500))")
             return []
+        }
+
+        let tray = (json["tray"] as? [[String: Any]])
+            ?? (json["items"] as? [[String: Any]])
+            ?? (json["highlight_reels"] as? [[String: Any]])
+            ?? ((json["reels"] as? [String: [String: Any]])?.values.map { $0 })
+
+        guard let tray else {
+            print("⚠️ [HIGHLIGHTS] No tray found in response. Keys: \(Array(json.keys).sorted().joined(separator: ","))")
+            return []
+        }
+        if tray.isEmpty {
+            let raw = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+            print("🌟 [HIGHLIGHTS] Tray empty. Response: \(raw.prefix(500))")
         }
 
         var highlights: [InstagramHighlight] = []
         for item in tray {
-            guard let id    = item["id"] as? String,
-                  let title = item["title"] as? String else { continue }
+            let id = (item["id"] as? String)
+                ?? (item["id"] as? NSNumber)?.stringValue
+                ?? (item["id"] as? Int).map(String.init)
+            guard let id else { continue }
+            let title = (item["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayTitle = title?.isEmpty == false ? title! : "Highlight"
 
-            // Cover image: prefer cropped_image_version, fallback to cover_media_cropped_image
             var coverURL = ""
-            if let coverMedia = item["cover_media"] as? [String: Any] {
-                if let cropped = coverMedia["cropped_image_version"] as? [String: Any],
+            func imageURL(from dictionary: [String: Any]?) -> String? {
+                guard let dictionary else { return nil }
+                if let url = dictionary["url"] as? String { return url }
+                if let uri = dictionary["uri"] as? String { return uri }
+                if let cropped = dictionary["cropped_image_version"] as? [String: Any],
                    let url = cropped["url"] as? String {
-                    coverURL = url
-                } else if let imgVersions = coverMedia["image_versions2"] as? [String: Any],
-                          let candidates = imgVersions["candidates"] as? [[String: Any]],
-                          let first = candidates.first,
-                          let url = first["url"] as? String {
-                    coverURL = url
+                    return url
                 }
+                if let cropped = dictionary["cover_media_cropped_image"] as? [String: Any],
+                   let url = cropped["url"] as? String {
+                    return url
+                }
+                if let imgVersions = dictionary["image_versions2"] as? [String: Any],
+                   let candidates = imgVersions["candidates"] as? [[String: Any]],
+                   let first = candidates.first,
+                   let url = first["url"] as? String {
+                    return url
+                }
+                if let candidates = dictionary["candidates"] as? [[String: Any]],
+                   let first = candidates.first,
+                   let url = first["url"] as? String {
+                    return url
+                }
+                if let media = dictionary["media"] as? [String: Any],
+                   let url = imageURL(from: media) {
+                    return url
+                }
+                if let mediaDict = dictionary["media_dict"] as? [String: Any],
+                   let url = imageURL(from: mediaDict) {
+                    return url
+                }
+                return nil
             }
-            guard !coverURL.isEmpty else { continue }
-            highlights.append(InstagramHighlight(id: id, title: title, coverImageURL: coverURL))
+            coverURL = imageURL(from: item["cover_media"] as? [String: Any])
+                ?? imageURL(from: item["cover_media_cropped_image"] as? [String: Any])
+                ?? imageURL(from: item["cropped_image_version"] as? [String: Any])
+                ?? imageURL(from: item["latest_reel_media"] as? [String: Any])
+                ?? ""
+            guard !coverURL.isEmpty else {
+                print("⚠️ [HIGHLIGHTS] Skipping highlight \(id) — no cover URL. Keys: \(Array(item.keys).sorted().joined(separator: ","))")
+                continue
+            }
+            highlights.append(InstagramHighlight(id: id, title: displayTitle, coverImageURL: coverURL))
         }
 
         print("🌟 [HIGHLIGHTS] Parsed \(highlights.count) highlights")
