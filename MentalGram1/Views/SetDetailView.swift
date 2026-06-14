@@ -1043,6 +1043,31 @@ struct SetDetailView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.3), lineWidth: 1))
                     }
 
+                    // Refresh cooldown banner — mirrors the API budget indicator
+                    // so the user knows when pulling to refresh in Performance will
+                    // actually call Instagram (instead of silently doing nothing).
+                    let pullRefreshDecision = InstagramSafetyGate.shared.decision(for: .pullRefresh)
+                    if !pullRefreshDecision.allowed && pullRefreshDecision.waitSeconds > 10 {
+                        HStack(spacing: 10) {
+                            Image(systemName: "arrow.clockwise.circle")
+                                .font(.system(size: 20))
+                                .foregroundColor(.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Refresh disponible en \(formatCountdown(pullRefreshDecision.waitSeconds))")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.blue)
+                                Text("Arrastrar para refrescar en Performance llamará a Instagram cuando el contador llegue a cero.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.blue.opacity(0.07))
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.25), lineWidth: 1))
+                    }
+
                     // Recent-reveal warning banner — shown when the same set was
                     // revealed less than 30 minutes ago. Rapid reveal→archive→reveal
                     // cycles with the same photos are the main trigger for Instagram
@@ -1170,6 +1195,7 @@ struct SetDetailView: View {
                 // otherwise idle redraws are wasted work.
                 let needsTick = InstagramSafetyGate.shared.postRevealSecondsRemaining > 0
                     || !InstagramSafetyGate.shared.canSyncSet(setId: currentSet.id.uuidString).allowed
+                    || !InstagramSafetyGate.shared.decision(for: .pullRefresh).allowed
                 if needsTick {
                     safetyCountdownTick &+= 1
                 }
@@ -3805,32 +3831,18 @@ struct SetDetailView: View {
         uploadManager.currentPhaseDescription = String(localized: "Starting upload...")
 
         let task = Task {
-            // GRID ANCHOR (automatic): fetch the first page of visible media and anchor
-            // taken_at to 1 second BEFORE the oldest post in that page.
-            // Result: when unarchived, the prediction always appears just below every
-            // post that existed at upload time — pinned posts stay at top, any new posts
-            // uploaded afterwards also stay above it, all without manual configuration.
+            // v13 diagnostic (2026-06-14): skip the GRID ANCHOR preflight GET before
+            // upload. The failing logs always show GET /feed/user immediately before
+            // rupload/configure. We already tested skipping old taken_at; this isolates
+            // the read-before-publish pattern itself.
             do {
-                // Anti-bot: wait for cold-start warm-up and network stability
-                // before the first API call of the session.
                 try await instagram.waitForSessionWarmup()
                 try await instagram.waitForNetworkStability()
-
-                let (mediaItems, _) = try await instagram.getUserMediaItems(amount: 21)
-                let datedItems = mediaItems.compactMap { $0.takenAt != nil ? $0 : nil }
-                                           .sorted { ($0.takenAt ?? .distantPast) > ($1.takenAt ?? .distantPast) }
-                if let oldestDate = datedItems.last?.takenAt {
-                    uploadTakenAt = oldestDate.addingTimeInterval(-1)
-                    print("📍 [GRID ANCHOR] Auto anchor: \(datedItems.count) posts fetched, oldest=\(oldestDate) → taken_at=\(uploadTakenAt!)")
-                } else {
-                    // No visible posts yet: no override (Instagram places at top, which is correct)
-                    uploadTakenAt = nil
-                    print("📍 [GRID ANCHOR] No existing posts found — uploading without taken_at override")
-                }
             } catch {
-                print("⚠️ [GRID ANCHOR] Media fetch failed (\(error)) — uploading without taken_at override")
-                uploadTakenAt = nil
+                print("⚠️ [GRID ANCHOR] Warmup/network wait failed (\(error)) — continuing without taken_at override")
             }
+            uploadTakenAt = nil
+            print("📍 [GRID ANCHOR] v13 diagnostic: skipped pre-upload media fetch — uploading without taken_at override")
             await uploadAllPhotos()
         }
         uploadManager.activeTask = task

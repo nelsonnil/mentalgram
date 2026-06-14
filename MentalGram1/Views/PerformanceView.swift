@@ -77,6 +77,8 @@ struct PerformanceView: View {
     @State private var cachedImages: [String: UIImage] = [:]
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
+    @State private var cdnForbiddenTimestamps: [Date] = []
+    @State private var cdnRefreshScheduled = false
     @State private var showingLockdownSheet = false   // For long-press lockdown details
     @State private var showDigitGridAlert = false
     @State private var performanceRemoteCallsAllowed = true
@@ -260,7 +262,7 @@ struct PerformanceView: View {
     /// Performance → photo never appears because the cache is served and the
     /// refresh is throttled out".
     @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
-    private let minRefreshInterval: TimeInterval = 90
+    private let minRefreshInterval: TimeInterval = 60
     @State private var isPullRefreshInFlight = false
     @State private var isSilentGridRefreshing = false
     private let fullRefreshAfterGridRefreshGap: TimeInterval = 90
@@ -2923,11 +2925,10 @@ struct PerformanceView: View {
 
     @MainActor
     private func handlePerformancePullToRefresh() async {
-        // Full refresh is allowed, but it is serialized and silent when blocked.
-        // A pull during an existing spinner/silent refresh must not start another API chain.
+        // If a refresh is already running, return immediately — no spinner delay
+        // so the UI makes clear the gesture was a no-op.
         guard !isPullRefreshInFlight, !isLoading, !isSilentGridRefreshing else {
             print("🚫 [PERF] Pull refresh skipped — refresh already in progress")
-            try? await Task.sleep(nanoseconds: 350_000_000)
             return
         }
         isPullRefreshInFlight = true
@@ -2941,7 +2942,6 @@ struct PerformanceView: View {
               !instagram.isSessionChallenged,
               !instagram.isUploadingProfilePic else {
             print("🛡️ [PERF] Pull refresh handled as cache-only")
-            try? await Task.sleep(nanoseconds: 450_000_000)
             return
         }
 
@@ -2950,14 +2950,22 @@ struct PerformanceView: View {
         guard lastAutoRefreshTimestamp == 0 || timeSinceGridRefresh >= fullRefreshAfterGridRefreshGap else {
             print("🛡️ [PERF] Pull refresh cache-only — grid refreshed \(Int(timeSinceGridRefresh))s ago")
             LogManager.shared.warning("SAFETY BLOCK — full refresh skipped after recent grid refresh", category: .general)
-            try? await Task.sleep(nanoseconds: 450_000_000)
             return
         }
 
         let timeSinceLastRefresh = now - lastRefreshTimestamp
         guard lastRefreshTimestamp == 0 || timeSinceLastRefresh >= minRefreshInterval else {
             print("🚫 [PERF] Pull refresh cache-only — \(Int(timeSinceLastRefresh))s since last refresh")
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            return
+        }
+
+        // Pre-check SafetyGate here so we never hand control to loadProfile
+        // when the cooldown is active — loadProfile's internal SafetyGate guard
+        // would already block it, but returning here avoids the async overhead
+        // and keeps the pull-to-refresh spinner instant when blocked.
+        let safetyCheck = InstagramSafetyGate.shared.decision(for: .pullRefresh)
+        guard safetyCheck.allowed else {
+            print("🛡️ [PERF] Pull refresh blocked by safety gate — \(safetyCheck.waitSeconds)s remaining")
             return
         }
 
@@ -2980,11 +2988,6 @@ struct PerformanceView: View {
         guard safetyDecision.allowed else {
             print("🛡️ [PERF] loadProfile blocked — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
             LogManager.shared.warning("SAFETY BLOCK — loadProfile \(source): \(safetyDecision.reason)", category: .general)
-            if source == "manual" {
-                // Pull-to-refresh is audience-facing. Safety blocks must be silent,
-                // otherwise they look like network/bot errors on the fake Instagram.
-                try? await Task.sleep(nanoseconds: 450_000_000)
-            }
             return
         }
         InstagramSafetyGate.shared.record(safetyAction)
@@ -3148,6 +3151,9 @@ struct PerformanceView: View {
                 // since no actual bot detection appears in the Instagram app.
                 print("⚠️ [PERF] loadProfile: transient challenge_required — suppressing connection error alert")
                 LogManager.shared.warning("loadProfile: transient challenge_required — alert suppressed", category: .general)
+            case .networkError(let message) where message.lowercased().contains("cancelled"):
+                print("ℹ️ [PERF] loadProfile cancelled — suppressing connection error alert")
+                LogManager.shared.info("loadProfile cancelled; connection alert suppressed", category: .general)
             default:
                     lastError = error
                     showingConnectionError = true
@@ -3155,6 +3161,11 @@ struct PerformanceView: View {
             } catch {
                 print("❌ Error loading profile: \(error)")
                     isLoading = false
+                guard !isCancellationLike(error) else {
+                    print("ℹ️ [PERF] loadProfile task cancelled — alert suppressed")
+                    LogManager.shared.info("loadProfile task cancelled; connection alert suppressed", category: .general)
+                    return
+                }
                     lastError = .apiError(error.localizedDescription)
                     showingConnectionError = true
                 }
@@ -3167,6 +3178,84 @@ struct PerformanceView: View {
 
     private func loadProfileSync(source: String) {
         Task { await loadProfile(source: source) }
+    }
+
+    private func isCancellationLike(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        if let instagramError = error as? InstagramError,
+           case .networkError(let message) = instagramError {
+            return message.lowercased().contains("cancelled")
+        }
+        return error.localizedDescription.lowercased().contains("cancelled")
+    }
+
+    @MainActor
+    private func noteForbiddenCDNImage(url: String) {
+        guard url.contains("fbcdn.net") || url.contains("instagram") else { return }
+
+        let now = Date()
+        cdnForbiddenTimestamps = cdnForbiddenTimestamps.filter { now.timeIntervalSince($0) < 20 }
+        cdnForbiddenTimestamps.append(now)
+
+        guard cdnForbiddenTimestamps.count >= 8 else { return }
+        scheduleCDNURLRefresh(reason: "expired CDN image URLs (\(cdnForbiddenTimestamps.count) HTTP 403s)")
+    }
+
+    @MainActor
+    private func scheduleCDNURLRefresh(reason: String) {
+        guard !cdnRefreshScheduled else { return }
+        guard profile != nil else { return }
+
+        cdnRefreshScheduled = true
+        print("🔄 [CDN] Scheduling safe URL refresh — \(reason)")
+        LogManager.shared.warning("CDN thumbnails expired — scheduling safe profile URL refresh", category: .cache)
+
+        Task { @MainActor in
+            defer {
+                cdnRefreshScheduled = false
+                cdnForbiddenTimestamps.removeAll()
+            }
+
+            for attempt in 1...4 {
+                guard profile != nil,
+                      !instagram.isLocked,
+                      !instagram.isSessionChallenged,
+                      !instagram.isSessionExpired,
+                      !uploadManager.isActive else {
+                    print("🔄 [CDN] URL refresh aborted — session/upload guard failed")
+                    return
+                }
+
+                if InstagramSafetyGate.shared.isInColdStartWindow {
+                    let wait = InstagramSafetyGate.shared.coldStartSecondsRemaining + Int.random(in: 5...9)
+                    print("⏳ [CDN] URL refresh waiting for cold-start window — \(wait)s")
+                    try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                    continue
+                }
+
+                let decision = InstagramSafetyGate.shared.decision(for: .silentGridRefresh)
+                if !decision.allowed {
+                    let wait = max(decision.waitSeconds, 5) + Int.random(in: 2...5)
+                    print("⏳ [CDN] URL refresh delayed by safety gate — \(wait)s (\(decision.reason))")
+                    try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                    continue
+                }
+
+                guard !isLoading, !isPullRefreshInFlight, !isSilentGridRefreshing else {
+                    print("⏳ [CDN] URL refresh attempt \(attempt) waiting — another refresh active")
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    continue
+                }
+
+                print("🔄 [CDN] Refreshing profile media URLs after CDN 403 burst")
+                await refreshMediaGridSilently()
+                return
+            }
+
+            print("⚠️ [CDN] URL refresh gave up after repeated safety delays")
+            LogManager.shared.warning("CDN URL refresh deferred repeatedly by safety gates", category: .cache)
+        }
     }
     
     private func loadCachedImages() {
@@ -3570,6 +3659,9 @@ struct PerformanceView: View {
                 if httpResponse.statusCode != 200 {
                     print("❌ [DOWNLOAD] Non-200 status code")
                     LogManager.shared.warning("Image download HTTP \(httpResponse.statusCode): \(String(urlString.prefix(80)))", category: .cache)
+                    if httpResponse.statusCode == 403 {
+                        await MainActor.run { noteForbiddenCDNImage(url: urlString) }
+                    }
                     return nil
                 }
             }
@@ -4035,6 +4127,11 @@ struct PerformanceView: View {
             print("🔄 [PERF] Silent refresh done — \(merged.count) total, \(newCount) newly visible")
             LogManager.shared.info("Silent refresh done: \(merged.count) items, \(newCount) new", category: .general)
         } catch {
+            if isCancellationLike(error) {
+                print("ℹ️ [PERF] Silent media refresh cancelled — ignored")
+                LogManager.shared.info("Silent refresh cancelled; no connection alert needed", category: .general)
+                return
+            }
             print("⚠️ [PERF] Silent media refresh failed: \(error.localizedDescription)")
             LogManager.shared.warning("Silent refresh failed: \(error.localizedDescription)", category: .general)
         }

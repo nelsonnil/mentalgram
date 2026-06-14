@@ -1960,6 +1960,10 @@ class InstagramService: ObservableObject {
         } catch let error as URLError {
             let duration = String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - requestStart) * 1000)
             print("🌐 [NETWORK] URLError: \(error.localizedDescription)")
+            if error.code == .cancelled {
+                LogManager.shared.info("\(method) \(shortPath) cancelled [\(duration)]", category: .api)
+                throw InstagramError.networkError("cancelled")
+            }
             LogManager.shared.error("\(method) \(shortPath) NETWORK ERROR [\(duration)]: \(error.localizedDescription)", category: .api)
             // Mark API error so background tasks (e.g. cold-start deferred refresh)
             // can skip firing into a broken/unstable session.
@@ -2136,6 +2140,119 @@ class InstagramService: ObservableObject {
         print("✅ [API] \(method) \(shortPath) → 200 [\(duration)] [\(dataSize)]")
         
         return data
+    }
+
+    /// Diagnostic/legacy media configure path.
+    ///
+    /// Most API calls should go through `apiRequest()`. This helper exists only because
+    /// older working upload builds sent `/media/configure/` without `Authorization:
+    /// Bearer ...`, while newer Notes/Bio fixes added Bearer globally. We also force
+    /// `X-IG-WWW-Claim: 0` here because rupload is not rotating a fresh claim in the
+    /// failing logs, and a persisted non-zero claim can be stale/account-scoped.
+    /// Keep this isolated to single-photo configure.
+    private func apiRequestLegacyConfigure(body: [String: String], extraHeaders: [String: String] = [:]) async throws -> Data {
+        let method = "POST"
+        let path = "/media/configure/"
+        let shortPath = path
+
+        if isLocked {
+            throw InstagramError.botDetected("App is in lockdown mode. Wait for countdown to finish.")
+        }
+        if isSessionExpired {
+            print("🔴 [SESSION] Blocked legacy configure — session is expired. Re-login required.")
+            throw InstagramError.sessionExpired
+        }
+
+        try await InstagramSafetyGate.shared.waitForApiSlot(method: method, path: path)
+
+        guard let url = URL(string: "\(baseURL)\(path)") else {
+            throw InstagramError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 30
+
+        var headers = buildHeaders()
+        // Without Authorization: Bearer the configure request hits the web stack instead
+        // of the mobile API backend (confirmed Jun 2026 via x-stack: www response header).
+        for (key, value) in extraHeaders {
+            headers[key] = value
+        }
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        var components = URLComponents()
+        components.queryItems = body.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = (components.percentEncodedQuery ?? "").data(using: .utf8)
+
+        trackAction()
+        InstagramSafetyGate.shared.recordApiRequest(method: method, path: path)
+
+        let started = Date()
+        let rateInfo = checkRateLimit()
+        LogManager.shared.log(
+            "\(method) \(shortPath) [actions:\(rateInfo.actionsUsed)/\(maxActionsPerHour)] [errors:\(consecutiveErrors)]",
+            level: .debug,
+            category: .api
+        )
+
+        let (data, response) = try await postSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw InstagramError.networkError("Invalid configure response")
+        }
+
+        let duration = String(format: "%.0fms", Date().timeIntervalSince(started) * 1000)
+        extractMID(from: response)
+        extractAndUpdateCSRF(from: response)
+
+        if httpResponse.statusCode == 200 {
+            consecutiveErrors = 0
+            consecutiveBotSignalErrors = 0
+            challengeRequiredStreak = 0
+            hasRecentApiError = false
+            let dataSize = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+            print("✅ [API] POST /media/configure/ legacy → 200 [\(duration)] [\(dataSize)]")
+            try await checkForBotSignals(data: data, isWriteOperation: true)
+            return data
+        }
+
+        consecutiveErrors += 1
+        hasRecentApiError = true
+        LogManager.shared.warning("POST /media/configure/ legacy HTTP \(httpResponse.statusCode) [\(duration)] [consecutiveErrors:\(consecutiveErrors)]", category: .api)
+
+        if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let message = errorJson["message"] as? String ?? ""
+            if httpResponse.statusCode >= 500 {
+                let errorType = errorJson["error_type"] as? String ?? "?"
+                let fbErrorCode = errorJson["fb_api_error_code"] as? Int ?? -1
+                let spamBlock = errorJson["spam"] as? Bool ?? false
+                let feedback = errorJson["feedback_message"] as? String ?? ""
+                print("❌ [API] legacy 5xx detail — type:\(errorType) fb_code:\(fbErrorCode) spam:\(spamBlock) msg:\(message) feedback:\(feedback)")
+                print("❌ [API] legacy Full 5xx JSON: \((String(data: data, encoding: .utf8) ?? "?").prefix(500))")
+            }
+            if message.contains("challenge_required") {
+                await MainActor.run { challengeRequiredStreak += 1 }
+                await markSessionChallenged(duration: 900)
+                await triggerLockdown(
+                    reason: "Instagram ha pedido verificación al publicar. Abre Instagram, completa cualquier aviso y espera unos minutos antes de reanudar.",
+                    duration: 900
+                )
+                await MainActor.run { UploadManager.shared.requiresManualResumeAfterChallenge = true }
+                throw InstagramError.challengeRequired
+            }
+            if !message.isEmpty {
+                print("❌ [API] legacy HTTP \(httpResponse.statusCode): \(message)")
+                throw InstagramError.apiError("HTTP \(httpResponse.statusCode): \(message)")
+            }
+        }
+
+        if let errorString = String(data: data, encoding: .utf8) {
+            print("❌ [API] legacy HTTP \(httpResponse.statusCode)")
+            print("❌ [API] legacy Response: \(String(errorString.prefix(200)))")
+        }
+        throw InstagramError.apiError("HTTP \(httpResponse.statusCode)")
     }
     
     // MARK: - Fetch Username
@@ -4358,6 +4475,15 @@ class InstagramService: ObservableObject {
                let url = firstCandidate["url"] as? String {
                 imageUrl = url
                 print("📷 [MEDIA] Item \(index + 1): Found image URL")
+            } else if let carouselChildren = item["carousel_media"] as? [[String: Any]],
+                      let firstChild = carouselChildren.first,
+                      let childVersions = firstChild["image_versions2"] as? [String: Any],
+                      let childCandidates = childVersions["candidates"] as? [[String: Any]],
+                      let firstChildCandidate = childCandidates.first,
+                      let url = firstChildCandidate["url"] as? String {
+                // Carousel posts sometimes lack a top-level image_versions2; use first child as cover.
+                imageUrl = url
+                print("📷 [MEDIA] Item \(index + 1): Found image URL from carousel child")
             } else {
                 print("⚠️ [MEDIA] Item \(index + 1): No image URL found")
             }
@@ -4707,21 +4833,23 @@ class InstagramService: ObservableObject {
 
         try await waitForUploadSafetyWindow(label: photoDesc)
         
-        // NOTE: Image is already aspect-adjusted and compressed when loaded from gallery
-        print("✅ [UPLOAD] Using pre-processed image")
+        // Always normalize image before rupload: fix orientation, aspect ratio and compression.
+        let aspectSafeData = InstagramService.adjustImageAspectRatio(imageData: imageData)
+        let preparedUploadInput = InstagramService.compressImageForUpload(
+            imageData: aspectSafeData,
+            photoIndex: photoIndex
+        )
         
-        // ANTI-BOT: For duplicate photos (Word/Number Reveal), make each copy unique
-        // This prevents Instagram from detecting identical image uploads across banks
+        // ANTI-BOT: Make each copy pixel-unique for sets that allow duplicates (Word/Number Reveal).
+        // For sets that don't allow duplicates, use the image as-is.
         let uploadData: Data
         if allowDuplicates {
-            print("🎲 [UPLOAD] Duplicates allowed - making image unique for this bank...")
-            uploadData = InstagramService.makeImageUnique(imageData: imageData)
+            uploadData = InstagramService.makeImageUnique(imageData: preparedUploadInput)
         } else {
-            uploadData = imageData
+            uploadData = preparedUploadInput
         }
         
         // ANTI-BOT: Detect duplicate image (prevent uploading same photo twice)
-        // EXCEPTION: Word Reveal and Number Reveal already have unique bytes per bank
         let finalHash = hashImageData(uploadData)
         if !allowDuplicates {
             if let lastHash = UserDefaults.standard.string(forKey: "last_upload_photo_hash"),
@@ -4730,8 +4858,6 @@ class InstagramService: ObservableObject {
                 let photoInfo = photoIndex != nil ? " Photo #\(photoIndex! + 1)" : " This photo"
                 throw InstagramError.apiError("\(photoInfo) was already uploaded. Duplicate uploads may trigger bot detection.")
             }
-        } else {
-            print("✅ [UPLOAD] Duplicates allowed with unique bytes for this set type (Word/Number Reveal)")
         }
         
         print("   Image hash: \(String(finalHash.prefix(16)))...")
@@ -4761,7 +4887,7 @@ class InstagramService: ObservableObject {
             throw InstagramError.uploadFailed
         }
         
-        // Step 3: Upload image bytes (exactly like instagrapi)
+        // Step 3: Upload image bytes
         guard let uploadURL = URL(string: "https://i.instagram.com/rupload_igphoto/\(uploadName)") else {
             print("❌ [UPLOAD] Invalid URL")
             throw InstagramError.invalidURL
@@ -4770,15 +4896,13 @@ class InstagramService: ObservableObject {
         var uploadRequest = URLRequest(url: uploadURL)
         uploadRequest.httpMethod = "POST"
         
-        // ANTI-BOT: Use ALL headers from buildHeaders() for consistency, then add upload-specific ones
-        let baseHeaders = buildHeaders()
+        var baseHeaders = buildHeaders()
+        baseHeaders["X-IG-WWW-Claim"] = "0"
         for (key, value) in baseHeaders {
-            // Skip Content-Type from base (upload uses octet-stream, not form-urlencoded)
             if key == "Content-Type" { continue }
             uploadRequest.setValue(value, forHTTPHeaderField: key)
         }
         
-        // Upload-specific headers (use uploadData which may be uniquified for duplicates)
         uploadRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         uploadRequest.setValue(String(uploadData.count), forHTTPHeaderField: "Content-Length")
         uploadRequest.setValue(ruploadParamsString, forHTTPHeaderField: "X-Instagram-Rupload-Params")
@@ -4795,9 +4919,8 @@ class InstagramService: ObservableObject {
         
         if let httpResponse = uploadResponse as? HTTPURLResponse {
             print("   Upload response status: \(httpResponse.statusCode)")
-            // Capture fresh www-claim from rupload response — configure needs it
-            if let claim = (httpResponse.allHeaderFields as? [String: String])?
-                .first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value,
+            let allHeaders = httpResponse.allHeaderFields as? [String: String] ?? [:]
+            if let claim = allHeaders.first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value,
                !claim.isEmpty {
                 await MainActor.run {
                     self.wwwClaim = claim
@@ -4906,85 +5029,40 @@ class InstagramService: ObservableObject {
         //   • Whether taken_at rules changed
         //   • https://github.com/LevPasha/instagrapi (reference implementation)
 
-        let tzOffset = String(TimeZone.current.secondsFromGMT())
-
-        // URL-encoded body — /media/configure/ does NOT accept signed_body format
-        // Minimal canonical fields for single-photo upload (instagrapi reference pattern).
-        var configBody: [String: String] = [
-            "_csrftoken":                 session.csrfToken,
-            "_uid":                       session.userId,
-            "_uuid":                      clientUUID,
-            "upload_id":                  uploadIdResponse,
-            "caption":                    caption,
-            "source_type":                "4",
-            "media_folder":               "Camera",
-            "device_id":                  deviceId,
-            "timezone_offset":            tzOffset,
-        ]
-        // Grid position anchor: only include taken_at when it is recent enough.
-        // A taken_at older than 60 days is suspicious and may trigger HTTP 500.
-        if let anchorDate = takenAt {
-            let maxAge: TimeInterval = 60 * 24 * 3600
-            if anchorDate >= Date().addingTimeInterval(-maxAge) {
-                configBody["taken_at"] = String(Int(anchorDate.timeIntervalSince1970))
-                print("📍 [UPLOAD] taken_at applied: \(anchorDate)")
-            } else {
-                print("📍 [UPLOAD] taken_at skipped (too old: \(anchorDate))")
-            }
-        }
-
-        // NOTE: Do NOT add a warm-up GET here before configure.
-        // The rupload response already captures a fresh X-IG-WWW-Claim (see above).
-        // Adding a GET /accounts/current_user/?edit=true creates a 3-call burst
-        // (rupload + GET + configure) that Instagram flags as automation — this caused
-        // working accounts to stop uploading. See notes section regression comment for
-        // the same lesson learned. One direct configure POST is the proven pattern.
-        print("   Configuring media (v6 URL-encoded, minimal body)...")
-        let configData = try await apiRequest(
-            method: "POST",
-            path: "/media/configure/",
-            body: configBody
+        // v7 (2026-06-14): Reverted EXACTLY to the last-known-good body shape from commit
+        //   976e3b5 (only upload_id / caption / source_type / media_folder / device_id +
+        //   unconditional taken_at).
+        //
+        // v8 diagnostic (2026-06-14): Keep the v7 body shape, but do NOT send a very old
+        //   taken_at. The current failing case anchors to Jun-2023; if Instagram tightened
+        //   publish validation, rupload can still accept bytes but configure can fail while
+        //   trying to publish media with an impossible/too-old timestamp. This test isolates
+        //   taken_at without mixing in the extra v2-v6 body fields.
+        // ── Step 4: Configure via sidecar (single-photo carousel) ───────────────
+        //
+        // Jun 2026: /media/configure/ (single photo) returns HTTP 500 deterministic
+        // error (error-mid d7ced9fdf1abbcac01c1d03b3184b8f4) for all accounts and all
+        // body/header variations (v1–v19 diagnostic series). /media/configure_sidecar/
+        // works correctly for Amnesia carousel sets — confirmed working same day.
+        // Using configure_sidecar with a single-image children array publishes
+        // identically to a normal single photo in the Instagram feed.
+        print("   Configuring media via configure_sidecar (single-photo workaround Jun 2026)...")
+        let mediaId = try await configureSidecar(
+            uploadIds:       [uploadIdResponse],
+            caption:         caption,
+            clientSidecarId: String(Int(Date().timeIntervalSince1970 * 1000))
         )
         
-        if let jsonString = String(data: configData, encoding: .utf8) {
-            print("   Configure response: \(jsonString)")
-        }
+        print("✅ [UPLOAD] Photo uploaded successfully via sidecar! Media ID: \(mediaId)")
+        let photoDescSuccess = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
+        LogManager.shared.success("\(photoDescSuccess) uploaded successfully (ID: \(mediaId))", category: .upload)
         
-        if let configJson = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
-           let media = configJson["media"] as? [String: Any] {
-            
-            // Instagram puede devolver pk como String o Int64, manejamos ambos
-            let mediaId: String?
-            if let pkString = media["pk"] as? String {
-                mediaId = pkString
-            } else if let pkInt = media["pk"] as? Int64 {
-                mediaId = String(pkInt)
-            } else if let pkInt = media["pk"] as? Int {
-                mediaId = String(pkInt)
-            } else {
-                mediaId = nil
-            }
-            
-            if let mediaId = mediaId {
-                print("✅ [UPLOAD] Photo uploaded successfully! Media ID: \(mediaId)")
-                let photoDesc = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
-                LogManager.shared.success("\(photoDesc) uploaded successfully (ID: \(mediaId))", category: .upload)
-                
-                // ANTI-BOT: Save hash and cooldown after successful upload
-                let imageHash = hashImageData(uploadData)
-                UserDefaults.standard.set(imageHash, forKey: "last_upload_photo_hash")
-                
-                // ANTI-BOT: DO NOT set cooldown here - it will be set AFTER archive completes
-                // This ensures the full upload+archive cycle is counted, not just upload
-                print("   ⏳ Cooldown will be set after archive completes")
-                
-                return mediaId
-            }
-        }
+        // ANTI-BOT: Save hash and cooldown after successful upload
+        let imageHash = hashImageData(uploadData)
+        UserDefaults.standard.set(imageHash, forKey: "last_upload_photo_hash")
+        print("   ⏳ Cooldown will be set after archive completes")
         
-        print("❌ [UPLOAD] Failed to get media ID from configure response")
-        LogManager.shared.error("Upload failed - no media ID received", category: .upload)
-        return nil
+        return mediaId
     }
     
     /// Check if photo upload is on cooldown (PUBLIC for SetDetailView)
@@ -7463,7 +7541,7 @@ final class InstagramSafetyGate {
         case .reveal:
             return minGapDecision(action: action, now: now, minGap: 150)
         case .pullRefresh:
-            return minGapDecision(action: action, now: now, minGap: 600)
+            return minGapDecision(action: action, now: now, minGap: 120)
         case .entryRefresh:
             return minGapDecision(action: action, now: now, minGap: 90)
         case .silentGridRefresh:
