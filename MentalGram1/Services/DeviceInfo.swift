@@ -60,6 +60,12 @@ struct DeviceInfo {
     ///   appVersion     = "390.0.0.28.85"
     ///   appVersionCode = "765313520"
     ///   bloksVersionId = "0a3ae4c88248863609c67e278f34af44673cff300bc76add965a9fb036bd3ca3"
+    ///
+    /// Updated Jun 2026 — v433 (App Store) broke /media/configure/ for v390 clients.
+    /// instagrapi reference pair for v428 (also fixes configure on iOS with iOS bloks hash):
+    ///   appVersion     = "428.0.0.47.67"
+    ///   appVersionCode = "961145276"
+    ///   bloksVersionId = "7189b949425f9bf80ea8bd880cf5a3080b292d9b1c4b38a18d112f7c4b71e7a8"
     /// ─────────────────────────────────────────────────────────────────────────
     let appVersion = "390.0.0.28.85"
     let appVersionCode = "765313520"
