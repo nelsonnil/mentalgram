@@ -67,6 +67,11 @@ struct PerformanceView: View {
     /// revert the fake profile bio — prevents a concurrent loadProfile (fetching the old bio
     /// from Instagram before our POST completes) from overwriting the newly-shown word.
     @State private var pendingBioText: String? = nil
+    /// Short-lived local override for bio changes initiated inside Vault (URL scheme,
+    /// clipboard, OCR, API, interface inputs). Instagram profile refreshes can briefly
+    /// return the previous biography right after a successful POST; preserve the local
+    /// value so the fake profile does not visually revert.
+    @State private var localBioOverride: (text: String, timestamp: Date)? = nil
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
@@ -467,10 +472,7 @@ struct PerformanceView: View {
                     return String(item.pseudoURL.dropFirst("reveal://".count))
                 }
                 InstagramSafetyGate.shared.markPostReveal(mediaIds: revealedIds)
-                for item in revealedPhotos {
-                    if let image = item.image { cachedImages[item.pseudoURL] = image }
-                    insertRevealURL(item.pseudoURL)
-                }
+                batchInsertRevealURLs(revealedPhotos)
 
                 // For video slots: seed mediaItemsByURL with a pseudo InstagramMediaItem so that
                 // the PostCardView can show the video player immediately (using the CDN videoURL
@@ -1133,7 +1135,10 @@ struct PerformanceView: View {
         // Instantly reflect a biography update in the fake Instagram profile view.
         // changeBiography() saves to ProfileCacheService on success; we pick it up here.
         .onChange(of: profileCache.cachedProfile?.biography) { newBio in
-            guard let newBio, !isLoading else { return }
+            guard let newBio else { return }
+            if isLoading && pendingBioText == nil && activeLocalBioOverride == nil {
+                return
+            }
             // If a bio POST is in-flight (OCR / interface capture), block any revert that
             // arrives from a concurrent loadProfile fetching the old bio from Instagram.
             // Once the POST completes (success or fail) pendingBioText is cleared and
@@ -1905,7 +1910,7 @@ struct PerformanceView: View {
             .replacingOccurrences(of: "\\n",  with: "\n")
     }
 
-    /// Replaces `{text1}`, `{text2}`, `{text3}` (and the legacy alias `{word}` = `{text1}`)
+    /// Replaces `{text1}`, `{text2}`, `{text3}`, `{text4}`, `{text5}` (and the legacy alias `{word}` = `{text1}`)
     /// in `template` with the provided value map, then expands `\n` escapes.
     /// Returns `values["text1"] ?? ""` (with escapes expanded) when template is empty.
     private func applyTemplate(_ values: [String: String], template: String) -> String {
@@ -1922,6 +1927,8 @@ struct PerformanceView: View {
         }
         if let v2 = values["text2"] { result = result.replacingOccurrences(of: "{text2}", with: v2) }
         if let v3 = values["text3"] { result = result.replacingOccurrences(of: "{text3}", with: v3) }
+        if let v4 = values["text4"] { result = result.replacingOccurrences(of: "{text4}", with: v4) }
+        if let v5 = values["text5"] { result = result.replacingOccurrences(of: "{text5}", with: v5) }
         return expandEscapes(result)
     }
 
@@ -2017,7 +2024,7 @@ struct PerformanceView: View {
             // Build effective value dict: use URL-scheme values when provided, else fall back to `text`
             let effectiveValues: [String: String] = values.isEmpty ? ["text1": text] : values
 
-            // Apply text template ({text1}/{text2}/{text3}/{word} → URL-scheme values)
+            // Apply text template ({text1}/{text2}/{text3}/{text4}/{text5}/{word} → URL-scheme values)
             let tpl = mode == "note" ? noteTemplate : bioTemplate
             let composed = tpl.isEmpty ? expandEscapes(text) : applyTemplate(effectiveValues, template: tpl)
 
@@ -2040,37 +2047,64 @@ struct PerformanceView: View {
                 if final.count < composed.count {
                     print("✂️ [URL] Bio truncated: \(composed.count)→\(final.count) chars")
                 }
-                // Optimistic: show bio immediately
-                await MainActor.run {
-                    if let current = profile {
-                        profile = InstagramProfile(
-                            userId: current.userId, username: current.username,
-                            fullName: current.fullName, biography: final,
-                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
-                            isVerified: current.isVerified, isPrivate: current.isPrivate,
-                            followerCount: current.followerCount, followingCount: current.followingCount,
-                            mediaCount: current.mediaCount, followedBy: current.followedBy,
-                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
-                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
-                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                            cachedHighlights: current.cachedHighlights,
-                            cachedMediaItems: current.cachedMediaItems,
-                            cachedReelItems: current.cachedReelItems,
-                            cachedNextMaxId: current.cachedNextMaxId
-                        )
+                // Optimistic: show bio immediately.
+                // Pin pendingBioText so a concurrent loadProfile fetching the old bio
+                // from Instagram while the POST is in-flight cannot revert the UI.
+                await MainActor.run { pinLocalBiography(final) }
+                do {
+                    let ok = try await instagram.changeBiography(text: final)
+                    if ok {
+                        print("✅ [URL] Biography updated via URL scheme")
+                        LogManager.shared.success("Biography updated via URL scheme (\(final.count) chars)", category: .general)
+                        fireDoubleConfirmationVibration()
                     }
+                } catch {
+                    print("⚠️ [URL] Bio change failed: \(error.localizedDescription)")
+                    LogManager.shared.warning("URL scheme bio failed: \(error.localizedDescription)", category: .general)
                 }
-                let ok = try await instagram.changeBiography(text: final)
-                if ok {
-                    print("✅ [URL] Biography updated via URL scheme")
-                    LogManager.shared.success("Biography updated via URL scheme (\(final.count) chars)", category: .general)
-                    fireDoubleConfirmationVibration()
-                }
+                await MainActor.run { pendingBioText = nil }
             }
         } catch {
             print("⚠️ [URL] Action failed: \(error.localizedDescription)")
             LogManager.shared.warning("URL scheme action failed: \(error.localizedDescription)", category: .general)
         }
+    }
+
+    private var activeLocalBioOverride: String? {
+        guard let override = localBioOverride else { return nil }
+        guard Date().timeIntervalSince(override.timestamp) < 5 * 60 else { return nil }
+        return override.text
+    }
+
+    @MainActor
+    private func pinLocalBiography(_ text: String) {
+        pendingBioText = text
+        localBioOverride = (text, Date())
+        applyBiographyToVisibleProfile(text)
+    }
+
+    @MainActor
+    private func applyBiographyToVisibleProfile(_ text: String) {
+        guard let current = profile else { return }
+        profile = profileByReplacingBiography(current, biography: text)
+    }
+
+    private func profileByReplacingBiography(_ current: InstagramProfile, biography: String) -> InstagramProfile {
+        InstagramProfile(
+            userId: current.userId, username: current.username,
+            fullName: current.fullName, biography: biography,
+            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
+            isVerified: current.isVerified, isPrivate: current.isPrivate,
+            followerCount: current.followerCount, followingCount: current.followingCount,
+            mediaCount: current.mediaCount, followedBy: current.followedBy,
+            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
+            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
+            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
+            cachedHighlights: current.cachedHighlights,
+            cachedMediaItems: current.cachedMediaItems,
+            cachedReelItems: current.cachedReelItems,
+            cachedNextMaxId: current.cachedNextMaxId
+        )
     }
 
     // MARK: - Clipboard Auto-Mode
@@ -2131,31 +2165,14 @@ struct PerformanceView: View {
                 }
             } else {
                 let composed = applyTemplate(text, template: bioTemplate)
-                let acrosticComposed = applyAcrosticIfNeeded(composed)
+                let inputForBio = bioAcrosticEnabled ? text : composed
+                let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
                 let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
                 if final.count < acrosticComposed.count {
                     print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(acrosticComposed.count)→\(final.count) chars")
                 }
                 // Optimistic: show bio immediately
-                await MainActor.run {
-                    if let current = profile {
-                        profile = InstagramProfile(
-                            userId: current.userId, username: current.username,
-                            fullName: current.fullName, biography: final,
-                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
-                            isVerified: current.isVerified, isPrivate: current.isPrivate,
-                            followerCount: current.followerCount, followingCount: current.followingCount,
-                            mediaCount: current.mediaCount, followedBy: current.followedBy,
-                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
-                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
-                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                            cachedHighlights: current.cachedHighlights,
-                            cachedMediaItems: current.cachedMediaItems,
-                            cachedReelItems: current.cachedReelItems,
-                            cachedNextMaxId: current.cachedNextMaxId
-                        )
-                    }
-                }
+                await MainActor.run { pinLocalBiography(final) }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     clipboardAutoLastSent = text  // track original clipboard text to avoid re-sends
@@ -2236,21 +2253,27 @@ struct PerformanceView: View {
             ud.removeObject(forKey: lastKey)
         }
 
-        // ── Fetch text2 / text3 in parallel (if configured) ──
+        // ── Fetch text2 / text3 / text4 / text5 in parallel (if configured) ──
         var values: [String: String] = [:]
         if !primaryText.isEmpty { values["text1"] = primaryText }
 
         let src2 = target == "note" ? integrations.noteText2Source : integrations.bioText2Source
         let src3 = target == "note" ? integrations.noteText3Source : integrations.bioText3Source
-        if src2 != .none || src3 != .none {
+        let src4 = target == "note" ? integrations.noteText4Source : integrations.bioText4Source
+        let src5 = target == "note" ? integrations.noteText5Source : integrations.bioText5Source
+        if src2 != .none || src3 != .none || src4 != .none || src5 != .none {
             async let v2 = src2 != .none ? integrations.fetchValue(for: src2) : nil
             async let v3 = src3 != .none ? integrations.fetchValue(for: src3) : nil
-            let (r2, r3) = await (v2, v3)
+            async let v4 = src4 != .none ? integrations.fetchValue(for: src4) : nil
+            async let v5 = src5 != .none ? integrations.fetchValue(for: src5) : nil
+            let (r2, r3, r4, r5) = await (v2, v3, v4, v5)
             if let r2 { values["text2"] = r2 }
             if let r3 { values["text3"] = r3 }
+            if let r4 { values["text4"] = r4 }
+            if let r5 { values["text5"] = r5 }
         }
 
-        let text = primaryText.isEmpty ? (values["text2"] ?? values["text3"] ?? "") : primaryText
+        let text = primaryText.isEmpty ? (values["text2"] ?? values["text3"] ?? values["text4"] ?? values["text5"] ?? "") : primaryText
         print("⚡ [API AUTO] Values for \(target): \(values.map { "\($0.key)=\($0.value.prefix(20))" }.joined(separator: ", "))")
         LogManager.shared.info("Magic API → \(target): \(values.map { "\($0.key)=\($0.value.prefix(20))" }.joined(separator: ", "))", category: .general)
 
@@ -2275,28 +2298,14 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let acrosticComposed = applyAcrosticIfNeeded(composed)
+                // When acrostic mode is ON, bypass the template and feed the raw
+                // fetched word directly to the acrostic engine — the template
+                // would produce a sentence with spaces that the engine would reject.
+                let inputForBio = bioAcrosticEnabled ? text : composed
+                let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
                 let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
                 // Optimistic: update bio in fake profile instantly, before API confirms
-                await MainActor.run {
-                    if let current = profile {
-                        profile = InstagramProfile(
-                            userId: current.userId, username: current.username,
-                            fullName: current.fullName, biography: final,
-                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
-                            isVerified: current.isVerified, isPrivate: current.isPrivate,
-                            followerCount: current.followerCount, followingCount: current.followingCount,
-                            mediaCount: current.mediaCount, followedBy: current.followedBy,
-                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
-                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
-                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                            cachedHighlights: current.cachedHighlights,
-                            cachedMediaItems: current.cachedMediaItems,
-                            cachedReelItems: current.cachedReelItems,
-                            cachedNextMaxId: current.cachedNextMaxId
-                        )
-                    }
-                }
+                await MainActor.run { pinLocalBiography(final) }
                 let ok = try await instagram.changeBiography(text: final)
                 if ok {
                     print("✅ [API AUTO] Biography updated: \"\(final)\"")
@@ -2326,8 +2335,8 @@ struct PerformanceView: View {
         // Bio/Note active if any polled placeholder source is configured — no mode gate needed,
         // the source selection itself determines whether polling should run.
         // .ocr sources are event-driven and excluded via isPolled.
-        let bioActive  = integrations.bioText1Source.isPolled  || integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioApiSource.isPolled
-        let noteActive = integrations.noteText1Source.isPolled || integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteApiSource.isPolled
+        let bioActive  = integrations.bioText1Source.isPolled  || integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioText4Source.isPolled  || integrations.bioText5Source.isPolled  || integrations.bioApiSource.isPolled
+        let noteActive = integrations.noteText1Source.isPolled || integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteText4Source.isPolled || integrations.noteText5Source.isPolled || integrations.noteApiSource.isPolled
         let ppActive   = integrations.ppApiSource   != .none && ppTopInputMode   == "api"
         guard bioActive || noteActive || ppActive else { return }
         guard apiPollingTask == nil else { return }
@@ -2348,8 +2357,8 @@ struct PerformanceView: View {
                     let legacySrc = target == "note" ? integrations.noteApiSource    : integrations.bioApiSource
                     let source    = text1src.isPolled ? text1src : (legacySrc.isPolled ? legacySrc : .none)
                     let hasPolledSrc = source.isPolled
-                        || (target == "note" ? integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled
-                                             : integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled)
+                        || (target == "note" ? integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteText4Source.isPolled || integrations.noteText5Source.isPolled
+                                             : integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioText4Source.isPolled  || integrations.bioText5Source.isPolled)
                     guard hasPolledSrc else { continue }
 
                     guard let payload = await integrations.fetchPayload(for: source) else { continue }
@@ -2503,33 +2512,17 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else {
-                let acrosticComposed = applyAcrosticIfNeeded(composed)
+                // When acrostic mode is ON, bypass the template and feed the raw
+                // OCR word directly to the acrostic engine.
+                let inputForBio = bioAcrosticEnabled ? trimmed : composed
+                let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
                 let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
 
                 // ── Optimistic UI update (fake profile shows result instantly) ────────
                 // Pin pendingBioText so that a concurrent loadProfile (fetching the old
                 // bio from Instagram while our POST is in-flight) cannot revert the fake
                 // profile via onChange(of: profileCache.cachedProfile?.biography).
-                await MainActor.run {
-                    pendingBioText = final
-                    if let current = profile {
-                        profile = InstagramProfile(
-                            userId: current.userId, username: current.username,
-                            fullName: current.fullName, biography: final,
-                            externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
-                            isVerified: current.isVerified, isPrivate: current.isPrivate,
-                            followerCount: current.followerCount, followingCount: current.followingCount,
-                            mediaCount: current.mediaCount, followedBy: current.followedBy,
-                            isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
-                            cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
-                            cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                            cachedHighlights: current.cachedHighlights,
-                            cachedMediaItems: current.cachedMediaItems,
-                            cachedReelItems: current.cachedReelItems,
-                            cachedNextMaxId: current.cachedNextMaxId
-                        )
-                    }
-                }
+                await MainActor.run { pinLocalBiography(final) }
 
                 // ── Direct POST — mirrors mentalgram5's proven pattern ─────────────
                 // No cold-start delay or jitter here. The real root cause of the previous
@@ -2604,8 +2597,8 @@ struct PerformanceView: View {
         }
 
         let sources: [ApiSource] = target == "note"
-            ? [integrations.noteText1Source, integrations.noteText2Source, integrations.noteText3Source]
-            : [integrations.bioText1Source,  integrations.bioText2Source,  integrations.bioText3Source]
+            ? [integrations.noteText1Source, integrations.noteText2Source, integrations.noteText3Source, integrations.noteText4Source, integrations.noteText5Source]
+            : [integrations.bioText1Source,  integrations.bioText2Source,  integrations.bioText3Source,  integrations.bioText4Source,  integrations.bioText5Source]
         let matchingSlots = sources.enumerated().compactMap { idx, src -> Int? in
             guard let k = src.interfaceKind, kinds.contains(k) else { return nil }
             return idx + 1
@@ -2647,26 +2640,7 @@ struct PerformanceView: View {
             await MainActor.run { lastNoteText = finalText }
         } else {
             finalText = truncateAtWordBoundary(composed, limit: 150)
-            await MainActor.run {
-                pendingBioText = finalText
-                if let current = profile {
-                    profile = InstagramProfile(
-                        userId: current.userId, username: current.username,
-                        fullName: current.fullName, biography: finalText,
-                        externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
-                        isVerified: current.isVerified, isPrivate: current.isPrivate,
-                        followerCount: current.followerCount, followingCount: current.followingCount,
-                        mediaCount: current.mediaCount, followedBy: current.followedBy,
-                        isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
-                        cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
-                        cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                        cachedHighlights: current.cachedHighlights,
-                        cachedMediaItems: current.cachedMediaItems,
-                        cachedReelItems: current.cachedReelItems,
-                        cachedNextMaxId: current.cachedNextMaxId
-                    )
-                }
-            }
+            await MainActor.run { pinLocalBiography(finalText) }
         }
 
         // ── Direct POST — mirrors mentalgram5's proven pattern ───────────────────
@@ -2796,6 +2770,11 @@ struct PerformanceView: View {
                 }
             }
             print("📦 [CACHE] Loading profile from cache — \(cached.cachedMediaURLs.count) posts, \(cached.cachedMediaItems.count) items")
+
+            if let localBio = activeLocalBioOverride, cached.biography != localBio {
+                print("⚡️ [PERF] Preserving local bio override while loading cached profile")
+                cached = profileByReplacingBiography(cached, biography: localBio)
+            }
 
             self.profile = cached
             // If highlights are already in cache we know the final state immediately.
@@ -3091,6 +3070,11 @@ struct PerformanceView: View {
                         cachedImages[newPicURL] = img
                         print("⚡️ [PERF] Profile pic bridged old→new CDN URL — no blank frame")
                     }
+                }
+
+                if let localBio = activeLocalBioOverride, mergedProfile.biography != localBio {
+                    print("⚡️ [PERF] Preserving local bio override during profile refresh")
+                    mergedProfile = profileByReplacingBiography(mergedProfile, biography: localBio)
                 }
 
                         self.profile = mergedProfile
@@ -7071,23 +7055,20 @@ struct PostScrollView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var resolvedItems: [String: InstagramMediaItem] = [:]
-    @State private var hasForceActivated: Bool = false
     /// Display order of posts. While the Force Post trick is armed the forced post
     /// is REMOVED from this list (it can never be seen by scrolling). When the
-    /// spectator's flick ends, ScrollViewInterceptor inserts it exactly at the
-    /// natural landing slot via `insertForcedPost`. nil = original order.
+    /// spectator's flick ends, `commitForce` inserts it just below the fold and
+    /// SwiftUI scrolls to center it. nil = original order.
     @State private var displayURLs: [String]? = nil
+    /// Index the feed should scroll to (and center) after the forced post is
+    /// inserted. Drives a single smooth `scrollTo` animation.
+    @State private var forceScrollTarget: Int? = nil
 
     private var urls: [String] { displayURLs ?? mediaURLs }
 
     /// A force post exists in the original media list.
     private var forceConfigured: Bool {
         mediaURLs.contains(where: isForcedPostURL)
-    }
-
-    /// Index of the forced post in the CURRENT display list (nil while hidden).
-    private var forcedPostIndex: Int? {
-        urls.firstIndex(where: isForcedPostURL)
     }
 
     private func isForcedPostURL(_ url: String) -> Bool {
@@ -7099,19 +7080,21 @@ struct PostScrollView: View {
         return false
     }
 
-    /// Inserts the hidden forced post at `requested` so it sits exactly where the
-    /// current flick will stop. Called by ScrollViewInterceptor at finger-lift;
-    /// the slot is always below the visible viewport, so nothing changes on screen.
-    private func insertForcedPost(atIndex requested: Int) -> Int {
+    /// Inserts the hidden forced post just below the fold (at `slot`, found from real
+    /// geometry by the interceptor) and triggers a smooth scroll to center it. The
+    /// slot is always below the visible viewport, so the insertion is invisible.
+    private func commitForce(slot: Int) {
+        guard let forcedURL = mediaURLs.first(where: isForcedPostURL) else { return }
         var list = urls
-        if let existing = list.firstIndex(where: isForcedPostURL) { return existing }
-        guard let forcedURL = mediaURLs.first(where: isForcedPostURL) else { return -1 }
-        let target = min(max(requested, 0), list.count)
+        guard !list.contains(where: isForcedPostURL) else { return }
+        let target = min(max(slot, 0), list.count)
         list.insert(forcedURL, at: target)
         var tx = Transaction()
         tx.disablesAnimations = true
-        withTransaction(tx) { displayURLs = list }
-        return target
+        withTransaction(tx) {
+            displayURLs = list
+        }
+        forceScrollTarget = target
     }
 
     private func postID(_ index: Int) -> String { "post_\(index)" }
@@ -7122,9 +7105,9 @@ struct PostScrollView: View {
                 ZStack {
                     ScrollView(.vertical, showsIndicators: false) {
                         // LazyVStack so video cells (AVPlayer-backed) only mount when
-                        // they are about to appear on screen. The Force Post interceptor
-                        // already has a fallback (forcedIndex × avg row height) for the
-                        // case where the forced card hasn't been materialised yet.
+                        // they are about to appear on screen. Each cell carries a
+                        // per-cell geometry marker so the interceptor can insert the
+                        // forced post exactly below the fold.
                         LazyVStack(spacing: 0) {
                             ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
                                 PostCardView(
@@ -7135,11 +7118,8 @@ struct PostScrollView: View {
                                     profileImage: profileImage
                                 )
                                 .id(postID(index))
-                                .accessibilityIdentifier(isForcedPostURL(url) ? "forced_post_card" : "")
                                 .background {
-                                    // Real UIKit marker → lets the interceptor read the
-                                    // forced card's exact position on every device.
-                                    if isForcedPostURL(url) { ForcedCardMarker() }
+                                    if forceConfigured { PostCellMarker(index: index) }
                                 }
                                 Divider().background(Color(UIColor.separator))
                             }
@@ -7148,25 +7128,31 @@ struct PostScrollView: View {
 
                     if forceConfigured {
                         ScrollViewInterceptor(
-                            forcedIndex: forcedPostIndex ?? -1,
-                            totalPostCount: urls.count,
-                            hasActivated: $hasForceActivated,
                             isActive: forceConfigured,
-                            forcedThumbnail: forcedThumbnail,
-                            insertForcedPost: { requested in
-                                insertForcedPost(atIndex: requested)
-                            }
+                            totalPostCount: urls.count,
+                            commitForce: { slot in commitForce(slot: slot) }
                         )
                         .frame(width: 0, height: 0)
+                    }
+                }
+                .onChange(of: forceScrollTarget) { target in
+                    guard let target else { return }
+                    // Single smooth move that centers the freshly-inserted forced
+                    // post. SwiftUI computes the exact offset, so it lands correctly
+                    // on every screen size without manual geometry math.
+                    DispatchQueue.main.async {
+                        withAnimation(.easeOut(duration: 0.6)) {
+                            proxy.scrollTo(postID(target), anchor: .center)
+                        }
                     }
                 }
                 .onAppear {
                     resolvedItems = mediaItemsByURL
 
                     // Hide the forced post from the feed: it must be IMPOSSIBLE to
-                    // see it by scrolling. It reappears only at the landing slot of
-                    // the spectator's flick. If the spectator tapped the forced post
-                    // itself from the grid, keep the list intact (it's already shown).
+                    // see it by scrolling. It reappears only when the spectator's
+                    // flick commits it (just below the fold, then centered). If the
+                    // spectator tapped the forced post itself, keep the list intact.
                     let tappedURL = mediaURLs.indices.contains(initialIndex) ? mediaURLs[initialIndex] : nil
                     if displayURLs == nil,
                        forceConfigured,

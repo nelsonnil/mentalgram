@@ -237,7 +237,7 @@ private struct CoverTypingConfig: View {
     @ObservedObject private var secret = SecretInputSettings.shared
 
     private var preview: String {
-        let word = "coche"
+        let word = "car"
         let mask = secret.mode == .customUsername ? secret.customUsername.lowercased() : "user"
         guard !mask.isEmpty else { return "user" }
         var result = ""
@@ -290,7 +290,7 @@ private struct CoverTypingConfig: View {
                 Text("Preview:")
                     .font(VaultTheme.Typography.captionSmall())
                     .foregroundColor(VaultTheme.Colors.textTertiary)
-                Text("\"coche\" → \"\(preview)\"")
+                Text("\"car\" → \"\(preview)\"")
                     .font(VaultTheme.Typography.captionSmall())
                     .foregroundColor(VaultTheme.Colors.primary)
             }

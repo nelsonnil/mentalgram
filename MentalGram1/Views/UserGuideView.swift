@@ -20,7 +20,9 @@ struct UserGuideView: View {
         case profilePicture
         case note
         case biography
+        case forcePost
         case forceReel
+        case postPrediction
         case counterGlitch
         case dateForce
         case fakeHomeScreen
@@ -37,14 +39,16 @@ struct UserGuideView: View {
             case .profilePicture:  return 3
             case .note:            return 4
             case .biography:       return 5
-            case .forceReel:       return 6
-            case .counterGlitch:   return 7
-            case .dateForce:       return 8
-            case .fakeHomeScreen:  return 9
-            case .lockscreenInput: return 10
-            case .amnesiaCarousel: return 11
-            case .faq:             return 12
-            case .inputMethods:    return 13
+            case .forcePost:       return 6
+            case .forceReel:       return 7
+            case .postPrediction:  return 8
+            case .counterGlitch:   return 9
+            case .dateForce:       return 10
+            case .fakeHomeScreen:  return 11
+            case .lockscreenInput: return 12
+            case .amnesiaCarousel: return 13
+            case .faq:             return 14
+            case .inputMethods:    return 15
             }
         }
     }
@@ -163,12 +167,31 @@ struct UserGuideView: View {
                     guideSectionLabel("TRICKS", icon: "wand.and.stars", color: colorTricks)
                     guideCardGroup {
                         guideRow(
+                            icon: "hand.point.up.left.fill",
+                            iconColor: colorTricks,
+                            title: "Force Post",
+                            subtitle: "Force a scroll to stop on a specific post",
+                            isFirst: true, isLast: false
+                        ) { activeSheet = .forcePost }
+
+                        guideDivider
+                        guideRow(
                             icon: "square.grid.2x2",
                             iconColor: colorTricks,
                             title: "Force Reel",
                             subtitle: "Force a specific reel to appear in Explore",
-                            isFirst: true, isLast: false
+                            isFirst: false, isLast: false
                         ) { activeSheet = .forceReel }
+
+                        guideDivider
+                        guideRow(
+                            icon: "number.circle.fill",
+                            iconColor: colorTricks,
+                            title: "Post Prediction",
+                            subtitle: "Unarchive photos from the active set to reveal a prediction",
+                            badge: "⭐ Sets",
+                            isFirst: false, isLast: false
+                        ) { activeSheet = .postPrediction }
 
                         guideDivider
                         guideRow(
@@ -374,8 +397,12 @@ struct UserGuideView: View {
             NoteHelpView(onClose: { activeSheet = nil })
         case .biography:
             BiographyHelpView(onClose: { activeSheet = nil })
+        case .forcePost:
+            ForcePostHelpView(onClose: { activeSheet = nil })
         case .forceReel:
             ForceReelHelpView(onClose: { activeSheet = nil })
+        case .postPrediction:
+            PostPredictionHelpView(onClose: { activeSheet = nil })
         case .counterGlitch:
             CounterGlitchHelpView(onClose: { activeSheet = nil })
         case .dateForce:

@@ -5,9 +5,9 @@ import Combine
 ///
 /// Supported URLs:
 ///   vault://note?text=<encoded text>                     → send as Instagram Note (legacy, maps to text1)
-///   vault://note?text1=<v>&text2=<v>&text3=<v>          → multi-placeholder Note
+///   vault://note?text1=<v>&text2=<v>&text3=<v>&text4=<v>&text5=<v>   → multi-placeholder Note
 ///   vault://bio?text=<encoded text>                      → update Instagram Biography (legacy)
-///   vault://bio?text1=<v>&text2=<v>&text3=<v>           → multi-placeholder Biography
+///   vault://bio?text1=<v>&text2=<v>&text3=<v>&text4=<v>&text5=<v>    → multi-placeholder Biography
 ///   vault://reveal?word=<encoded word>  → Word Reveal: unarchive letter photos for the given word
 ///   vault://reveal?slot=<number>        → Custom Set Reveal: unarchive the photo at slot 1–100
 ///   vault://reveal?card=<symbol>        → Playing Card Reveal: unarchive a card (e.g. J♠, 10♥, K♦)
@@ -31,7 +31,7 @@ class URLActionManager: ObservableObject {
     @Published private(set) var pendingMode: String = ""
     /// Primary text (legacy / text1 value) — kept for backward compat with consumers that only read this.
     @Published private(set) var pendingText: String = ""
-    /// Multi-placeholder values keyed by "text1", "text2", "text3".
+    /// Multi-placeholder values keyed by "text1" … "text5".
     @Published private(set) var pendingValues: [String: String] = [:]
 
     // MARK: - URL Parsing
@@ -131,11 +131,13 @@ class URLActionManager: ObservableObject {
             return nil
         }
 
-        // Try multi-placeholder params first (text1, text2, text3), then legacy "text"
+        // Try multi-placeholder params first (text1..text5), then legacy "text"
         var values: [String: String] = [:]
         if let v1 = extractParam("text1") { values["text1"] = v1 }
         if let v2 = extractParam("text2") { values["text2"] = v2 }
         if let v3 = extractParam("text3") { values["text3"] = v3 }
+        if let v4 = extractParam("text4") { values["text4"] = v4 }
+        if let v5 = extractParam("text5") { values["text5"] = v5 }
         // Legacy "text" → maps to text1
         if values.isEmpty, let legacy = extractParam("text") { values["text1"] = legacy }
 
@@ -158,7 +160,7 @@ class URLActionManager: ObservableObject {
     // MARK: - Consumption
 
     /// Called by PerformanceView to retrieve and clear the pending action.
-    /// Returns `(mode, text, values)` where `values` contains keyed placeholders ("text1", "text2", "text3").
+    /// Returns `(mode, text, values)` where `values` contains keyed placeholders ("text1" … "text5").
     /// `text` is the legacy primary value (= values["text1"] if present).
     /// Note: pendingText may be empty for modes that carry no payload (e.g. profilepic_last).
     func consume() -> (mode: String, text: String, values: [String: String])? {
@@ -186,7 +188,7 @@ class URLActionManager: ObservableObject {
         var components = URLComponents()
         components.scheme = "vault"
         components.host   = mode
-        let orderedKeys = ["text1", "text2", "text3"].filter { values[$0] != nil }
+        let orderedKeys = ["text1", "text2", "text3", "text4", "text5"].filter { values[$0] != nil }
         components.queryItems = orderedKeys.map { URLQueryItem(name: $0, value: values[$0]!) }
         return components.url?.absoluteString ?? "vault://\(mode)"
     }

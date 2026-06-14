@@ -18,10 +18,10 @@ class DataManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        migrateImageDataToFilesystem()  // CRITICAL: Migrate old data first
-
         // Capture initial userId from whatever session was restored from Keychain
         currentUserId = InstagramService.shared.session.userId
+
+        migrateImageDataToFilesystem()  // CRITICAL: Migrate old data first
 
         // Migrate legacy (unscoped) sets to the current account's key on first run
         migrateLegacySetsIfNeeded()
@@ -39,6 +39,7 @@ class DataManager: ObservableObject {
                 guard let self else { return }
                 print("👤 [ACCOUNT] User changed → '\(newUserId.isEmpty ? "guest" : newUserId)' — reloading sets")
                 self.currentUserId = newUserId
+                self.migrateImageDataToFilesystem()
                 self.migrateLegacySetsIfNeeded()
                 self.loadSets()
             }
@@ -654,12 +655,49 @@ class DataManager: ObservableObject {
     private func loadSets() {
         if let data = UserDefaults.standard.data(forKey: setsKey),
            let decoded = try? JSONDecoder().decode([PhotoSet].self, from: data) {
-            sets = decoded
-            print("👤 [ACCOUNT] Loaded \(decoded.count) sets for userId='\(currentUserId.isEmpty ? "guest" : currentUserId)'")
+            sets = migrateDecodedLegacyImagesIfNeeded(decoded)
+            print("👤 [ACCOUNT] Loaded \(sets.count) sets for userId='\(currentUserId.isEmpty ? "guest" : currentUserId)'")
         } else {
             sets = []
             print("👤 [ACCOUNT] No sets found for userId='\(currentUserId.isEmpty ? "guest" : currentUserId)'")
         }
+    }
+
+    /// Defensive migration for account-scoped sets that still contain legacy inline
+    /// `imageData`. Older builds could mark the global migration as complete before
+    /// the logged-in user's scoped key was loaded; the next save would then encode
+    /// only `imagePath` and permanently drop the inline bytes. Running this at load
+    /// time protects every account key before any later saveSets() call.
+    private func migrateDecodedLegacyImagesIfNeeded(_ decoded: [PhotoSet]) -> [PhotoSet] {
+        var migrated = decoded
+        var migratedCount = 0
+
+        for setIndex in migrated.indices {
+            let setId = migrated[setIndex].id
+            for photoIndex in migrated[setIndex].photos.indices {
+                var photo = migrated[setIndex].photos[photoIndex]
+                guard photo.imagePath == nil, let imageData = photo.imageData else { continue }
+
+                let path = "photos/\(setId.uuidString)/\(photo.id.uuidString).jpg"
+                if let savedPath = SetPhoto.saveImageToFilesystem(data: imageData, path: path) {
+                    photo.imagePath = savedPath
+                    migrated[setIndex].photos[photoIndex] = photo
+                    migratedCount += 1
+                } else {
+                    print("⚠️ [MIGRATION] Could not persist legacy image for photo \(photo.id)")
+                }
+            }
+        }
+
+        guard migratedCount > 0 else { return decoded }
+
+        if let data = try? JSONEncoder().encode(migrated) {
+            UserDefaults.standard.set(data, forKey: setsKey)
+            print("✅ [MIGRATION] Repaired \(migratedCount) legacy photo file(s) for '\(setsKey)' before save")
+            LogManager.shared.success("Repaired \(migratedCount) set thumbnails before save", category: .general)
+        }
+
+        return migrated
     }
 
     /// Moves sets stored under the old global key ("com.vault.sets") into the
@@ -713,7 +751,7 @@ class DataManager: ObservableObject {
     /// CRITICAL: Migrates old data structure (imageData in UserDefaults) to new structure (files on disk)
     /// This runs once on app launch to fix the 5MB+ UserDefaults issue
     private func migrateImageDataToFilesystem() {
-        let migrationKey = "com.vault.migration.imagedata.v1"
+        let migrationKey = "com.vault.migration.imagedata.v1.\(currentUserId.isEmpty ? "guest" : currentUserId)"
         
         // Check if migration already done
         if UserDefaults.standard.bool(forKey: migrationKey) {

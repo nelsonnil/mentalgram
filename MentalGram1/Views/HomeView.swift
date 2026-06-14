@@ -717,6 +717,9 @@ struct SetsListView: View {
                                 .padding(.horizontal, VaultTheme.Spacing.lg)
                         }
 
+                        postPredictionToggleCard
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
+
                         if dataManager.sets.isEmpty {
                             EmptyStateView(
                                 icon: "square.stack.3d.up.slash.fill",
@@ -2033,6 +2036,13 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     modernDivider()
+                    NavigationLink(destination: CrashLogsView()) {
+                        modernRow(icon: "ladybug.fill", iconColor: .red,
+                                  title: "Crash Logs",
+                                  trailing: crashBadge)
+                    }
+                    .buttonStyle(.plain)
+                    modernDivider()
                     Button(action: { showingLogoutAlert = true }) {
                         modernRow(icon: "rectangle.portrait.and.arrow.right", iconColor: VaultTheme.Colors.error,
                                   title: "Logout",
@@ -2043,6 +2053,22 @@ struct SettingsView: View {
             }
         }
         Spacer().frame(height: 28)
+    }
+
+    /// Badge shown next to "Crash Logs" row: red pill with count when crashes exist, empty otherwise.
+    @ViewBuilder private var crashBadge: some View {
+        let count = CrashLoggerService.shared.storedReports.count
+        if count > 0 {
+            Text("\(count)")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Color.red)
+                .clipShape(Capsule())
+        } else {
+            EmptyView()
+        }
     }
 
     private func loadSettingsProfilePic() async {
@@ -2085,6 +2111,7 @@ struct SettingsView: View {
         settingsSectionLabel("TRICKS", icon: "wand.and.stars", color: Self.colorTricks)
         accentedSection(color: Self.colorTricks) {
             ForceReelSettingsCard()
+            ForcePostSettingsCard()
             ForceNumberRevealSettingsCard()
             FollowingMagicSettingsCard()
             DateForceSettingsCard()
@@ -2318,26 +2345,32 @@ struct SettingsView: View {
                     .onChange(of: noteTemplate) { if $0.count > 60 { noteTemplate = String($0.prefix(60)) } }
 
                 // ── Insert buttons + char counter ─────────────────────────────
-                HStack(spacing: 6) {
-                    ForEach(["{text1}", "{text2}", "{text3}"], id: \.self) { token in
-                        Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { noteTemplate += token }
-                        } label: {
-                            Text(token)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10).padding(.vertical, 7)
-                                .background(noteTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
-                                .cornerRadius(7)
+                HStack(spacing: 0) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(["{text1}", "{text2}", "{text3}", "{text4}", "{text5}"], id: \.self) { token in
+                                Button {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                        insertTokenAtCursor(token, fallback: &noteTemplate)
+                                    }
+                                } label: {
+                                    Text(token)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 10).padding(.vertical, 7)
+                                        .background(noteTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
+                                        .cornerRadius(7)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(!noteFeatureEnabled)
+                                .opacity(noteFeatureEnabled ? 1.0 : 0.45)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .disabled(!noteFeatureEnabled)
-                        .opacity(noteFeatureEnabled ? 1.0 : 0.45)
                     }
-                    Spacer()
                     Text("\(noteTemplate.count)/60")
                         .font(VaultTheme.Typography.captionSmall())
                         .foregroundColor(noteTemplate.count > 50 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                        .padding(.leading, 8)
                 }
 
                 // ── Per-placeholder source pickers (dynamic) ──────────────────
@@ -2459,28 +2492,32 @@ struct SettingsView: View {
                     .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
 
                     // ── Insert buttons + char counter ──────────────────────────
-                    HStack(spacing: 6) {
-                        ForEach(["{text1}", "{text2}", "{text3}"], id: \.self) { token in
-                            Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                                    activeBioBinding.wrappedValue += token
+                    HStack(spacing: 0) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(["{text1}", "{text2}", "{text3}", "{text4}", "{text5}"], id: \.self) { token in
+                                    Button {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                            insertTokenAtCursor(token, fallback: &activeBioBinding.wrappedValue)
+                                        }
+                                    } label: {
+                                        Text(token)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 10).padding(.vertical, 7)
+                                            .background(bioTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
+                                            .cornerRadius(7)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!bioFeatureEnabled)
+                                    .opacity(bioFeatureEnabled ? 1.0 : 0.45)
                                 }
-                            } label: {
-                                Text(token)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 10).padding(.vertical, 7)
-                                    .background(bioTemplate.contains(token) ? Self.colorProfile : Color(hex: "#3A3A3C"))
-                                    .cornerRadius(7)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(!bioFeatureEnabled)
-                            .opacity(bioFeatureEnabled ? 1.0 : 0.45)
                         }
-                        Spacer()
                         Text("\(bioTemplate.count)/150")
                             .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(bioTemplate.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+                            .padding(.leading, 8)
                     }
                 }
 
@@ -2792,7 +2829,7 @@ struct SettingsView: View {
             Text("Auto Input")
                                     .font(VaultTheme.Typography.bodyBold())
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
-            Text("API: polls every 2 s while Performance is active. OCR: camera recognises the word when you press the volume-up button. Sources are configured above via {text1}, {text2}, {text3}.")
+            Text("API: polls every 2 s while Performance is active. OCR: camera recognises the word when you press the volume-up button. Sources are configured above via {text1}, {text2}, {text3}, {text4}, {text5}.")
                                                     .font(VaultTheme.Typography.caption())
                                                     .foregroundColor(VaultTheme.Colors.textSecondary)
 
@@ -3173,9 +3210,9 @@ struct SettingsView: View {
 
         Task {
             do {
-                // Resolve {text1}/{text2}/{text3} from configured sources before sending
+                // Resolve {text1}/{text2}/{text3}/{text4}/{text5} from configured sources before sending
                 var resolved = rawTemplate
-                let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{word}")
+                let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{text4}") || resolved.contains("{text5}") || resolved.contains("{word}")
                 if hasTokens {
                     let values = await IntegrationsSettings.shared.fetchTemplatePlaceholders(for: "note")
                     if !values.isEmpty {
@@ -3185,6 +3222,8 @@ struct SettingsView: View {
                         }
                         if let v2 = values["text2"] { resolved = resolved.replacingOccurrences(of: "{text2}", with: v2) }
                         if let v3 = values["text3"] { resolved = resolved.replacingOccurrences(of: "{text3}", with: v3) }
+                        if let v4 = values["text4"] { resolved = resolved.replacingOccurrences(of: "{text4}", with: v4) }
+                        if let v5 = values["text5"] { resolved = resolved.replacingOccurrences(of: "{text5}", with: v5) }
                     }
                 }
                 let textToSend = String(resolved.prefix(60))
@@ -3240,9 +3279,9 @@ struct SettingsView: View {
 
         Task {
             do {
-                // Resolve {text1}/{text2}/{text3} from configured sources before sending
+                // Resolve {text1}/{text2}/{text3}/{text4}/{text5} from configured sources before sending
                 var resolved = rawTemplate
-                let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{word}")
+                let hasTokens = resolved.contains("{text1}") || resolved.contains("{text2}") || resolved.contains("{text3}") || resolved.contains("{text4}") || resolved.contains("{text5}") || resolved.contains("{word}")
                 if hasTokens {
                     let values = await IntegrationsSettings.shared.fetchTemplatePlaceholders(for: "bio")
                     if !values.isEmpty {
@@ -3252,6 +3291,8 @@ struct SettingsView: View {
                         }
                         if let v2 = values["text2"] { resolved = resolved.replacingOccurrences(of: "{text2}", with: v2) }
                         if let v3 = values["text3"] { resolved = resolved.replacingOccurrences(of: "{text3}", with: v3) }
+                        if let v4 = values["text4"] { resolved = resolved.replacingOccurrences(of: "{text4}", with: v4) }
+                        if let v5 = values["text5"] { resolved = resolved.replacingOccurrences(of: "{text5}", with: v5) }
                     }
                     // Expand \n escapes
                     resolved = resolved.replacingOccurrences(of: "\\n", with: "\n")
@@ -3366,7 +3407,7 @@ private struct InlineSourcePickerView: View {
     @State private var blockedToken: String = "{text1}"
     @State private var showBlockedInputAlert = false
 
-    private let allTokens = ["{text1}", "{text2}", "{text3}"]
+    private let allTokens = ["{text1}", "{text2}", "{text3}", "{text4}", "{text5}"]
 
     private var visibleTokens: [String] {
         var t = allTokens.filter { template.contains($0) }
@@ -3382,6 +3423,8 @@ private struct InlineSourcePickerView: View {
         switch token {
         case "{text2}": return target == "note" ? $integrations.noteText2Source : $integrations.bioText2Source
         case "{text3}": return target == "note" ? $integrations.noteText3Source : $integrations.bioText3Source
+        case "{text4}": return target == "note" ? $integrations.noteText4Source : $integrations.bioText4Source
+        case "{text5}": return target == "note" ? $integrations.noteText5Source : $integrations.bioText5Source
         default:        return target == "note" ? $integrations.noteText1Source : $integrations.bioText1Source
         }
     }
@@ -4548,7 +4591,7 @@ private struct PostPredictionCoverTypingView: View {
                         Text("Preview:")
                                 .font(VaultTheme.Typography.captionSmall())
                                 .foregroundColor(VaultTheme.Colors.textTertiary)
-                        Text("\"coche\" → \"\(coverTypingPreview)\"")
+                        Text("\"car\" → \"\(coverTypingPreview)\"")
                             .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(VaultTheme.Colors.primary)
                     }

@@ -1,32 +1,24 @@
 import SwiftUI
 import UIKit
 
-/// Makes the feed "naturally" land on the forced post.
+/// Makes the feed land on the forced post — simple and reliable on every device.
 ///
-/// THE TRICK (hidden-post design — robust on every device):
-/// The forced post is NOT in the feed at all while the spectator browses; it cannot
-/// be seen by scrolling fast or far. When the spectator flicks downward, UIKit tells
-/// us exactly where that flick would naturally stop (`targetContentOffset`). At that
-/// moment we INSERT the forced post into the landing slot — always below anything
-/// already seen, so the insertion is invisible — and glide the scroll there with a
-/// spring that inherits the finger's velocity. Result: a soft flick travels a
-/// little, a hard flick travels far, and wherever the scroll stops, the forced post
-/// is the one on screen, centered.
+/// THE TRICK (hidden-post design):
+/// The forced post is NOT in the feed while the spectator browses, so it can never be
+/// seen by scrolling. This UIKit bridge does ONE job: detect when the spectator lifts
+/// their finger after a downward flick, cancel the native deceleration, and report a
+/// safe insertion slot (the first cell just below the fold, found from real geometry).
 ///
-/// Anti-oscillation guarantees:
-/// - Initial spring velocity is capped at the critical value (no overshoot).
-/// - The glide is monotonic: it never reverses direction. If layout settles the
-///   ideal center slightly behind us, we release where we are instead of backing up.
+/// SwiftUI then inserts the forced post at that slot (invisibly, below the fold) and
+/// scrolls it to the center with `ScrollViewReader.scrollTo(anchor:)`. The distance is
+/// roughly one screen regardless of flick strength, so the behaviour is consistent and
+/// does not depend on finger speed — exactly what we want for a dependable stop.
 struct ScrollViewInterceptor: UIViewRepresentable {
-    /// Index of the forced post in the CURRENT display list, or -1 while hidden.
-    let forcedIndex: Int
-    let totalPostCount: Int
-    @Binding var hasActivated: Bool
     let isActive: Bool
-    var forcedThumbnail: UIImage? = nil
-    /// Asks SwiftUI to insert the forced post at the requested slot.
-    /// Returns the post's final index (or -1 when impossible).
-    var insertForcedPost: ((Int) -> Int)? = nil
+    let totalPostCount: Int
+    /// Called once when the spectator commits a downward flick. The argument is the
+    /// SwiftUI index where the forced post should be inserted (just below the fold).
+    var commitForce: ((Int) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -46,11 +38,9 @@ struct ScrollViewInterceptor: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         let c = context.coordinator
-        c.forcedIndex         = forcedIndex
-        c.totalPostCount      = totalPostCount
-        c.isActive            = isActive
-        c.hasActivatedBinding = $hasActivated
-        c.insertForcedPost    = insertForcedPost
+        c.totalPostCount = totalPostCount
+        c.isActive       = isActive
+        c.commitForce    = commitForce
     }
 
     // MARK: - View hierarchy search
@@ -80,60 +70,35 @@ struct ScrollViewInterceptor: UIViewRepresentable {
     // MARK: - Coordinator
 
     class Coordinator: NSObject, UIScrollViewDelegate {
-        var forcedIndex: Int = -1
         var totalPostCount: Int = 1
-        var hasActivatedBinding: Binding<Bool>?
-        var insertForcedPost: ((Int) -> Int)?
+        var commitForce: ((Int) -> Void)?
 
         /// Once true, the trick is done and all scrolling is normal.
         private var released = false
         private weak var originalDelegate: UIScrollViewDelegate?
-        private weak var attachedScrollView: UIScrollView?
 
-        /// Bottom-most content Y the spectator has ever had on screen. The forced
-        /// post is only inserted BELOW this line, so the insertion is invisible.
-        private var maxSeenContentY: CGFloat = 0
-
-        // ── Custom glide animation (CADisplayLink driven) ────────────────────
-        private var displayLink: CADisplayLink?
-        private var glideY: CGFloat = 0          // animated content offset
-        private var glideV: CGFloat = 0          // animated velocity (pts/s)
-        private var lastFrameTime: CFTimeInterval = 0
-        /// Spring stiffness — settles in ≈1.2 s, close to UIKit's own deceleration.
-        private let springOmega: CGFloat = 3.2
-
-        /// Tracks the last isActive value to detect re-entry.
         private var lastIsActive = false
         var isActive = false {
             didSet {
                 // Fresh activation (false → true): reset so the trick runs again.
-                if isActive && !lastIsActive {
-                    released = false
-                    maxSeenContentY = 0
-                    stopGlide()
-                }
+                if isActive && !lastIsActive { released = false }
                 lastIsActive = isActive
             }
         }
 
         init(parent: ScrollViewInterceptor) {
-            self.forcedIndex      = parent.forcedIndex
-            self.totalPostCount   = parent.totalPostCount
-            self.isActive         = parent.isActive
-            self.lastIsActive     = parent.isActive
-            self.insertForcedPost = parent.insertForcedPost
+            self.totalPostCount = parent.totalPostCount
+            self.isActive       = parent.isActive
+            self.lastIsActive   = parent.isActive
+            self.commitForce    = parent.commitForce
         }
-
-        deinit { displayLink?.invalidate() }
 
         func attach(to scrollView: UIScrollView) {
             originalDelegate = scrollView.delegate
-            attachedScrollView = scrollView
-            maxSeenContentY = scrollView.contentOffset.y + scrollView.bounds.height
             scrollView.delegate = self
         }
 
-        // MARK: - Finger lift → insert forced post at the natural landing slot
+        // MARK: - Finger lift → commit the forced post just below the fold
 
         func scrollViewWillEndDragging(
             _ scrollView: UIScrollView,
@@ -144,206 +109,66 @@ struct ScrollViewInterceptor: UIViewRepresentable {
                 scrollView, withVelocity: velocity, targetContentOffset: targetContentOffset
             )
 
-            guard isActive && !released else { return }
+            guard isActive, !released else { return }
+            // Fire on a downward flick (spectators browse a feed downward). Upward or
+            // near-zero gestures scroll normally so the spectator can look around.
+            guard velocity.y > 0.1 else { return }
+            guard scrollView.contentSize.height > 0, totalPostCount > 0 else { return }
 
-            // Upward or near-zero flicks scroll 100% naturally; the trick fires on
-            // the next downward flick (spectators browse a feed downward).
-            let vY = velocity.y   // points per millisecond; > 0 = scrolling down
-            guard vY > 0.05 else { return }
+            let slot = insertionSlot(in: scrollView)
 
-            // UIKit's exact natural landing offset for this flick — what makes the
-            // motion length feel genuine for slow AND fast scrolls on any screen.
-            let naturalY = targetContentOffset.pointee.y
-
-            let topInset  = scrollView.adjustedContentInset.top
-            let botInset  = scrollView.adjustedContentInset.bottom
-            let visibleH  = max(1, scrollView.bounds.height - topInset - botInset)
-            let contentH  = scrollView.contentSize.height
-            guard contentH > 0, totalPostCount > 0 else { return }
-            let avg = contentH / CGFloat(totalPostCount)
-
-            if forcedIndex < 0 {
-                // Hidden → insert into the slot centered at the natural landing,
-                // clamped below everything the spectator has already seen.
-                let landingCenterY = naturalY + topInset + visibleH / 2
-                var slot = Int((landingCenterY / avg).rounded(.down))
-                let firstUnseen = Int((maxSeenContentY / avg).rounded(.down)) + 1
-                slot = max(slot, firstUnseen)
-                slot = min(slot, totalPostCount)
-                guard let newIdx = insertForcedPost?(slot), newIdx >= 0 else { return }
-                forcedIndex = newIdx
-                totalPostCount += 1
-                print("🎯 [FORCE] inserted forced post at slot \(newIdx) (natural landing ≈ \(Int(naturalY)))")
-            } else {
-                // Already inserted by a previous (interrupted) flick. If it has been
-                // seen, only intervene when it still lies below the current view.
-                let forcedTopAbs = markerAbsoluteY(in: scrollView) ?? CGFloat(forcedIndex) * avg
-                if forcedTopAbs < maxSeenContentY {
-                    let viewportBottomAbs = scrollView.contentOffset.y + scrollView.bounds.height
-                    guard forcedTopAbs > viewportBottomAbs else { return }
-                }
-            }
-
-            // Glide target (estimate now; refined per-frame from real geometry).
-            guard let target = desiredY(in: scrollView) else { return }
-            let delta = target - scrollView.contentOffset.y
-            guard delta > 1 else { return }   // never glide upward
-
-            // Take over the deceleration. Initial velocity inherits the finger speed
-            // but is capped at the spring's critical value → can NEVER overshoot,
-            // which is what previously caused the up-and-down wobble.
+            // Cancel the native deceleration so the scroll stops where the finger
+            // lifted; SwiftUI then animates a single, smooth move to center the post.
             targetContentOffset.pointee = scrollView.contentOffset
-            let v0 = max(150, min(vY * 1000, springOmega * delta))
-            startGlide(in: scrollView, initialVelocity: v0)
-        }
-
-        func scrollViewWillBeginDragging(_ sv: UIScrollView) {
-            originalDelegate?.scrollViewWillBeginDragging?(sv)
-            // User touched down again — hand control back instantly.
-            stopGlide()
-        }
-
-        // MARK: - Glide animation
-
-        private func startGlide(in sv: UIScrollView, initialVelocity: CGFloat) {
-            attachedScrollView = sv
-            glideY = sv.contentOffset.y
-            glideV = initialVelocity
-            lastFrameTime = CACurrentMediaTime()
-
-            displayLink?.invalidate()
-            let dl = CADisplayLink(target: self, selector: #selector(stepGlide(_:)))
-            dl.add(to: .main, forMode: .common)
-            displayLink = dl
-        }
-
-        func stopGlide() {
-            displayLink?.invalidate()
-            displayLink = nil
-        }
-
-        @objc private func stepGlide(_ dl: CADisplayLink) {
-            guard let sv = attachedScrollView, isActive, !released else {
-                stopGlide()
-                return
-            }
-
-            let now = dl.timestamp
-            let dt = CGFloat(min(max(now - lastFrameTime, 1.0 / 120.0), 1.0 / 30.0))
-            lastFrameTime = now
-
-            // Refine the target every frame: as cells materialise during the glide
-            // the forced card's REAL geometry becomes available and centering
-            // becomes exact. Changes are small because the post was inserted in the
-            // landing zone, so the spring absorbs them smoothly.
-            guard let target = desiredY(in: sv) else {
-                stopGlide()
-                return
-            }
-
-            let delta = target - glideY
-
-            // MONOTONIC GUARD: if the ideal center ended up behind us (layout shifted
-            // upward while cells materialised), settle right here — never scroll back.
-            if delta < -24 {
-                sv.setContentOffset(CGPoint(x: 0, y: clampedY(glideY, in: sv)), animated: false)
-                stopGlide()
-                finishRelease()
-                return
-            }
-
-            // Critically-damped spring: natural ease-out, no oscillation.
-            let accel = springOmega * springOmega * delta - 2 * springOmega * glideV
-            glideV += accel * dt
-            glideV = max(glideV, -120)   // tiny easing allowed, no visible reversal
-            glideY += glideV * dt
-
-            sv.setContentOffset(CGPoint(x: 0, y: clampedY(glideY, in: sv)), animated: false)
-
-            // Settled with the forced post centered → land exactly and release.
-            if abs(delta) < 0.5 && abs(glideV) < 8 {
-                sv.setContentOffset(CGPoint(x: 0, y: clampedY(target, in: sv)), animated: false)
-                stopGlide()
-                finishRelease()
-            }
-        }
-
-        private func finishRelease() {
             released = true
-            print("🎯 [FORCE] settled on forced post — trick released")
-            DispatchQueue.main.async { [weak self] in
-                self?.hasActivatedBinding?.wrappedValue = true
-            }
+            print("🎯 [FORCE] commit forced post at slot \(slot)")
+            commitForce?(slot)
         }
 
-        // MARK: - Target computation
+        // MARK: - Insertion slot from real geometry
 
-        /// Content offset that shows the forced post fully visible and CENTERED in
-        /// the viewport (top-pinned with a margin when taller than the screen).
-        private func desiredY(in sv: UIScrollView) -> CGFloat? {
-            guard forcedIndex >= 0 else { return nil }
-            let topInset = sv.adjustedContentInset.top
-            let botInset = sv.adjustedContentInset.bottom
-            let visibleH = max(1, sv.bounds.height - topInset - botInset)
+        /// SwiftUI index of the slot where the forced post should be inserted: the
+        /// first materialised cell whose top is at or below the viewport's bottom
+        /// edge. Inserting there puts the forced post just under the fold (it pushes
+        /// that cell down), so it stays invisible until SwiftUI scrolls to it.
+        /// Falls back to just past the last materialised cell, then to the list end.
+        private func insertionSlot(in sv: UIScrollView) -> Int {
+            let viewportBottom = sv.contentOffset.y + sv.bounds.height
+            var firstBelow: (index: Int, top: CGFloat)?
+            var maxSeenIndex = -1
 
-            // ── Precise: real UIKit marker behind the forced card ────────────────
-            if let marker = findMarker(in: sv) {
-                let frame = marker.convert(marker.bounds, to: sv)
-                let cardTop = frame.minY + sv.contentOffset.y
-                let cardH = max(1, frame.height)
-
-                let y: CGFloat
-                if cardH >= visibleH - 16 {
-                    y = cardTop - topInset - 8                      // tall card: pin top
-                } else {
-                    y = cardTop - topInset - (visibleH - cardH) / 2 // center, fully visible
+            Self.forEachCellMarker(in: sv) { index, view in
+                let frame = view.convert(view.bounds, to: sv)
+                let top = frame.minY + sv.contentOffset.y
+                maxSeenIndex = max(maxSeenIndex, index)
+                if top >= viewportBottom - 1 {
+                    if firstBelow == nil || top < firstBelow!.top {
+                        firstBelow = (index, top)
+                    }
                 }
-                return clampedY(y, in: sv)
             }
 
-            // ── Estimate (until the card materialises): average row height ──────
-            let contentH = sv.contentSize.height
-            guard contentH > 0, totalPostCount > 0 else { return nil }
-            let avg = contentH / CGFloat(totalPostCount)
-            let cardTop = CGFloat(forcedIndex) * avg
-            let cardH = min(avg, visibleH)
-            let y = cardTop - topInset - max(0, (visibleH - cardH) / 2)
-            return clampedY(y, in: sv)
+            if let firstBelow { return firstBelow.index }
+            if maxSeenIndex >= 0 { return min(maxSeenIndex + 1, totalPostCount) }
+            return totalPostCount
         }
 
-        /// Absolute content-Y of the forced card's top, when it is materialised.
-        private func markerAbsoluteY(in sv: UIScrollView) -> CGFloat? {
-            guard let marker = findMarker(in: sv) else { return nil }
-            let frame = marker.convert(marker.bounds, to: sv)
-            return frame.minY + sv.contentOffset.y
-        }
-
-        private func findMarker(in sv: UIScrollView) -> UIView? {
-            Self.findView(identifier: "forced_post_marker", in: sv)
-                ?? Self.findView(identifier: "forced_post_card", in: sv)
-        }
-
-        private func clampedY(_ y: CGFloat, in sv: UIScrollView) -> CGFloat {
-            let maxY = max(0, sv.contentSize.height + sv.adjustedContentInset.bottom - sv.bounds.height)
-            return min(max(-sv.adjustedContentInset.top, y), maxY)
-        }
-
-        private static func findView(identifier: String, in root: UIView) -> UIView? {
-            if root.accessibilityIdentifier == identifier { return root }
-            for sub in root.subviews {
-                if let found = findView(identifier: identifier, in: sub) { return found }
+        /// Visits every materialised per-cell marker, decoding its index.
+        private static func forEachCellMarker(in root: UIView, _ body: (Int, UIView) -> Void) {
+            if let id = root.accessibilityIdentifier, id.hasPrefix("post_cell_"),
+               let index = Int(id.dropFirst("post_cell_".count)) {
+                body(index, root)
             }
-            return nil
+            for sub in root.subviews { forEachCellMarker(in: sub, body) }
         }
 
         // MARK: - Forward delegate calls
 
         func scrollViewDidScroll(_ sv: UIScrollView) {
             originalDelegate?.scrollViewDidScroll?(sv)
-            // Track how far down the spectator has ever seen (for invisible insertion).
-            if isActive && !released {
-                maxSeenContentY = max(maxSeenContentY, sv.contentOffset.y + sv.bounds.height)
-            }
+        }
+        func scrollViewWillBeginDragging(_ sv: UIScrollView) {
+            originalDelegate?.scrollViewWillBeginDragging?(sv)
         }
         func scrollViewDidEndDragging(_ sv: UIScrollView, willDecelerate decelerate: Bool) {
             originalDelegate?.scrollViewDidEndDragging?(sv, willDecelerate: decelerate)
@@ -363,23 +188,26 @@ struct ScrollViewInterceptor: UIViewRepresentable {
     }
 }
 
-// MARK: - Forced Card Marker
+// MARK: - Per-cell geometry marker
 
-/// A real UIKit marker view placed behind the forced post card. Unlike a SwiftUI
-/// `.accessibilityIdentifier` (which SwiftUI may strip from the rendered UIKit tree),
-/// this guarantees a genuine `UIView` carrying the identifier exists at the card's
-/// exact position and size, so `ScrollViewInterceptor` can read precise geometry
-/// on ANY device.
-struct ForcedCardMarker: UIViewRepresentable {
+/// A real UIKit marker placed behind EVERY post card, carrying that card's index in
+/// its identifier ("post_cell_<index>"). Unlike a SwiftUI `.accessibilityIdentifier`
+/// (which SwiftUI may strip from the rendered UIKit tree), this guarantees a genuine
+/// `UIView` exists at the card's position, letting `ScrollViewInterceptor` map the
+/// scroll's real geometry back to a SwiftUI index and insert the forced post exactly
+/// below the fold on ANY device.
+struct PostCellMarker: UIViewRepresentable {
+    let index: Int
+
     func makeUIView(context: Context) -> UIView {
         let v = UIView()
         v.backgroundColor = .clear
         v.isUserInteractionEnabled = false
-        v.accessibilityIdentifier = "forced_post_marker"
+        v.accessibilityIdentifier = "post_cell_\(index)"
         return v
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        uiView.accessibilityIdentifier = "forced_post_marker"
+        uiView.accessibilityIdentifier = "post_cell_\(index)"
     }
 }

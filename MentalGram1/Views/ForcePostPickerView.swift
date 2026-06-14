@@ -398,37 +398,52 @@ private struct PostPickerCell: View {
     let isSelected: Bool
     let onTap: () -> Void
 
-    var body: some View {
-        Button(action: onTap) {
-            ZStack {
-                if let img = image {
-                    Image(uiImage: img)
-                        .resizable()
-                        .aspectRatio(1, contentMode: .fill)
-                        .clipped()
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .aspectRatio(1, contentMode: .fill)
-                        .overlay(ProgressView().scaleEffect(0.7))
-                }
+    /// Tracks whether the finger moved enough to be a scroll, not a tap.
+    @State private var hasMoved = false
 
-                if isSelected {
-                    Color.blue.opacity(0.35)
-                    VStack {
+    var body: some View {
+        ZStack {
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .aspectRatio(1, contentMode: .fill)
+                    .clipped()
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .aspectRatio(1, contentMode: .fill)
+                    .overlay(ProgressView().scaleEffect(0.7))
+            }
+
+            if isSelected {
+                Color.blue.opacity(0.35)
+                VStack {
+                    Spacer()
+                    HStack {
                         Spacer()
-                        HStack {
-                            Spacer()
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                                .padding(8)
-                        }
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .padding(8)
                     }
                 }
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        // Use a drag gesture instead of Button so the scroll view's pan gesture
+        // takes precedence. A tap is only fired when the finger barely moved
+        // (< 10 pt); larger movements are treated as scroll and ignored.
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                .onChanged { value in
+                    if abs(value.translation.width) > 10 || abs(value.translation.height) > 10 {
+                        hasMoved = true
+                    }
+                }
+                .onEnded { _ in
+                    if !hasMoved { onTap() }
+                    hasMoved = false
+                }
+        )
     }
 }

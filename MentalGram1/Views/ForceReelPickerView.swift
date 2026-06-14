@@ -355,45 +355,56 @@ private struct ReelPickerCell: View {
     let isSelected: Bool
     let onTap: () -> Void
 
+    @State private var hasMoved = false
+
     var body: some View {
-        Button(action: onTap) {
-            ZStack(alignment: .bottomLeading) {
-                if let img = image {
-                    Image(uiImage: img)
-                        .resizable()
-                        .aspectRatio(4/5, contentMode: .fill)
-                        .clipped()
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.25))
-                        .aspectRatio(4/5, contentMode: .fill)
-                        .overlay(ProgressView())
-                }
+        ZStack(alignment: .bottomLeading) {
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .aspectRatio(4/5, contentMode: .fill)
+                    .clipped()
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.25))
+                    .aspectRatio(4/5, contentMode: .fill)
+                    .overlay(ProgressView())
+            }
 
-                // Play icon
-                Image(systemName: "play.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .shadow(radius: 2)
-                    .padding(6)
+            // Play icon
+            Image(systemName: "play.fill")
+                .font(.system(size: 12))
+                .foregroundColor(.white)
+                .shadow(radius: 2)
+                .padding(6)
 
-                // Selection overlay
-                if isSelected {
-                    Color.blue.opacity(0.35)
-                    VStack {
+            // Selection overlay
+            if isSelected {
+                Color.blue.opacity(0.35)
+                VStack {
+                    Spacer()
+                    HStack {
                         Spacer()
-                        HStack {
-                            Spacer()
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                                .padding(8)
-                        }
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .padding(8)
                     }
                 }
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                .onChanged { value in
+                    if abs(value.translation.width) > 10 || abs(value.translation.height) > 10 {
+                        hasMoved = true
+                    }
+                }
+                .onEnded { _ in
+                    if !hasMoved { onTap() }
+                    hasMoved = false
+                }
+        )
     }
 }

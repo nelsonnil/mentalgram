@@ -4795,6 +4795,16 @@ class InstagramService: ObservableObject {
         
         if let httpResponse = uploadResponse as? HTTPURLResponse {
             print("   Upload response status: \(httpResponse.statusCode)")
+            // Capture fresh www-claim from rupload response — configure needs it
+            if let claim = (httpResponse.allHeaderFields as? [String: String])?
+                .first(where: { $0.key.lowercased() == "x-ig-set-www-claim" })?.value,
+               !claim.isEmpty {
+                await MainActor.run {
+                    self.wwwClaim = claim
+                    UserDefaults.standard.set(claim, forKey: "ig_www_claim")
+                }
+                print("   [UPLOAD] wwwClaim refreshed from rupload response")
+            }
         }
         
         if let jsonString = String(data: responseData, encoding: .utf8) {
@@ -4858,23 +4868,78 @@ class InstagramService: ObservableObject {
         print("   Waiting \(String(format: "%.1f", Double(configDelay) / 1_000_000_000.0))s before configure...")
         try await Task.sleep(nanoseconds: configDelay)
         
-        // Step 4: Configure media (with more complete data like instagrapi)
+        // ── Step 4: Configure media ──────────────────────────────────────────────
+        //
+        // HISTORY OF CHANGES (update when Instagram changes the API):
+        //
+        // v1 (original): plain URL-encoded body with only upload_id / caption /
+        //   source_type / media_folder / device_id. No signing. Worked until Jun 2026.
+        //
+        // v2 (2026-06-14): Added _csrftoken / _uid / _uuid to body after HTTP 500s.
+        //   Still URL-encoded. Still failing (likely account/IP restriction, not format).
+        //
+        // v3 (2026-06-14 attempt): Converted to signed JSON body (same format as
+        //   configure_sidecar). BROKE with "upload id is missing" because
+        //   /media/configure/ does NOT parse signed_body — only /media/configure_sidecar/ does.
+        //   Reverted immediately.
+        //
+        // v4 (2026-06-14): Back to URL-encoded but with full metadata fields matching
+        //   what official IG clients send: _csrftoken/_uid/_uuid, timezone_offset,
+        //   device (as JSON string), edits, extra, scene_capture_type,
+        //   creation_logger_session_id. taken_at omitted when older than 60 days.
+        //   Also added a warm-up GET /accounts/current_user/?edit=true before configure.
+        //
+        // v5 (2026-06-14): REMOVED the warm-up GET. The GET created a 3-call burst
+        //   (rupload + GET + configure) that Instagram flagged as automation, causing
+        //   previously working accounts to fail. The rupload response already captures
+        //   a fresh wwwClaim. Lesson: do NOT chain warm-ups before configure — same as
+        //   the Notes endpoint regression fix. One direct configure POST is correct.
+        //
+        // v6 (2026-06-14): Removed the `device` JSON string, `edits`, and `extra` fields.
+        //   These are sidecar/carousel specific fields. For single-photo /media/configure/
+        //   they create an unexpected body shape — `device` duplicated device_id and added
+        //   redundant fields; `edits`/`extra` are only used in configure_sidecar children.
+        //   Stripped back to the minimal canonical body used by instagrapi for single photos.
+        //
+        // NOTE: If Instagram changes the API again and this starts failing, check:
+        //   • Whether new required fields have been added (compare with sidecar)
+        //   • Whether taken_at rules changed
+        //   • https://github.com/LevPasha/instagrapi (reference implementation)
+
+        let tzOffset = String(TimeZone.current.secondsFromGMT())
+
+        // URL-encoded body — /media/configure/ does NOT accept signed_body format
+        // Minimal canonical fields for single-photo upload (instagrapi reference pattern).
         var configBody: [String: String] = [
-            "upload_id": uploadIdResponse,
-            "caption": caption,
-            "source_type": "4",
-            "media_folder": "Camera",
-            "device_id": deviceId
+            "_csrftoken":                 session.csrfToken,
+            "_uid":                       session.userId,
+            "_uuid":                      clientUUID,
+            "upload_id":                  uploadIdResponse,
+            "caption":                    caption,
+            "source_type":                "4",
+            "media_folder":               "Camera",
+            "device_id":                  deviceId,
+            "timezone_offset":            tzOffset,
         ]
-        // Grid position anchor: override taken_at so the photo slots into the correct
-        // chronological position in the grid when it is later unarchived.
-        // Without this, Instagram uses the current time → photo appears at the top.
+        // Grid position anchor: only include taken_at when it is recent enough.
+        // A taken_at older than 60 days is suspicious and may trigger HTTP 500.
         if let anchorDate = takenAt {
-            configBody["taken_at"] = String(Int(anchorDate.timeIntervalSince1970))
-            print("📍 [UPLOAD] taken_at overridden to \(anchorDate) for grid position anchoring")
+            let maxAge: TimeInterval = 60 * 24 * 3600
+            if anchorDate >= Date().addingTimeInterval(-maxAge) {
+                configBody["taken_at"] = String(Int(anchorDate.timeIntervalSince1970))
+                print("📍 [UPLOAD] taken_at applied: \(anchorDate)")
+            } else {
+                print("📍 [UPLOAD] taken_at skipped (too old: \(anchorDate))")
+            }
         }
-        
-        print("   Configuring media...")
+
+        // NOTE: Do NOT add a warm-up GET here before configure.
+        // The rupload response already captures a fresh X-IG-WWW-Claim (see above).
+        // Adding a GET /accounts/current_user/?edit=true creates a 3-call burst
+        // (rupload + GET + configure) that Instagram flags as automation — this caused
+        // working accounts to stop uploading. See notes section regression comment for
+        // the same lesson learned. One direct configure POST is the proven pattern.
+        print("   Configuring media (v6 URL-encoded, minimal body)...")
         let configData = try await apiRequest(
             method: "POST",
             path: "/media/configure/",

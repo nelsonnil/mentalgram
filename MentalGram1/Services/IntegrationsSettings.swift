@@ -175,6 +175,12 @@ final class IntegrationsSettings: ObservableObject {
     @Published var noteText3Source: ApiSource {
         didSet { UserDefaults.standard.set(noteText3Source.rawValue, forKey: "integ_noteText3Source") }
     }
+    @Published var noteText4Source: ApiSource {
+        didSet { UserDefaults.standard.set(noteText4Source.rawValue, forKey: "integ_noteText4Source") }
+    }
+    @Published var noteText5Source: ApiSource {
+        didSet { UserDefaults.standard.set(noteText5Source.rawValue, forKey: "integ_noteText5Source") }
+    }
 
     // Per-placeholder sources for Bio template
     @Published var bioText1Source: ApiSource {
@@ -185,6 +191,12 @@ final class IntegrationsSettings: ObservableObject {
     }
     @Published var bioText3Source: ApiSource {
         didSet { UserDefaults.standard.set(bioText3Source.rawValue, forKey: "integ_bioText3Source") }
+    }
+    @Published var bioText4Source: ApiSource {
+        didSet { UserDefaults.standard.set(bioText4Source.rawValue, forKey: "integ_bioText4Source") }
+    }
+    @Published var bioText5Source: ApiSource {
+        didSet { UserDefaults.standard.set(bioText5Source.rawValue, forKey: "integ_bioText5Source") }
     }
 
     private init() {
@@ -208,9 +220,13 @@ final class IntegrationsSettings: ObservableObject {
         noteText1Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText1Source")) ?? legacyNote
         noteText2Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText2Source")) ?? .none
         noteText3Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText3Source")) ?? .none
+        noteText4Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText4Source")) ?? .none
+        noteText5Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText5Source")) ?? .none
         bioText1Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText1Source"))  ?? legacyBio
         bioText2Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText2Source"))  ?? .none
         bioText3Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText3Source"))  ?? .none
+        bioText4Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText4Source"))  ?? .none
+        bioText5Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText5Source"))  ?? .none
     }
 
     // MARK: - Fetch
@@ -239,8 +255,8 @@ final class IntegrationsSettings: ObservableObject {
     func fetchNoteValue() async -> String? { await fetchValue(for: noteApiSource) }
     func fetchPPValue()   async -> String? { await fetchValue(for: ppApiSource) }
 
-    /// Fetches all three placeholder values for a given target ("note" or "bio") in parallel.
-    /// Returns a dict: ["text1": value, "text2": value, "text3": value] (only non-nil entries).
+    /// Fetches all placeholder values for a given target ("note" or "bio") in parallel.
+    /// Returns a dict: ["text1": value, ..., "text5": value] (only non-nil entries).
     /// Fetches API-polled placeholder values in parallel (skips .ocr — that is event-driven).
     /// Pass `ocrValues` to inject already-captured OCR words into the correct slots.
     func fetchTemplatePlaceholders(for target: String, ocrValues: [String: String] = [:]) async -> [String: String] {
@@ -248,20 +264,28 @@ final class IntegrationsSettings: ObservableObject {
         let s1 = target == "note" ? noteText1Source : bioText1Source
         let s2 = target == "note" ? noteText2Source : bioText2Source
         let s3 = target == "note" ? noteText3Source : bioText3Source
+        let s4 = target == "note" ? noteText4Source : bioText4Source
+        let s5 = target == "note" ? noteText5Source : bioText5Source
 
         async let v1 = s1.isPolled ? fetchValue(for: s1) : nil
         async let v2 = s2.isPolled ? fetchValue(for: s2) : nil
         async let v3 = s3.isPolled ? fetchValue(for: s3) : nil
-        let (r1, r2, r3) = await (v1, v2, v3)
+        async let v4 = s4.isPolled ? fetchValue(for: s4) : nil
+        async let v5 = s5.isPolled ? fetchValue(for: s5) : nil
+        let (r1, r2, r3, r4, r5) = await (v1, v2, v3, v4, v5)
 
         var result: [String: String] = [:]
         if let r1 { result["text1"] = r1 }
         if let r2 { result["text2"] = r2 }
         if let r3 { result["text3"] = r3 }
+        if let r4 { result["text4"] = r4 }
+        if let r5 { result["text5"] = r5 }
         // Inject OCR-captured values for slots assigned to .ocr
         if s1 == .ocr, let v = ocrValues["text1"] { result["text1"] = v }
         if s2 == .ocr, let v = ocrValues["text2"] ?? ocrValues["text1"] { result["text2"] = v }
         if s3 == .ocr, let v = ocrValues["text3"] ?? ocrValues["text1"] { result["text3"] = v }
+        if s4 == .ocr, let v = ocrValues["text4"] ?? ocrValues["text1"] { result["text4"] = v }
+        if s5 == .ocr, let v = ocrValues["text5"] ?? ocrValues["text1"] { result["text5"] = v }
         return result
     }
 
@@ -271,12 +295,12 @@ final class IntegrationsSettings: ObservableObject {
         return activeTokenSourceEntries.contains { $0.target == target && $0.source != .none }
     }
 
-    /// Returns which slot (1/2/3) is assigned to OCR for the given target, or nil if none.
+    /// Returns which slot (1..5) is assigned to OCR for the given target, or nil if none.
     func ocrSlot(for target: String) -> Int? {
         guard targetIsEnabled(target) else { return nil }
         let sources = target == "note"
-            ? [noteText1Source, noteText2Source, noteText3Source]
-            : [bioText1Source,  bioText2Source,  bioText3Source]
+            ? [noteText1Source, noteText2Source, noteText3Source, noteText4Source, noteText5Source]
+            : [bioText1Source,  bioText2Source,  bioText3Source,  bioText4Source,  bioText5Source]
         return sources.enumerated().first { idx, source in
             source == .ocr && tokenIsUsed(target: target, token: "{text\(idx + 1)}")
         }.map { $0.offset + 1 }
@@ -307,8 +331,8 @@ final class IntegrationsSettings: ObservableObject {
 
     /// All persisted (target, token, source) entries for bio + note templates.
     private var allTokenSourceEntries: [(target: String, token: String, source: ApiSource)] {
-        [("bio",  "{text1}", bioText1Source),  ("bio",  "{text2}", bioText2Source),  ("bio",  "{text3}", bioText3Source),
-         ("note", "{text1}", noteText1Source), ("note", "{text2}", noteText2Source), ("note", "{text3}", noteText3Source)]
+        [("bio",  "{text1}", bioText1Source),  ("bio",  "{text2}", bioText2Source),  ("bio",  "{text3}", bioText3Source),  ("bio",  "{text4}", bioText4Source),  ("bio",  "{text5}", bioText5Source),
+         ("note", "{text1}", noteText1Source), ("note", "{text2}", noteText2Source), ("note", "{text3}", noteText3Source), ("note", "{text4}", noteText4Source), ("note", "{text5}", noteText5Source)]
     }
 
     /// Only entries whose token is currently present in the active template.
@@ -433,9 +457,13 @@ final class IntegrationsSettings: ObservableObject {
         case ("note", "{text1}"): noteText1Source = source
         case ("note", "{text2}"): noteText2Source = source
         case ("note", "{text3}"): noteText3Source = source
+        case ("note", "{text4}"): noteText4Source = source
+        case ("note", "{text5}"): noteText5Source = source
         case ("bio",  "{text1}"): bioText1Source  = source
         case ("bio",  "{text2}"): bioText2Source  = source
         case ("bio",  "{text3}"): bioText3Source  = source
+        case ("bio",  "{text4}"): bioText4Source  = source
+        case ("bio",  "{text5}"): bioText5Source  = source
         default: break
         }
     }

@@ -174,7 +174,9 @@ struct StatusBadge: View {
             Text(text.uppercased())
                 .font(VaultTheme.Typography.captionSmall())
                 .fontWeight(.bold)
+                .lineLimit(1)
         }
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundColor(.white)
         .padding(.horizontal, VaultTheme.Spacing.sm)
         .padding(.vertical, 4)
