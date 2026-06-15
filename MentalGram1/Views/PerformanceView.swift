@@ -3019,6 +3019,12 @@ struct PerformanceView: View {
             let rate = instagram.checkRateLimit()
             print("🛡️ [PERF] loadProfile skipped — near hourly budget (\(rate.actionsUsed)/55)")
             LogManager.shared.warning("CACHE ONLY — loadProfile skipped near rate budget (\(rate.actionsUsed)/55)", category: .general)
+            // Record a SafetyGate stamp so the CooldownWarningBanner shows the
+            // "Performance Refresh" countdown even when the budget is the blocker.
+            // The 120 s window keeps the pull gesture disabled for the same duration.
+            if source == "manual" {
+                InstagramSafetyGate.shared.record(.pullRefresh)
+            }
             return
         }
 
@@ -4752,26 +4758,29 @@ struct ListSetInputView: View {
 
 // MARK: - Refresh control enabler
 
-/// Invisible UIViewRepresentable that, when placed as background of the ScrollView,
-/// walks up the view hierarchy to find the UIScrollView and sets
-/// `refreshControl?.isEnabled`.  This avoids recreating the view tree
-/// (which would reset scroll position) just to toggle pull-to-refresh.
+/// Invisible UIViewRepresentable placed INSIDE the ScrollView content.
+/// Walks UP the UIKit superview chain from inside the UIScrollView's content
+/// area to reach the UIScrollView itself, then sets
+/// `refreshControl?.isEnabled = isEnabled`.
+/// This avoids recreating the view tree (which would reset scroll position).
 private struct RefreshControlEnabler: UIViewRepresentable {
     let isEnabled: Bool
 
     func makeUIView(context: Context) -> UIView {
         let v = UIView()
-        v.isHidden    = true
+        v.isHidden             = true
         v.isUserInteractionEnabled = false
+        v.backgroundColor      = .clear
         return v
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
         let enabled = isEnabled
-        // Defer: UIKit hierarchy may not be fully wired on the first layout pass.
+        // A brief async hop lets the UIKit hierarchy finish wiring before we walk it.
         DispatchQueue.main.async {
-            var current: UIView? = uiView.superview
-            while let view = current {
+            var current: UIView? = uiView
+            for _ in 0..<25 {           // cap depth to avoid runaway loop
+                guard let view = current else { break }
                 if let scroll = view as? UIScrollView {
                     scroll.refreshControl?.isEnabled = enabled
                     return
@@ -5006,6 +5015,12 @@ struct InstagramProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
+                // RefreshControlEnabler must live INSIDE the ScrollView content so
+                // it is a UIKit descendant of UIScrollView.  Walking superviews from
+                // here reliably reaches UIScrollView.  Zero height — no layout impact.
+                RefreshControlEnabler(isEnabled: isRefreshEnabled)
+                    .frame(maxWidth: .infinity, maxHeight: 0)
+
                 InstagramHeaderView(
                     username: profile.username,
                     isVerified: profile.isVerified,
@@ -5035,18 +5050,12 @@ struct InstagramProfileView: View {
         .onChange(of: followingOverride) { _ in
             logVisibleCountState(reason: "following override changed")
         }
-        // Pull-to-refresh: always attached so the ScrollView identity is preserved
-            // (no layout reset). isEnabled is toggled via RefreshControlEnabler at
-            // UIKit level — when disabled, the pull gesture produces no spinner at all.
+        // Pull-to-refresh: always attached so the ScrollView identity is preserved.
+        // isEnabled is managed at UIKit level by RefreshControlEnabler above.
             .refreshable {
                 await Task { await onAsyncRefresh() }.value
             }
-            .background(
-                ZStack {
-                    Color(UIColor.igPageBackground)
-                    RefreshControlEnabler(isEnabled: isRefreshEnabled)
-                }
-            )
+            .background(Color(UIColor.igPageBackground))
         // Race-condition fix for URL-scheme reveals:
         // When vault://reveal?word=X arrives while PerformanceView is loading,
         // pendingOCRWord may be set BEFORE InstagramProfileView enters the hierarchy.
@@ -7260,6 +7269,8 @@ struct PostScrollView: View {
     /// spectator's swipe ends, `insertForced` puts it just below the fold and the
     /// interceptor animates the scroll to show it. nil = original order.
     @State private var displayURLs: [String]? = nil
+    /// Triggered after the interceptor inserts the forced post; SwiftUI animates to it.
+    @State private var forceScrollTrigger = false
 
     private var urls: [String] { displayURLs ?? mediaURLs }
 
@@ -7305,7 +7316,7 @@ struct PostScrollView: View {
                         // per-cell geometry marker so the interceptor can insert the
                         // forced post exactly below the fold.
                         LazyVStack(spacing: 0) {
-                            ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
+                            ForEach(urls, id: \.self) { url in
                                 PostCardView(
                                     url: url,
                                     item: resolvedItems[url],
@@ -7314,10 +7325,6 @@ struct PostScrollView: View {
                                     profileImage: profileImage,
                                     isForced: isForcedPostURL(url)
                                 )
-                                .id(postID(index))
-                                .background {
-                                    if forceConfigured { PostCellMarker(index: index) }
-                                }
                                 Divider().background(Color(UIColor.separator))
                             }
                         }
@@ -7327,9 +7334,21 @@ struct PostScrollView: View {
                         ScrollViewInterceptor(
                             isActive: forceConfigured,
                             totalPostCount: urls.count,
-                            insertForced: { slot in insertForced(at: slot) }
+                            insertForced: { slot in insertForced(at: slot) },
+                            onInserted: { forceScrollTrigger = true }
                         )
                         .frame(width: 0, height: 0)
+                    }
+                }
+                .onChange(of: forceScrollTrigger) { triggered in
+                    guard triggered else { return }
+                    forceScrollTrigger = false
+                    guard let forcedURL = urls.first(where: isForcedPostURL) else { return }
+                    // SwiftUI scrollTo handles coordinates perfectly for any screen/
+                    // image size. anchor 0.35 puts the image (which sits below the
+                    // ~50pt header) roughly centred in the viewport.
+                    withAnimation(.easeOut(duration: 1.1)) {
+                        proxy.scrollTo(forcedURL, anchor: UnitPoint(x: 0.5, y: 0.35))
                     }
                 }
                 .onAppear {
@@ -7350,10 +7369,12 @@ struct PostScrollView: View {
                         }
                     }
 
-                    // Map the tapped post to its index in the (possibly filtered) list.
-                    let startIndex = tappedURL.flatMap { u in urls.firstIndex(of: u) } ?? initialIndex
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        proxy.scrollTo(postID(startIndex), anchor: .top)
+                    // Scroll to the tapped post. IDs are the URL strings themselves.
+                    let startURL = tappedURL ?? (urls.indices.contains(initialIndex) ? urls[initialIndex] : nil)
+                    if let startURL {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            proxy.scrollTo(startURL, anchor: .top)
+                        }
                     }
                     let missingCount = mediaURLs.filter { mediaItemsByURL[$0] == nil }.count
                     if missingCount > 0 {
