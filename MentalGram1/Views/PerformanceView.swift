@@ -2981,6 +2981,22 @@ struct PerformanceView: View {
             return
         }
 
+        // Pre-check rate budget — same reason loadProfile would bail immediately.
+        // Doing it here (before calling loadProfile) means the async func returns
+        // in microseconds → the spinner disappears before the user can pull again.
+        if instagram.shouldUseCacheOnlyForOptionalCalls {
+            let rate = instagram.checkRateLimit()
+            print("🛡️ [PERF] Pull refresh pre-blocked — near hourly budget (\(rate.actionsUsed)/55)")
+            LogManager.shared.warning("PULL BLOCKED — rate budget (\(rate.actionsUsed)/55)", category: .general)
+            InstagramSafetyGate.shared.record(.pullRefresh)
+            isRefreshEnabled = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(120) * 1_000_000_000)
+                isRefreshEnabled = true
+            }
+            return
+        }
+
         // Pre-check SafetyGate here so we never hand control to loadProfile
         // when the cooldown is active — loadProfile's internal SafetyGate guard
         // would already block it, but returning here avoids the async overhead
@@ -4763,30 +4779,63 @@ struct ListSetInputView: View {
 /// area to reach the UIScrollView itself, then sets
 /// `refreshControl?.isEnabled = isEnabled`.
 /// This avoids recreating the view tree (which would reset scroll position).
+/// Invisible UIViewRepresentable placed INSIDE the ScrollView content.
+/// Walks UP the UIKit superview chain to reach the UIScrollView, then sets
+/// both `isEnabled` and `isHidden` on its `refreshControl` so the spinner
+/// never appears when refresh is on cooldown.
 private struct RefreshControlEnabler: UIViewRepresentable {
     let isEnabled: Bool
 
+    class Coordinator {
+        weak var scrollView: UIScrollView?
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIView(context: Context) -> UIView {
         let v = UIView()
-        v.isHidden             = true
+        // Non-zero size so SwiftUI does NOT optimize the view out of the UIKit tree.
+        v.frame                = CGRect(x: 0, y: 0, width: 1, height: 1)
         v.isUserInteractionEnabled = false
         v.backgroundColor      = .clear
+        v.alpha                = 0
         return v
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+        applyEnabled(isEnabled, uiView: uiView, coordinator: context.coordinator)
+
+        // Retry after one layout pass: SwiftUI may add the UIRefreshControl lazily.
         let enabled = isEnabled
-        // A brief async hop lets the UIKit hierarchy finish wiring before we walk it.
-        DispatchQueue.main.async {
-            var current: UIView? = uiView
-            for _ in 0..<25 {           // cap depth to avoid runaway loop
-                guard let view = current else { break }
-                if let scroll = view as? UIScrollView {
-                    scroll.refreshControl?.isEnabled = enabled
-                    return
-                }
-                current = view.superview
+        let coordinator = context.coordinator
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            applyEnabled(enabled, uiView: uiView, coordinator: coordinator)
+        }
+    }
+
+    private func applyEnabled(_ enabled: Bool,
+                               uiView: UIView,
+                               coordinator: Coordinator) {
+        func apply(_ scroll: UIScrollView) {
+            guard let rc = scroll.refreshControl else { return }
+            rc.isEnabled = enabled
+            rc.isHidden  = !enabled
+        }
+
+        if let cached = coordinator.scrollView {
+            apply(cached)
+            return
+        }
+
+        // Walk up the UIKit superview chain to find the first UIScrollView.
+        var current: UIView? = uiView
+        for _ in 0..<30 {
+            guard let view = current else { break }
+            if let scroll = view as? UIScrollView {
+                coordinator.scrollView = scroll
+                apply(scroll)
+                return
             }
+            current = view.superview
         }
     }
 }
@@ -5015,11 +5064,13 @@ struct InstagramProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // RefreshControlEnabler must live INSIDE the ScrollView content so
-                // it is a UIKit descendant of UIScrollView.  Walking superviews from
-                // here reliably reaches UIScrollView.  Zero height — no layout impact.
+                // Must be inside the ScrollView content so its UIView is a UIKit
+                // descendant of UIScrollView.  1 pt high, alpha 0 — invisible but
+                // NOT removed from the hierarchy (zero-size views can be pruned).
                 RefreshControlEnabler(isEnabled: isRefreshEnabled)
-                    .frame(maxWidth: .infinity, maxHeight: 0)
+                    .frame(width: 1, height: 1)
+                    .opacity(0)
+                    .allowsHitTesting(false)
 
                 InstagramHeaderView(
                     username: profile.username,
