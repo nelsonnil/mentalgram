@@ -7159,25 +7159,27 @@ struct TabButton: View {
                         .scaledToFit()
                         .frame(width: 24, height: 24)
                 } else {
-            Image(systemName: icon)
-                .font(.system(size: 24))
+                    Image(systemName: icon)
+                        .font(.system(size: 24))
                 }
             }
             .foregroundColor(isSelected ? Color(UIColor.label) : Color(UIColor.secondaryLabel))
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .overlay(
-                    Rectangle()
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .overlay(
+                Rectangle()
                     .fill(isSelected ? Color(UIColor.label) : Color.clear)
-                        .frame(height: 1),
-                    alignment: .bottom
-                )
-                // Ensure the full 44pt area captures taps, not just the icon bounds.
-                // Without this, taps in the empty space below the icon fall through
-                // to the first grid cell — on small screens (Mini) this opens post 0.
-                .contentShape(Rectangle())
+                    .frame(height: 1),
+                alignment: .bottom
+            )
         }
         .buttonStyle(.plain)
+        // contentShape must be on the Button itself (not inside its label) so that
+        // the full 44-pt touch area is owned by the button. When placed inside, SwiftUI
+        // does NOT always propagate it to the button's hit-test boundary, causing taps
+        // in the empty space below the icon to fall through to the first grid cell —
+        // on small screens (Mini/SE) this opened post 0 in full-screen view.
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .contentShape(Rectangle())
     }
 }
 
