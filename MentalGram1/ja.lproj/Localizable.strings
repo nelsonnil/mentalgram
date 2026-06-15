@@ -1575,6 +1575,7 @@
 "cooldown.capture.note" = "入力キャプチャ（ノート）";
 "cooldown.capture.bio" = "入力キャプチャ（自己紹介）";
 "cooldown.performance" = "パフォーマンス一時停止";
+"cooldown.refresh" = "パフォーマンス更新";
 "postpred.help.input.grid.encoding.title" = "桁のエンコード（Clock Inputと同じ）";
 
 // MARK: - Card Clock Input config

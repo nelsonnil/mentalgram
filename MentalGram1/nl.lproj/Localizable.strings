@@ -1574,6 +1574,7 @@
 "cooldown.capture.note" = "Invoer Vastleggen (Notitie)";
 "cooldown.capture.bio" = "Invoer Vastleggen (Biografie)";
 "cooldown.performance" = "Performance pauze";
+"cooldown.refresh" = "Performance vernieuwen";
 "postpred.help.input.grid.encoding.title" = "Cijfercodering  (zelfde als Clock Input)";
 
 // MARK: - Card Clock Input config

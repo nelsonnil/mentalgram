@@ -765,6 +765,7 @@
 "cooldown.capture.note" = "Bắt Đầu Vào (Ghi Chú)";
 "cooldown.capture.bio" = "Bắt Đầu Vào (Tiểu Sử)";
 "cooldown.performance" = "Tạm dừng hiệu suất";
+"cooldown.refresh" = "Làm mới Performance";
 "postpred.help.input.grid.intro" = "Trong Performance, vuốt theo bất kỳ hướng nào trong bốn hướng (↑ ↓ ← →) trên lưới ảnh. Mỗi hai lần vuốt liên tiếp mã hóa một chữ số — logic tương tự Clock Input. Nhập bao nhiêu chữ số tùy ý, rồi nhấn giữ bất kỳ vị trí nào trên lưới để xác nhận.";
 "postpred.help.input.grid.step3" = "Nhấn giữ bất kỳ vị trí nào trên lưới ảnh để xác nhận và kích hoạt reveal.";
 "postpred.help.input.grid.case.custom" = "Tất cả các chữ số tích lũy tạo thành số slot. VD: nhập 7, 2 → slot 72.";

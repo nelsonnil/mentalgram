@@ -1201,6 +1201,7 @@
 "cooldown.capture.note" = "Input Capture (Note)";
 "cooldown.capture.bio" = "Input Capture (Biography)";
 "cooldown.performance" = "Performance Pause";
+"cooldown.refresh" = "Performance Refresh";
 "postpred.help.input.grid.encoding.title" = "Digit Encoding  (same as Clock Input)";
 
 // MARK: - Card Clock Input config

@@ -398,10 +398,15 @@ struct ExploreView: View {
                 await MainActor.run { isSearching = false }
                 return
             }
-            InstagramSafetyGate.shared.record(.searchUsers)
+            // Record AFTER the response arrives, not before. This way a task that
+            // gets cancelled mid-flight (user still typing) does NOT consume the
+            // safety-gate slot, preventing the "20s lockout after typing" bug.
 
             do {
                 let results = try await InstagramService.shared.searchUsers(query: query)
+                // Only stamp the timestamp when the request actually completed —
+                // cancelled tasks skip this line and the gate remains open.
+                InstagramSafetyGate.shared.record(.searchUsers)
                 VisitedProfileCacheService.shared.saveSearchResults(results, for: query)
                 await MainActor.run {
                     guard !Task.isCancelled else { return }
@@ -411,6 +416,9 @@ struct ExploreView: View {
             } catch {
                 // Search errors are silent — never show a popup (mirrors Instagram UX)
                 guard !Task.isCancelled else { return }
+                // Non-cancellation errors do count against the gate so we don't
+                // spam the API on repeated failures.
+                InstagramSafetyGate.shared.record(.searchUsers)
                 print("🔍 [SEARCH] Error (silent): \(error)")
                 await MainActor.run { isSearching = false }
             }

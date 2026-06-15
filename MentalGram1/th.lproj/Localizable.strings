@@ -1224,6 +1224,7 @@
 "cooldown.capture.note" = "จับภาพอินพุต (หมายเหตุ)";
 "cooldown.capture.bio" = "จับภาพอินพุต (ชีวประวัติ)";
 "cooldown.performance" = "หยุดชั่วคราว";
+"cooldown.refresh" = "รีเฟรช Performance";
 "postpred.help.input.grid.encoding.title" = "การเข้ารหัสตัวเลข  (เหมือน Clock Input)";
 
 // MARK: - Card Clock Input config

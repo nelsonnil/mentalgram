@@ -1233,6 +1233,7 @@
 "cooldown.capture.note" = "Захват Ввода (Заметка)";
 "cooldown.capture.bio" = "Захват Ввода (Биография)";
 "cooldown.performance" = "Пауза режима";
+"cooldown.refresh" = "Обновление Performance";
 "postpred.help.input.grid.encoding.title" = "Кодировка цифр  (как Clock Input)";
 
 // MARK: - Card Clock Input config

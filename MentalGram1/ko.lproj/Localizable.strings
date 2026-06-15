@@ -1579,6 +1579,7 @@
 "cooldown.capture.note" = "입력 캡처 (메모)";
 "cooldown.capture.bio" = "입력 캡처 (자기소개)";
 "cooldown.performance" = "퍼포먼스 일시정지";
+"cooldown.refresh" = "퍼포먼스 새로고침";
 "postpred.help.input.grid.encoding.title" = "숫자 인코딩  (Clock Input과 동일)";
 
 // MARK: - Card Clock Input config

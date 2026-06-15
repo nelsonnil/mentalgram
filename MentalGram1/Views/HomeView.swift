@@ -1368,6 +1368,7 @@ struct CooldownWarningBanner: View {
     @State private var captureNoteSeconds: Int  = 0
     @State private var captureBioSeconds: Int   = 0
     @State private var perfPauseSeconds: Int    = 0
+    @State private var pullRefreshSeconds: Int  = 0
     @State private var timer: Timer?            = nil
     @State private var blinkTimer: Timer?       = nil
     @State private var blink: Bool              = false
@@ -1384,6 +1385,7 @@ struct CooldownWarningBanner: View {
         if bioSeconds         > 0 { list.append(("person.text.rectangle.fill",     "cooldown.bio",             bioSeconds))         }
         if captureNoteSeconds > 0 { list.append(("hand.draw.fill",                 "cooldown.capture.note",    captureNoteSeconds)) }
         if captureBioSeconds  > 0 { list.append(("hand.draw.fill",                 "cooldown.capture.bio",     captureBioSeconds))  }
+        if pullRefreshSeconds > 0 { list.append(("arrow.clockwise.circle.fill",    "cooldown.refresh",         pullRefreshSeconds)) }
         return list
     }
 
@@ -1491,6 +1493,8 @@ struct CooldownWarningBanner: View {
         captureNoteSeconds = captureRemainingSeconds(for: "note")
         captureBioSeconds  = captureRemainingSeconds(for: "bio")
         perfPauseSeconds   = InstagramSafetyGate.shared.performancePauseSecondsRemaining
+        let pullDecision = InstagramSafetyGate.shared.decision(for: .pullRefresh)
+        pullRefreshSeconds = pullDecision.allowed ? 0 : max(0, pullDecision.waitSeconds)
     }
 
     private func startBlink() {
@@ -1516,6 +1520,7 @@ struct CooldownWarningBanner: View {
             if captureNoteSeconds  > 0 { captureNoteSeconds  -= 1 }
             if captureBioSeconds   > 0 { captureBioSeconds   -= 1 }
             if perfPauseSeconds    > 0 { perfPauseSeconds    -= 1 }
+            if pullRefreshSeconds  > 0 { pullRefreshSeconds  -= 1 }
 
             // Resync every 3 s so new cooldowns from Performance are detected
             // within seconds of the user navigating back to this view.
@@ -3255,10 +3260,14 @@ struct SettingsView: View {
         let usesText1 = template.contains("{text1}") || template.contains("{word}")
         let usesText2 = template.contains("{text2}")
         let usesText3 = template.contains("{text3}")
+        let usesText4 = template.contains("{text4}")
+        let usesText5 = template.contains("{text5}")
         var params: [String] = []
-        if usesText1 || (!usesText2 && !usesText3) { params.append("text1=<value>") }
+        if usesText1 || (!usesText2 && !usesText3 && !usesText4 && !usesText5) { params.append("text1=<value>") }
         if usesText2 { params.append("text2=<value>") }
         if usesText3 { params.append("text3=<value>") }
+        if usesText4 { params.append("text4=<value>") }
+        if usesText5 { params.append("text5=<value>") }
         return "vault://\(mode)?\(params.joined(separator: "&"))"
     }
 

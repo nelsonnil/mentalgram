@@ -7574,7 +7574,7 @@ final class InstagramSafetyGate {
         case .explorePagination:
             return pacedWindowDecision(action: action, now: now, minGap: 15, maxCount: 8, window: 600)
         case .searchUsers:
-            return minGapDecision(action: action, now: now, minGap: 20)
+            return minGapDecision(action: action, now: now, minGap: 5)
         case .visitedProfileOpen:
             return minGapDecision(action: action, now: now, minGap: 3)
         case .visitedProfilePagination:

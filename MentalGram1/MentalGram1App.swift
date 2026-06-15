@@ -16,7 +16,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Install crash logger as early as possible so any subsequent crash
         // (including during app startup) is captured and written to disk.
         CrashLoggerService.install()
+        // Detect Jetsam/OOM kills from the previous session BEFORE the new
+        // running marker overwrites the old one.
+        CrashLoggerService.checkAndLogPreviousSessionCrash()
         return true
+    }
+
+    func applicationWillTerminate(_ application: UIApplication) {
+        // Remove the "running" marker so the next launch does not mistake
+        // a normal user-initiated kill for a Jetsam/OOM crash.
+        CrashLoggerService.markCleanExit()
     }
 
     func application(_ application: UIApplication,

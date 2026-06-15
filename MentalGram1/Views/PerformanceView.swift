@@ -79,6 +79,9 @@ struct PerformanceView: View {
     @State private var lastError: InstagramError?
     @State private var cdnForbiddenTimestamps: [Date] = []
     @State private var cdnRefreshScheduled = false
+    /// Prevents multiple concurrent loadCachedImages runs from stacking up
+    /// and flooding the network with parallel URLSession tasks.
+    @State private var isLoadingImages = false
     @State private var showingLockdownSheet = false   // For long-press lockdown details
     @State private var showDigitGridAlert = false
     @State private var performanceRemoteCallsAllowed = true
@@ -266,6 +269,10 @@ struct PerformanceView: View {
     @State private var isPullRefreshInFlight = false
     @State private var isSilentGridRefreshing = false
     private let fullRefreshAfterGridRefreshGap: TimeInterval = 90
+    /// Controls whether pull-to-refresh is active. Set to false after each refresh
+    /// and restored once both local (60 s) and SafetyGate (120 s) cooldowns expire,
+    /// so the pull gesture bounces without showing the spinner when blocked.
+    @State private var isRefreshEnabled: Bool = true
 
     // MARK: - API Polling (continuous watch mode)
     /// Background task that polls the Inject/Custom API every 4–6 s while the view is visible.
@@ -459,6 +466,7 @@ struct PerformanceView: View {
             cachedImages: $cachedImages,
             onRefresh: loadProfileSync,
             onAsyncRefresh: handlePerformancePullToRefresh,
+            isRefreshEnabled: isRefreshEnabled,
             onPlusPress: { selectedTab = 1 },
             highlightsLoadedOnce: $highlightsLoadedOnce,
             mediaURLs: allMediaURLs,
@@ -1212,6 +1220,20 @@ struct PerformanceView: View {
             print("🔄 [PERF] Grid updated locally — \(newURLs.count) items (no API call)")
         }
         .onAppear {
+            // Sync pull-to-refresh availability with any persisted SafetyGate cooldown
+            // so the first pull after re-entering PerformanceView doesn't flash a spinner.
+            let entryPullDecision = InstagramSafetyGate.shared.decision(for: .pullRefresh)
+            if !entryPullDecision.allowed && entryPullDecision.waitSeconds > 0 {
+                isRefreshEnabled = false
+                let waitSec = entryPullDecision.waitSeconds
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: UInt64(max(1, waitSec)) * 1_000_000_000)
+                    isRefreshEnabled = true
+                }
+            } else {
+                isRefreshEnabled = true
+            }
+
             // Reset Post Prediction visual ring — new session starts clean.
             // The ring from the previous trick is cleared so the magician can see
             // a fresh confirmation for the current trick.
@@ -2966,7 +2988,25 @@ struct PerformanceView: View {
         let safetyCheck = InstagramSafetyGate.shared.decision(for: .pullRefresh)
         guard safetyCheck.allowed else {
             print("🛡️ [PERF] Pull refresh blocked by safety gate — \(safetyCheck.waitSeconds)s remaining")
+            // Suppress pull gesture for exactly the remaining wait so the spinner
+            // doesn't flash on every swipe while in cooldown.
+            let waitSec = max(1, safetyCheck.waitSeconds)
+            isRefreshEnabled = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(waitSec) * 1_000_000_000)
+                isRefreshEnabled = true
+            }
             return
+        }
+
+        // Disable pull-to-refresh for the combined cooldown window so the pull
+        // gesture bounces (no spinner) while the user must wait.
+        // maxCooldown = max(local minRefreshInterval 60s, SafetyGate 120s) = 120s
+        isRefreshEnabled = false
+        Task { @MainActor in
+            let maxCooldownNs = UInt64(120) * 1_000_000_000
+            try? await Task.sleep(nanoseconds: maxCooldownNs)
+            isRefreshEnabled = true
         }
 
         await loadProfile(source: "manual")
@@ -3260,6 +3300,12 @@ struct PerformanceView: View {
     
     private func loadCachedImages() {
         guard let profile = profile else { return }
+        // Prevent multiple concurrent download storms: if a batch is already
+        // in flight, skip — the running batch will cover the same URLs.
+        guard !isLoadingImages else {
+            print("📦 [CACHE] loadCachedImages skipped — download already in flight")
+            return
+        }
 
         // ── 1. Serve everything that is already on disk (synchronous, free) ──────
         if let pending = ProfileCacheService.shared.pendingProfilePic {
@@ -3291,19 +3337,29 @@ struct PerformanceView: View {
 
         guard !missingURLs.isEmpty else { return }
 
-        // ── 2. Download missing images in parallel ─────────────────────────────
-        // Thumbnails are <50 KB each so we can run many concurrent requests
-        // safely. Going from 4 → 10 drops a 66-image first-paint from ~17s to
-        // ~7s on a typical network — directly addresses the "blank for 60s"
-        // perception when iOS has purged the image cache.
+        // ── 2. Skip batch when CDN tokens are already known-expired ──────────
+        // If 8+ HTTP 403s were recorded in the last 20s the CDN URLs have
+        // rotated — downloading them now would just produce 403s that inflate
+        // memory and trigger more OOM pressure.  Wait for the CDN refresh.
+        let recentForbidden = cdnForbiddenTimestamps.filter { Date().timeIntervalSince($0) < 20 }.count
+        if recentForbidden >= 8 {
+            print("📦 [CACHE] Skipping download — CDN URLs known-expired (\(recentForbidden) recent 403s)")
+            return
+        }
+
+        // ── 3. Download missing images with limited concurrency ───────────────
+        // Cap at 4 concurrent tasks to avoid OOM from too many simultaneous
+        // URLSession data tasks + UIImage decode operations in memory at once.
+        isLoadingImages = true
         Task {
-            let concurrencyLimit = 10
+            defer { Task { @MainActor in self.isLoadingImages = false } }
+            let concurrencyLimit = 4
             await withTaskGroup(of: (String, UIImage?).self) { group in
                 var inFlight = 0
-                var pending = missingURLs.makeIterator()
+                var iterator = missingURLs.makeIterator()
 
                 // Seed the first batch
-                while inFlight < concurrencyLimit, let url = pending.next() {
+                while inFlight < concurrencyLimit, let url = iterator.next() {
                     let u = url
                     group.addTask { (u, await self.downloadImage(from: u)) }
                     inFlight += 1
@@ -3315,7 +3371,6 @@ struct PerformanceView: View {
                         let u = url
                         let i = img
                         await MainActor.run {
-                            // Prefer the local pending override for the profile pic
                             if u == profile.profilePicURL,
                                ProfileCacheService.shared.pendingProfilePic != nil { return }
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -3324,15 +3379,24 @@ struct PerformanceView: View {
                             ProfileCacheService.shared.saveImage(i, forURL: u)
                         }
                     }
+                    // Abort the whole batch early if CDN has gone stale mid-run
+                    let forbidden = await MainActor.run {
+                        self.cdnForbiddenTimestamps.filter { Date().timeIntervalSince($0) < 20 }.count
+                    }
+                    guard forbidden < 8 else {
+                        print("📦 [CACHE] Aborting download batch — CDN expired mid-run (\(forbidden) 403s)")
+                        group.cancelAll()
+                        break
+                    }
                     // Enqueue next URL as a slot frees up
-                    if let url = pending.next() {
+                    if let url = iterator.next() {
                         let u = url
                         group.addTask { (u, await self.downloadImage(from: u)) }
                         inFlight += 1
                     }
                 }
             }
-            print("✅ [CACHE] Parallel download finished — total \(await MainActor.run { self.cachedImages.count })")
+            print("✅ [CACHE] Download batch finished — total \(await MainActor.run { self.cachedImages.count })")
         }
     }
     
@@ -4687,6 +4751,21 @@ struct ListSetInputView: View {
     }
 }
 
+// MARK: - Conditional refreshable helper
+
+private extension View {
+    /// Applies `.refreshable` only when `isEnabled` is true.
+    /// When false the pull gesture simply bounces — no spinner, no callback.
+    @ViewBuilder
+    func refreshableIf(_ isEnabled: Bool, action: @escaping () async -> Void) -> some View {
+        if isEnabled {
+            self.refreshable { await action() }
+        } else {
+            self
+        }
+    }
+}
+
 // MARK: - Instagram Profile View
 
 struct InstagramProfileView: View {
@@ -4694,6 +4773,7 @@ struct InstagramProfileView: View {
     @Binding var cachedImages: [String: UIImage]
     let onRefresh: () -> Void          // sync — used by header button
     let onAsyncRefresh: () async -> Void  // async — used by pull-to-refresh
+    var isRefreshEnabled: Bool = true  // when false, pull gesture bounces without spinner
     let onPlusPress: () -> Void
     @Binding var highlightsLoadedOnce: Bool
     @State private var selectedTab = 0
@@ -4937,10 +5017,9 @@ struct InstagramProfileView: View {
         .onChange(of: followingOverride) { _ in
             logVisibleCountState(reason: "following override changed")
         }
-        // Pull-to-refresh: runs load in an unstructured Task so SwiftUI
-            // cancellation doesn't abort the URLSession requests inside loadProfile.
-            // The spinner stays visible until the task finishes.
-            .refreshable {
+        // Pull-to-refresh: only applied when refresh is allowed so the
+            // pull gesture bounces immediately (no spinner) when in cooldown.
+            .refreshableIf(isRefreshEnabled) {
                 await Task { await onAsyncRefresh() }.value
             }
             .background(Color(UIColor.igPageBackground))
@@ -7154,12 +7233,9 @@ struct PostScrollView: View {
     @State private var resolvedItems: [String: InstagramMediaItem] = [:]
     /// Display order of posts. While the Force Post trick is armed the forced post
     /// is REMOVED from this list (it can never be seen by scrolling). When the
-    /// spectator's flick ends, `commitForce` inserts it just below the fold and
-    /// SwiftUI scrolls to center it. nil = original order.
+    /// spectator's swipe ends, `insertForced` puts it just below the fold and the
+    /// interceptor animates the scroll to show it. nil = original order.
     @State private var displayURLs: [String]? = nil
-    /// Index the feed should scroll to (and center) after the forced post is
-    /// inserted. Drives a single smooth `scrollTo` animation.
-    @State private var forceScrollTarget: Int? = nil
 
     private var urls: [String] { displayURLs ?? mediaURLs }
 
@@ -7178,9 +7254,9 @@ struct PostScrollView: View {
     }
 
     /// Inserts the hidden forced post just below the fold (at `slot`, found from real
-    /// geometry by the interceptor) and triggers a smooth scroll to center it. The
-    /// slot is always below the visible viewport, so the insertion is invisible.
-    private func commitForce(slot: Int) {
+    /// geometry by the interceptor). The slot is always below the visible viewport, so
+    /// the insertion is invisible; the interceptor then animates the scroll to it.
+    private func insertForced(at slot: Int) {
         guard let forcedURL = mediaURLs.first(where: isForcedPostURL) else { return }
         var list = urls
         guard !list.contains(where: isForcedPostURL) else { return }
@@ -7191,7 +7267,6 @@ struct PostScrollView: View {
         withTransaction(tx) {
             displayURLs = list
         }
-        forceScrollTarget = target
     }
 
     private func postID(_ index: Int) -> String { "post_\(index)" }
@@ -7212,7 +7287,8 @@ struct PostScrollView: View {
                                     item: resolvedItems[url],
                                     cachedImages: cachedImages,
                                     username: username,
-                                    profileImage: profileImage
+                                    profileImage: profileImage,
+                                    isForced: isForcedPostURL(url)
                                 )
                                 .id(postID(index))
                                 .background {
@@ -7227,20 +7303,9 @@ struct PostScrollView: View {
                         ScrollViewInterceptor(
                             isActive: forceConfigured,
                             totalPostCount: urls.count,
-                            commitForce: { slot in commitForce(slot: slot) }
+                            insertForced: { slot in insertForced(at: slot) }
                         )
                         .frame(width: 0, height: 0)
-                    }
-                }
-                .onChange(of: forceScrollTarget) { target in
-                    guard let target else { return }
-                    // Single smooth move that centers the freshly-inserted forced
-                    // post. SwiftUI computes the exact offset, so it lands correctly
-                    // on every screen size without manual geometry math.
-                    DispatchQueue.main.async {
-                        withAnimation(.easeOut(duration: 0.6)) {
-                            proxy.scrollTo(postID(target), anchor: .center)
-                        }
                     }
                 }
                 .onAppear {
@@ -7321,6 +7386,7 @@ private struct PostCardView: View {
     let cachedImages: [String: UIImage]
     let username: String
     let profileImage: UIImage?
+    var isForced: Bool = false
     @State private var carouselIndex = 0
 
     private static let numberFormatter: NumberFormatter = {
@@ -7358,6 +7424,11 @@ private struct PostCardView: View {
             .padding(.vertical, 8)
 
             mediaView
+                .background {
+                    // Real UIKit marker scoped to the IMAGE → the interceptor settles
+                    // the scroll with the image fully visible on any device/size.
+                    if isForced { ForcedCardMarker() }
+                }
 
             if carouselURLs.count > 1 {
                 HStack(spacing: 4) {

@@ -1277,6 +1277,7 @@
 "cooldown.capture.note" = "输入捕获（笔记）";
 "cooldown.capture.bio" = "输入捕获（简介）";
 "cooldown.performance" = "效能暂停";
+"cooldown.refresh" = "效能刷新";
 "postpred.help.input.grid.encoding.title" = "数字编码（与 Clock Input 相同）";
 
 // MARK: - Card Clock Input config

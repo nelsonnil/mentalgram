@@ -1224,6 +1224,7 @@
 "cooldown.capture.note" = "इनपुट कैप्चर (नोट)";
 "cooldown.capture.bio" = "इनपुट कैप्चर (जीवनी)";
 "cooldown.performance" = "प्रदर्शन विराम";
+"cooldown.refresh" = "Performance रिफ्रेश";
 "postpred.help.input.grid.encoding.title" = "अंक एन्कोडिंग  (Clock Input जैसी)";
 
 // MARK: - Card Clock Input config
