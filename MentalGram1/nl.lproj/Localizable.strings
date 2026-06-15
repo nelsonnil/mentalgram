@@ -1680,5 +1680,7 @@ Slechts een interfacetype kan tegelijk actief zijn voor Sets, Bio en Notities. A
 "input.guide.force.body" = "Cijferraster, Nummerklok en Kaartenklok doen meer dan een set onthullen — het vastgelegde getal drijft ook twee optionele schermanimaties aan die de onthulling zichtbaar en dramatisch maken.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "De toeschouwer scrolt vrij door het postraster. De feed vertraagt heimelijk bij de foto waarvan de positie overeenkomt met het ingevoerde getal — hij gelooft dat de keuze volledig willekeurig was.";
+"force.post.picker.playingcard.tip" = "Tip: we hebben @playingcarddesign gemaakt als kant-en-klaar speelkaartenprofiel. Gebruik het om elke kaart te forceren, of zoek elk profiel dat je wilt.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Wanneer de toeschouwer Verkennen opent, verschijnt de door jou voorgeselecteerde reel precies op de positie die overeenkomt met het vastgelegde cijfer — niet te onderscheiden van een echt Verkennen-feed.";
+"upload.tap_to_upload" = "Tik om te uploaden";

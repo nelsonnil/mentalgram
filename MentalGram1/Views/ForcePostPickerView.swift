@@ -30,26 +30,42 @@ struct ForcePostPickerView: View {
     ]
     private let pageSize = 36
     private let initialPrefetchTarget = 144
+    private let screenBackground = Color.black
+    private let panelBackground = Color(red: 0.07, green: 0.07, blue: 0.08)
+    private let fieldBackground = Color(red: 0.11, green: 0.11, blue: 0.13)
+    private let accentBlue = Color(red: 0.10, green: 0.45, blue: 1.0)
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                searchBar
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.system(size: 13))
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 8)
+            ZStack {
+                screenBackground.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    searchBar
+                    playingCardProfileTip
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color(red: 1.0, green: 0.38, blue: 0.38))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                    }
+                    Rectangle()
+                        .fill(Color.white.opacity(0.08))
+                        .frame(height: 1)
+                    contentArea
                 }
-                Divider()
-                contentArea
             }
             .navigationTitle(editingUserId != nil ? "Change Post" : "Add Force Post")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(screenBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .foregroundColor(accentBlue)
                 }
                 if let uid = editingUserId, settings.entry(forUserId: uid) != nil {
                     ToolbarItem(placement: .navigationBarTrailing) {
@@ -72,37 +88,86 @@ struct ForcePostPickerView: View {
                 ReloginSheet(isPresented: $showingRelogin)
             }
         }
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Search bar
 
     private var searchBar: some View {
         HStack(spacing: 8) {
-            TextField("Instagram username", text: $usernameInput)
+            TextField("", text: $usernameInput, prompt: Text("Instagram username").foregroundColor(.white.opacity(0.38)))
                 .autocapitalization(.none)
                 .autocorrectionDisabled()
+                .foregroundColor(.white)
+                .tint(accentBlue)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(uiColor: .systemGray6))
-                .cornerRadius(10)
+                .padding(.vertical, 12)
+                .background(fieldBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(usernameInput.isEmpty ? Color.white.opacity(0.12) : accentBlue.opacity(0.65), lineWidth: 1)
+                )
+                .cornerRadius(12)
                 .onSubmit { searchPosts() }
 
             Button(action: searchPosts) {
                 if isSearching {
-                    ProgressView().frame(width: 44, height: 44)
+                    ProgressView()
+                        .tint(.white)
+                        .frame(width: 46, height: 46)
+                        .background(accentBlue.opacity(0.55))
+                        .cornerRadius(12)
                 } else {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.blue)
-                        .cornerRadius(10)
+                        .frame(width: 46, height: 46)
+                        .background(accentBlue)
+                        .cornerRadius(12)
                 }
             }
             .disabled(isSearching || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked)
+            .opacity(isSearching || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked ? 0.55 : 1.0)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+
+    private var playingCardProfileTip: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "lightbulb.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(Color(red: 1.0, green: 0.82, blue: 0.22))
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Color(red: 1.0, green: 0.82, blue: 0.22).opacity(0.16)))
+
+            Text("force.post.picker.playingcard.tip")
+                .font(.system(size: 13, weight: .medium))
+                .lineSpacing(2)
+                .foregroundColor(.white.opacity(0.84))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.72, blue: 0.10).opacity(0.16),
+                    panelBackground
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(red: 1.0, green: 0.82, blue: 0.22).opacity(0.28), lineWidth: 1)
+        )
+        .cornerRadius(12)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
     }
 
     // MARK: - Content area
@@ -114,6 +179,8 @@ struct ForcePostPickerView: View {
         } else if posts.isEmpty && isSearching {
             Spacer()
             ProgressView("Searching…")
+                .tint(.white)
+                .foregroundColor(.white.opacity(0.78))
             Spacer()
         } else {
             ScrollView {
@@ -122,10 +189,12 @@ struct ForcePostPickerView: View {
                     HStack {
                         Text("@\(searchedUsername) · \(posts.count)\(hasMorePages ? "+" : "") posts")
                             .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.60))
                         Spacer()
                         if isLoadingMore {
-                            ProgressView().scaleEffect(0.7)
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.7)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -154,17 +223,24 @@ struct ForcePostPickerView: View {
                             } else {
                                 Text("Load more posts")
                                     .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
                             }
                         }
                         .disabled(isLoadingMore)
-                        .buttonStyle(.bordered)
+                        .background(panelBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                        .cornerRadius(12)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                     }
                 }
             }
+            .background(screenBackground)
         }
     }
 
@@ -172,14 +248,16 @@ struct ForcePostPickerView: View {
         VStack(spacing: 16) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 52))
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(0.34))
             Text(searchedUsername.isEmpty
                  ? "Search a username to see their posts"
                  : "No posts found for @\(searchedUsername)")
-                .foregroundColor(.secondary)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white.opacity(0.58))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(screenBackground)
     }
 
     // MARK: - Search

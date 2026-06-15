@@ -1330,5 +1330,7 @@ Chai interface dai khrae nueng prapet tho khriang samrap Sets, Bio lae Notes. Da
 "input.guide.force.body" = "กริดตัวเลข นาฬิกาตัวเลข และนาฬิกาไพ่ทำมากกว่าแค่เปิดเผยชุด — ตัวเลขที่จับได้ยังขับเคลื่อนแอนิเมชั่นหน้าจอเสริมสองตัวที่ทำให้การเปิดเผยมองเห็นได้และดราม่า";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "ผู้ชมเลื่อนผ่านกริดโพสต์อย่างอิสระ ฟีดลดความเร็วอย่างลับๆ บนรูปภาพที่มีตำแหน่งตรงกับตัวเลขที่คุณป้อน";
+"force.post.picker.playingcard.tip" = "เคล็ดลับ: เราสร้าง @playingcarddesign เป็นโปรไฟล์ไพ่ที่พร้อมใช้งาน ใช้เพื่อ force ไพ่ใบใดก็ได้ หรือค้นหาโปรไฟล์ใดก็ได้ที่คุณต้องการ";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "เมื่อผู้ชมเปิด Explore รีลที่คุณเลือกล่วงหน้าจะปรากฏที่ตำแหน่งที่ตรงกับตัวเลขที่จับได้พอดี";
+"upload.tap_to_upload" = "แตะเพื่ออัปโหลด";

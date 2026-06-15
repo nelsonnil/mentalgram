@@ -1685,5 +1685,7 @@ Set, soGae, noteeseo han beon e hana ui in teopeoiseu yuhyeong man hwalseonghwa 
 "input.guide.force.body" = "숫자 그리드, 숫자 시계, 카드 시계는 세트를 공개하는 것 이상을 합니다 — 캡처된 숫자는 공개를 시각적으로 드라마틱하게 만드는 두 개의 선택적 화면 애니메이션도 작동시킵니다.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "관객은 포스트 그리드를 자유롭게 스크롤합니다. 피드는 입력한 숫자와 위치가 일치하는 사진에서 비밀리에 감속합니다.";
+"force.post.picker.playingcard.tip" = "팁: 바로 사용할 수 있는 플레잉 카드 프로필로 @playingcarddesign을 만들었습니다. 어떤 카드든 포스할 때 사용하거나 원하는 프로필을 검색하세요.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "관객이 탐색을 열면, 미리 선택한 릴이 캡처된 숫자에 해당하는 정확한 위치에 나타납니다.";
+"upload.tap_to_upload" = "탭하여 업로드";

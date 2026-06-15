@@ -1918,5 +1918,7 @@ Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Not
 "input.guide.force.body" = "La Cuadrícula de Dígitos, el Reloj de Números y el Reloj de Cartas hacen algo más que revelar un set — el número capturado también alimenta dos animaciones opcionales en pantalla que hacen la revelación visible y dramática para el espectador.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "El espectador desplaza libremente la cuadrícula de posts. El feed decelera secretamente en la foto cuya posición coincide con el número que introdujiste — creen que la elección fue completamente aleatoria.";
+"force.post.picker.playingcard.tip" = "Consejo: hemos creado @playingcarddesign como perfil de cartas listo para usar. Úsalo para forzar cualquier carta, o busca cualquier perfil que prefieras.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Cuando el espectador abre Explorar, el reel que preseleccionaste aparece exactamente en la posición que coincide con el dígito capturado — indistinguible de un feed de Explorar real.";
+"upload.tap_to_upload" = "Toca para subir";

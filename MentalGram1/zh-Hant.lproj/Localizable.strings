@@ -1340,5 +1340,7 @@ He ji, jian jie he bei zhu zhong yi ci zhi neng qi yong yi zhong jie mian lei xi
 "input.guide.force.body" = "數字格、數字時鐘和牌卡時鐘不僅僅揭示套組——捕獲的數字還驅動兩個可選的螢幕動畫，使揭示對觀眾可見且戲劇化。";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "觀眾自由滾動貼文網格。動態秘密地在與輸入數字位置匹配的照片處減速——他們相信選擇完全是隨機的。";
+"force.post.picker.playingcard.tip" = "提示：我們建立了 @playingcarddesign 這個可直接使用的撲克牌個人檔案。你可以用它強制任意一張牌，或搜尋任何你想使用的個人檔案。";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "當觀眾打開探索時，你預選的Reel出現在與捕獲數字對應的確切位置——與真正的探索動態無法區分。";
+"upload.tap_to_upload" = "點擊上傳";

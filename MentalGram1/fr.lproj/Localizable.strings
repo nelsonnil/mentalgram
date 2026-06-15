@@ -1864,5 +1864,7 @@ Un seul type d'interface peut etre actif a la fois pour les Sets, la Bio et les 
 "input.guide.force.body" = "La Grille de Chiffres, l'Horloge Numérique et l'Horloge Carte font plus que révéler un set — le nombre capturé alimente aussi deux animations optionnelles à l'écran qui rendent la révélation visible et dramatique.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "Le spectateur défile librement dans la grille de posts. Le feed décélère secrètement sur la photo dont la position correspond au nombre saisi — il croit que le choix était entièrement aléatoire.";
+"force.post.picker.playingcard.tip" = "Astuce : nous avons créé @playingcarddesign comme profil de cartes prêt à l'emploi. Utilise-le pour forcer n'importe quelle carte, ou cherche le profil que tu préfères.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Quand le spectateur ouvre Explore, le reel présélectionné apparaît exactement à la position correspondant au chiffre capturé — indiscernable d'un vrai feed Explore.";
+"upload.tap_to_upload" = "Appuyer pour envoyer";

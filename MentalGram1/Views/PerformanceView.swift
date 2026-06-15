@@ -2947,8 +2947,7 @@ struct PerformanceView: View {
 
     @MainActor
     private func handlePerformancePullToRefresh() async {
-        // If a refresh is already running, return immediately — no spinner delay
-        // so the UI makes clear the gesture was a no-op.
+        // Guard against concurrent pulls.
         guard !isPullRefreshInFlight, !isLoading, !isSilentGridRefreshing else {
             print("🚫 [PERF] Pull refresh skipped — refresh already in progress")
             return
@@ -2956,14 +2955,18 @@ struct PerformanceView: View {
         isPullRefreshInFlight = true
         defer { isPullRefreshInFlight = false }
 
-        checkAndLoadProfile(allowRemote: false)
+        // ── ALL blocking checks FIRST (before any disk I/O) ──────────────────
+        // This guarantees the async func returns in *microseconds* when blocked,
+        // so the SwiftUI spinner disappears before the user can pull again.
+        // (Previously checkAndLoadProfile — which does disk reads — ran first,
+        //  keeping the spinner alive for 300–500 ms even on a blocked pull.)
 
         guard performanceRemoteCallsAllowed,
               !uploadManager.isActive,
               !instagram.isLocked,
               !instagram.isSessionChallenged,
               !instagram.isUploadingProfilePic else {
-            print("🛡️ [PERF] Pull refresh handled as cache-only")
+            print("🛡️ [PERF] Pull refresh cache-only — session/upload guard")
             return
         }
 
@@ -2981,12 +2984,9 @@ struct PerformanceView: View {
             return
         }
 
-        // Pre-check rate budget — same reason loadProfile would bail immediately.
-        // Doing it here (before calling loadProfile) means the async func returns
-        // in microseconds → the spinner disappears before the user can pull again.
         if instagram.shouldUseCacheOnlyForOptionalCalls {
             let rate = instagram.checkRateLimit()
-            print("🛡️ [PERF] Pull refresh pre-blocked — near hourly budget (\(rate.actionsUsed)/55)")
+            print("🛡️ [PERF] Pull refresh blocked — near hourly budget (\(rate.actionsUsed)/55)")
             LogManager.shared.warning("PULL BLOCKED — rate budget (\(rate.actionsUsed)/55)", category: .general)
             InstagramSafetyGate.shared.record(.pullRefresh)
             isRefreshEnabled = false
@@ -2997,15 +2997,9 @@ struct PerformanceView: View {
             return
         }
 
-        // Pre-check SafetyGate here so we never hand control to loadProfile
-        // when the cooldown is active — loadProfile's internal SafetyGate guard
-        // would already block it, but returning here avoids the async overhead
-        // and keeps the pull-to-refresh spinner instant when blocked.
         let safetyCheck = InstagramSafetyGate.shared.decision(for: .pullRefresh)
         guard safetyCheck.allowed else {
             print("🛡️ [PERF] Pull refresh blocked by safety gate — \(safetyCheck.waitSeconds)s remaining")
-            // Suppress pull gesture for exactly the remaining wait so the spinner
-            // doesn't flash on every swipe while in cooldown.
             let waitSec = max(1, safetyCheck.waitSeconds)
             isRefreshEnabled = false
             Task { @MainActor in
@@ -3015,11 +3009,13 @@ struct PerformanceView: View {
             return
         }
 
-        // Run the actual load while the spinner is still visible.
+        // ── All checks passed: do the cache read + network load ───────────────
+        // checkAndLoadProfile renders the latest cache while the network call runs.
+        checkAndLoadProfile(allowRemote: false)
         await loadProfile(source: "manual")
 
-        // Disable pull-to-refresh AFTER load completes so the spinner stays up
-        // for the full load duration.  maxCooldown = SafetyGate minGap (120 s).
+        // Keep pull-to-refresh disabled for 120 s (= SafetyGate minGap) so the
+        // user can't trigger a second full load right after this one.
         isRefreshEnabled = false
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(120) * 1_000_000_000)

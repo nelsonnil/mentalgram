@@ -1383,5 +1383,7 @@ He ji, jian jie he bian qian zhong yi ci zhi neng ji huo yi zhong jie mian lei x
 "input.guide.force.body" = "数字格、数字时钟和卡牌时钟不仅仅揭示套组——捕获的数字还驱动两个可选的屏幕动画，使揭示对观众可见且戏剧化。";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "观众自由滚动帖子网格。动态秘密地在与输入数字位置匹配的照片处减速——他们相信选择完全是随机的。";
+"force.post.picker.playingcard.tip" = "提示：我们创建了 @playingcarddesign 这个可直接使用的扑克牌资料页。你可以用它强制任意一张牌，或搜索你想使用的任何资料页。";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "当观众打开探索时，你预选的Reel出现在与捕获数字对应的确切位置——与真正的探索动态无法区分。";
+"upload.tap_to_upload" = "点击上传";

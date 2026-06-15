@@ -1863,5 +1863,7 @@ Nur ein Schnittstellentyp kann gleichzeitig fuer Sets, Bio und Notizen aktiv sei
 "input.guide.force.body" = "Zifferngitter, Zahlenuhr und Kartenuhr enthüllen nicht nur ein Set — die erfasste Zahl treibt auch zwei optionale Bildschirmanimationen an, die die Enthüllung für den Zuschauer sichtbar und dramatisch machen.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "Der Zuschauer scrollt frei durch das Post-Raster. Der Feed verlangsamt sich heimlich bei dem Foto, dessen Position der eingegebenen Zahl entspricht — er glaubt, die Wahl war völlig zufällig.";
+"force.post.picker.playingcard.tip" = "Tipp: Wir haben @playingcarddesign als sofort nutzbares Spielkarten-Profil erstellt. Nutze es, um jede Karte zu forcieren, oder suche nach einem beliebigen Profil deiner Wahl.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Wenn der Zuschauer Explore öffnet, erscheint das von dir vorgewählte Reel genau an der Position, die der erfassten Ziffer entspricht — nicht von einem echten Explore-Feed zu unterscheiden.";
+"upload.tap_to_upload" = "Zum Hochladen tippen";

@@ -2023,6 +2023,12 @@ struct SettingsView: View {
         nonmutating set { activeBioBinding.wrappedValue = newValue }
     }
 
+    private var appVersionDisplay: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (\(build))"
+    }
+
     // OCR configuration (shared between note and bio)
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
     @AppStorage("ocr_camera")   private var ocrCamera:   Int    = 0  // 0=back, 1=front
@@ -2192,7 +2198,7 @@ struct SettingsView: View {
         settingsSectionLabel("ACCOUNT", icon: "person.circle", color: Self.colorAccount)
         modernCard {
             VStack(spacing: VaultTheme.Spacing.md) {
-                Text("Version 1.0.0")
+                Text("Version \(appVersionDisplay)")
                                         .font(VaultTheme.Typography.body())
                     .foregroundColor(VaultTheme.Colors.textSecondary)
                     .onTapGesture {
@@ -2484,7 +2490,7 @@ struct SettingsView: View {
                                     .font(VaultTheme.Typography.body())
                                     .foregroundColor(VaultTheme.Colors.textPrimary)
                                 Spacer()
-                        Text("1.0.0 (1)")
+                        Text(appVersionDisplay)
                                     .font(VaultTheme.Typography.body())
                                     .foregroundColor(VaultTheme.Colors.textSecondary)
                             .onLongPressGesture(minimumDuration: 2.0) {

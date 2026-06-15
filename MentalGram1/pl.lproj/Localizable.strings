@@ -1679,5 +1679,7 @@ W zestawach, bio i notatkach jednoczesnie moze byc aktywny tylko jeden typ inter
 "input.guide.force.body" = "Siatka Cyfr, Zegar Numeryczny i Zegar Kart robią więcej niż ujawniają set — przechwycona liczba zasila też dwie opcjonalne animacje na ekranie, które czynią ujawnienie widocznym i dramatycznym.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "Widz swobodnie przewija siatkę postów. Feed potajemnie zwalnia przy zdjęciu, którego pozycja odpowiada wprowadzonej liczbie — uważa, że wybór był całkowicie losowy.";
+"force.post.picker.playingcard.tip" = "Wskazówka: stworzyliśmy @playingcarddesign jako gotowy profil kart do gry. Użyj go, aby wymusić dowolną kartę, albo wyszukaj dowolny profil.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Gdy widz otwiera Eksplorator, wybrany przez ciebie reel pojawia się dokładnie na pozycji odpowiadającej przechwyconej cyfrze — nie do odróżnienia od prawdziwego feedu Eksploratora.";
+"upload.tap_to_upload" = "Dotknij, aby przesłać";

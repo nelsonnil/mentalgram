@@ -1863,5 +1863,7 @@ Solo un tipo di interfaccia puo essere attivo alla volta tra Set, Bio e Note. Co
 "input.guide.force.body" = "Griglia Cifre, Orologio Numerico e Orologio Carte fanno di più che rivelare un set — il numero catturato alimenta anche due animazioni opzionali a schermo che rendono la rivelazione visibile e drammatica.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "Lo spettatore scorre liberamente la griglia dei post. Il feed decelera segretamente sulla foto la cui posizione corrisponde al numero inserito — crede che la scelta fosse completamente casuale.";
+"force.post.picker.playingcard.tip" = "Suggerimento: abbiamo creato @playingcarddesign come profilo di carte pronto all'uso. Usalo per forzare qualsiasi carta, oppure cerca il profilo che preferisci.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Quando lo spettatore apre Esplora, il reel preselezionato appare esattamente nella posizione corrispondente alla cifra catturata — indistinguibile da un feed Esplora reale.";
+"upload.tap_to_upload" = "Tocca per caricare";

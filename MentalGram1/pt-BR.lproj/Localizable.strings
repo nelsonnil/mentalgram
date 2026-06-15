@@ -1862,5 +1862,7 @@ Apenas um tipo de interface pode estar ativo por vez entre Sets, Bio e Notas. Co
 "input.guide.force.body" = "Grade de Dígitos, Relógio Numérico e Relógio de Cartas fazem mais do que revelar um set — o número capturado também alimenta duas animações opcionais na tela que tornam a revelação visível e dramática.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "O espectador rola livremente pela grade de posts. O feed desacelera secretamente na foto cuja posição corresponde ao número inserido — ele acredita que a escolha foi completamente aleatória.";
+"force.post.picker.playingcard.tip" = "Dica: criamos @playingcarddesign como um perfil de cartas pronto para usar. Use-o para forçar qualquer carta, ou procure qualquer perfil que preferir.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Quando o espectador abre Explorar, o reel pré-selecionado aparece exatamente na posição correspondente ao dígito capturado — indistinguível de um feed Explorar real.";
+"upload.tap_to_upload" = "Toque para enviar";

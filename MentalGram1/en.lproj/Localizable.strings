@@ -1328,5 +1328,7 @@
 "input.guide.force.body" = "Digit Grid, Clock Input and Card Clock do more than reveal a set — the captured number also powers two optional on-screen animations that make the reveal visible and dramatic for the spectator.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "The spectator scrolls freely through the post grid. The feed secretly decelerates on the photo whose position matches the number you entered — they believe the choice was entirely random.";
+"force.post.picker.playingcard.tip" = "Tip: we created @playingcarddesign as a ready-to-use playing-card profile. Use it to force any card, or search for any profile you prefer.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "When the spectator opens Explore, the reel you pre-selected appears at the exact position matching the digit you captured — indistinguishable from a genuine Explore feed.";
+"upload.tap_to_upload" = "Tap to upload";

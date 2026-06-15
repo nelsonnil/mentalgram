@@ -874,6 +874,7 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "input.guide.force.body" = "Lưới Chữ Số, Đồng Hồ Số và Đồng Hồ Bài làm nhiều hơn chỉ tiết lộ bộ — số được thu thập cũng điều khiển hai hoạt hình màn hình tùy chọn làm cho việc tiết lộ trở nên ấn tượng và kịch tính.";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "Khán giả cuộn tự do qua lưới bài đăng. Feed bí mật giảm tốc tại ảnh có vị trí khớp với số bạn nhập — họ tin rằng sự lựa chọn hoàn toàn ngẫu nhiên.";
+"force.post.picker.playingcard.tip" = "Mẹo: chúng tôi đã tạo @playingcarddesign như một hồ sơ bài tây sẵn dùng. Dùng nó để force bất kỳ lá bài nào, hoặc tìm bất kỳ hồ sơ nào bạn muốn.";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Khi khán giả mở Khám phá, reel bạn đã chọn trước xuất hiện đúng ở vị trí tương ứng với chữ số được thu thập — không thể phân biệt với feed Khám phá thực sự.";
 "postpred.help.howitworks.archive_reason" = "Instagram không cho phép tải một ảnh mới lên rồi đặt nó thành ngày cũ. Vault giải quyết bằng cách tải ảnh dự đoán lên trước và lưu trữ ngay lập tức. Instagram vẫn giữ ngày tải lên ban đầu và vị trí trong lưới, nên khi dự đoán được bỏ lưu trữ sau đó, nó trông như một bài đăng cũ đã luôn ở đó. Việc tải lên và lưu trữ diễn ra tự động và ngay lập tức, vì vậy khán giả không bao giờ thấy các ảnh chuẩn bị trên hồ sơ thật của bạn.";
@@ -884,3 +885,4 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "input.guide.numpadcard.body" = "A black fullscreen input for playing cards. When Performance opens, the screen is completely black. Tap anywhere to reveal a private card pad, choose A-10/J/Q/K and one suit, then the pad closes automatically and the fake Instagram profile appears. The captured card can reveal a Playing Cards set or fill Notes/Bio with the localized card name.";
 "input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
 "input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
+"upload.tap_to_upload" = "Nhấn để tải lên";

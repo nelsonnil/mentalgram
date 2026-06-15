@@ -1681,5 +1681,7 @@ Setto, profairu, noto de douji ni tsukaeru intafeisu wa hitotsu dake desu. Tsuzu
 "input.guide.force.body" = "数字グリッド、数字クロック、カードクロックはセットを公開するだけでなく、キャプチャされた数字が2つのオプションの画面アニメーションも動かします。";
 "input.guide.force.post.title" = "Force Post";
 "input.guide.force.post.body" = "スペクテーターは投稿グリッドを自由にスクロールします。フィードは入力した数字と位置が一致する写真で秘密裏に減速します。";
+"force.post.picker.playingcard.tip" = "ヒント：すぐに使えるトランプ用プロフィールとして @playingcarddesign を作成しました。任意のカードをフォースするために使うか、好みのプロフィールを検索してください。";
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "スペクテーターがExpLoreを開くと、事前に選択したリールがキャプチャした数字に対応するまさにその位置に表示されます。";
+"upload.tap_to_upload" = "タップしてアップロード";

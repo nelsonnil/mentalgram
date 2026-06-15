@@ -114,6 +114,7 @@ struct SetDetailView: View {
     // FILLED SLOT ACTIONS (tap → action sheet)
     @State private var showFilledSlotActions = false
     @State private var filledSlotActionSymbol: String? = nil
+    @State private var filledSlotActionPhotoId: UUID? = nil
     @State private var filledSlotActionIsUploaded = false
 
     // LIST SET
@@ -133,6 +134,7 @@ struct SetDetailView: View {
     @State private var syncUnknownCount = 0          // couldn't check (nil response)
     @State private var syncTrulyVisibleIds: [String] = []  // confirmed public by Instagram
     @State private var syncCompleted = false
+    @State private var pendingBlockerPulse = false
 
     // ARCHIVE ALL state (post-sync)
     @State private var isArchivingAll = false
@@ -273,6 +275,7 @@ struct SetDetailView: View {
         ScrollView {
             VStack(spacing: VaultTheme.Spacing.lg) {
                 statsSection
+                previousSetPendingBanner
                 sessionExpiredBanner
                 verifySyncSection
                 reverifySection
@@ -724,6 +727,16 @@ struct SetDetailView: View {
             Text("Remove this photo from all banks? This cannot be undone.")
         }
         .confirmationDialog("Photo options", isPresented: $showFilledSlotActions, titleVisibility: .visible) {
+            if let photoId = filledSlotActionPhotoId,
+               let photo = currentSet.photos.first(where: { $0.id == photoId }),
+               photo.mediaId == nil,
+               photo.imageData != nil,
+               !uploadManager.isActive {
+                Button("Upload & Archive This Photo") {
+                    uploadSinglePendingPhoto(photoId: photoId)
+                    showFilledSlotActions = false
+                }
+            }
             Button(filledSlotActionIsUploaded ? "Replace from Gallery" : "Change photo from Gallery") {
                 if let symbol = filledSlotActionSymbol {
                     targetSlotSymbol = symbol
@@ -757,6 +770,7 @@ struct SetDetailView: View {
             }
             Button("Cancel", role: .cancel) {
                 filledSlotActionSymbol = nil
+                filledSlotActionPhotoId = nil
                 showFilledSlotActions = false
             }
         } message: {
@@ -2036,6 +2050,50 @@ struct SetDetailView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var previousSetPendingBanner: some View {
+        if let blocker = previousIncompleteSetBlocker() {
+            let plural = blocker.count == 1 ? "photo" : "photos"
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(pendingBlockerPulse ? 0.30 : 0.12))
+                        .frame(width: 38, height: 38)
+                        .scaleEffect(pendingBlockerPulse ? 1.12 : 0.96)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(Color.orange)
+                        .opacity(pendingBlockerPulse ? 1.0 : 0.45)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Finish the older set first")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(Color.orange)
+                    Text("\"\(blocker.set.name)\" still has \(blocker.count) \(plural) waiting to upload or archive. Open that set and fix the pending slot before uploading this one.")
+                        .font(.system(size: 13))
+                        .foregroundColor(VaultTheme.Colors.textPrimary.opacity(0.88))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.10))
+            .overlay(
+                RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
+                    .stroke(Color.orange.opacity(pendingBlockerPulse ? 0.75 : 0.28), lineWidth: 1.5)
+            )
+            .cornerRadius(VaultTheme.CornerRadius.md)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                    pendingBlockerPulse = true
+                }
+            }
+        }
+    }
     
     // MARK: - Status Section (Enhanced - Single Source of Truth)
     
@@ -2552,6 +2610,7 @@ struct SetDetailView: View {
                         showingLockdownSheet = true
                         return
                     }
+                    guard !blockIfPreviousSetHasPendingUpload() else { return }
                     dataManager.updateSetStatus(id: currentSet.id, status: .ready)
                     Task { await uploadAllPhotos() }
                 } label: {
@@ -3205,9 +3264,18 @@ struct SetDetailView: View {
             }
             .frame(width: 100, height: 100)
             .onTapGesture {
-                filledSlotActionSymbol = label
-                filledSlotActionIsUploaded = photo.mediaId != nil
-                showFilledSlotActions = true
+                // Directly upload a stuck photo without showing the dialog.
+                // isDirectlyUploadable already checks isLoggedIn, no active upload,
+                // has imageData, no mediaId.  Anti-bot guards are inside
+                // uploadSinglePendingPhoto (rate limit, SafetyGate, session warmup).
+                if isDirectlyUploadable(photo) {
+                    uploadSinglePendingPhoto(photoId: photo.id)
+                } else {
+                    filledSlotActionSymbol = label
+                    filledSlotActionPhotoId = photo.id
+                    filledSlotActionIsUploaded = photo.mediaId != nil
+                    showFilledSlotActions = true
+                }
             }
             .contextMenu {
                 if currentSet.type == .list {
@@ -3344,6 +3412,15 @@ struct SetDetailView: View {
     }
     
     @ViewBuilder
+    /// True when the photo can be uploaded individually right now (no active upload,
+    /// has image data, not yet on Instagram).
+    private func isDirectlyUploadable(_ photo: SetPhoto) -> Bool {
+        photo.mediaId == nil &&
+        photo.imageData != nil &&
+        !uploadManager.isActive &&
+        instagram.isLoggedIn
+    }
+
     private func uploadStatusBadge(for photo: SetPhoto) -> some View {
         switch photo.uploadStatus {
         case .completed:
@@ -3358,10 +3435,11 @@ struct SetDetailView: View {
         case .error:
             ZStack {
                 Circle()
-                    .fill(Color.red)
+                    // Orange when actionable (no upload running), red when upload active
+                    .fill(isDirectlyUploadable(photo) ? Color.orange : Color.red)
                     .frame(width: 20, height: 20)
-                Image(systemName: "exclamationmark")
-                    .font(.system(size: 10, weight: .bold))
+                Image(systemName: isDirectlyUploadable(photo) ? "arrow.up" : "exclamationmark")
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundColor(.white)
             }
         case .uploading, .archiving, .uploaded:
@@ -3374,13 +3452,26 @@ struct SetDetailView: View {
                     .tint(.white)
             }
         case .pending:
-            ZStack {
-                Circle()
-                    .fill(Color.gray.opacity(0.6))
-                    .frame(width: 20, height: 20)
-                Image(systemName: "clock")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.white)
+            if isDirectlyUploadable(photo) {
+                // Stuck pending (no active upload) — orange arrow signals "tap me"
+                ZStack {
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 20, height: 20)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            } else {
+                // Waiting in the active upload queue — gray clock
+                ZStack {
+                    Circle()
+                        .fill(Color.gray.opacity(0.6))
+                        .frame(width: 20, height: 20)
+                    Image(systemName: "clock")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                }
             }
         }
     }
@@ -3389,9 +3480,15 @@ struct SetDetailView: View {
     private func statusTextView(for photo: SetPhoto) -> some View {
         switch photo.uploadStatus {
         case .pending:
-            Text("Pending")
-                .font(.caption2)
-                .foregroundColor(.orange)
+            if isDirectlyUploadable(photo) {
+                Text(String(localized: "upload.tap_to_upload"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(.orange)
+            } else {
+                Text("Pending")
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+            }
         case .uploading:
             Text("Uploading...")
                 .font(.caption2)
@@ -3415,9 +3512,15 @@ struct SetDetailView: View {
                     .foregroundColor(.green)
             }
         case .error:
-            Text("Error")
-                .font(.caption2)
-                .foregroundColor(.red)
+            if isDirectlyUploadable(photo) {
+                Text(String(localized: "upload.tap_to_upload"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(.orange)
+            } else {
+                Text("Error")
+                    .font(.caption2)
+                    .foregroundColor(.red)
+            }
         }
     }
     
@@ -3788,6 +3891,44 @@ struct SetDetailView: View {
     }
     
     // MARK: - Upload Controls
+
+    private func incompleteUploadCount(in set: PhotoSet) -> Int {
+        set.photos.filter { photo in
+            guard photo.imageData != nil else { return false }
+            if photo.mediaId == nil { return true }
+            if photo.uploadStatus == .uploaded || photo.uploadStatus == .archiving || photo.uploadStatus == .uploading || photo.uploadStatus == .error {
+                return true
+            }
+            return false
+        }.count
+    }
+
+    private func previousIncompleteSetBlocker() -> (set: PhotoSet, count: Int)? {
+        dataManager.sets
+            .filter { $0.id != currentSet.id && $0.createdAt < currentSet.createdAt }
+            .sorted { $0.createdAt < $1.createdAt }
+            .compactMap { set -> (PhotoSet, Int)? in
+                let count = incompleteUploadCount(in: set)
+                return count > 0 ? (set, count) : nil
+            }
+            .first
+    }
+
+    @discardableResult
+    private func blockIfPreviousSetHasPendingUpload() -> Bool {
+        guard let blocker = previousIncompleteSetBlocker() else { return false }
+        let plural = blocker.count == 1 ? "photo" : "photos"
+        let message = """
+        Finish the older set first.
+
+        "\(blocker.set.name)" still has \(blocker.count) \(plural) waiting to upload or archive. Uploading a newer set first can change the Instagram date/order and break the prediction.
+
+        Look for the orange warning banner, open that older set, tap the pending slot, and use "Upload & Archive This Photo" or Start Upload.
+        """
+        uploadManager.safetyBlockMessage = message
+        LogManager.shared.warning("Upload blocked: older set '\(blocker.set.name)' has \(blocker.count) incomplete photo(s)", category: .upload)
+        return true
+    }
     
     private func startUpload() {
         // Guard against double-launch: rapid double-tap or duplicate SwiftUI renders
@@ -3795,6 +3936,8 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD] Ignored duplicate startUpload() call — already active (phase: \(uploadManager.uploadPhase))")
             return
         }
+
+        guard !blockIfPreviousSetHasPendingUpload() else { return }
 
         // Guard: no images loaded — show notification instead of starting an infinite loop
         let readyPhotos = currentSet.photos.filter { $0.imageData != nil && $0.mediaId == nil }
@@ -3844,6 +3987,128 @@ struct SetDetailView: View {
             uploadTakenAt = nil
             print("📍 [GRID ANCHOR] v13 diagnostic: skipped pre-upload media fetch — uploading without taken_at override")
             await uploadAllPhotos()
+        }
+        uploadManager.activeTask = task
+    }
+
+    private func uploadSinglePendingPhoto(photoId: UUID) {
+        guard uploadManager.activeTask == nil, !uploadManager.isActive else {
+            print("⚠️ [UPLOAD SINGLE] Ignored — upload already active")
+            return
+        }
+        guard !blockIfPreviousSetHasPendingUpload() else { return }
+        guard let index = currentSet.photos.firstIndex(where: { $0.id == photoId }) else { return }
+        let photo = currentSet.photos[index]
+        guard photo.mediaId == nil, let imageData = photo.imageData else {
+            uploadManager.showingError = "This photo is not ready to upload."
+            return
+        }
+
+        let rate = instagram.checkRateLimit()
+        if rate.actionsUsed >= 25 {
+            let message = uploadStartSafetyMessage(rateUsed: rate.actionsUsed)
+            LogManager.shared.warning("SAFETY BLOCK — single upload start blocked: \(rate.actionsUsed)/55 recent API actions", category: .upload)
+            uploadManager.safetyBlockMessage = message
+            return
+        }
+
+        let uploadSafety = InstagramSafetyGate.shared.decision(for: .upload)
+        guard uploadSafety.allowed else {
+            uploadManager.safetyBlockMessage = "Upload paused for safety.\n\nReason: \(uploadSafety.reason).\n\nWait \(uploadSafety.waitSeconds)s before trying again."
+            LogManager.shared.warning("SAFETY BLOCK — single upload blocked: \(uploadSafety.reason)", category: .upload)
+            return
+        }
+
+        uploadManager.resetAllState()
+        uploadManager.activeSetId = currentSet.id
+        uploadManager.requestPause = false
+        uploadManager.uploadProgress = UploadManager.UploadProgressInfo(current: 0, total: 1)
+        uploadManager.uploadPhase = .uploading(photoNumber: index + 1)
+        uploadManager.currentPhaseDescription = "Uploading \(photo.symbol)…"
+        dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
+
+        let task = Task {
+            var uploadedMediaId: String? = nil
+            defer {
+                Task { @MainActor in
+                    uploadManager.activeTask = nil
+                    uploadManager.activeSetId = nil
+                }
+            }
+
+            do {
+                try await instagram.waitForSessionWarmup()
+                try await instagram.waitForUploadSafetyWindow(label: "single upload")
+
+                dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .uploading, errorMessage: nil)
+
+                let allowDuplicates = (currentSet.type == .word || currentSet.type == .number)
+                let mediaId = try await instagram.uploadPhoto(
+                    imageData: imageData,
+                    caption: "",
+                    allowDuplicates: allowDuplicates,
+                    photoIndex: index,
+                    takenAt: uploadTakenAt
+                )
+
+                guard let mediaId else {
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Upload returned no media ID")
+                    uploadManager.showingError = "Upload failed for \(photo.symbol). Try again later."
+                    uploadManager.uploadPhase = .paused
+                    dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                    return
+                }
+                uploadedMediaId = mediaId
+
+                dataManager.updatePhoto(
+                    photoId: photo.id,
+                    mediaId: mediaId,
+                    uploadStatus: .uploaded,
+                    errorMessage: nil,
+                    uploadDate: uploadTakenAt
+                )
+
+                let waitSeconds = Double.random(in: 15...35)
+                print("⏳ [UPLOAD SINGLE] Waiting \(String(format: "%.1f", waitSeconds))s before archiving \(photo.symbol)")
+                try await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+
+                if await checkPauseRequested(atPhotoIndex: index) { return }
+
+                dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, uploadStatus: .archiving, errorMessage: nil)
+                await MainActor.run {
+                    uploadManager.uploadPhase = .archiving(photoNumber: index + 1)
+                    uploadManager.currentPhaseDescription = "Archiving \(photo.symbol)…"
+                }
+
+                let archived = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
+                if archived {
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                    await MainActor.run {
+                        uploadManager.uploadProgress = UploadManager.UploadProgressInfo(current: 1, total: 1)
+                        uploadManager.uploadPhase = .completed
+                        uploadManager.currentPhaseDescription = "Photo uploaded and archived"
+                    }
+                    if currentSet.photos.allSatisfy({ $0.id == photo.id || ($0.mediaId != nil && $0.uploadStatus == .completed) }) {
+                        dataManager.updateSetStatus(id: currentSet.id, status: .completed)
+                    }
+                    LogManager.shared.success("Single photo uploaded+archived: \(photo.symbol)", category: .upload)
+                } else {
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: false, uploadStatus: .error, errorMessage: "Archive failed")
+                    uploadManager.showingError = "Uploaded \(photo.symbol), but archive failed. Tap it again to retry archive."
+                    uploadManager.uploadPhase = .paused
+                    dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                }
+            } catch {
+                if let uploadedMediaId {
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: uploadedMediaId, isArchived: false, uploadStatus: .error, errorMessage: error.localizedDescription)
+                } else {
+                    dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: error.localizedDescription)
+                }
+                uploadManager.showingError = "Upload failed for \(photo.symbol): \(error.localizedDescription)"
+                uploadManager.uploadPhase = .paused
+                dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                LogManager.shared.warning("Single photo upload failed (\(photo.symbol)): \(error.localizedDescription)", category: .upload)
+            }
         }
         uploadManager.activeTask = task
     }
@@ -4077,6 +4342,19 @@ struct SetDetailView: View {
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
         LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
+
+        if startFrom == 0 {
+            let blocked = await MainActor.run { blockIfPreviousSetHasPendingUpload() }
+            if blocked {
+                await MainActor.run {
+                    uploadManager.uploadPhase = .idle
+                    uploadManager.activeTask = nil
+                    uploadManager.activeSetId = nil
+                    dataManager.updateSetStatus(id: currentSet.id, status: .ready)
+                }
+                return
+            }
+        }
         
         // CRITICAL: Check if lockdown is active before starting
         if instagram.isLocked {
