@@ -3412,12 +3412,14 @@ struct SetDetailView: View {
     }
     
     @ViewBuilder
-    /// True when the photo can be uploaded individually right now (no active upload,
-    /// has image data, not yet on Instagram).
+    /// True when the photo can be uploaded individually right now.
+    /// Checks every concurrent-upload guard so a rapid tap on the photo followed
+    /// immediately by "Start Upload" (or vice-versa) never starts two operations.
     private func isDirectlyUploadable(_ photo: SetPhoto) -> Bool {
         photo.mediaId == nil &&
         photo.imageData != nil &&
-        !uploadManager.isActive &&
+        !uploadManager.isActive &&       // phase-based guard (set synchronously)
+        uploadManager.activeTask == nil && // task-based guard (belt-and-suspenders)
         instagram.isLoggedIn
     }
 
