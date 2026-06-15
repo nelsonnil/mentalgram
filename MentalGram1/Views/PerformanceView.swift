@@ -2999,17 +2999,16 @@ struct PerformanceView: View {
             return
         }
 
-        // Disable pull-to-refresh for the combined cooldown window so the pull
-        // gesture bounces (no spinner) while the user must wait.
-        // maxCooldown = max(local minRefreshInterval 60s, SafetyGate 120s) = 120s
+        // Run the actual load while the spinner is still visible.
+        await loadProfile(source: "manual")
+
+        // Disable pull-to-refresh AFTER load completes so the spinner stays up
+        // for the full load duration.  maxCooldown = SafetyGate minGap (120 s).
         isRefreshEnabled = false
         Task { @MainActor in
-            let maxCooldownNs = UInt64(120) * 1_000_000_000
-            try? await Task.sleep(nanoseconds: maxCooldownNs)
+            try? await Task.sleep(nanoseconds: UInt64(120) * 1_000_000_000)
             isRefreshEnabled = true
         }
-
-        await loadProfile(source: "manual")
     }
 
     @MainActor
@@ -4751,17 +4750,34 @@ struct ListSetInputView: View {
     }
 }
 
-// MARK: - Conditional refreshable helper
+// MARK: - Refresh control enabler
 
-private extension View {
-    /// Applies `.refreshable` only when `isEnabled` is true.
-    /// When false the pull gesture simply bounces — no spinner, no callback.
-    @ViewBuilder
-    func refreshableIf(_ isEnabled: Bool, action: @escaping () async -> Void) -> some View {
-        if isEnabled {
-            self.refreshable { await action() }
-        } else {
-            self
+/// Invisible UIViewRepresentable that, when placed as background of the ScrollView,
+/// walks up the view hierarchy to find the UIScrollView and sets
+/// `refreshControl?.isEnabled`.  This avoids recreating the view tree
+/// (which would reset scroll position) just to toggle pull-to-refresh.
+private struct RefreshControlEnabler: UIViewRepresentable {
+    let isEnabled: Bool
+
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.isHidden    = true
+        v.isUserInteractionEnabled = false
+        return v
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        let enabled = isEnabled
+        // Defer: UIKit hierarchy may not be fully wired on the first layout pass.
+        DispatchQueue.main.async {
+            var current: UIView? = uiView.superview
+            while let view = current {
+                if let scroll = view as? UIScrollView {
+                    scroll.refreshControl?.isEnabled = enabled
+                    return
+                }
+                current = view.superview
+            }
         }
     }
 }
@@ -4773,7 +4789,9 @@ struct InstagramProfileView: View {
     @Binding var cachedImages: [String: UIImage]
     let onRefresh: () -> Void          // sync — used by header button
     let onAsyncRefresh: () async -> Void  // async — used by pull-to-refresh
-    var isRefreshEnabled: Bool = true  // when false, pull gesture bounces without spinner
+    /// When false, the UIRefreshControl is disabled at UIKit level so the pull
+    /// gesture produces no spinner.  Changed via RefreshControlEnabler background.
+    var isRefreshEnabled: Bool = true
     let onPlusPress: () -> Void
     @Binding var highlightsLoadedOnce: Bool
     @State private var selectedTab = 0
@@ -5017,12 +5035,18 @@ struct InstagramProfileView: View {
         .onChange(of: followingOverride) { _ in
             logVisibleCountState(reason: "following override changed")
         }
-        // Pull-to-refresh: only applied when refresh is allowed so the
-            // pull gesture bounces immediately (no spinner) when in cooldown.
-            .refreshableIf(isRefreshEnabled) {
+        // Pull-to-refresh: always attached so the ScrollView identity is preserved
+            // (no layout reset). isEnabled is toggled via RefreshControlEnabler at
+            // UIKit level — when disabled, the pull gesture produces no spinner at all.
+            .refreshable {
                 await Task { await onAsyncRefresh() }.value
             }
-            .background(Color(UIColor.igPageBackground))
+            .background(
+                ZStack {
+                    Color(UIColor.igPageBackground)
+                    RefreshControlEnabler(isEnabled: isRefreshEnabled)
+                }
+            )
         // Race-condition fix for URL-scheme reveals:
         // When vault://reveal?word=X arrives while PerformanceView is loading,
         // pendingOCRWord may be set BEFORE InstagramProfileView enters the hierarchy.

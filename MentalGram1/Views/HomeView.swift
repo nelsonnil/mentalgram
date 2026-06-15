@@ -671,6 +671,7 @@ struct SetsListView: View {
                             .padding(.horizontal, VaultTheme.Spacing.lg)
                             .padding(.vertical, 10)
                         CooldownWarningBanner()
+                        PostRevealArchiveBanner()
                         Divider()
                             .background(Color.white.opacity(0.08))
                     }
@@ -1541,6 +1542,227 @@ struct CooldownWarningBanner: View {
     }
 }
 
+// MARK: - Post-Reveal Re-Archive Banner
+
+/// Rojo parpadeante que aparece en Settings tras un reveal de Post Prediction
+/// mientras haya fotos sin archivar. Muestra el countdown del hold anti-bot
+/// y ofrece un botón "Archivar ahora" que respeta todos los cooldowns de SafetyGate.
+struct PostRevealArchiveBanner: View {
+    @ObservedObject private var instagram = InstagramService.shared
+    @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var isArchiving      = false
+    @State private var doneSoFar        = 0
+    @State private var totalToArchive   = 0
+    @State private var archiveError: String? = nil
+    @State private var postRevealLeft: Int  = 0
+    @State private var timer: Timer?        = nil
+    @State private var blinkTimer: Timer?   = nil
+    @State private var blink: Bool          = false
+    @State private var refreshTick: Int     = 0
+
+    // Photos that were unarchived by PP reveal and still need to be re-archived
+    private var revealedPhotos: [(setId: UUID, photo: SetPhoto)] {
+        dataManager.sets.flatMap { set in
+            set.photos
+                .filter { !$0.isArchived && $0.mediaId != nil && $0.uploadStatus == .completed }
+                .map { (set.id, $0) }
+        }
+    }
+
+    private var count: Int { revealedPhotos.count }
+    private var hasPhotos: Bool { count > 0 }
+
+    var body: some View {
+        ZStack {
+            if hasPhotos {
+                bannerContent
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: hasPhotos)
+            }
+        }
+        .onAppear {
+            refreshCounters()
+            startTimer()
+        }
+        .onDisappear { stopTimer() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { refreshCounters() }
+        }
+    }
+
+    @ViewBuilder
+    private var bannerContent: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "eye.fill")
+                .font(.system(size: 15, weight: .black))
+                .foregroundColor(blink ? .red : Color.red.opacity(0.35))
+                .scaleEffect(blink ? 1.18 : 1.0)
+                .animation(.easeInOut(duration: 0.5), value: blink)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isArchiving
+                     ? "Archivando \(doneSoFar)/\(totalToArchive)…"
+                     : "\(count) foto\(count == 1 ? "" : "s") visible\(count == 1 ? "" : "s") tras el reveal")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundColor(blink ? .red : Color.red.opacity(0.45))
+                    .scaleEffect(blink ? 1.03 : 1.0, anchor: .leading)
+                    .animation(.easeInOut(duration: 0.5), value: blink)
+
+                if let err = archiveError {
+                    Text("Error: \(err)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if postRevealLeft > 0 {
+                    Text("Archivable en \(formatSeconds(postRevealLeft)) — espera el hold anti-bot")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(blink ? .red : Color.red.opacity(0.8))
+                        .animation(.easeInOut(duration: 0.5), value: blink)
+                } else if !isArchiving {
+                    Text("Post Prediction dejó fotos visibles en Instagram. Archívalas para el próximo truco.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.red.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !isArchiving {
+                    Button(action: {
+                        archiveError = nil
+                        Task { await runArchive() }
+                    }) {
+                        Label("Archivar ahora", systemImage: "archivebox.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(archiveButtonEnabled ? Color.red : Color.red.opacity(0.35))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!archiveButtonEnabled)
+                    .padding(.top, 2)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.red.opacity(blink ? 0.18 : 0.08))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.red.opacity(blink ? 0.9 : 0.3), lineWidth: blink ? 1.5 : 1))
+                .animation(.easeInOut(duration: 0.5), value: blink)
+        )
+        .padding(.horizontal, VaultTheme.Spacing.lg)
+        .padding(.bottom, 8)
+    }
+
+    private var archiveButtonEnabled: Bool {
+        !isArchiving
+        && postRevealLeft == 0
+        && !instagram.isLocked
+        && !instagram.isSessionChallenged
+        && !instagram.isSessionExpired
+    }
+
+    // MARK: - Archive action
+
+    private func runArchive() async {
+        let photos = revealedPhotos
+        guard !photos.isEmpty else { return }
+
+        await MainActor.run {
+            isArchiving      = true
+            doneSoFar        = 0
+            totalToArchive   = photos.count
+            archiveError     = nil
+        }
+
+        for (_, photo) in photos {
+            guard let mediaId = photo.mediaId else { continue }
+
+            // Re-check post-reveal hold before each photo — the hold may still be
+            // active for individual IDs even after the global countdown clears.
+            let mediaSafety = InstagramSafetyGate.shared.canArchive(mediaId: mediaId)
+            guard mediaSafety.allowed else {
+                await MainActor.run {
+                    archiveError = "Hold activo: \(mediaSafety.reason) — espera \(mediaSafety.waitSeconds)s"
+                    isArchiving  = false
+                }
+                return
+            }
+
+            do {
+                // skipPreCheck = true: skip the GET state-check (we know from local
+                // model that the photo is unarchived).  archivePhoto internally
+                // applies the 3–6.5 s anti-bot delay before the POST.
+                let success = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
+                if success {
+                    await MainActor.run {
+                        dataManager.updatePhoto(photoId: photo.id, isArchived: true)
+                        doneSoFar += 1
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    archiveError = error.localizedDescription
+                    isArchiving  = false
+                }
+                return
+            }
+        }
+
+        await MainActor.run { isArchiving = false }
+    }
+
+    // MARK: - Timer
+
+    private func refreshCounters() {
+        postRevealLeft = InstagramSafetyGate.shared.postRevealSecondsRemaining
+    }
+
+    private func startTimer() {
+        stopTimer()
+        refreshTick = 0
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            if postRevealLeft > 0 { postRevealLeft -= 1 }
+            refreshTick += 1
+            if refreshTick >= 3 {
+                refreshTick = 0
+                refreshCounters()
+            }
+            if blink || postRevealLeft > 0 { startBlink() }
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate();        timer       = nil
+        blinkTimer?.invalidate();   blinkTimer  = nil
+    }
+
+    private func startBlink() {
+        guard blinkTimer == nil else { return }
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { t in
+            if hasPhotos {
+                blink.toggle()
+            } else {
+                blink = false; t.invalidate(); blinkTimer = nil
+            }
+        }
+    }
+
+    private func formatSeconds(_ s: Int) -> String {
+        let m = s / 60; let sec = s % 60
+        return m > 0 ? String(format: "%d:%02d", m, sec) : "\(sec)s"
+    }
+}
+
 /// Una fila dentro del CooldownWarningBanner.
 /// `highlight` activa el parpadeo en filas de interface capture cooldown.
 private struct CooldownRow: View {
@@ -1895,6 +2117,9 @@ struct SettingsView: View {
         // Cooldown banner — shows active waits so the user knows how long before
         // re-entering Performance will allow the feature they just used.
         CooldownWarningBanner()
+            .padding(.bottom, 4)
+        // Post-reveal archive banner — shows when PP revealed photos are still visible.
+        PostRevealArchiveBanner()
             .padding(.bottom, 4)
         DuplicateNoteWarningBanner()
             .padding(.bottom, 4)
