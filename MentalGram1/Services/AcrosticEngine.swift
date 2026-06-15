@@ -2,46 +2,50 @@ import Foundation
 
 // MARK: - Acrostic Engine
 //
-// Converts a word into an acrostic bio text.
-// Each letter of the input word becomes one line of the bio,
-// where that line starts with the corresponding letter.
+// Converts a prediction into an acrostic bio text.
 //
-// Rotation: if the same letter appears more than once, the engine
-// cycles through the 3 available words so the same word is never repeated.
+// • Letter character → one line = a real word in the user's language that
+//   starts with that letter (from AcrosticWordBank). Repeated letters rotate
+//   through the word list so no word is reused.
 //
-// Example  →  "BANANA"
-//   B → Barco
-//   A → Árbol       (A[0])
-//   N → Norte       (N[0])
-//   A → Avión       (A[1], different from Árbol)
-//   N → Nube        (N[1], different from Norte)
-//   A → Azul        (A[2])
+// • Digit character → one line = that digit followed by 5 random digits,
+//   giving a 6-digit string that looks like a real phone-like number.
+//
+// • Mixed input (e.g. "3c") → each character is handled by its own rule.
+//
+// Examples
+//   "12"  → "134543"   (1 + 5 random digits)
+//           "287461"   (2 + 5 random digits)
+//
+//   "354" → "367821"
+//           "541093"
+//           "428754"
+//
+//   "3c"  → "391045"   (digit rule)
+//           "Caracol"  (letter rule, Spanish)
 
 struct AcrosticEngine {
 
-    // Returns the acrostic bio string, or nil if the input is empty.
-    // Each letter produces one line; lines are joined by "\n".
+    // MARK: - Public API
+
+    /// Builds the acrostic bio string, or nil if the input is empty.
+    /// Lines are joined by "\n" and trimmed to the Instagram 150-char limit.
     static func build(word: String, locale: Locale = .current) -> String? {
         let clean = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
 
         let language = locale.language.languageCode?.identifier ?? "en"
-        var usageIndex: [String: Int] = [:]   // tracks rotation per letter
+        var usageIndex: [String: Int] = [:]
         var lines: [String] = []
 
         for char in clean.uppercased() {
-            let key = String(char)
-            let words = AcrosticWordBank.words(for: char, language: language)
-            let index = usageIndex[key, default: 0] % words.count
-            lines.append(words[index])
-            usageIndex[key] = index + 1
+            lines.append(line(for: char, language: language, usageIndex: &usageIndex))
         }
 
         let result = lines.joined(separator: "\n")
 
-        // Instagram bio limit is 150 characters
+        // Instagram bio limit is 150 characters — trim from the end if needed.
         if result.count > 150 {
-            // Trim lines from the end until it fits
             var trimmed = lines
             while trimmed.joined(separator: "\n").count > 150, !trimmed.isEmpty {
                 trimmed.removeLast()
@@ -52,7 +56,7 @@ struct AcrosticEngine {
         return result
     }
 
-    // Preview helper — returns an array of (letter, word) pairs for display
+    /// Preview helper — returns an array of (character, line) pairs for display.
     static func preview(word: String, locale: Locale = .current) -> [(letter: String, word: String)] {
         let clean = word.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let language = locale.language.languageCode?.identifier ?? "en"
@@ -60,12 +64,40 @@ struct AcrosticEngine {
         var pairs: [(String, String)] = []
 
         for char in clean {
-            let key = String(char)
-            let words = AcrosticWordBank.words(for: char, language: language)
-            let index = usageIndex[key, default: 0] % words.count
-            pairs.append((key, words[index]))
-            usageIndex[key] = index + 1
+            let key  = String(char)
+            let text = line(for: char, language: language, usageIndex: &usageIndex)
+            pairs.append((key, text))
         }
         return pairs
+    }
+
+    // MARK: - Private helpers
+
+    /// Produces the bio line for a single character.
+    private static func line(for char: Character,
+                              language: String,
+                              usageIndex: inout [String: Int]) -> String {
+        if char.isNumber {
+            return digitLine(startingWith: char)
+        } else {
+            return letterLine(for: char, language: language, usageIndex: &usageIndex)
+        }
+    }
+
+    /// Digit rule: the digit itself + 5 random digits = 6-character string.
+    private static func digitLine(startingWith digit: Character) -> String {
+        let randomDigits = (0..<5).map { _ in String(Int.random(in: 0...9)) }.joined()
+        return String(digit) + randomDigits
+    }
+
+    /// Letter rule: a real word from AcrosticWordBank starting with that letter.
+    private static func letterLine(for char: Character,
+                                   language: String,
+                                   usageIndex: inout [String: Int]) -> String {
+        let key   = String(char)
+        let words = AcrosticWordBank.words(for: char, language: language)
+        let index = usageIndex[key, default: 0] % words.count
+        usageIndex[key] = index + 1
+        return words[index]
     }
 }
