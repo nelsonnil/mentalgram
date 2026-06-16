@@ -664,24 +664,35 @@ struct SetsListView: View {
             }
 
             VStack(spacing: 0) {
-                // ── Fixed budget bar (does not scroll) ──────────────────────
+                // ── Fixed status console (does not scroll) ───────────────────
                 if instagram.isLoggedIn {
                     VStack(spacing: 0) {
                         APIBudgetWidget()
                             .padding(.horizontal, VaultTheme.Spacing.lg)
-                            .padding(.vertical, 10)
+                            .padding(.top, 10)
+                            .padding(.bottom, 6)
+                        InstagramSyncCard()
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
+                            .padding(.bottom, 10)
                         CooldownWarningBanner()
                         PostRevealArchiveBanner()
-                        Divider()
-                            .background(Color.white.opacity(0.08))
+
+                        // Visible 1pt bottom separator — clean hard edge
+                        Color.white.opacity(0.18).frame(height: 1)
                     }
-                    .background(VaultTheme.Colors.backgroundSecondary)
+                    // Elevated panel color: noticeably lighter than the #0A0A0A content below
+                    .background(
+                        Color(hex: "222222")
+                            .ignoresSafeArea(edges: .top)
+                    )
+                    // Downward drop shadow: creates the "floating panel" depth effect
+                    .shadow(color: .black.opacity(0.55), radius: 10, x: 0, y: 5)
                 }
 
                 // ── Scrollable content ───────────────────────────────────────
                 ScrollView {
                     LazyVStack(spacing: VaultTheme.Spacing.md) {
-                        // Header
+                        // Header — "My Sets" with inline "+" button
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 10) {
                                 ZStack {
@@ -703,6 +714,17 @@ struct SetsListView: View {
                                         .foregroundColor(VaultTheme.Colors.textTertiary)
                                 }
                                 Spacer()
+                                // "+" button moved here from the navigation bar toolbar
+                                Button(action: { showingCreateSet = true }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(VaultTheme.Colors.gradientPrimary)
+                                            .frame(width: 36, height: 36)
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 18, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
                             }
                             Text("Each set groups photo banks used to unarchive posts during your performance.")
                                 .font(.system(size: 12))
@@ -756,26 +778,7 @@ struct SetsListView: View {
                 }
             }
         }
-        .navigationTitle("My Sets")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showingCreateSet = true }) {
-                    ZStack {
-                        Circle()
-                            .fill(VaultTheme.Colors.gradientPrimary)
-                            .frame(width: 36, height: 36)
-                        
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-        }
-        .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .navigationBarHidden(true)
         .sheet(isPresented: $showingCreateSet) {
             CreateSetView(isPresented: $showingCreateSet) { createdSet in
                 newlyCreatedSet = createdSet
@@ -1252,6 +1255,107 @@ struct ActivityLogView: View {
         }
         .navigationTitle("Activity")
         .listStyle(.insetGrouped)
+    }
+}
+
+// MARK: - Instagram Sync Card
+
+/// Compact card placed right below the API Budget widget.
+/// Shows the last time the profile was synced from Instagram and provides a
+/// one-tap Refresh button for when the user has made changes on real Instagram
+/// (new post, bio edit, new highlight, etc.).
+struct InstagramSyncCard: View {
+    @ObservedObject private var instagram = InstagramService.shared
+
+    // Last refresh timestamp — shared with PerformanceView via AppStorage.
+    @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
+
+    @State private var isRefreshing = false
+    @State private var showCopied  = false
+
+    private var lastSyncText: String {
+        guard lastRefreshTimestamp > 0 else {
+            return String(localized: "sync.never_synced")
+        }
+        let date = Date(timeIntervalSince1970: lastRefreshTimestamp)
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // ── Header row ────────────────────────────────────────────────
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.primary)
+                Text(String(localized: "sync.title"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                Spacer()
+                // Last sync badge
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 10))
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                    Text(lastSyncText)
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                }
+            }
+
+            // ── Info line ─────────────────────────────────────────────────
+            Text(String(localized: "sync.info"))
+                .font(.system(size: 12))
+                .foregroundColor(VaultTheme.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // ── Refresh button ────────────────────────────────────────────
+            Button {
+                guard !isRefreshing else { return }
+                isRefreshing = true
+                NotificationCenter.default.post(name: .performanceManualRefresh, object: nil)
+                // Re-enable after 3 s — the actual callback lives in PerformanceView
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    isRefreshing = false
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    if isRefreshing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.75)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    Text(isRefreshing
+                         ? String(localized: "sync.refreshing")
+                         : String(localized: "sync.refresh_button"))
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    isRefreshing
+                    ? Color.white.opacity(0.08)
+                    : VaultTheme.Colors.primary.opacity(0.18)
+                )
+                .foregroundColor(isRefreshing ? VaultTheme.Colors.textTertiary : VaultTheme.Colors.primary)
+                .cornerRadius(8)
+                .animation(.easeInOut(duration: 0.2), value: isRefreshing)
+            }
+            .disabled(isRefreshing || !instagram.isLoggedIn)
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(VaultTheme.Colors.primary.opacity(0.18), lineWidth: 1))
+        // Re-read the timestamp when the app comes to foreground or after a refresh
+        .onChange(of: lastRefreshTimestamp) { _ in
+            if isRefreshing { isRefreshing = false }
+        }
     }
 }
 
@@ -2061,42 +2165,68 @@ struct SettingsView: View {
     // TEST: Archive access
     
     var body: some View {
-        mainScrollView
-            .background(Color(hex: "#0F0F0F"))
-            .navigationTitle("Settings")
-            .toolbarBackground(Color(hex: "#1C1C1E"), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            // Use environment (not preferredColorScheme) so the dark theme stays local to
-            // this tab and does NOT leak to the Performance tab, which must follow the device.
-            .environment(\.colorScheme, .dark)
-            .alert("Logout", isPresented: $showingLogoutAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Logout", role: .destructive) { instagram.logout() }
-            } message: { Text("Are you sure you want to logout?") }
-            .alert(uploadMessage ?? "Upload Complete", isPresented: $showingUploadAlert) {
-                Button("OK") { uploadMessage = nil }
-            } message: { Text(uploadMessage ?? "") }
-            .alert(noteMessage ?? "", isPresented: $showingNoteAlert) {
-                Button("OK") { noteMessage = nil }
-            } message: { Text(noteMessage ?? "") }
-            .alert(bioMessage ?? "", isPresented: $showingBioAlert) {
-                Button("OK") { bioMessage = nil }
-            } message: { Text(bioMessage ?? "") }
-            .sheet(isPresented: $showingImagePicker) {
-                ImagePicker(selectedImageData: $selectedImageData)
-            }
-            .sheet(isPresented: $showingHomeScreenPicker) {
-                HomeScreenImagePicker { image in
-                    illusionService.save(image)
+        ZStack(alignment: .top) {
+            Color(hex: "0F0F0F").ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // ── Fixed status console (does not scroll) ───────────────────
+                if instagram.isLoggedIn {
+                    VStack(spacing: 0) {
+                        APIBudgetWidget()
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
+                            .padding(.top, 10)
+                            .padding(.bottom, 6)
+                        InstagramSyncCard()
+                            .padding(.horizontal, VaultTheme.Spacing.lg)
+                            .padding(.bottom, 10)
+                        CooldownWarningBanner()
+                        PostRevealArchiveBanner()
+
+                        // Visible 1pt bottom separator
+                        Color.white.opacity(0.18).frame(height: 1)
+                    }
+                    .background(
+                        Color(hex: "222222")
+                            .ignoresSafeArea(edges: .top)
+                    )
+                    .shadow(color: .black.opacity(0.55), radius: 10, x: 0, y: 5)
                 }
+
+                // ── Scrollable content ────────────────────────────────────────
+                mainScrollView
             }
-            .sheet(isPresented: $showingFollowerData) {
-                FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
+        }
+        .navigationBarHidden(true)
+        // Use environment (not preferredColorScheme) so the dark theme stays local to
+        // this tab and does NOT leak to the Performance tab, which must follow the device.
+        .environment(\.colorScheme, .dark)
+        .alert("Logout", isPresented: $showingLogoutAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Logout", role: .destructive) { instagram.logout() }
+        } message: { Text("Are you sure you want to logout?") }
+        .alert(uploadMessage ?? "Upload Complete", isPresented: $showingUploadAlert) {
+            Button("OK") { uploadMessage = nil }
+        } message: { Text(uploadMessage ?? "") }
+        .alert(noteMessage ?? "", isPresented: $showingNoteAlert) {
+            Button("OK") { noteMessage = nil }
+        } message: { Text(noteMessage ?? "") }
+        .alert(bioMessage ?? "", isPresented: $showingBioAlert) {
+            Button("OK") { bioMessage = nil }
+        } message: { Text(bioMessage ?? "") }
+        .sheet(isPresented: $showingImagePicker) {
+            ImagePicker(selectedImageData: $selectedImageData)
+        }
+        .sheet(isPresented: $showingHomeScreenPicker) {
+            HomeScreenImagePicker { image in
+                illusionService.save(image)
             }
-            .sheet(isPresented: $showingLogin) {
-                InstagramWebLoginView(isPresented: $showingLogin)
-            }
+        }
+        .sheet(isPresented: $showingFollowerData) {
+            FollowerDataSheet(follower: latestFollower, fullInfo: followerFullInfo)
+        }
+        .sheet(isPresented: $showingLogin) {
+            InstagramWebLoginView(isPresented: $showingLogin)
+        }
     }
 
     private var mainScrollView: some View {
@@ -2104,12 +2234,35 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 if !instagram.isLoggedIn {
                     notLoggedInSection
+                        .padding(.horizontal, VaultTheme.Spacing.lg)
+                        .padding(.vertical, VaultTheme.Spacing.lg)
                 } else {
+                    // "Settings" inline header — replaces the navigation bar title
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(LinearGradient(
+                                    colors: [VaultTheme.Colors.primaryDark, VaultTheme.Colors.secondary],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 38, height: 38)
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                        Text("Settings")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, VaultTheme.Spacing.lg)
+                    .padding(.top, VaultTheme.Spacing.md)
+                    .padding(.bottom, VaultTheme.Spacing.sm)
+
                     loggedInSections
+                        .padding(.horizontal, VaultTheme.Spacing.lg)
+                        .padding(.bottom, VaultTheme.Spacing.lg)
                 }
             }
-            .padding(.horizontal, VaultTheme.Spacing.lg)
-            .padding(.vertical, VaultTheme.Spacing.lg)
         }
     }
 
@@ -2117,16 +2270,6 @@ struct SettingsView: View {
         if hasPendingPrePerformanceActions {
             prePerformanceWarningSection
         }
-        // API budget — always visible so the magician can check before performing
-        APIBudgetWidget()
-            .padding(.bottom, 4)
-        // Cooldown banner — shows active waits so the user knows how long before
-        // re-entering Performance will allow the feature they just used.
-        CooldownWarningBanner()
-            .padding(.bottom, 4)
-        // Post-reveal archive banner — shows when PP revealed photos are still visible.
-        PostRevealArchiveBanner()
-            .padding(.bottom, 4)
         DuplicateNoteWarningBanner()
             .padding(.bottom, 4)
         accountSection
@@ -2498,6 +2641,27 @@ struct SettingsView: View {
                                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                             }
                     }
+                    #if DEBUG
+                    if developerMode {
+                        modernDivider()
+                        Button {
+                            let uid = InstagramService.shared.session.userId
+                            guard !uid.isEmpty else { return }
+                            UserDefaults.standard.removeObject(forKey: "perf_fully_preloaded_\(uid)")
+                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.counterclockwise.circle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Reset first-time preload (DEBUG)")
+                                    .font(VaultTheme.Typography.body())
+                                    .foregroundColor(.orange)
+                                Spacer()
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
+                    #endif
                 }
             }
         }
