@@ -1442,7 +1442,7 @@
 
 "limits.help.gauge.title" = "Dein stündliches Budget von 55 Aktionen";
 "limits.help.gauge.body" = "Instagram begrenzt jede verbundene App auf 55 Aktionen pro Stunde. Das Budget funktioniert als gleitendes 60-Minuten-Fenster — jede Aktion läuft genau 60 Minuten nach ihrer Ausführung ab, sodass der Zähler automatisch sinkt, ohne einen harten Reset.";
-"limits.help.gauge.cache" = "Schnelle Wiederholungsbesuche nutzen den Cache und können 0 kosten. Nach dem Sicherheits-Cooldown kann Performance oder ein Follower-Profil erneut aktualisiert werden und Budget verbrauchen.";
+"limits.help.gauge.cache" = "Performance öffnen kostet ab dem zweiten Besuch 0 — alles wird dauerhaft auf deinem Gerät gespeichert. Nur beim allerersten Mal (oder nach einem Kontowechsel) werden 3–5 Aktionen benötigt, um dein vollständiges Profil herunterzuladen und zu cachen.";
 "limits.help.gauge.hardstop" = "Wenn das Limit von 55 erreicht ist, stoppt die App automatisch alle weiteren Instagram-Anfragen. Es wird nichts gesendet, nichts ausgelöst — sie wartet still, bis das Budget erneuert wird. Du musst nichts tun.";
 "limits.help.gauge.zone.safe" = "Sicher (>20)";
 "limits.help.gauge.zone.low" = "Niedrig (8–20)";
@@ -1464,7 +1464,7 @@
 "limits.help.table.row.notebio" = "Notiz oder Bio ändern";
 "limits.help.table.row.explore" = "Erkunden / Suchen";
 "limits.help.sa.auto" = "Nach einer vollständigen Performance mit Enthüllungen und Profilbesuchen fügt die App automatisch eine kurze Wartezeit vor Sync & Archive ein. Das ist normal — es schützt deine Session.";
-"limits.help.table.cache.lost" = "Performance öffnen kostet normalerweise 3 Aktionen für Profil + Beiträge, oder bis zu 5, wenn der Reels/Tagged-Cache neu aufgebaut werden muss. Schnelle Wiederholungen können 0 kosten, spätere Aktualisierungen können wieder Budget verbrauchen. Highlights werden in Performance nicht automatisch aktualisiert.";
+"limits.help.table.cache.lost" = "Performance wird nach dem ersten Laden vollständig auf deinem Gerät gespeichert — jeder weitere Aufruf kostet 0 Aktionen. Beim ersten Mal (oder nach einem Kontowechsel) erscheint ein Ladebildschirm, während dein Profil heruntergeladen und gespeichert wird. Tippe in den Einstellungen nur auf Aktualisieren, wenn du auf echtem Instagram etwas geändert hast (neuer Beitrag, Bio, usw.).";
 "limits.help.table.batch.note" = "Kosten pro Foto addieren sich. Sync & Archive mit 4 Fotos = 8 Aktionen insgesamt. 4 Fotos hochladen = 9 insgesamt (1 Vorbereitung + 2 pro Foto). Das Profilbild zeigt 1 Budget-Aktion, obwohl Instagram zusätzlich den Bild-Upload erhält.";
 
 "limits.help.profiles.title" = "Profile besuchen — die teuerste Aktion";
@@ -1617,6 +1617,27 @@
 "budget.warning.renewal" = "Volles Budget um %@";
 "budget.warning.advice" = "Betrete Performance erst nach der Budget-Erneuerung, um Unterbrechungen zu vermeiden.";
 "action.understood" = "Verstanden";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "Profil wird geladen";
+"preload.subtitle" = "Alles wird vorbereitet…";
+"preload.wifi" = "Nutze WLAN für das schnellste erste Laden";
+"preload.profile" = "Profil wird geladen…";
+"preload.posts" = "Beiträge werden geladen…";
+"preload.images" = "Fotos werden heruntergeladen…";
+"preload.reels" = "Reels werden geladen…";
+"preload.tagged" = "Markierungen werden geladen…";
+"preload.highlights" = "Highlights werden geladen…";
+"preload.failed.title" = "Laden konnte nicht abgeschlossen werden";
+"preload.failed.subtitle" = "Überprüfe deine Verbindung und versuche es erneut. WLAN wird für das erste Laden empfohlen.";
+"preload.retry" = "Erneut versuchen";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Instagram-Synchronisierung";
+"sync.never_synced" = "Noch nie synchronisiert";
+"sync.info" = "Wenn du etwas gepostet, deine Bio geändert oder andere Aktualisierungen auf Instagram vorgenommen hast, tippe auf Aktualisieren, damit die App die Änderungen erkennt.";
+"sync.refresh_button" = "Von Instagram aktualisieren";
+"sync.refreshing" = "Synchronisiere…";
 
 // ── Performance Gate Sheet ──────────────────────────────────────────────────
 "performance.gate.session.title" = "Sitzung abgelaufen";

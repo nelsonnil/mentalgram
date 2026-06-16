@@ -909,7 +909,7 @@
 
 "limits.help.gauge.title" = "您每小時 55 次操作預算";
 "limits.help.gauge.body" = "Instagram 將每個連接的應用限制為每小時 55 次操作。預算採用滾動 60 分鐘視窗機制，每次操作在執行後正好 60 分鐘後到期，因此計數器會自動下降，無需強制重置。";
-"limits.help.gauge.cache" = "快速重複訪問會使用快取，可能消耗 0。安全冷卻後，Performance 或追蹤者資料可能會再次重新整理並消耗預算。";
+"limits.help.gauge.cache" = "從第二次起開啟 Performance 消耗 0 — 所有內容已永久儲存至裝置。只有第一次（或切換帳號後）才需要 3–5 個操作來下載並快取完整個人檔案。";
 "limits.help.gauge.hardstop" = "當達到 55 次限制時，應用程式會自動停止向 Instagram 發送任何進一步的請求。不會發送任何內容，不會觸發任何操作——它會靜默等待，直到預算重置。您無需做任何事情。";
 "limits.help.gauge.zone.safe" = "安全 (>20)";
 "limits.help.gauge.zone.low" = "偏低 (8–20)";
@@ -931,7 +931,7 @@
 "limits.help.table.row.notebio" = "更改備註或簡介";
 "limits.help.table.row.explore" = "探索 / 搜尋";
 "limits.help.sa.auto" = "在包含揭示和資料訪問的完整表演後，應用程式會在 Sync & Archive 前自動增加短暫等待時間。這是正常的，可以保護您的工作階段。";
-"limits.help.table.cache.lost" = "開啟 Performance 通常會為資料 + 貼文消耗 3 個操作；如果需要重建 Reels/Tagged 快取，最多可能消耗 5 個。快速重複進入可能為 0，但之後的重新整理可能再次消耗預算。Highlights 不會在 Performance 中自動重新整理。";
+"limits.help.table.cache.lost" = "首次載入後，Performance 將完整儲存至裝置 — 之後每次進入均消耗 0 個操作。第一次（或切換帳號後）會顯示載入畫面，同時下載並儲存你的個人檔案。只有在你對真實 Instagram 進行了更改（新貼文、簡介修改等）後，才需在設定中點選重新整理。";
 "limits.help.table.batch.note" = "按照片計算的成本會累加。4 張照片執行 Sync & Archive = 共 8 個操作。上傳 4 張照片 = 共 9 個操作（1 次準備呼叫 + 每張 2 次）。頭像在預算中顯示為 1 個操作，但 Instagram 也會收到圖片上傳呼叫。";
 
 "limits.help.profiles.title" = "訪問資料 — 消耗最多的操作";
@@ -1094,6 +1094,27 @@
 "budget.warning.renewal" = "配額在 %@ 完全恢復";
 "budget.warning.advice" = "為避免演出中斷，請等待配額恢復後再進入 Performance。";
 "action.understood" = "知道了";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "正在載入你的個人檔案";
+"preload.subtitle" = "正在準備一切…";
+"preload.wifi" = "首次載入建議使用 Wi-Fi";
+"preload.profile" = "正在載入個人檔案…";
+"preload.posts" = "正在載入貼文…";
+"preload.images" = "正在下載相片…";
+"preload.reels" = "正在載入 Reels…";
+"preload.tagged" = "正在載入標註…";
+"preload.highlights" = "正在載入精選…";
+"preload.failed.title" = "載入未完成";
+"preload.failed.subtitle" = "請檢查網路連線後重試。首次載入建議使用 Wi-Fi。";
+"preload.retry" = "重試";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Instagram 同步";
+"sync.never_synced" = "從未同步";
+"sync.info" = "如果你在真實 Instagram 上發布了新內容、修改了簡介或進行了其他更新，請點擊重新整理，讓應用程式偵測這些變更。";
+"sync.refresh_button" = "從 Instagram 重新整理";
+"sync.refreshing" = "同步中…";
 
 // ── Performance Gate Sheet ──────────────────────────────────────────────────
 "performance.gate.session.title" = "工作階段已過期";

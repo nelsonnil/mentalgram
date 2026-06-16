@@ -2647,7 +2647,12 @@ struct SettingsView: View {
                         Button {
                             let uid = InstagramService.shared.session.userId
                             guard !uid.isEmpty else { return }
+                            // 1. Borrar el flag de precarga
                             UserDefaults.standard.removeObject(forKey: "perf_fully_preloaded_\(uid)")
+                            // 2. Borrar el perfil cacheado en disco (JSON)
+                            ProfileCacheService.shared.clearProfile()
+                            // 3. Borrar todas las imágenes cacheadas
+                            ProfileCacheService.shared.clearAllImages()
                             UINotificationFeedbackGenerator().notificationOccurred(.warning)
                         } label: {
                             HStack(spacing: 8) {

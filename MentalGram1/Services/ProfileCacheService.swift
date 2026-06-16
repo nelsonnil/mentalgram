@@ -36,25 +36,60 @@ class ProfileCacheService: ObservableObject {
         let supportPaths = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
         profileDirectory = supportPaths[0].appendingPathComponent("ProfileCache", isDirectory: true)
 
+        // imageDirectory kept for the one-shot migration below; images now live
+        // inside profileDirectory (Application Support) so iOS never purges them.
         let cachesPaths = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)
         imageDirectory = cachesPaths[0].appendingPathComponent("ProfileCache", isDirectory: true)
 
         try? fileManager.createDirectory(at: profileDirectory, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: imageDirectory, withIntermediateDirectories: true)
 
-        // Application Support is included in iCloud / iTunes backups by default.
-        // The profile cache is rebuildable from the API, so excluding it keeps
-        // user backups small and avoids syncing transient data across devices.
+        // Exclude from iCloud/iTunes backup — rebuildable data.
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         var url = profileDirectory
         try? url.setResourceValues(values)
 
         migrateLegacyProfilesFromCachesIfNeeded()
+        migrateImagesToAppSupportIfNeeded()
 
-        // Warm the in-memory copy from disk on launch. This uses the Keychain
-        // session if one exists; otherwise it returns nil without touching disk.
+        // Warm the in-memory copy from disk on launch.
         cachedProfile = loadProfile()
+    }
+
+    /// One-time migration: move existing `.jpg` thumbnails from `Caches/ProfileCache/`
+    /// into `Application Support/ProfileCache/<userId>/images/` so they are never
+    /// purged by iOS under low-disk pressure.
+    private func migrateImagesToAppSupportIfNeeded() {
+        let migrationKey = "profileImagesCacheMigrated_v1"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+        defer { UserDefaults.standard.set(true, forKey: migrationKey) }
+
+        guard let userFolders = try? fileManager.contentsOfDirectory(
+            at: imageDirectory, includingPropertiesForKeys: [.isDirectoryKey]
+        ) else { return }
+
+        var moved = 0
+        for folder in userFolders {
+            var isDir: ObjCBool = false
+            guard fileManager.fileExists(atPath: folder.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            let userId = folder.lastPathComponent
+            let destDir = userImageDirectory(for: userId)
+            try? fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+            guard let files = try? fileManager.contentsOfDirectory(
+                at: folder, includingPropertiesForKeys: nil
+            ) else { continue }
+            for file in files where file.pathExtension == "jpg" {
+                let dest = destDir.appendingPathComponent(file.lastPathComponent)
+                guard !fileManager.fileExists(atPath: dest.path) else { continue }
+                try? fileManager.copyItem(at: file, to: dest)
+                moved += 1
+            }
+        }
+        if moved > 0 {
+            print("🗂️ [CACHE] Migrated \(moved) image(s) from Caches → Application Support")
+        }
     }
 
     /// One-time migration: older builds stored `profile.json` inside `Caches/`.
@@ -365,24 +400,39 @@ class ProfileCacheService: ObservableObject {
     func saveImage(_ image: UIImage, forURL urlString: String) {
         guard let data = image.jpegData(compressionQuality: 0.8) else { return }
         guard let userId = activeUserId() else { return }
-        
         let filename = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? UUID().uuidString
         let directory = userImageDirectory(for: userId)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        let fileURL = directory.appendingPathComponent("\(filename).jpg")
-        
-        try? data.write(to: fileURL)
+        try? data.write(to: directory.appendingPathComponent("\(filename).jpg"))
     }
-    
+
     func loadImage(forURL urlString: String) -> UIImage? {
         guard let userId = activeUserId() else { return nil }
         let filename = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
         let fileURL = userImageDirectory(for: userId).appendingPathComponent("\(filename).jpg")
-        
-        guard let data = try? Data(contentsOf: fileURL) else {
-            return nil
-        }
-        
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return UIImage(data: data)
+    }
+
+    /// Save an image keyed by stable mediaId (e.g. Instagram post pk).
+    /// CDN URLs rotate between sessions; mediaId never changes, so this
+    /// survives URL rotation without needing a new network request.
+    func saveImage(_ image: UIImage, forMediaId mediaId: String) {
+        guard !mediaId.isEmpty else { return }
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        guard let userId = activeUserId() else { return }
+        let safe = mediaId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? mediaId
+        let directory = userImageDirectory(for: userId)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? data.write(to: directory.appendingPathComponent("mid_\(safe).jpg"))
+    }
+
+    func loadImage(forMediaId mediaId: String) -> UIImage? {
+        guard !mediaId.isEmpty else { return nil }
+        guard let userId = activeUserId() else { return nil }
+        let safe = mediaId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? mediaId
+        let fileURL = userImageDirectory(for: userId).appendingPathComponent("mid_\(safe).jpg")
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
         return UIImage(data: data)
     }
     
@@ -428,10 +478,58 @@ class ProfileCacheService: ObservableObject {
         return profileDirectory.appendingPathComponent(safeUserId, isDirectory: true)
     }
 
-    /// Per-user folder inside Caches — holds `.jpg` thumbnails only.
-    /// Safe to be purged; we re-download from CDN URLs on demand.
+    /// Per-user folder inside Application Support — holds `.jpg` thumbnails.
+    /// Lives next to `profile.json`; never purged by iOS under low-disk pressure.
     private func userImageDirectory(for userId: String) -> URL {
         let safeUserId = userId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? userId
-        return imageDirectory.appendingPathComponent(safeUserId, isDirectory: true)
+        return profileDirectory.appendingPathComponent("\(safeUserId)/images", isDirectory: true)
+    }
+
+    // MARK: - Reveal State Persistence
+
+    private struct RevealState: Codable {
+        var revealURLs: [String]
+        var revealDates: [String: Date]
+    }
+
+    private func revealStateFileURL(for userId: String) -> URL? {
+        guard !userId.isEmpty, userId != "0" else { return nil }
+        return userProfileDirectory(for: userId).appendingPathComponent("reveal_state.json")
+    }
+
+    /// Persists the list of reveal:// URLs and their dates so they survive app restarts.
+    func saveRevealState(urls: [String], dates: [String: Date], userId: String) {
+        let revealURLs = urls.filter { $0.hasPrefix("reveal://") }
+        guard !revealURLs.isEmpty else {
+            clearRevealState(userId: userId)
+            return
+        }
+        let revealDates = dates.filter { $0.key.hasPrefix("reveal://") }
+        let state = RevealState(revealURLs: revealURLs, revealDates: revealDates)
+        guard let fileURL = revealStateFileURL(for: userId) else { return }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(state) else { return }
+        try? data.write(to: fileURL)
+        print("💾 [REVEAL] Saved \(revealURLs.count) reveal URL(s) to disk")
+    }
+
+    /// Loads persisted reveal state, or nil if none exists.
+    func loadRevealState(userId: String) -> (urls: [String], dates: [String: Date])? {
+        guard let fileURL = revealStateFileURL(for: userId),
+              let data = try? Data(contentsOf: fileURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let state = try? decoder.decode(RevealState.self, from: data) else { return nil }
+        print("💾 [REVEAL] Loaded \(state.revealURLs.count) reveal URL(s) from disk")
+        return (state.revealURLs, state.revealDates)
+    }
+
+    /// Removes the persisted reveal state (called after a successful profile refresh).
+    func clearRevealState(userId: String) {
+        guard let fileURL = revealStateFileURL(for: userId) else { return }
+        guard fileManager.fileExists(atPath: fileURL.path) else { return }
+        try? fileManager.removeItem(at: fileURL)
+        print("💾 [REVEAL] Cleared reveal state from disk")
     }
 }

@@ -1442,7 +1442,7 @@
 
 "limits.help.gauge.title" = "Ton budget horaire de 55 actions";
 "limits.help.gauge.body" = "Instagram limite chaque app connectée à 55 actions par heure. Le budget fonctionne comme une fenêtre glissante de 60 minutes — chaque action expire exactement 60 minutes après avoir été effectuée, et le compteur baisse automatiquement sans remise à zéro forcée.";
-"limits.help.gauge.cache" = "Les visites répétées rapides utilisent le cache et peuvent coûter 0. Après le délai de sécurité, Performance ou un profil d'abonné peut se rafraîchir à nouveau et utiliser du budget.";
+"limits.help.gauge.cache" = "Ouvrir Performance coûte 0 dès la deuxième visite — tout est sauvegardé en permanence sur votre appareil. Seule la toute première fois (ou après un changement de compte) utilise 3–5 actions pour télécharger et mettre en cache votre profil complet.";
 "limits.help.gauge.hardstop" = "Lorsque la limite de 55 est atteinte, l'app arrête automatiquement toute nouvelle requête vers Instagram. Rien n'est envoyé, rien n'est déclenché — elle attend silencieusement que le budget se renouvelle. Tu n'as rien à faire.";
 "limits.help.gauge.zone.safe" = "Sûr (>20)";
 "limits.help.gauge.zone.low" = "Faible (8–20)";
@@ -1464,7 +1464,7 @@
 "limits.help.table.row.notebio" = "Changer note ou bio";
 "limits.help.table.row.explore" = "Explorer / Rechercher";
 "limits.help.sa.auto" = "Après une performance complète avec révélations et visites de profils, l'app ajoute automatiquement une courte pause avant Sync & Archive. C'est normal — cela protège ta session.";
-"limits.help.table.cache.lost" = "Ouvrir Performance coûte généralement 3 actions pour le profil + les publications, ou jusqu'à 5 si le cache Reels/Tagged doit être reconstruit. Les répétitions rapides peuvent coûter 0, mais les rafraîchissements ultérieurs peuvent réutiliser du budget. Les Highlights ne sont pas actualisés automatiquement dans Performance.";
+"limits.help.table.cache.lost" = "Performance est entièrement mis en cache sur votre appareil après le premier chargement — chaque entrée suivante coûte 0 action. La première fois (ou après un changement de compte), un écran de chargement s'affiche pendant le téléchargement et la sauvegarde de votre profil. Appuyez sur Actualiser dans Réglages uniquement si vous avez modifié quelque chose sur Instagram (nouveau post, bio, etc.).";
 "limits.help.table.batch.note" = "Les coûts par photo s'additionnent. Sync & Archive sur 4 photos = 8 actions au total. Télécharger 4 photos = 9 au total (1 appel de préparation + 2 par photo). La photo de profil affiche 1 action de budget, même si Instagram reçoit aussi l'appel d'upload de l'image.";
 
 "limits.help.profiles.title" = "Visiter des profils — l'action la plus coûteuse";
@@ -1618,6 +1618,27 @@
 "budget.warning.renewal" = "Budget complet à %@";
 "budget.warning.advice" = "Évitez d'entrer dans Performance jusqu'au renouvellement du budget pour ne pas interrompre un spectacle.";
 "action.understood" = "Compris";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "Chargement de votre profil";
+"preload.subtitle" = "Préparation en cours…";
+"preload.wifi" = "Utilisez le Wi-Fi pour un premier chargement plus rapide";
+"preload.profile" = "Chargement du profil…";
+"preload.posts" = "Chargement des publications…";
+"preload.images" = "Téléchargement des photos…";
+"preload.reels" = "Chargement des reels…";
+"preload.tagged" = "Chargement des identifications…";
+"preload.highlights" = "Chargement des stories à la une…";
+"preload.failed.title" = "Impossible de terminer le chargement";
+"preload.failed.subtitle" = "Vérifiez votre connexion et réessayez. Le Wi-Fi est recommandé pour le premier chargement.";
+"preload.retry" = "Réessayer";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Synchronisation Instagram";
+"sync.never_synced" = "Jamais synchronisé";
+"sync.info" = "Si vous avez publié quelque chose, modifié votre bio ou fait une mise à jour sur Instagram, appuyez sur Actualiser pour que l'app détecte ces changements.";
+"sync.refresh_button" = "Actualiser depuis Instagram";
+"sync.refreshing" = "Synchronisation…";
 
 // ── Performance Gate Sheet ──────────────────────────────────────────────────
 "performance.gate.session.title" = "Session expirée";

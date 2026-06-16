@@ -525,6 +525,27 @@
 "budget.warning.renewal" = "Ngân sách đầy lúc %@";
 "budget.warning.advice" = "Tránh vào Trình diễn cho đến khi ngân sách gia hạn để tránh gián đoạn trong buổi diễn.";
 
+// MARK: - First-Time Profile Preload
+"preload.title" = "Đang tải hồ sơ của bạn";
+"preload.subtitle" = "Đang chuẩn bị mọi thứ…";
+"preload.wifi" = "Hãy dùng Wi-Fi để tải lần đầu nhanh nhất";
+"preload.profile" = "Đang tải hồ sơ…";
+"preload.posts" = "Đang tải bài viết…";
+"preload.images" = "Đang tải ảnh…";
+"preload.reels" = "Đang tải reels…";
+"preload.tagged" = "Đang tải gắn thẻ…";
+"preload.highlights" = "Đang tải tin nổi bật…";
+"preload.failed.title" = "Không thể hoàn tất tải";
+"preload.failed.subtitle" = "Kiểm tra kết nối và thử lại. Nên dùng Wi-Fi cho lần tải đầu tiên.";
+"preload.retry" = "Thử lại";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Đồng bộ Instagram";
+"sync.never_synced" = "Chưa đồng bộ lần nào";
+"sync.info" = "Nếu bạn đã đăng bài mới, thay đổi bio hoặc cập nhật gì đó trên Instagram thật, hãy nhấn Làm mới để ứng dụng nhận diện những thay đổi đó.";
+"sync.refresh_button" = "Làm mới từ Instagram";
+"sync.refreshing" = "Đang đồng bộ…";
+
 "initial_load.title" = "Đang chuẩn bị Trình diễn";
 "initial_load.phase.validating" = "Đang xác minh phiên của bạn…";
 "initial_load.phase.loading_profile" = "Đang tải hồ sơ Instagram của bạn…";
@@ -650,7 +671,7 @@
 "limits.help.session.contact" = "Nếu phát hiện bot tiếp tục xảy ra, liên hệ nhà phát triển và chia sẻ nhật ký của bạn (Cài đặt → Xuất nhật ký). Điều này giúp phân tích vấn đề và cải thiện bảo vệ cho mọi người.";
 "limits.help.gauge.title" = "Ngân sách 55 hành động theo giờ của bạn";
 "limits.help.gauge.body" = "Instagram giới hạn mỗi ứng dụng kết nối ở 55 hành động mỗi giờ. Ngân sách hoạt động như cửa sổ 60 phút liên tục — mỗi hành động hết hạn đúng 60 phút sau khi thực hiện, vì vậy bộ đếm giảm tự động theo thời gian mà không cần đặt lại cứng.";
-"limits.help.gauge.cache" = "Những lần vào lại nhanh dùng cache và có thể tốn 0. Sau cooldown an toàn, Trình diễn hoặc hồ sơ người theo dõi có thể làm mới lại và dùng ngân sách.";
+"limits.help.gauge.cache" = "Mở Performance từ lần thứ hai trở đi tốn 0 — tất cả được lưu vĩnh viễn trên thiết bị. Chỉ lần đầu tiên (hoặc sau khi đổi tài khoản) mới dùng 3–5 hành động để tải và lưu toàn bộ hồ sơ.";
 "limits.help.gauge.hardstop" = "Khi đạt giới hạn 55, ứng dụng tự động ngừng thực hiện bất kỳ yêu cầu Instagram nào nữa. Không có gì được gửi, không có gì được kích hoạt — nó chờ âm thầm cho đến khi ngân sách gia hạn. Bạn không cần làm gì.";
 "limits.help.gauge.zone.safe" = "An toàn (>20)";
 "limits.help.gauge.zone.low" = "Thấp (8–20)";
@@ -671,7 +692,7 @@
 "limits.help.table.row.notebio" = "Thay đổi ghi chú hoặc tiểu sử";
 "limits.help.table.row.explore" = "Explore / Tìm kiếm";
 "limits.help.sa.auto" = "Sau buổi diễn đầy đủ với tiết lộ và truy cập hồ sơ, ứng dụng tự động thêm thời gian chờ ngắn trước Đồng bộ & Lưu trữ. Điều này bình thường — nó bảo vệ phiên của bạn.";
-"limits.help.table.cache.lost" = "Mở Trình diễn thường tốn 3 hành động cho hồ sơ + bài đăng, hoặc tối đa 5 nếu cần tạo lại cache Reels/Tagged. Lần vào lại nhanh có thể tốn 0, nhưng các lần làm mới sau đó có thể dùng ngân sách lại. Highlights không tự động làm mới trong Trình diễn.";
+"limits.help.table.cache.lost" = "Sau lần tải đầu tiên, Performance được lưu đầy đủ trên thiết bị — mỗi lần vào sau đó tốn 0 hành động. Lần đầu (hoặc sau khi đổi tài khoản) hiển thị màn hình tải trong khi hồ sơ được tải xuống và lưu. Nhấn Làm mới trong Cài đặt chỉ khi bạn đã thay đổi gì đó trên Instagram thật (bài đăng mới, sửa bio, v.v.).";
 "limits.help.table.batch.note" = "Chi phí theo ảnh sẽ cộng dồn. Sync & Archive trên 4 ảnh = tổng 8 hành động. Tải 4 ảnh lên = tổng 9 (1 lệnh chuẩn bị + 2 mỗi ảnh). Ảnh hồ sơ hiển thị 1 hành động ngân sách, dù Instagram cũng nhận lệnh tải ảnh lên.";
 "limits.help.profiles.title" = "Truy cập hồ sơ — hành động tốn kém nhất";
 "limits.help.profiles.body" = "Mở hồ sơ người theo dõi mới thường tốn 3–4 hành động. Lần truy cập lại nhanh cùng hồ sơ tải từ cache, nhưng lần làm mới sau đó có thể dùng ngân sách lại. Đây là lý do tại sao mở 3–4 hồ sơ khác nhau nhanh chóng có thể cạn kiệt ngân sách và kích hoạt phát hiện bot.";

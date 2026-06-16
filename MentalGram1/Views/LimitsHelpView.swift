@@ -210,7 +210,7 @@ struct LimitsHelpView: View {
                 VStack(spacing: 0) {
                     tableHeaderRow
                     Divider().background(Color.white.opacity(0.08))
-                    tableDataRow("limits.help.table.row.performance", first: "3–5", again: "0–5")
+                    tableDataRow("limits.help.table.row.performance", first: "3–5", again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))
                     tableDataRow("limits.help.table.row.followers",   first: "1",   again: "0 ✓")
                     Divider().background(Color.white.opacity(0.06))

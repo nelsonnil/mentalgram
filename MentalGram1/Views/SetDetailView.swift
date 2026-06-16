@@ -3264,18 +3264,10 @@ struct SetDetailView: View {
             }
             .frame(width: 100, height: 100)
             .onTapGesture {
-                // Directly upload a stuck photo without showing the dialog.
-                // isDirectlyUploadable already checks isLoggedIn, no active upload,
-                // has imageData, no mediaId.  Anti-bot guards are inside
-                // uploadSinglePendingPhoto (rate limit, SafetyGate, session warmup).
-                if isDirectlyUploadable(photo) {
-                    uploadSinglePendingPhoto(photoId: photo.id)
-                } else {
-                    filledSlotActionSymbol = label
-                    filledSlotActionPhotoId = photo.id
-                    filledSlotActionIsUploaded = photo.mediaId != nil
-                    showFilledSlotActions = true
-                }
+                filledSlotActionSymbol = label
+                filledSlotActionPhotoId = photo.id
+                filledSlotActionIsUploaded = photo.mediaId != nil
+                showFilledSlotActions = true
             }
             .contextMenu {
                 if currentSet.type == .list {
@@ -3411,7 +3403,6 @@ struct SetDetailView: View {
         return result
     }
     
-    @ViewBuilder
     /// True when the photo can be uploaded individually right now.
     /// Checks every concurrent-upload guard so a rapid tap on the photo followed
     /// immediately by "Start Upload" (or vice-versa) never starts two operations.
@@ -3423,6 +3414,7 @@ struct SetDetailView: View {
         instagram.isLoggedIn
     }
 
+    @ViewBuilder
     private func uploadStatusBadge(for photo: SetPhoto) -> some View {
         switch photo.uploadStatus {
         case .completed:
@@ -3454,26 +3446,13 @@ struct SetDetailView: View {
                     .tint(.white)
             }
         case .pending:
-            if isDirectlyUploadable(photo) {
-                // Stuck pending (no active upload) — orange arrow signals "tap me"
-                ZStack {
-                    Circle()
-                        .fill(Color.orange)
-                        .frame(width: 20, height: 20)
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                }
-            } else {
-                // Waiting in the active upload queue — gray clock
-                ZStack {
-                    Circle()
-                        .fill(Color.gray.opacity(0.6))
-                        .frame(width: 20, height: 20)
-                    Image(systemName: "clock")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                }
+            ZStack {
+                Circle()
+                    .fill(uploadManager.isActive ? Color.gray.opacity(0.6) : Color.orange)
+                    .frame(width: 20, height: 20)
+                Image(systemName: uploadManager.isActive ? "clock" : "exclamationmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white)
             }
         }
     }
@@ -3482,15 +3461,9 @@ struct SetDetailView: View {
     private func statusTextView(for photo: SetPhoto) -> some View {
         switch photo.uploadStatus {
         case .pending:
-            if isDirectlyUploadable(photo) {
-                Text(String(localized: "upload.tap_to_upload"))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundColor(.orange)
-            } else {
-                Text("Pending")
-                    .font(.caption2)
-                    .foregroundColor(.orange)
-            }
+            Text("Pending")
+                .font(.caption2)
+                .foregroundColor(.orange)
         case .uploading:
             Text("Uploading...")
                 .font(.caption2)
@@ -3514,15 +3487,9 @@ struct SetDetailView: View {
                     .foregroundColor(.green)
             }
         case .error:
-            if isDirectlyUploadable(photo) {
-                Text(String(localized: "upload.tap_to_upload"))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundColor(.orange)
-            } else {
-                Text("Error")
-                    .font(.caption2)
-                    .foregroundColor(.red)
-            }
+            Text("Error")
+                .font(.caption2)
+                .foregroundColor(.red)
         }
     }
     

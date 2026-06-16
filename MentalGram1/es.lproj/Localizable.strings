@@ -1477,7 +1477,7 @@
 
 "limits.help.gauge.title" = "Tu presupuesto de 55 acciones por hora";
 "limits.help.gauge.body" = "Instagram limita cada app conectada a 55 acciones por hora. El presupuesto funciona como una ventana deslizante de 60 minutos: cada acción caduca exactamente 60 minutos después de realizarse, por lo que el contador baja automáticamente sin necesidad de un reinicio forzado.";
-"limits.help.gauge.cache" = "Las visitas repetidas rápidas usan caché y pueden costar 0. Después del cooldown de seguridad, Performance o un perfil de seguidor puede refrescarse de nuevo y usar presupuesto para mantener los datos actualizados.";
+"limits.help.gauge.cache" = "Abrir Performance cuesta 0 desde la segunda visita en adelante — todo se guarda permanentemente en tu dispositivo. Solo la primera vez (o al cambiar de cuenta) usa 3–5 acciones para descargar y guardar tu perfil completo.";
 "limits.help.gauge.hardstop" = "Cuando se alcanza el límite de 55, la app detiene automáticamente cualquier nueva petición a Instagram. No se envía nada ni se ejecuta ninguna acción — espera en silencio hasta que el presupuesto se renueve. No tienes que hacer nada.";
 "limits.help.gauge.zone.safe" = "Seguro (>20)";
 "limits.help.gauge.zone.low" = "Bajo (8–20)";
@@ -1499,7 +1499,7 @@
 "limits.help.table.row.notebio" = "Cambiar nota o bio";
 "limits.help.table.row.explore" = "Explorar / Buscar";
 "limits.help.sa.auto" = "Después de una actuación completa con revelaciones y visitas a perfiles, la app añade automáticamente una breve espera antes de Sync & Archive. Es normal — protege tu sesión.";
-"limits.help.table.cache.lost" = "Abrir Performance suele costar 3 acciones para perfil + posts, o hasta 5 si hay que reconstruir la caché de Reels/Tagged. Las repeticiones rápidas pueden costar 0, pero los refrescos posteriores pueden volver a usar presupuesto. Highlights no se refresca automáticamente en Performance.";
+"limits.help.table.cache.lost" = "Performance se guarda completamente en tu dispositivo tras la primera carga — cada entrada posterior cuesta 0 acciones. La primera vez (o al cambiar de cuenta) muestra una pantalla de carga mientras se descarga y guarda tu perfil. Pulsa Actualizar en Ajustes solo cuando hayas hecho un cambio en Instagram real (nuevo post, cambio de bio, etc.).";
 "limits.help.table.batch.note" = "Los costes por foto se multiplican. Sync & Archive en 4 fotos = 8 acciones en total. Subir 4 fotos = 9 en total (1 llamada de preparación + 2 por foto). La foto de perfil muestra 1 acción de presupuesto, aunque Instagram también recibe la llamada de subida de imagen.";
 
 "limits.help.profiles.title" = "Visitar perfiles — la acción más costosa";
@@ -1641,6 +1641,27 @@
 "budget.warning.renewal" = "Presupuesto completo a las %@";
 "budget.warning.advice" = "Evita entrar en Performance hasta que se renueve el presupuesto para no interrumpir un pase.";
 "action.understood" = "Entendido";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "Cargando tu perfil";
+"preload.subtitle" = "Preparando todo…";
+"preload.wifi" = "Usa Wi-Fi para una primera carga más rápida";
+"preload.profile" = "Cargando perfil…";
+"preload.posts" = "Cargando publicaciones…";
+"preload.images" = "Descargando fotos…";
+"preload.reels" = "Cargando reels…";
+"preload.tagged" = "Cargando etiquetados…";
+"preload.highlights" = "Cargando destacadas…";
+"preload.failed.title" = "No se pudo completar la carga";
+"preload.failed.subtitle" = "Comprueba tu conexión e inténtalo de nuevo. Se recomienda Wi-Fi para la primera carga.";
+"preload.retry" = "Reintentar";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Sincronización con Instagram";
+"sync.never_synced" = "Nunca sincronizado";
+"sync.info" = "Si has subido un post, cambiado la bio u hecho cualquier actualización en Instagram real, pulsa Actualizar para que la app lo detecte.";
+"sync.refresh_button" = "Actualizar desde Instagram";
+"sync.refreshing" = "Sincronizando…";
 
 // MARK: - Initial Profile Load screen
 "initial_load.title" = "Preparando el Pase";

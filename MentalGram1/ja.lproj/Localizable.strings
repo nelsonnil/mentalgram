@@ -1260,7 +1260,7 @@
 
 "limits.help.gauge.title" = "1時間あたり55アクションの予算";
 "limits.help.gauge.body" = "Instagramは接続されたアプリを1時間あたり55アクションに制限しています。予算は60分のローリングウィンドウとして機能します — 各アクションは実行から正確に60分後に失効するため、強制リセットなしにカウンターが自動的に下がります。";
-"limits.help.gauge.cache" = "短時間の再訪問はキャッシュを使うため0になることがあります。安全クールダウン後は、Performanceやフォロワープロフィールが再更新され、再び予算を使う場合があります。";
+"limits.help.gauge.cache" = "2回目以降のPerformance起動は0アクション — すべてがデバイスに永続保存されます。初回（またはアカウント切り替え後）のみ、プロフィール全体のダウンロードと保存に3〜5アクション使います。";
 "limits.help.gauge.hardstop" = "55のリミットに達すると、アプリは自動的にInstagramへのすべてのリクエストを停止します。何も送信されず、何も実行されません — 予算が更新されるまで静かに待機します。何もする必要はありません。";
 "limits.help.gauge.zone.safe" = "安全 (>20)";
 "limits.help.gauge.zone.low" = "低 (8–20)";
@@ -1282,7 +1282,7 @@
 "limits.help.table.row.notebio" = "ノートまたはbio変更";
 "limits.help.table.row.explore" = "探索 / 検索";
 "limits.help.sa.auto" = "リビールとプロフィール訪問を含む完全なパフォーマンスの後、アプリはSync & Archiveの前に自動的に短い待機時間を追加します。これは正常です — セッションを保護します。";
-"limits.help.table.cache.lost" = "Performanceを開くと通常、プロフィール＋投稿で3アクション消費します。Reels/Taggedのキャッシュ再構築が必要な場合は最大5です。短時間の再入場は0になることがありますが、後の更新では再び予算を使う場合があります。HighlightsはPerformanceで自動更新されません。";
+"limits.help.table.cache.lost" = "初回読み込み後、Performanceは完全にデバイスに保存されます — 以降の起動はすべて0アクション。初回（またはアカウント切り替え後）はプロフィールのダウンロード・保存中にローディング画面が表示されます。設定の「更新」は、本物のInstagramで変更（新しい投稿・bio編集など）をした場合にのみタップしてください。";
 "limits.help.table.batch.note" = "写真ごとのコストは合計されます。4枚でSync & Archive = 合計8アクション。4枚アップロード = 合計9（準備1回 + 写真ごとに2回）。プロフィール写真は予算上1アクションと表示されますが、Instagramには画像アップロードの呼び出しも送られます。";
 
 "limits.help.profiles.title" = "プロフィール訪問 — 最もコストの高いアクション";
@@ -1435,6 +1435,27 @@
 "budget.warning.renewal" = "%@に完全回復";
 "budget.warning.advice" = "ショーの中断を防ぐため、バジェット回復までPerformanceに入らないでください。";
 "action.understood" = "了解";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "プロフィールを読み込み中";
+"preload.subtitle" = "準備しています…";
+"preload.wifi" = "初回読み込みはWi-Fiの使用をおすすめします";
+"preload.profile" = "プロフィールを読み込み中…";
+"preload.posts" = "投稿を読み込み中…";
+"preload.images" = "写真をダウンロード中…";
+"preload.reels" = "リールを読み込み中…";
+"preload.tagged" = "タグ付けを読み込み中…";
+"preload.highlights" = "ハイライトを読み込み中…";
+"preload.failed.title" = "読み込みを完了できませんでした";
+"preload.failed.subtitle" = "接続を確認して、もう一度お試しください。初回読み込みはWi-Fiを推奨します。";
+"preload.retry" = "再試行";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Instagramと同期";
+"sync.never_synced" = "未同期";
+"sync.info" = "新しい投稿、bio の変更、または実際のInstagramで何か更新した場合は、「更新」をタップしてアプリに変更を反映させてください。";
+"sync.refresh_button" = "Instagramから更新";
+"sync.refreshing" = "同期中…";
 
 // ── Performance Gate Sheet ──────────────────────────────────────────────────
 "performance.gate.session.title" = "セッション期限切れ";

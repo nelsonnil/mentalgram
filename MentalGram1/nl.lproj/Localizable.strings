@@ -1259,7 +1259,7 @@
 
 "limits.help.gauge.title" = "Je uurlijks budget van 55 acties";
 "limits.help.gauge.body" = "Instagram beperkt elke verbonden app tot 55 acties per uur. Het budget werkt als een rollend venster van 60 minuten — elke actie verloopt precies 60 minuten nadat die werd uitgevoerd, zodat de teller automatisch daalt zonder een harde reset.";
-"limits.help.gauge.cache" = "Snelle herhaalbezoeken gebruiken cache en kunnen 0 kosten. Na de veiligheids-cooldown kan Performance of een volgersprofiel opnieuw verversen en budget gebruiken.";
+"limits.help.gauge.cache" = "Performance openen kost 0 vanaf het tweede bezoek — alles wordt permanent opgeslagen op je apparaat. Alleen de allereerste keer (of na een accountwisseling) worden 3–5 acties gebruikt om je volledige profiel te downloaden en op te slaan.";
 "limits.help.gauge.hardstop" = "Wanneer de limiet van 55 is bereikt, stopt de app automatisch alle verdere Instagram-verzoeken. Er wordt niets verzonden, niets geactiveerd — ze wacht stil totdat het budget vernieuwd wordt. Je hoeft niets te doen.";
 "limits.help.gauge.zone.safe" = "Veilig (>20)";
 "limits.help.gauge.zone.low" = "Laag (8–20)";
@@ -1281,7 +1281,7 @@
 "limits.help.table.row.notebio" = "Notitie of bio wijzigen";
 "limits.help.table.row.explore" = "Verkennen / Zoeken";
 "limits.help.sa.auto" = "Na een volledige performance met onthullingen en profielbezoeken voegt de app automatisch een korte wachttijd toe vóór Sync & Archive. Dit is normaal — het beschermt je sessie.";
-"limits.help.table.cache.lost" = "Performance openen kost meestal 3 acties voor profiel + posts, of maximaal 5 als de Reels/Tagged-cache opnieuw moet worden opgebouwd. Snelle herhalingen kunnen 0 kosten, maar latere verversingen kunnen opnieuw budget gebruiken. Highlights worden niet automatisch vernieuwd in Performance.";
+"limits.help.table.cache.lost" = "Performance wordt na de eerste keer volledig opgeslagen op je apparaat — elk volgend bezoek kost 0 acties. De eerste keer (of na een accountwisseling) verschijnt een laadscherm terwijl je profiel wordt gedownload en opgeslagen. Tik op Vernieuwen in Instellingen alleen als je iets op echte Instagram hebt gewijzigd (nieuw bericht, bio, enz.).";
 "limits.help.table.batch.note" = "Kosten per foto tellen op. Sync & Archive op 4 foto's = 8 acties totaal. 4 foto's uploaden = 9 totaal (1 voorbereidingsaanroep + 2 per foto). Profielfoto toont 1 budgetactie, hoewel Instagram ook de uploadaanroep van de afbeelding ontvangt.";
 
 "limits.help.profiles.title" = "Profielen bezoeken — de duurste actie";
@@ -1434,6 +1434,27 @@
 "budget.warning.renewal" = "Vol budget om %@";
 "budget.warning.advice" = "Ga pas Performance in na budgetvernieuwing om onderbrekingen te voorkomen.";
 "action.understood" = "Begrepen";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "Profiel laden";
+"preload.subtitle" = "Alles wordt voorbereid…";
+"preload.wifi" = "Gebruik wifi voor de snelste eerste keer laden";
+"preload.profile" = "Profiel laden…";
+"preload.posts" = "Berichten laden…";
+"preload.images" = "Foto's downloaden…";
+"preload.reels" = "Reels laden…";
+"preload.tagged" = "Tags laden…";
+"preload.highlights" = "Hoogtepunten laden…";
+"preload.failed.title" = "Laden kon niet worden voltooid";
+"preload.failed.subtitle" = "Controleer je verbinding en probeer het opnieuw. Wifi wordt aanbevolen voor de eerste keer laden.";
+"preload.retry" = "Opnieuw proberen";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Instagram-synchronisatie";
+"sync.never_synced" = "Nog nooit gesynchroniseerd";
+"sync.info" = "Als je iets hebt gepost, je bio hebt gewijzigd of andere updates op Instagram hebt gedaan, tik op Vernieuwen zodat de app de wijzigingen detecteert.";
+"sync.refresh_button" = "Vernieuwen van Instagram";
+"sync.refreshing" = "Synchroniseren…";
 
 // ── Performance Gate Sheet ──────────────────────────────────────────────────
 "performance.gate.session.title" = "Sessie verlopen";

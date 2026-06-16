@@ -952,7 +952,7 @@
 
 "limits.help.gauge.title" = "您每小时 55 次操作预算";
 "limits.help.gauge.body" = "Instagram 将每个连接的应用限制为每小时 55 次操作。预算采用滚动 60 分钟窗口机制，每次操作在执行后正好 60 分钟后到期，因此计数器会自动下降，无需强制重置。";
-"limits.help.gauge.cache" = "快速重复访问会使用缓存，可能消耗 0。安全冷却后，Performance 或关注者资料可能会再次刷新并消耗预算。";
+"limits.help.gauge.cache" = "从第二次起打开 Performance 消耗 0 — 所有内容已永久保存到设备上。只有第一次（或切换账号后）才需要 3–5 个操作来下载和缓存完整主页。";
 "limits.help.gauge.hardstop" = "当达到 55 次限制时，应用会自动停止向 Instagram 发送任何进一步的请求。不会发送任何内容，不会触发任何操作——它会静默等待，直到预算重置。您无需做任何事情。";
 "limits.help.gauge.zone.safe" = "安全 (>20)";
 "limits.help.gauge.zone.low" = "偏低 (8–20)";
@@ -974,7 +974,7 @@
 "limits.help.table.row.notebio" = "更改备注或简介";
 "limits.help.table.row.explore" = "探索 / 搜索";
 "limits.help.sa.auto" = "在包含揭示和资料访问的完整表演后，应用会在 Sync & Archive 前自动添加短暂等待时间。这是正常的，可以保护您的会话。";
-"limits.help.table.cache.lost" = "打开 Performance 通常会为资料 + 帖子消耗 3 个操作；如果需要重建 Reels/Tagged 缓存，最多可能消耗 5 个。快速重复进入可能为 0，但之后的刷新可能再次消耗预算。Highlights 不会在 Performance 中自动刷新。";
+"limits.help.table.cache.lost" = "首次加载后，Performance 将完整保存到设备上 — 之后每次进入均消耗 0 个操作。第一次（或切换账号后）会显示加载界面，同时下载并保存你的主页。仅在你对真实 Instagram 进行了更改（新帖子、简介修改等）后，才需要在设置中点击刷新。";
 "limits.help.table.batch.note" = "按照片计算的成本会累加。4 张照片执行 Sync & Archive = 共 8 个操作。上传 4 张照片 = 共 9 个操作（1 次准备调用 + 每张 2 次）。头像在预算中显示为 1 个操作，但 Instagram 也会收到图片上传调用。";
 
 "limits.help.profiles.title" = "访问资料 — 消耗最多的操作";
@@ -1137,6 +1137,27 @@
 "budget.warning.renewal" = "配额在 %@ 完全恢复";
 "budget.warning.advice" = "为避免演出中断，请等待配额恢复后再进入 Performance。";
 "action.understood" = "知道了";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "正在加载你的主页";
+"preload.subtitle" = "正在准备一切…";
+"preload.wifi" = "首次加载建议使用 Wi-Fi";
+"preload.profile" = "正在加载主页…";
+"preload.posts" = "正在加载帖子…";
+"preload.images" = "正在下载照片…";
+"preload.reels" = "正在加载 Reels…";
+"preload.tagged" = "正在加载标记…";
+"preload.highlights" = "正在加载精选…";
+"preload.failed.title" = "加载未完成";
+"preload.failed.subtitle" = "请检查网络连接后重试。首次加载建议使用 Wi-Fi。";
+"preload.retry" = "重试";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Instagram 同步";
+"sync.never_synced" = "从未同步";
+"sync.info" = "如果你在真实 Instagram 上发布了新内容、修改了简介或进行了其他更新，请点击刷新，让应用识别这些更改。";
+"sync.refresh_button" = "从 Instagram 刷新";
+"sync.refreshing" = "同步中…";
 
 // ── Performance Gate Sheet ──────────────────────────────────────────────────
 "performance.gate.session.title" = "会话已过期";

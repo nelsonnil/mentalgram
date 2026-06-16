@@ -1302,6 +1302,10 @@ extension Notification.Name {
     /// userInfo["nextMaxId"]  → `String?`
     static let ownProfileMediaReady = Notification.Name("com.vault.ownProfileMediaReady")
 
+    /// Posted by `InstagramSyncCard` (Settings / Set header) when the user taps
+    /// the manual Refresh button. PerformanceView listens and calls `loadProfileSync`.
+    static let performanceManualRefresh = Notification.Name("com.vault.performanceManualRefresh")
+
     /// Posted by `InstagramService.getProfileInfo` for a visited (searched)
     /// profile as soon as the header (username, profile pic, follower /
     /// following / media counts) is ready, BEFORE the media + followers chain.

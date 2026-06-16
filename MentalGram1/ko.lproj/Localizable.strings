@@ -1261,7 +1261,7 @@
 
 "limits.help.gauge.title" = "시간당 55회 행동 예산";
 "limits.help.gauge.body" = "Instagram은 연결된 앱을 시간당 55회 행동으로 제한합니다. 예산은 60분 롤링 윈도우로 작동합니다 — 각 행동은 실행 후 정확히 60분 후에 만료되므로, 강제 재설정 없이 카운터가 자동으로 감소합니다.";
-"limits.help.gauge.cache" = "빠른 반복 방문은 캐시를 사용하므로 0일 수 있습니다. 안전 쿨다운 후에는 Performance 또는 팔로워 프로필이 다시 새로고침되어 예산을 사용할 수 있습니다.";
+"limits.help.gauge.cache" = "두 번째 방문부터 Performance 열기는 0 — 모든 것이 기기에 영구 저장됩니다. 최초 1회(또는 계정 전환 후)에만 전체 프로필을 다운로드하고 저장하는 데 3–5개의 액션이 사용됩니다.";
 "limits.help.gauge.hardstop" = "55 한도에 도달하면, 앱은 자동으로 Instagram으로의 모든 추가 요청을 중단합니다. 아무것도 전송되지 않고, 아무것도 실행되지 않습니다 — 예산이 갱신될 때까지 조용히 대기합니다. 아무것도 할 필요가 없습니다.";
 "limits.help.gauge.zone.safe" = "안전 (>20)";
 "limits.help.gauge.zone.low" = "낮음 (8–20)";
@@ -1283,7 +1283,7 @@
 "limits.help.table.row.notebio" = "노트 또는 bio 변경";
 "limits.help.table.row.explore" = "탐색 / 검색";
 "limits.help.sa.auto" = "리빌과 프로필 방문을 포함한 완전한 퍼포먼스 후, 앱은 Sync & Archive 전에 자동으로 짧은 대기 시간을 추가합니다. 이는 정상입니다 — 세션을 보호합니다.";
-"limits.help.table.cache.lost" = "Performance를 열면 보통 프로필 + 게시물에 3개 액션이 들며, Reels/Tagged 캐시를 다시 만들어야 하면 최대 5개까지 들 수 있습니다. 빠른 반복 진입은 0일 수 있지만, 이후 새로고침은 다시 예산을 사용할 수 있습니다. Highlights는 Performance에서 자동으로 새로고침되지 않습니다.";
+"limits.help.table.cache.lost" = "첫 로딩 이후 Performance는 기기에 완전히 저장되어 이후 모든 접속은 0 액션입니다. 최초 1회(또는 계정 전환 후)에는 프로필 다운로드 및 저장 중 로딩 화면이 표시됩니다. 실제 Instagram에서 변경(새 게시물, 바이오 수정 등)을 했을 때만 설정에서 새로고침을 탭하세요.";
 "limits.help.table.batch.note" = "사진별 비용은 합산됩니다. 사진 4장의 Sync & Archive = 총 8개 액션. 사진 4장 업로드 = 총 9개(준비 호출 1개 + 사진당 2개). 프로필 사진은 예산 액션 1개로 표시되지만, Instagram에는 이미지 업로드 호출도 전송됩니다.";
 
 "limits.help.profiles.title" = "프로필 방문 — 가장 비용이 많이 드는 행동";
@@ -1439,6 +1439,27 @@
 "budget.warning.renewal" = "%@에 예산 완전 회복";
 "budget.warning.advice" = "공연 중 중단을 방지하려면 예산 갱신 후 Performance에 입장하세요.";
 "action.understood" = "확인";
+
+// MARK: - First-Time Profile Preload
+"preload.title" = "프로필 불러오는 중";
+"preload.subtitle" = "모든 준비를 하고 있어요…";
+"preload.wifi" = "첫 로딩은 Wi-Fi 사용을 권장합니다";
+"preload.profile" = "프로필 불러오는 중…";
+"preload.posts" = "게시물 불러오는 중…";
+"preload.images" = "사진 다운로드 중…";
+"preload.reels" = "릴스 불러오는 중…";
+"preload.tagged" = "태그 불러오는 중…";
+"preload.highlights" = "하이라이트 불러오는 중…";
+"preload.failed.title" = "불러오기를 완료하지 못했습니다";
+"preload.failed.subtitle" = "연결을 확인한 후 다시 시도하세요. 첫 로딩에는 Wi-Fi를 권장합니다.";
+"preload.retry" = "다시 시도";
+
+// MARK: - Instagram Sync Card
+"sync.title" = "Instagram 동기화";
+"sync.never_synced" = "동기화된 적 없음";
+"sync.info" = "새 게시물 업로드, 바이오 수정 또는 실제 Instagram에서 변경 사항이 생겼다면 새로 고침을 눌러 앱이 변경 내용을 감지하도록 하세요.";
+"sync.refresh_button" = "Instagram에서 새로 고침";
+"sync.refreshing" = "동기화 중…";
 
 // ── Performance Gate Sheet ──────────────────────────────────────────────────
 "performance.gate.session.title" = "세션 만료";
