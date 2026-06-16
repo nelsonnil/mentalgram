@@ -578,6 +578,38 @@ class DataManager: ObservableObject {
         objectWillChange.send()
     }
 
+    /// Deletes the list item at the given slot symbol ("1", "2", …), removes its
+    /// associated photo, re-numbers higher-slot photos, and adjusts separators.
+    func deleteListItem(setId: UUID, symbol: String) {
+        guard let idx = sets.firstIndex(where: { $0.id == setId }),
+              sets[idx].type == .list,
+              let slot = Int(symbol), slot > 0 else { return }
+
+        // 1. Remove the label from listItems
+        var items = sets[idx].listItems ?? sets[idx].listDisplayLabels
+        if slot - 1 < items.count { items.remove(at: slot - 1) }
+        sets[idx].listItems = items.isEmpty ? nil : items
+
+        // 2. Remove the photo for this slot
+        sets[idx].photos.removeAll { $0.symbol == symbol }
+
+        // 3. Re-number photos with a higher slot so the sequence stays contiguous
+        for i in sets[idx].photos.indices {
+            if let photoSlot = Int(sets[idx].photos[i].symbol), photoSlot > slot {
+                sets[idx].photos[i].symbol = "\(photoSlot - 1)"
+            }
+        }
+
+        // 4. Update separators: drop the separator at the deleted slot, decrement those after it
+        let updatedSeparators = (sets[idx].listSeparators ?? [])
+            .filter { $0 != slot }
+            .map   { $0 > slot ? $0 - 1 : $0 }
+        sets[idx].listSeparators = updatedSeparators.isEmpty ? nil : updatedSeparators
+
+        saveSets()
+        objectWillChange.send()
+    }
+
     func setListLayout(setId: UUID, columns: ListSetColumns? = nil, buttonSize: ListSetButtonSize? = nil) {
         guard let idx = sets.firstIndex(where: { $0.id == setId }), sets[idx].type == .list else { return }
         if let columns { sets[idx].listColumns = columns }

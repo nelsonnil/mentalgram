@@ -122,6 +122,8 @@ struct SetDetailView: View {
     @State private var listRenameSymbol: String? = nil
     @State private var listRenameText = ""
     @State private var showListRenameAlert = false
+    @State private var listDeleteSymbol: String? = nil
+    @State private var showListDeleteAlert = false
     @State private var listImportError: String? = nil
     @State private var listSeparatorSlot: Int = 10
 
@@ -815,6 +817,18 @@ struct SetDetailView: View {
             Button("Cancel", role: .cancel) { listRenameSymbol = nil }
         } message: {
             Text("This changes the private list button text. The linked media stays attached to the same slot.")
+        }
+        .alert("Delete List Item", isPresented: $showListDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                if let symbol = listDeleteSymbol {
+                    dataManager.deleteListItem(setId: currentSet.id, symbol: symbol)
+                }
+                listDeleteSymbol = nil
+            }
+            Button("Cancel", role: .cancel) { listDeleteSymbol = nil }
+        } message: {
+            let label = listDeleteSymbol.flatMap { listDisplayLabelsBySymbol[$0] } ?? "this item"
+            Text("Delete \"\(label)\"? Its photo will be removed from the set. If the photo is already uploaded to Instagram, archive it first from the set detail before deleting.")
         }
         .alert("Import Failed", isPresented: Binding(
             get: { listImportError != nil },
@@ -3272,6 +3286,7 @@ struct SetDetailView: View {
             .contextMenu {
                 if currentSet.type == .list {
                     Button("Rename Item") { startRenamingListItem(label) }
+                    Button("Delete Item", role: .destructive) { startDeletingListItem(label) }
                 }
             }
 
@@ -3330,6 +3345,7 @@ struct SetDetailView: View {
         .contextMenu {
             if currentSet.type == .list {
                 Button("Rename Item") { startRenamingListItem(label) }
+                Button("Delete Item", role: .destructive) { startDeletingListItem(label) }
             }
         }
         .buttonStyle(PlainButtonStyle())
@@ -3343,6 +3359,11 @@ struct SetDetailView: View {
         listRenameSymbol = symbol
         listRenameText = displayLabel(for: symbol)
         showListRenameAlert = true
+    }
+
+    private func startDeletingListItem(_ symbol: String) {
+        listDeleteSymbol = symbol
+        showListDeleteAlert = true
     }
 
     private func importListItems(from result: Result<[URL], Error>) {
