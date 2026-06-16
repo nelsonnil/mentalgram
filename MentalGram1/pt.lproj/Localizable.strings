@@ -1623,6 +1623,7 @@
 "preload.reels" = "A carregar reels…";
 "preload.tagged" = "A carregar etiquetados…";
 "preload.highlights" = "A carregar destaques…";
+"preload.explore" = "A carregar Explore…";
 "preload.failed.title" = "Não foi possível concluir o carregamento";
 "preload.failed.subtitle" = "Verifique a sua ligação e tente novamente. Recomenda-se Wi-Fi para o primeiro carregamento.";
 "preload.retry" = "Tentar novamente";

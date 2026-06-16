@@ -1444,6 +1444,7 @@
 "preload.reels" = "Ładowanie rolek…";
 "preload.tagged" = "Ładowanie oznaczeń…";
 "preload.highlights" = "Ładowanie wyróżnionych…";
+"preload.explore" = "Ładowanie Explore…";
 "preload.failed.title" = "Nie udało się zakończyć ładowania";
 "preload.failed.subtitle" = "Sprawdź połączenie i spróbuj ponownie. Do pierwszego ładowania zalecamy Wi-Fi.";
 "preload.retry" = "Spróbuj ponownie";

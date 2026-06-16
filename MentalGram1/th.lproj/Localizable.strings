@@ -1095,6 +1095,7 @@
 "preload.reels" = "กำลังโหลดรีล…";
 "preload.tagged" = "กำลังโหลดการแท็ก…";
 "preload.highlights" = "กำลังโหลดไฮไลต์…";
+"preload.explore" = "กำลังโหลด Explore…";
 "preload.failed.title" = "โหลดไม่สำเร็จ";
 "preload.failed.subtitle" = "ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง แนะนำให้ใช้ Wi-Fi สำหรับการโหลดครั้งแรก";
 "preload.retry" = "ลองอีกครั้ง";

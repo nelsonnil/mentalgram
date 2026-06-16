@@ -1105,6 +1105,7 @@
 "preload.reels" = "正在載入 Reels…";
 "preload.tagged" = "正在載入標註…";
 "preload.highlights" = "正在載入精選…";
+"preload.explore" = "正在載入 Explore…";
 "preload.failed.title" = "載入未完成";
 "preload.failed.subtitle" = "請檢查網路連線後重試。首次載入建議使用 Wi-Fi。";
 "preload.retry" = "重試";

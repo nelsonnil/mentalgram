@@ -1445,6 +1445,7 @@
 "preload.reels" = "Reels laden…";
 "preload.tagged" = "Tags laden…";
 "preload.highlights" = "Hoogtepunten laden…";
+"preload.explore" = "Explore laden…";
 "preload.failed.title" = "Laden kon niet worden voltooid";
 "preload.failed.subtitle" = "Controleer je verbinding en probeer het opnieuw. Wifi wordt aanbevolen voor de eerste keer laden.";
 "preload.retry" = "Opnieuw proberen";

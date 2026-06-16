@@ -729,11 +729,14 @@ struct SetDetailView: View {
             Text("Remove this photo from all banks? This cannot be undone.")
         }
         .confirmationDialog("Photo options", isPresented: $showFilledSlotActions, titleVisibility: .visible) {
+            // Show upload option when photo is pending AND no real task is running.
+            // uploadManager.isActive can be true even when stuck (no activeTask) —
+            // uploadSinglePendingPhoto auto-resets that stale state before proceeding.
             if let photoId = filledSlotActionPhotoId,
                let photo = currentSet.photos.first(where: { $0.id == photoId }),
                photo.mediaId == nil,
                photo.imageData != nil,
-               !uploadManager.isActive {
+               uploadManager.activeTask == nil {
                 Button("Upload & Archive This Photo") {
                     uploadSinglePendingPhoto(photoId: photoId)
                     showFilledSlotActions = false
@@ -3425,13 +3428,12 @@ struct SetDetailView: View {
     }
     
     /// True when the photo can be uploaded individually right now.
-    /// Checks every concurrent-upload guard so a rapid tap on the photo followed
-    /// immediately by "Start Upload" (or vice-versa) never starts two operations.
+    /// Uses activeTask (not isActive) so a stale/stuck phase doesn't hide the
+    /// option — uploadSinglePendingPhoto resets stale state automatically.
     private func isDirectlyUploadable(_ photo: SetPhoto) -> Bool {
         photo.mediaId == nil &&
         photo.imageData != nil &&
-        !uploadManager.isActive &&       // phase-based guard (set synchronously)
-        uploadManager.activeTask == nil && // task-based guard (belt-and-suspenders)
+        uploadManager.activeTask == nil &&
         instagram.isLoggedIn
     }
 
@@ -3982,9 +3984,15 @@ struct SetDetailView: View {
     }
 
     private func uploadSinglePendingPhoto(photoId: UUID) {
-        guard uploadManager.activeTask == nil, !uploadManager.isActive else {
-            print("⚠️ [UPLOAD SINGLE] Ignored — upload already active")
+        // If there's a real running task, block. If only the phase is stale
+        // (activeTask == nil but isActive == true), recover automatically.
+        if uploadManager.activeTask != nil {
+            print("⚠️ [UPLOAD SINGLE] Ignored — upload task is genuinely running")
             return
+        }
+        if uploadManager.isActive {
+            print("⚠️ [UPLOAD SINGLE] Stale upload state detected — resetting before single upload")
+            uploadManager.resetAllState()
         }
         guard !blockIfPreviousSetHasPendingUpload() else { return }
         guard let index = currentSet.photos.firstIndex(where: { $0.id == photoId }) else { return }

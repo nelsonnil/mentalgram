@@ -1450,6 +1450,7 @@
 "preload.reels" = "릴스 불러오는 중…";
 "preload.tagged" = "태그 불러오는 중…";
 "preload.highlights" = "하이라이트 불러오는 중…";
+"preload.explore" = "Explore 불러오는 중…";
 "preload.failed.title" = "불러오기를 완료하지 못했습니다";
 "preload.failed.subtitle" = "연결을 확인한 후 다시 시도하세요. 첫 로딩에는 Wi-Fi를 권장합니다.";
 "preload.retry" = "다시 시도";

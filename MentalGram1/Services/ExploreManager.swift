@@ -62,9 +62,7 @@ class ExploreManager: ObservableObject {
 
         Task {
             await loadExploreInternal()
-            await MainActor.run {
-                isLoading = false
-            }
+            // isLoading is reset inside loadExploreInternal as soon as the grid data arrives
         }
     }
 
@@ -141,7 +139,7 @@ class ExploreManager: ObservableObject {
         InstagramSafetyGate.shared.record(.exploreRefresh)
         await MainActor.run { isLoading = true }
         await loadExploreInternal()
-        await MainActor.run { isLoading = false }
+        // isLoading is reset inside loadExploreInternal
     }
 
     private func loadExploreInternal() async {
@@ -170,29 +168,49 @@ class ExploreManager: ObservableObject {
                 self.itemBuffer = itemsToBuffer
                 self.nextMaxId = maxId
                 self.hasMorePages = maxId != nil
+                // Release the loading state NOW so the grid appears immediately
+                // with per-cell spinners. Thumbnails stream in progressively below.
+                self.isLoading = false
+                self.isBackgroundRefreshing = false
 
                 // Save item list and cursor permanently
                 saveToCache()
 
-                print("✅ [EXPLORE] Loaded \(itemsToShow.count) items into UI")
+                print("✅ [EXPLORE] Grid shown — downloading thumbnails progressively")
                 print("🔍 [EXPLORE] Has more pages: \(self.hasMorePages)")
             }
 
-            // Download new thumbnails FIRST, then clear stale ones.
-            // Doing it in this order ensures that if the download fails (offline, CDN error),
-            // the old thumbnails on disk are still shown rather than a blank grid.
+            // Download thumbnails in the background — each cell shows its own
+            // spinner (gray rect + ProgressView) until its image arrives.
+            // Clear stale files after the new batch is ready.
             await downloadThumbnails(items: itemsToShow)
             clearPermanentThumbnails(except: Set(itemsToShow.map { $0.imageURL }))
             
         } catch {
             print("❌ [EXPLORE] Error loading: \(error)")
             await MainActor.run {
+                self.isLoading = false
+                self.isBackgroundRefreshing = false
                 if self.exploreMedia.isEmpty {
                     print("🔍 [EXPLORE] No items in cache after error — showing retry UI")
                     self.loadError = error.localizedDescription
                 }
             }
         }
+    }
+
+    /// Awaitable version used by the first-time profile preload spinner.
+    /// Loads Explore from the API if the cache is empty, otherwise returns immediately.
+    func preloadIfNeeded() async {
+        guard exploreMedia.isEmpty else {
+            print("🔍 [EXPLORE] preloadIfNeeded: cache already populated, skipping")
+            return
+        }
+        guard !InstagramService.shared.isSessionChallenged,
+              !InstagramService.shared.isLocked else { return }
+        await MainActor.run { isLoading = true }
+        await loadExploreInternal()
+        // isLoading is reset inside loadExploreInternal now
     }
     
     // MARK: - Download Thumbnails

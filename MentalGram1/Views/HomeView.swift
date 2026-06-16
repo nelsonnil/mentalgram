@@ -3632,7 +3632,7 @@ struct SettingsView: View {
                     }
                 }
                 let textToSend = String(resolved.prefix(60))
-                let success = try await instagram.createNote(text: textToSend)
+                let success = try await instagram.createNote(text: textToSend, userInitiated: true)
 
                 await MainActor.run {
                     isSendingNote = false
@@ -3719,7 +3719,7 @@ struct SettingsView: View {
                 }
 
                 let textToSend = String(resolved.prefix(150))
-                let success = try await instagram.changeBiography(text: textToSend)
+                let success = try await instagram.changeBiography(text: textToSend, userInitiated: true)
                 await MainActor.run {
                     isSendingBio = false
                     if success {
@@ -3759,7 +3759,7 @@ struct SettingsView: View {
                 print("🖼️ [UI] Starting profile picture upload...")
                 
                 // Upload with all anti-bot protections
-                let success = try await instagram.changeProfilePicture(imageData: imageData)
+                let success = try await instagram.changeProfilePicture(imageData: imageData, userInitiated: true)
                 
                 await MainActor.run {
                     isUploadingProfilePic = false

@@ -1629,6 +1629,7 @@
 "preload.reels" = "Chargement des reels…";
 "preload.tagged" = "Chargement des identifications…";
 "preload.highlights" = "Chargement des stories à la une…";
+"preload.explore" = "Chargement d'Explore…";
 "preload.failed.title" = "Impossible de terminer le chargement";
 "preload.failed.subtitle" = "Vérifiez votre connexion et réessayez. Le Wi-Fi est recommandé pour le premier chargement.";
 "preload.retry" = "Réessayer";

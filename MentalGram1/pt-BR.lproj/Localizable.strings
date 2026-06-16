@@ -1627,6 +1627,7 @@
 "preload.reels" = "Carregando reels…";
 "preload.tagged" = "Carregando marcações…";
 "preload.highlights" = "Carregando destaques…";
+"preload.explore" = "Carregando Explore…";
 "preload.failed.title" = "Não foi possível concluir o carregamento";
 "preload.failed.subtitle" = "Verifique sua conexão e tente novamente. Recomendamos Wi-Fi para o primeiro carregamento.";
 "preload.retry" = "Tentar novamente";

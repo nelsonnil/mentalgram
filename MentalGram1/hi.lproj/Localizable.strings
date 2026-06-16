@@ -1095,6 +1095,7 @@
 "preload.reels" = "रील्स लोड हो रही हैं…";
 "preload.tagged" = "टैग किए गए लोड हो रहे हैं…";
 "preload.highlights" = "हाइलाइट्स लोड हो रहे हैं…";
+"preload.explore" = "Explore लोड हो रहा है…";
 "preload.failed.title" = "लोड पूरा नहीं हो सका";
 "preload.failed.subtitle" = "अपना कनेक्शन जांचें और फिर से प्रयास करें। पहली बार लोड करने के लिए Wi-Fi की सलाह दी जाती है।";
 "preload.retry" = "पुनः प्रयास करें";

@@ -1465,10 +1465,9 @@ struct PerformanceView: View {
                 performanceEntryRecorded = true
             }
 
-            // PRE-FLIGHT: Validate session before any API call.
-            // If the session is expired/challenged, isSessionExpired is set to true
-            // by validateSession() → SessionGuardView overlay takes over automatically.
-            // Network errors are treated as non-blocking (profile loads from cache).
+            // Entry is cache-first: opening Performance with a saved profile must cost
+            // 0 Instagram calls. We only validate the session when this entry actually
+            // needs remote data (first-time preload or true cache miss).
             Task { @MainActor in
                 guard !uploadManager.isActive, !didAutoPauseUpload else {
                     print("🛡️ [PERF] Entry remote calls skipped — upload active/paused")
@@ -1508,26 +1507,34 @@ struct PerformanceView: View {
                     return
                 }
 
-                let sessionStatus = await instagram.validateSession()
-                guard sessionStatus == .valid || sessionStatus == .networkError else {
-                    print("🚫 [PERF] Session invalid (\(sessionStatus)) — aborting onAppear actions")
-                    return
-                }
                 // First-ever entry for this account (no/low cache): block the view with a
                 // spinner and load everything once (header + ~24 posts + reels + tagged +
                 // highlights + images), saving it all to disk. Every later entry is instant
                 // with zero API calls. Existing accounts with a populated cache skip this.
                 let preloadUserId = currentSessionUserId()
                 if shouldRunFirstTimePreload(userId: preloadUserId) {
+                    let sessionStatus = await instagram.validateSession()
+                    guard sessionStatus == .valid || sessionStatus == .networkError else {
+                        print("🚫 [PERF] Session invalid (\(sessionStatus)) — aborting first-time preload")
+                        checkAndLoadProfile(allowRemote: false)
+                        return
+                    }
                     await runFirstTimePreload(userId: preloadUserId)
+                } else if ProfileCacheService.shared.loadProfile() != nil {
+                    checkAndLoadProfile(allowRemote: false)
+                    triggerFirstTimeBannerIfNeeded()
+                    // Exception requested by the user: Counter Glitch + Transfer Effect
+                    // may refresh follower/following counts on entry.
+                    maybeAutoRefreshCountsForTransferEffect()
                 } else {
+                    let sessionStatus = await instagram.validateSession()
+                    guard sessionStatus == .valid || sessionStatus == .networkError else {
+                        print("🚫 [PERF] Session invalid (\(sessionStatus)) — no cache available for remote load")
+                        checkAndLoadProfile(allowRemote: false)
+                        return
+                    }
                     checkAndLoadProfile(allowRemote: true)
                     triggerFirstTimeBannerIfNeeded()
-                    // Counter Glitch + Transfer Effect: refresh follower/following counts
-                    // automatically on entry so the magician performs with live numbers
-                    // without having to tap Refresh first. (First-time preload already
-                    // fetches fresh counts, so it's only needed on the cache path.)
-                    maybeAutoRefreshCountsForTransferEffect()
                 }
 
                 // AUTO-REFRESH disabled: the profile is now fully cached on disk
@@ -1546,8 +1553,9 @@ struct PerformanceView: View {
                     LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped: upload active", category: .general)
                     return
                 }
-                // Abort auto-actions if session is expired (validateSession above already
-                // set isSessionExpired = true and the overlay is showing).
+                // Abort auto-actions only if a previous real API action already marked
+                // the session expired. Normal cached Performance entry no longer spends
+                // a validation call just to display the local replica.
                 guard performanceRemoteCallsAllowed else {
                     print("🛡️ [PERF] Auto-actions skipped — cache-only safety entry")
                     LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped in cache-only mode", category: .general)
@@ -1958,7 +1966,7 @@ struct PerformanceView: View {
         }
 
         do {
-            let success = try await instagram.changeProfilePicture(imageData: finalData)
+            let success = try await instagram.changeProfilePicture(imageData: finalData, userInitiated: true)
             if success, let uiImage = UIImage(data: finalData) {
                 let picURL = profile?.profilePicURL ?? "urlpic_pending"
                 await MainActor.run {
@@ -2144,7 +2152,7 @@ struct PerformanceView: View {
                 }
                 // Optimistic: show note bubble immediately
                 await MainActor.run { lastNoteText = final }
-                let ok = try await instagram.createNote(text: final)
+                let ok = try await instagram.createNote(text: final, userInitiated: true)
                 if ok {
                     await MainActor.run { lastNoteSentTimestamp = Date().timeIntervalSince1970 }
                     print("✅ [URL] Note sent via URL scheme")
@@ -2161,7 +2169,7 @@ struct PerformanceView: View {
                 // from Instagram while the POST is in-flight cannot revert the UI.
                 await MainActor.run { pinLocalBiography(final) }
                 do {
-                    let ok = try await instagram.changeBiography(text: final)
+                    let ok = try await instagram.changeBiography(text: final, userInitiated: true)
                     if ok {
                         print("✅ [URL] Biography updated via URL scheme")
                         LogManager.shared.success("Biography updated via URL scheme (\(final.count) chars)", category: .general)
@@ -3086,6 +3094,11 @@ struct PerformanceView: View {
             preloadProgress = String(localized: "preload.highlights")
             try await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_600_000_000))
             await fetchHighlightsIfNeeded(for: profile ?? working)
+
+            // 8) Explore grid — cached to disk so the first Explore open is instant.
+            preloadProgress = String(localized: "preload.explore")
+            try await Task.sleep(nanoseconds: UInt64.random(in: 1_200_000_000...2_000_000_000))
+            await ExploreManager.shared.preloadIfNeeded()
 
             // Remember whether all pages are already loaded so pagination won't
             // re-fetch page 1 in later sessions.
@@ -5372,6 +5385,7 @@ struct InstagramProfileView: View {
                     .padding(.top, 12)
                 tabBarSection
                 Divider()
+                tabTapSafetySpacer
                 tabContentSection
                 // Bottom spacer so the last row of the grid can always be scrolled
                 // fully above the floating pill (~54 pt pill height + 8 pt bottom gap + 32 pt margin).
@@ -5922,6 +5936,19 @@ struct InstagramProfileView: View {
                     }
                 }
                 .frame(height: 44)
+                .background(Color(UIColor.igPageBackground))
+                .contentShape(Rectangle())
+                .zIndex(2)
+    }
+
+    private var tabTapSafetySpacer: some View {
+        // A tiny tap shield between the tab icons and the first grid row.
+        // On very small devices a low tap on the Posts icon can land close to the
+        // grid boundary; this absorbs that near-miss instead of opening post 0.
+        Color(UIColor.igPageBackground)
+            .frame(height: 6)
+            .contentShape(Rectangle())
+            .onTapGesture { }
     }
 
     @ViewBuilder private var tabContentSection: some View {
@@ -6138,6 +6165,7 @@ struct InstagramProfileView: View {
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }),
            activeSet.resolvedInputMethod == .cardClock,
            let cardSym = secretManager.decodedCard {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
             guard !UploadManager.shared.isActive else {
@@ -6155,6 +6183,8 @@ struct InstagramProfileView: View {
         }
 
         guard secretManager.hasDigits else { return }
+        // Haptic confirmation — only fires when there are actual digits to reveal
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         if let activeSet = activeDigitGridSet, activeSet.type == .number {
             let digits     = secretManager.digitBuffer
@@ -7458,22 +7488,20 @@ struct TabButton: View {
                 }
             }
             .foregroundColor(isSelected ? Color(UIColor.label) : Color(UIColor.secondaryLabel))
-            .frame(maxWidth: .infinity, minHeight: 44)
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
             .overlay(
                 Rectangle()
                     .fill(isSelected ? Color(UIColor.label) : Color.clear)
                     .frame(height: 1),
                 alignment: .bottom
             )
+            // contentShape inside the Button label so SwiftUI uses it for the
+            // button's own hit-test area. Moving it outside breaks all taps because
+            // the tap reaches the outer frame container but never fires the Button action.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // contentShape must be on the Button itself (not inside its label) so that
-        // the full 44-pt touch area is owned by the button. When placed inside, SwiftUI
-        // does NOT always propagate it to the button's hit-test boundary, causing taps
-        // in the empty space below the icon to fall through to the first grid cell —
-        // on small screens (Mini/SE) this opened post 0 in full-screen view.
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .contentShape(Rectangle())
     }
 }
 

@@ -1048,6 +1048,7 @@
 "preload.reels" = "Loading reels…";
 "preload.tagged" = "Loading tagged…";
 "preload.highlights" = "Loading highlights…";
+"preload.explore" = "Loading Explore…";
 "preload.failed.title" = "Couldn't finish loading";
 "preload.failed.subtitle" = "Check your connection and try again. Wi-Fi is recommended for the first load.";
 "preload.retry" = "Try again";

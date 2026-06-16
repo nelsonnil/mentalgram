@@ -48,13 +48,22 @@ struct ArchivedPhotosPickerView: View {
     let targetSlotSymbol: String
     let onPhotoSelected: (ArchivedPhoto) -> Void
 
+    // Accumulated photos across all loaded pages
     @State private var archivedPhotos: [ArchivedPhoto] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String? = nil
-    @State private var selectedPhoto: ArchivedPhoto? = nil
     @State private var downloadedImages: [String: UIImage] = [:]
-    @State private var isForcingRefresh = false
-    @State private var scanWarning: String? = nil
+    @State private var selectedPhoto: ArchivedPhoto? = nil
+
+    // Pagination state
+    @State private var nextCursor: String? = nil
+    @State private var hasMore = true
+    @State private var seenMediaIds: Set<String> = []
+
+    // Loading states
+    @State private var isLoadingFirst = true   // first page — show full-screen spinner
+    @State private var isLoadingMore = false   // subsequent pages — show bottom spinner
+    @State private var errorMessage: String? = nil
+    @State private var loadMoreError: String? = nil
+    @State private var rateLimited = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -65,20 +74,13 @@ struct ArchivedPhotosPickerView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                VaultTheme.Colors.background
-                    .ignoresSafeArea()
+                VaultTheme.Colors.background.ignoresSafeArea()
 
-                if isLoading {
+                if isLoadingFirst {
                     VStack(spacing: 16) {
-                        ProgressView()
-                            .tint(.white)
-                        Text(isForcingRefresh ? "Refreshing archive..." : "Loading archived photos...")
+                        ProgressView().tint(.white)
+                        Text("Loading archived photos…")
                             .foregroundColor(.secondary)
-                        if !isForcingRefresh {
-                            Text("Fetching all pages — this may take a moment")
-                                .font(.caption)
-                                .foregroundColor(.secondary.opacity(0.7))
-                        }
                     }
                 } else if let error = errorMessage {
                     VStack(spacing: 16) {
@@ -92,8 +94,7 @@ struct ArchivedPhotosPickerView: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
-
-                        Button(action: { loadPhotos(forceRefresh: true) }) {
+                        Button(action: { resetAndLoad() }) {
                             Label("Retry", systemImage: "arrow.clockwise")
                                 .font(.headline)
                                 .foregroundColor(.white)
@@ -118,22 +119,6 @@ struct ArchivedPhotosPickerView: View {
                     .padding()
                 } else {
                     ScrollView {
-                        if let warning = scanWarning {
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
-                                Text(warning)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Spacer()
-                            }
-                            .padding()
-                            .background(Color.orange.opacity(0.08))
-                            .cornerRadius(10)
-                            .padding(.horizontal)
-                            .padding(.top)
-                        }
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(archivedPhotos) { photo in
                                 ArchivedPhotoCell(
@@ -145,6 +130,54 @@ struct ArchivedPhotosPickerView: View {
                             }
                         }
                         .padding()
+
+                        // ── Bottom pagination area ──────────────────────────────
+                        if isLoadingMore {
+                            ProgressView()
+                                .tint(.white)
+                                .padding(.vertical, 20)
+                        } else if rateLimited {
+                            VStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Too many API requests — wait a moment before loading more")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                Button("Try Again") { loadNextPage() }
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                            }
+                            .padding(.vertical, 16)
+                            .padding(.horizontal)
+                        } else if let err = loadMoreError {
+                            VStack(spacing: 6) {
+                                Text(err)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                Button("Retry") { loadNextPage() }
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(VaultTheme.Colors.primary)
+                            }
+                            .padding(.vertical, 16)
+                            .padding(.horizontal)
+                        } else if hasMore {
+                            Button(action: { loadNextPage() }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "arrow.down.circle")
+                                    Text("Load more (\(archivedPhotos.count) loaded)")
+                                }
+                                .font(.subheadline.weight(.medium))
+                                .foregroundColor(VaultTheme.Colors.primary)
+                                .padding(.vertical, 14)
+                            }
+                        } else {
+                            Text("All \(archivedPhotos.count) photos loaded")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.vertical, 14)
+                        }
                     }
                 }
             }
@@ -156,8 +189,8 @@ struct ArchivedPhotosPickerView: View {
                         .foregroundColor(.white)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if !isLoading && errorMessage == nil {
-                        Button(action: { loadPhotos(forceRefresh: true) }) {
+                    if !isLoadingFirst && errorMessage == nil {
+                        Button(action: { resetAndLoad() }) {
                             Image(systemName: "arrow.clockwise")
                                 .foregroundColor(.white.opacity(0.7))
                         }
@@ -179,92 +212,123 @@ struct ArchivedPhotosPickerView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
-        .onAppear {
-            loadPhotos(forceRefresh: false)
-        }
+        .onAppear { loadFirstPage() }
     }
 
     // MARK: - Load Logic
 
-    private func loadPhotos(forceRefresh: Bool) {
-        // Serve from cache if valid and not forcing refresh — zero API calls
-        if !forceRefresh, ArchivedPhotosCache.shared.isValid {
+    private func resetAndLoad() {
+        archivedPhotos = []
+        downloadedImages = [:]
+        nextCursor = nil
+        hasMore = true
+        seenMediaIds = []
+        errorMessage = nil
+        loadMoreError = nil
+        rateLimited = false
+        ArchivedPhotosCache.shared.invalidate()
+        loadFirstPage()
+    }
+
+    private func loadFirstPage() {
+        // Serve from in-memory cache for instant reopens (no API call)
+        if ArchivedPhotosCache.shared.isValid {
             let cached = ArchivedPhotosCache.shared.photos
             archivedPhotos = cached
-            isLoading = false
-            // Thumbnails already downloaded in a previous open are stored in the cache objects
-            for photo in cached {
-                if let img = photo.thumbnailImage {
-                    downloadedImages[photo.mediaId] = img
-                }
-            }
-            print("📦 [ARCHIVE PICKER] Serving \(cached.count) photos from cache (no API call)")
+            for photo in cached { if let img = photo.thumbnailImage { downloadedImages[photo.mediaId] = img } }
+            hasMore = false   // cache is the full result
+            isLoadingFirst = false
+            print("📦 [ARCHIVE PICKER] \(cached.count) photos from cache")
             return
         }
 
-        isLoading = true
-        isForcingRefresh = forceRefresh
+        isLoadingFirst = true
         errorMessage = nil
-        scanWarning = nil
-
-        if forceRefresh {
-            ArchivedPhotosCache.shared.invalidate()
-        }
 
         Task {
             do {
-                // Full paginated fetch — pass forceRefresh so the InstagramService
-                // data cache is also bypassed (not just the thumbnail cache)
-                let raw = try await instagram.getAllArchivedPhotos(forceRefresh: forceRefresh)
-                var photos = raw.map {
+                var ids = seenMediaIds
+                let result = try await instagram.fetchArchivedPhotosPage(
+                    cursor: nil, seenMediaIds: &ids, applyDelay: false)
+                seenMediaIds = ids
+                let newPhotos = result.photos.map {
                     ArchivedPhoto(mediaId: $0.mediaId, imageURL: $0.imageURL, timestamp: $0.timestamp,
-                                  isVideo: $0.isVideo, videoURL: $0.videoURL, videoAspectRatio: $0.videoAspectRatio)
+                                  isVideo: $0.isVideo, videoURL: $0.videoURL,
+                                  videoAspectRatio: $0.videoAspectRatio)
                 }
-                let scanCompleted = instagram.lastArchiveScanCompleted
-                let stopReason = instagram.lastArchiveScanStopReason
-
                 await MainActor.run {
-                    archivedPhotos = photos
-                    if !scanCompleted {
-                        scanWarning = "Archive scan stopped early (\(stopReason ?? "safety limit")). Older photos may not appear yet. Wait a few minutes or tap refresh again later."
-                    }
-                    isLoading = false
-                    isForcingRefresh = false
+                    archivedPhotos = newPhotos
+                    nextCursor = result.nextCursor
+                    hasMore = result.hasMore
+                    rateLimited = result.rateLimited
+                    isLoadingFirst = false
                 }
-
-                // Download thumbnails and store them back into cache objects
-                await downloadThumbnails(into: &photos)
-                if scanCompleted {
-                    ArchivedPhotosCache.shared.store(photos)
-                } else {
-                    print("📦 [ARCHIVE PICKER] Partial scan not cached — \(photos.count) photos")
-                }
-
+                await downloadThumbnails(for: newPhotos, startingAt: 0)
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
-                    isLoading = false
-                    isForcingRefresh = false
+                    isLoadingFirst = false
                 }
             }
         }
     }
 
-    private func downloadThumbnails(into photos: inout [ArchivedPhoto]) async {
-        for i in photos.indices {
-            let photo = photos[i]
+    private func loadNextPage() {
+        guard hasMore, !isLoadingMore, !isLoadingFirst else { return }
+        isLoadingMore = true
+        loadMoreError = nil
+        rateLimited = false
+
+        Task {
+            do {
+                var ids = seenMediaIds
+                let result = try await instagram.fetchArchivedPhotosPage(
+                    cursor: nextCursor, seenMediaIds: &ids, applyDelay: true)
+                seenMediaIds = ids
+                let newPhotos = result.photos.map {
+                    ArchivedPhoto(mediaId: $0.mediaId, imageURL: $0.imageURL, timestamp: $0.timestamp,
+                                  isVideo: $0.isVideo, videoURL: $0.videoURL,
+                                  videoAspectRatio: $0.videoAspectRatio)
+                }
+                let startIndex = archivedPhotos.count
+                await MainActor.run {
+                    archivedPhotos.append(contentsOf: newPhotos)
+                    nextCursor = result.nextCursor
+                    hasMore = result.hasMore
+                    rateLimited = result.rateLimited
+                    isLoadingMore = false
+                    if result.blocked {
+                        loadMoreError = "Upload in progress — try again once it finishes"
+                    }
+                }
+                await downloadThumbnails(for: newPhotos, startingAt: startIndex)
+
+                // When all pages are loaded, store in cache
+                if !result.hasMore && !result.rateLimited && !result.blocked {
+                    ArchivedPhotosCache.shared.store(archivedPhotos)
+                }
+            } catch {
+                await MainActor.run {
+                    loadMoreError = error.localizedDescription
+                    isLoadingMore = false
+                }
+            }
+        }
+    }
+
+    private func downloadThumbnails(for photos: [ArchivedPhoto], startingAt offset: Int) async {
+        for (i, photo) in photos.enumerated() {
             guard !photo.imageURL.isEmpty else { continue }
             if let url = URL(string: photo.imageURL),
                let (data, _) = try? await URLSession.shared.data(from: url),
                let image = UIImage(data: data) {
+                let globalIndex = offset + i
                 await MainActor.run {
                     downloadedImages[photo.mediaId] = image
-                    // Keep the displayed grid updated as thumbnails arrive
-                    if let idx = archivedPhotos.firstIndex(where: { $0.mediaId == photo.mediaId }) {
-                        archivedPhotos[idx].thumbnailImage = image
+                    if globalIndex < archivedPhotos.count {
+                        archivedPhotos[globalIndex].thumbnailImage = image
                     }
                 }
-                photos[i].thumbnailImage = image  // persist in cache object
             }
         }
     }

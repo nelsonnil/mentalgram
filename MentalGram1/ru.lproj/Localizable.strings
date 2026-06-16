@@ -1104,6 +1104,7 @@
 "preload.reels" = "Загрузка Reels…";
 "preload.tagged" = "Загрузка отметок…";
 "preload.highlights" = "Загрузка актуального…";
+"preload.explore" = "Загрузка Explore…";
 "preload.failed.title" = "Не удалось завершить загрузку";
 "preload.failed.subtitle" = "Проверьте подключение и повторите попытку. Для первой загрузки рекомендуется Wi-Fi.";
 "preload.retry" = "Повторить";

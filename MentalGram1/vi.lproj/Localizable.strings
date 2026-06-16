@@ -535,6 +535,7 @@
 "preload.reels" = "Đang tải reels…";
 "preload.tagged" = "Đang tải gắn thẻ…";
 "preload.highlights" = "Đang tải tin nổi bật…";
+"preload.explore" = "Đang tải Explore…";
 "preload.failed.title" = "Không thể hoàn tất tải";
 "preload.failed.subtitle" = "Kiểm tra kết nối và thử lại. Nên dùng Wi-Fi cho lần tải đầu tiên.";
 "preload.retry" = "Thử lại";

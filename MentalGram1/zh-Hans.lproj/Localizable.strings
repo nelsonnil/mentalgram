@@ -1148,6 +1148,7 @@
 "preload.reels" = "正在加载 Reels…";
 "preload.tagged" = "正在加载标记…";
 "preload.highlights" = "正在加载精选…";
+"preload.explore" = "正在加载 Explore…";
 "preload.failed.title" = "加载未完成";
 "preload.failed.subtitle" = "请检查网络连接后重试。首次加载建议使用 Wi-Fi。";
 "preload.retry" = "重试";

@@ -1234,12 +1234,7 @@ struct ExploreMediaCell: View {
                             .resizable()
                             .scaledToFill()
                     } else {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .overlay(
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            )
+                        SkeletonGridItem()
                     }
 
                     // Video badge only when there's no videoURL (thumbnail-only

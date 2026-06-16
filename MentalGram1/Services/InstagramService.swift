@@ -5859,7 +5859,7 @@ class InstagramService: ObservableObject {
 
     /// Create an Instagram Note (bubble above profile pic in DMs)
     /// Max 60 characters, lasts 24 hours
-    func createNote(text: String, audience: Int = 0) async throws -> Bool {
+    func createNote(text: String, audience: Int = 0, userInitiated: Bool = false) async throws -> Bool {
         print("📝 [NOTE] Creating note: \"\(text)\"")
         
         // Validate
@@ -5910,7 +5910,29 @@ class InstagramService: ObservableObject {
             LogManager.shared.warning("SAFETY BLOCK — note: \(noteSafety.reason)", category: .api)
             throw InstagramError.apiError("Safety pause: \(noteSafety.reason). Wait \(noteSafety.waitSeconds)s.")
         }
-        
+
+        // ANTI-BOT: Cold-start / warm-resume protection.
+        // User-initiated (URL scheme / manual): 8 s fixed — lets validateSession finish
+        // without blocking a live performance. Automatic triggers: full window + jitter.
+        let noteGate = InstagramSafetyGate.shared
+        if noteGate.isInColdStartWindow {
+            if userInitiated {
+                print("🛡️ [NOTE] Cold-start active — short 8s wait (user-initiated, speed priority)")
+                LogManager.shared.info("Note POST: 8s cold-start grace (user-initiated)", category: .api)
+                try await Task.sleep(nanoseconds: 8_000_000_000)
+            } else {
+                let remaining = noteGate.coldStartSecondsRemaining
+                if remaining > 0 {
+                    print("🛡️ [NOTE] Cold-start active (\(Int(remaining))s left) — deferring note POST to avoid bot signal")
+                    LogManager.shared.warning("Note POST deferred \(Int(remaining))s (cold-start window)", category: .api)
+                    try await Task.sleep(nanoseconds: UInt64(remaining) * 1_000_000_000)
+                }
+                let jitter = UInt64.random(in: 3_000_000_000...6_000_000_000)
+                print("🛡️ [NOTE] Cold-start closed — waiting \(jitter / 1_000_000_000)s jitter before POST")
+                try await Task.sleep(nanoseconds: jitter)
+            }
+        }
+
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
 
@@ -6066,7 +6088,7 @@ class InstagramService: ObservableObject {
 
     /// Updates the Instagram biography text via /accounts/edit_profile/.
     /// Preserves all existing profile fields — only `biography` is modified.
-    func changeBiography(text: String) async throws -> Bool {
+    func changeBiography(text: String, userInitiated: Bool = false) async throws -> Bool {
         print("📝 [BIO] Changing biography to: \"\(text)\"")
 
         guard text.count <= 150 else {
@@ -6095,6 +6117,38 @@ class InstagramService: ObservableObject {
         guard bioSafety.allowed else {
             LogManager.shared.warning("SAFETY BLOCK — biography: \(bioSafety.reason)", category: .api)
             throw InstagramError.apiError("Safety pause: \(bioSafety.reason). Wait \(bioSafety.waitSeconds)s.")
+        }
+
+        // ANTI-BOT: Cold-start / warm-resume protection.
+        //
+        // If the app was just launched, Instagram sees a burst of API calls in the first
+        // ~45 s (validateSession, reels, tagged, highlights, prefetch…). A POST landing
+        // in that window is a strong bot signal.
+        //
+        // User-initiated actions (URL scheme / manual): only a short fixed delay (8 s) —
+        // enough for validateSession to finish. Speed matters here because the magician
+        // may need the change visible on real Instagram before performing.
+        //
+        // Automatic triggers (OCR, interface capture, clipboard, API poll): wait for the
+        // full cold-start window to close, then add 3–6 s of jitter.
+        let gate = InstagramSafetyGate.shared
+        if gate.isInColdStartWindow {
+            if userInitiated {
+                // Short fixed wait — lets validateSession complete without blocking the trick.
+                print("🛡️ [BIO] Cold-start active — short 8s wait (user-initiated, speed priority)")
+                LogManager.shared.info("Bio POST: 8s cold-start grace (user-initiated)", category: .api)
+                try await Task.sleep(nanoseconds: 8_000_000_000)
+            } else {
+                let remaining = gate.coldStartSecondsRemaining
+                if remaining > 0 {
+                    print("🛡️ [BIO] Cold-start active (\(Int(remaining))s left) — deferring bio POST to avoid bot signal")
+                    LogManager.shared.warning("Bio POST deferred \(Int(remaining))s (cold-start window)", category: .api)
+                    try await Task.sleep(nanoseconds: UInt64(remaining) * 1_000_000_000)
+                }
+                let jitter = UInt64.random(in: 3_000_000_000...6_000_000_000)
+                print("🛡️ [BIO] Cold-start closed — waiting \(jitter / 1_000_000_000)s jitter before POST")
+                try await Task.sleep(nanoseconds: jitter)
+            }
         }
 
         try await waitForNetworkStability()
@@ -6209,7 +6263,7 @@ class InstagramService: ObservableObject {
     /// - Network is stable
     /// - No lockdown active
     /// - Image hash is different from last upload
-    func changeProfilePicture(imageData: Data) async throws -> Bool {
+    func changeProfilePicture(imageData: Data, userInitiated: Bool = false) async throws -> Bool {
         print("🖼️ [PROFILE PIC] Starting profile picture change...")
 
         // CRITICAL: Check lockdown
@@ -6228,6 +6282,30 @@ class InstagramService: ObservableObject {
         // defer guarantees the flag is cleared in every exit path (success, throw, or cancel).
         await MainActor.run { isUploadingProfilePic = true }
         defer { Task { @MainActor in self.isUploadingProfilePic = false } }
+
+        // ANTI-BOT: Cold-start / warm-resume protection.
+        // The auto-upload path (autoUploadLatestGalleryPhoto) already waits in its caller.
+        // URL scheme and manual Home uploads use userInitiated=true for a short 8s grace
+        // so the new pic reaches Instagram quickly during a live performance.
+        // Automatic triggers keep the full cold-start wait + jitter.
+        let ppGate = InstagramSafetyGate.shared
+        if ppGate.isInColdStartWindow {
+            if userInitiated {
+                print("🛡️ [PP] Cold-start active — short 8s wait (user-initiated, speed priority)")
+                LogManager.shared.info("Profile pic upload: 8s cold-start grace (user-initiated)", category: .api)
+                try await Task.sleep(nanoseconds: 8_000_000_000)
+            } else {
+                let remaining = ppGate.coldStartSecondsRemaining
+                if remaining > 0 {
+                    print("🛡️ [PP] Cold-start active (\(Int(remaining))s left) — deferring profile pic upload to avoid bot signal")
+                    LogManager.shared.warning("Profile pic upload deferred \(Int(remaining))s (cold-start window)", category: .api)
+                    try await Task.sleep(nanoseconds: UInt64(remaining) * 1_000_000_000)
+                }
+                let jitter = UInt64.random(in: 3_000_000_000...6_000_000_000)
+                print("🛡️ [PP] Cold-start closed — waiting \(jitter / 1_000_000_000)s jitter before upload")
+                try await Task.sleep(nanoseconds: jitter)
+            }
+        }
 
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
@@ -6970,13 +7048,18 @@ class InstagramService: ObservableObject {
     /// - Parameter forceRefresh: When true, bypass the cache and do a fresh network scan.
     func getAllArchivedPhotos(forceRefresh: Bool = false) async throws -> [(mediaId: String, imageURL: String, timestamp: Date?, isVideo: Bool, videoURL: String?, videoAspectRatio: CGFloat?)] {
         // ANTI-BOT: Do not start a full archive scan while a Sync & Archive or
-        // upload operation is active. Running /feed/only_me_feed/ in parallel
-        // with POST /media/.../only_me/ requests from the same session doubles
-        // the API footprint and has been observed to cause Instagram 403s. If
-        // the caller needs fresh data, they must wait until the heavy op ends.
-        if isHeavyOperationActive {
-            print("⏳ [ARCHIVE SCAN] Skipped — heavy operation active (S&A or upload)")
-            LogManager.shared.info("Archive scan deferred: heavy operation active", category: .api)
+        // upload task is genuinely running. Running /feed/only_me_feed/ in parallel
+        // with POST /media/.../only_me/ requests doubles the API footprint.
+        // We check activeTask (not isActive) so a paused/stuck upload state does NOT
+        // block the scan — the user needs the archive picker to work precisely when
+        // the upload is stuck and they are trying to recover.
+        let uploadRunning = UploadManager.shared.activeTask != nil
+            || UploadManager.shared.isSyncArchiveActive
+            || isRevealOperationActive
+            || isUploadingProfilePic
+        if uploadRunning {
+            print("⏳ [ARCHIVE SCAN] Skipped — upload task genuinely running")
+            LogManager.shared.info("Archive scan deferred: upload task active", category: .api)
             // Return cached data if available so the UI isn't left empty.
             if let cached = archivedPhotoCache {
                 return cached
@@ -7179,6 +7262,147 @@ class InstagramService: ObservableObject {
             LogManager.shared.info("Archive scan complete: \(allPhotos.count) photos (cached for \(Int(archivedPhotoCacheTTL/60)) min)", category: .api)
         }
         return allPhotos
+    }
+
+    // MARK: - Archive – single page fetch (used by lazy-loading picker)
+
+    struct ArchivePageResult {
+        typealias Photo = (mediaId: String, imageURL: String, timestamp: Date?,
+                           isVideo: Bool, videoURL: String?, videoAspectRatio: CGFloat?)
+        let photos: [Photo]
+        let nextCursor: String?
+        let hasMore: Bool
+        /// Rate-limit threshold was hit — caller should show a "try again later" message.
+        let rateLimited: Bool
+        /// A heavy operation (real upload/S&A) was running — result is empty, caller may retry.
+        let blocked: Bool
+    }
+
+    /// Fetches a single page of archived photos.
+    /// - Parameters:
+    ///   - cursor: Pass `nil` for the first page; pass the previous result's `nextCursor` for subsequent pages.
+    ///   - seenMediaIds: Pass an `inout Set<String>` so duplicates across pages are filtered out.
+    ///   - applyDelay: Pass `true` for all pages except the very first (mimics human browsing speed).
+    func fetchArchivedPhotosPage(
+        cursor: String?,
+        seenMediaIds: inout Set<String>,
+        applyDelay: Bool = false
+    ) async throws -> ArchivePageResult {
+        // ANTI-BOT: block only when a task is genuinely running (not paused/stuck).
+        let uploadRunning = UploadManager.shared.activeTask != nil
+            || UploadManager.shared.isSyncArchiveActive
+            || isRevealOperationActive
+            || isUploadingProfilePic
+        if uploadRunning {
+            print("⏳ [ARCHIVE PAGE] Blocked — upload task running")
+            return ArchivePageResult(photos: [], nextCursor: cursor, hasMore: true,
+                                     rateLimited: false, blocked: true)
+        }
+
+        guard !isSessionExpired else {
+            print("🔴 [ARCHIVE PAGE] Skipped — session expired")
+            return ArchivePageResult(photos: [], nextCursor: nil, hasMore: false,
+                                     rateLimited: false, blocked: false)
+        }
+        guard !isLocked else {
+            print("🚨 [ARCHIVE PAGE] Skipped — lockdown active")
+            return ArchivePageResult(photos: [], nextCursor: nil, hasMore: false,
+                                     rateLimited: false, blocked: false)
+        }
+
+        let rateInfo = checkRateLimit()
+        if rateInfo.actionsUsed >= archiveScanRateLimitThreshold {
+            print("⚠️ [ARCHIVE PAGE] Rate limit — \(rateInfo.actionsUsed)/\(maxActionsPerHour)")
+            LogManager.shared.warning("Archive page deferred — rate limit \(rateInfo.actionsUsed)/\(maxActionsPerHour)", category: .api)
+            return ArchivePageResult(photos: [], nextCursor: cursor, hasMore: true,
+                                     rateLimited: true, blocked: false)
+        }
+
+        // Human-like inter-page delay (skip on first page so UI appears immediately).
+        if applyDelay {
+            let delay = UInt64.random(in: 2_500_000_000...4_000_000_000)
+            try await Task.sleep(nanoseconds: delay)
+        }
+
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "count", value: "18")]
+        if let c = cursor {
+            components.queryItems?.append(URLQueryItem(name: "max_id", value: c))
+        }
+        let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+        let path = "/feed/only_me_feed/\(query)"
+
+        print("📦 [ARCHIVE PAGE] Fetching \(path)")
+        let data = try await apiRequest(method: "GET", path: path)
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw InstagramError.apiError("Could not parse archive feed response")
+        }
+
+        var photos: [ArchivePageResult.Photo] = []
+        let items = json["items"] as? [[String: Any]] ?? []
+        for item in items {
+            let mediaItem = item["media"] as? [String: Any] ?? item
+
+            var resolvedId: String? = nil
+            if let s = mediaItem["pk"] as? String, !s.isEmpty { resolvedId = s }
+            else if let n = mediaItem["pk"] as? NSNumber { resolvedId = n.stringValue }
+            else if let s = mediaItem["id"] as? String, !s.isEmpty { resolvedId = s }
+            else if let n = mediaItem["id"] as? NSNumber { resolvedId = n.stringValue }
+            guard let mediaId = resolvedId else { continue }
+            guard !seenMediaIds.contains(mediaId) else { continue }
+            seenMediaIds.insert(mediaId)
+
+            var imageURL = ""
+            if let iv = mediaItem["image_versions2"] as? [String: Any],
+               let candidates = iv["candidates"] as? [[String: Any]],
+               let url = candidates.first?["url"] as? String {
+                imageURL = url
+            } else if let carousel = mediaItem["carousel_media"] as? [[String: Any]],
+                      let first = carousel.first,
+                      let iv = first["image_versions2"] as? [String: Any],
+                      let candidates = iv["candidates"] as? [[String: Any]],
+                      let url = candidates.first?["url"] as? String {
+                imageURL = url
+            }
+
+            let takenAt: Date? = (mediaItem["taken_at"] as? NSNumber).map {
+                Date(timeIntervalSince1970: $0.doubleValue)
+            }
+
+            let itemMediaType = mediaItem["media_type"] as? Int ?? 1
+            let isVideo = itemMediaType == 2
+            var itemVideoURL: String? = nil
+            var itemVideoAspectRatio: CGFloat? = nil
+            if isVideo {
+                if let vv = mediaItem["video_versions"] as? [[String: Any]],
+                   let url = vv.first?["url"] as? String { itemVideoURL = url }
+                if let w = mediaItem["original_width"] as? Int,
+                   let h = mediaItem["original_height"] as? Int, h > 0 {
+                    itemVideoAspectRatio = CGFloat(w) / CGFloat(h)
+                }
+            }
+
+            photos.append((mediaId: mediaId, imageURL: imageURL, timestamp: takenAt,
+                           isVideo: isVideo, videoURL: itemVideoURL,
+                           videoAspectRatio: itemVideoAspectRatio))
+        }
+
+        let topLevelMore = json["more_available"] as? Bool
+        let pagingInfo = json["paging_info"] as? [String: Any]
+        let pagingMore = pagingInfo?["more_available"] as? Bool
+        let moreAvailable = topLevelMore ?? pagingMore ?? false
+
+        var nextMaxId: String? = nil
+        if let s = json["next_max_id"] as? String, !s.isEmpty { nextMaxId = s }
+        else if let n = json["next_max_id"] as? NSNumber { nextMaxId = n.stringValue }
+        else if let s = pagingInfo?["max_id"] as? String, !s.isEmpty { nextMaxId = s }
+        else if let s = pagingInfo?["next_max_id"] as? String, !s.isEmpty { nextMaxId = s }
+
+        print("📦 [ARCHIVE PAGE] \(photos.count) items, hasMore=\(moreAvailable), next=\(nextMaxId ?? "nil")")
+        return ArchivePageResult(photos: photos, nextCursor: nextMaxId,
+                                 hasMore: moreAvailable && nextMaxId != nil,
+                                 rateLimited: false, blocked: false)
     }
 
     // MARK: - Diagnostics

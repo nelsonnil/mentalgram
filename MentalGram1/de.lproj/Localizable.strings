@@ -1628,6 +1628,7 @@
 "preload.reels" = "Reels werden geladen…";
 "preload.tagged" = "Markierungen werden geladen…";
 "preload.highlights" = "Highlights werden geladen…";
+"preload.explore" = "Explore wird geladen…";
 "preload.failed.title" = "Laden konnte nicht abgeschlossen werden";
 "preload.failed.subtitle" = "Überprüfe deine Verbindung und versuche es erneut. WLAN wird für das erste Laden empfohlen.";
 "preload.retry" = "Erneut versuchen";
