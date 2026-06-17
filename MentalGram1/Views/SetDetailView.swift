@@ -136,7 +136,6 @@ struct SetDetailView: View {
     @State private var syncUnknownCount = 0          // couldn't check (nil response)
     @State private var syncTrulyVisibleIds: [String] = []  // confirmed public by Instagram
     @State private var syncCompleted = false
-    @State private var pendingBlockerPulse = false
 
     // ARCHIVE ALL state (post-sync)
     @State private var isArchivingAll = false
@@ -277,7 +276,6 @@ struct SetDetailView: View {
         ScrollView {
             VStack(spacing: VaultTheme.Spacing.lg) {
                 statsSection
-                previousSetPendingBanner
                 sessionExpiredBanner
                 verifySyncSection
                 reverifySection
@@ -648,6 +646,7 @@ struct SetDetailView: View {
             }
         }
         .onAppear {
+            CrashLoggerService.shared.recordScreen("SetDetail: \(currentSet.name)")
             // Reconstruir timers si es necesario cuando la vista aparece
             restoreTimersIfNeeded()
         }
@@ -2068,50 +2067,6 @@ struct SetDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private var previousSetPendingBanner: some View {
-        if let blocker = previousIncompleteSetBlocker() {
-            let plural = blocker.count == 1 ? "photo" : "photos"
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.orange.opacity(pendingBlockerPulse ? 0.30 : 0.12))
-                        .frame(width: 38, height: 38)
-                        .scaleEffect(pendingBlockerPulse ? 1.12 : 0.96)
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Color.orange)
-                        .opacity(pendingBlockerPulse ? 1.0 : 0.45)
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Finish the older set first")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color.orange)
-                    Text("\"\(blocker.set.name)\" still has \(blocker.count) \(plural) waiting to upload or archive. Open that set and fix the pending slot before uploading this one.")
-                        .font(.system(size: 13))
-                        .foregroundColor(VaultTheme.Colors.textPrimary.opacity(0.88))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.orange.opacity(0.10))
-            .overlay(
-                RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.md)
-                    .stroke(Color.orange.opacity(pendingBlockerPulse ? 0.75 : 0.28), lineWidth: 1.5)
-            )
-            .cornerRadius(VaultTheme.CornerRadius.md)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
-                    pendingBlockerPulse = true
-                }
-            }
-        }
-    }
-    
     // MARK: - Status Section (Enhanced - Single Source of Truth)
     
     private var isThisSetActive: Bool {
@@ -2500,7 +2455,7 @@ struct SetDetailView: View {
             }
         } else {
             // No active upload or this set isn't active — show Start if pending photos exist
-            if currentSet.photos.contains(where: { $0.mediaId == nil }) && uploadManager.activeSetId == nil {
+            if currentSet.photos.contains(where: { $0.mediaId == nil }) && uploadManager.activeTask == nil {
 
                 Button(action: startUpload) {
                     Label("Start Upload", systemImage: "arrow.up.circle.fill")
@@ -2511,7 +2466,7 @@ struct SetDetailView: View {
                         .background(VaultTheme.Colors.success)
                         .cornerRadius(VaultTheme.CornerRadius.md)
                 }
-                .disabled(uploadManager.isActive || uploadManager.activeTask != nil)
+                .disabled(uploadManager.activeTask != nil)
 
                 uploadInfoBanner
             }
@@ -2620,14 +2575,13 @@ struct SetDetailView: View {
                 }()
 
                 Button {
-                    guard !uploadManager.isActive else { return }
+                    guard uploadManager.activeTask == nil else { return }
                     if instagram.isLocked {
                         // Tapping while locked: show the lockdown details sheet instead
                         // of letting the upload attempt fail visually with a wifi overlay.
                         showingLockdownSheet = true
                         return
                     }
-                    guard !blockIfPreviousSetHasPendingUpload() else { return }
                     dataManager.updateSetStatus(id: currentSet.id, status: .ready)
                     Task { await uploadAllPhotos() }
                 } label: {
@@ -2652,7 +2606,7 @@ struct SetDetailView: View {
                             .cornerRadius(VaultTheme.CornerRadius.sm)
                     }
                 }
-                .disabled(uploadManager.isActive)
+                .disabled(uploadManager.activeTask != nil)
                 .onReceive(safetySectionTimer) { _ in
                     // safetySectionTimer already ticks every second — reuse it to
                     // refresh the lockdown countdown without adding a second timer.
@@ -3884,52 +3838,18 @@ struct SetDetailView: View {
     
     // MARK: - Upload Controls
 
-    private func incompleteUploadCount(in set: PhotoSet) -> Int {
-        set.photos.filter { photo in
-            guard photo.imageData != nil else { return false }
-            if photo.mediaId == nil { return true }
-            if photo.uploadStatus == .uploaded || photo.uploadStatus == .archiving || photo.uploadStatus == .uploading || photo.uploadStatus == .error {
-                return true
-            }
-            return false
-        }.count
-    }
-
-    private func previousIncompleteSetBlocker() -> (set: PhotoSet, count: Int)? {
-        dataManager.sets
-            .filter { $0.id != currentSet.id && $0.createdAt < currentSet.createdAt }
-            .sorted { $0.createdAt < $1.createdAt }
-            .compactMap { set -> (PhotoSet, Int)? in
-                let count = incompleteUploadCount(in: set)
-                return count > 0 ? (set, count) : nil
-            }
-            .first
-    }
-
-    @discardableResult
-    private func blockIfPreviousSetHasPendingUpload() -> Bool {
-        guard let blocker = previousIncompleteSetBlocker() else { return false }
-        let plural = blocker.count == 1 ? "photo" : "photos"
-        let message = """
-        Finish the older set first.
-
-        "\(blocker.set.name)" still has \(blocker.count) \(plural) waiting to upload or archive. Uploading a newer set first can change the Instagram date/order and break the prediction.
-
-        Look for the orange warning banner, open that older set, tap the pending slot, and use "Upload & Archive This Photo" or Start Upload.
-        """
-        uploadManager.safetyBlockMessage = message
-        LogManager.shared.warning("Upload blocked: older set '\(blocker.set.name)' has \(blocker.count) incomplete photo(s)", category: .upload)
-        return true
-    }
-    
     private func startUpload() {
-        // Guard against double-launch: rapid double-tap or duplicate SwiftUI renders
-        guard uploadManager.activeTask == nil, !uploadManager.isActive else {
-            print("⚠️ [UPLOAD] Ignored duplicate startUpload() call — already active (phase: \(uploadManager.uploadPhase))")
+        CrashLoggerService.shared.recordAction("Start upload set=\(currentSet.name) photos=\(currentSet.photos.count)")
+        // Guard against a real concurrent upload. Paused/stale states from another
+        // set must NOT block this set; only an active task means Instagram work is running.
+        guard uploadManager.activeTask == nil else {
+            print("⚠️ [UPLOAD] Ignored startUpload() — another upload task is running (phase: \(uploadManager.uploadPhase))")
             return
         }
-
-        guard !blockIfPreviousSetHasPendingUpload() else { return }
+        if uploadManager.isActive {
+            print("⚠️ [UPLOAD] Clearing paused/stale upload state before starting this set")
+            uploadManager.resetAllState()
+        }
 
         // Guard: no images loaded — show notification instead of starting an infinite loop
         let readyPhotos = currentSet.photos.filter { $0.imageData != nil && $0.mediaId == nil }
@@ -3994,7 +3914,6 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD SINGLE] Stale upload state detected — resetting before single upload")
             uploadManager.resetAllState()
         }
-        guard !blockIfPreviousSetHasPendingUpload() else { return }
         guard let index = currentSet.photos.firstIndex(where: { $0.id == photoId }) else { return }
         let photo = currentSet.photos[index]
         guard photo.mediaId == nil, let imageData = photo.imageData else {
@@ -4341,19 +4260,6 @@ struct SetDetailView: View {
         print("   Total photos to upload: \(currentSet.photos.count)")
         LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
 
-        if startFrom == 0 {
-            let blocked = await MainActor.run { blockIfPreviousSetHasPendingUpload() }
-            if blocked {
-                await MainActor.run {
-                    uploadManager.uploadPhase = .idle
-                    uploadManager.activeTask = nil
-                    uploadManager.activeSetId = nil
-                    dataManager.updateSetStatus(id: currentSet.id, status: .ready)
-                }
-                return
-            }
-        }
-        
         // CRITICAL: Check if lockdown is active before starting
         if instagram.isLocked {
             print("🚨 [UPLOAD] Cannot start - lockdown is active")
@@ -4621,6 +4527,7 @@ struct SetDetailView: View {
                 
                 // Update photo status: uploading
                 dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .uploading, errorMessage: nil)
+                CrashLoggerService.shared.recordAction("Uploading photo \(index + 1)/\(totalPhotos) set=\(currentSet.name) symbol=\(photo.symbol)")
                 
                 // UPDATE PHASE: Uploading
                 await MainActor.run {
@@ -5018,6 +4925,31 @@ struct SetDetailView: View {
             LogManager.shared.success("All \(currentBankCount) banks completed for set '\(setForBankCheck?.name ?? "")'", category: .upload)
         }
         if isWordOrNumber && canAddMoreBanks {
+            if let activeBank = setForBankCheck?.banks.max(by: { $0.position < $1.position }) {
+                let activeBankPhotos = dataManager.getPhotosForBank(setId: currentSet.id, bankId: activeBank.id)
+                let incompletePhotos = activeBankPhotos.filter { photo in
+                    guard photo.imageData != nil else { return false }
+                    return photo.mediaId == nil || photo.uploadStatus != .completed || !photo.isArchived
+                }
+
+                guard incompletePhotos.isEmpty else {
+                    let count = incompletePhotos.count
+                    let plural = count == 1 ? "photo" : "photos"
+                    let message = "Bank \(activeBank.position) still has \(count) \(plural) pending upload/archive. Fix that bank before continuing to the next bank."
+                    print("⛔️ [BANK] Auto-next blocked — \(message)")
+                    LogManager.shared.warning("Auto-next bank blocked: \(message)", category: .upload)
+                    await MainActor.run {
+                        selectedBankIndex = max(0, currentBankCount - 1)
+                        uploadManager.showingError = message
+                        uploadManager.uploadPhase = .paused
+                        uploadManager.currentPhaseDescription = "Bank \(activeBank.position) needs attention"
+                        uploadManager.activeTask = nil
+                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                    }
+                    return
+                }
+            }
+
             print("➕ [BANK] Bank \(currentBankCount)/\(targetBanks) complete — auto-adding next bank and continuing upload…")
             LogManager.shared.info("Bank \(currentBankCount)/\(targetBanks) complete — auto-adding next bank", category: .upload)
             let newBank = await MainActor.run { dataManager.addBank(setId: currentSet.id) }

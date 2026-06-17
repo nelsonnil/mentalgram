@@ -1356,3 +1356,11 @@ Chai interface dai khrae nueng prapet tho khriang samrap Sets, Bio lae Notes. Da
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "เมื่อผู้ชมเปิด Explore รีลที่คุณเลือกล่วงหน้าจะปรากฏที่ตำแหน่งที่ตรงกับตัวเลขที่จับได้พอดี";
 "upload.tap_to_upload" = "แตะเพื่ออัปโหลด";
+"pp.test_mode.note" = "โหมด Test ใช้เฉพาะรูปภาพจากเทมเพลตเท่านั้น ไม่มีการอัปโหลดหรือยกเลิกการเก็บถาวรบน Instagram ในโหมด Test รูปภาพจะแสดงที่ด้านบนของกริด ดังนั้นตำแหน่งอาจไม่ตรงกับการแสดงจริง";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

@@ -1891,3 +1891,11 @@ So pode estar ativo um tipo de interface de cada vez entre Sets, Bio e Notas. Co
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Quando o espectador abre Explorar, o reel pré-selecionado aparece exatamente na posição correspondente ao dígito capturado — indistinguível de um feed Explorar real.";
 "upload.tap_to_upload" = "Toque para enviar";
+"pp.test_mode.note" = "O modo Teste usa apenas imagens de modelo. Nada é carregado nem desarquivado no Instagram. No modo Teste, as imagens aparecem no topo da grelha, por isso a posição pode não coincidir com uma atuação real.";
+
+// Performance Mode
+"performance.mode.title" = "Modo Performance";
+"performance.mode.normal" = "Modo normal";
+"performance.mode.test" = "Modo teste";
+"performance.mode.subtitle" = "Escolha como Performance trata os inputs.";
+"performance.mode.test.note" = "O modo teste permite praticar localmente. O Instagram falso pode mudar, incluindo Bio, Notes, Profile Picture e Post Prediction, mas nada e enviado ao Instagram. As alteracoes temporarias sao repostas ao sair do Performance.";

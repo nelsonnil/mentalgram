@@ -1711,3 +1711,11 @@ Set, soGae, noteeseo han beon e hana ui in teopeoiseu yuhyeong man hwalseonghwa 
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "관객이 탐색을 열면, 미리 선택한 릴이 캡처된 숫자에 해당하는 정확한 위치에 나타납니다.";
 "upload.tap_to_upload" = "탭하여 업로드";
+"pp.test_mode.note" = "테스트 모드는 템플릿 이미지만 사용합니다. Instagram에는 아무것도 업로드되거나 보관 해제되지 않습니다. 테스트 모드에서는 이미지가 그리드 맨 위에 표시되므로 실제 공연에서의 위치와 다를 수 있습니다.";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

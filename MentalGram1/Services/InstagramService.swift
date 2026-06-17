@@ -1453,7 +1453,9 @@ class InstagramService: ObservableObject {
     /// avoid spending the last actions in the hourly budget on optional cache work.
     var shouldUseCacheOnlyForOptionalCalls: Bool {
         let rate = checkRateLimit()
-        return rate.actionsUsed >= 45 || rate.remaining <= 10
+        return rate.actionsUsed >= 45 ||
+            rate.remaining <= 10 ||
+            InstagramSafetyGate.shared.postMutationQuietSecondsRemaining > 0
     }
 
     /// Returns the moment when ALL actions in the current rolling window will have
@@ -6463,6 +6465,7 @@ class InstagramService: ObservableObject {
                 // ANTI-BOT: Add cooldown before next profile pic change
                 let cooldownUntil = Date().addingTimeInterval(300) // 5 minutes
                 UserDefaults.standard.set(cooldownUntil, forKey: "profile_pic_cooldown_until")
+                InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .upload)
                 
                 return true
             } else {
@@ -7530,6 +7533,14 @@ final class InstagramSafetyGate {
     private let warmResumeWindow: TimeInterval = 25
     private var warmResumeCloseLogged: Bool = false
 
+    // MARK: - Post-Mutation Quiet Window
+    /// After any sensitive Instagram write (bio/note/upload/archive/unarchive/etc.),
+    /// optional Performance calls must stay cache-only and later writes must wait.
+    /// This prevents patterns like POST /accounts/edit_profile/ followed seconds later
+    /// by POST /clips/user/ or multiple reveal POSTs, which produced challenge_required
+    /// in tester logs.
+    private let postMutationQuietWindow: TimeInterval = 120
+
     private init() {}
 
     /// Called once on app launch to start the cold-start window.
@@ -7608,7 +7619,64 @@ final class InstagramSafetyGate {
             LogManager.shared.warning("[COLD-START] \(label) blocked — \(remaining)s remaining", category: .general)
             return false
         }
+        let quietRemaining = postMutationQuietSecondsRemaining
+        if quietRemaining > 0 {
+            LogManager.shared.warning("[QUIET] \(label) blocked — recent Instagram write (\(quietRemaining)s remaining)", category: .general)
+            return false
+        }
         return true
+    }
+
+    var postMutationQuietSecondsRemaining: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        let until = defaults.double(forKey: key("post_mutation_quiet_until"))
+        guard until > 0 else { return 0 }
+        return max(0, Int(ceil(until - Date().timeIntervalSince1970)))
+    }
+
+    private func sensitiveMutationActionsContain(_ action: Action) -> Bool {
+        switch action {
+        case .biography, .note, .noteDelete, .archive, .unarchive, .reveal, .upload, .apiWrite:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func shouldAutomaticallyArmQuietWindow(for action: Action) -> Bool {
+        switch action {
+        case .biography, .note, .noteDelete:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func armPostMutationQuietWindowLocked(now: Double, action: Action) {
+        guard shouldAutomaticallyArmQuietWindow(for: action) else { return }
+        let until = now + postMutationQuietWindow
+        defaults.set(until, forKey: key("post_mutation_quiet_until"))
+        LogManager.shared.info("[QUIET] 2-minute post-mutation window armed by \(action.rawValue)", category: .api)
+    }
+
+    func markPostMutationQuietWindow(action: Action) {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date().timeIntervalSince1970
+        let until = now + postMutationQuietWindow
+        defaults.set(until, forKey: key("post_mutation_quiet_until"))
+        LogManager.shared.info("[QUIET] 2-minute post-mutation window armed by \(action.rawValue)", category: .api)
+    }
+
+    func waitForPostMutationQuietWindowIfNeeded(action: Action) async throws {
+        guard sensitiveMutationActionsContain(action) else { return }
+        while true {
+            let remaining = postMutationQuietSecondsRemaining
+            guard remaining > 0 else { return }
+            LogManager.shared.info("[QUIET] Delaying \(action.rawValue) for \(remaining)s after recent Instagram write", category: .api)
+            try await Task.sleep(nanoseconds: UInt64(min(remaining, 10)) * 1_000_000_000)
+        }
     }
 
     // MARK: - Performance entry
@@ -7834,6 +7902,7 @@ final class InstagramSafetyGate {
 
     func waitForApiSlot(method: String, path: String) async throws {
         let action = actionFor(method: method, path: path)
+        try await waitForPostMutationQuietWindowIfNeeded(action: action)
         let decision = self.decision(for: action)
         guard decision.allowed else {
             logBlock("\(method) \(short(path)) blocked — \(decision.reason) (\(decision.waitSeconds)s)")
@@ -8073,6 +8142,7 @@ final class InstagramSafetyGate {
         var values = timestamps(for: action).filter { now - $0 < 3600 }
         values.append(now)
         setTimestamps(values, for: action)
+        armPostMutationQuietWindowLocked(now: now, action: action)
     }
 
     private func timestamps(for action: Action) -> [Double] {

@@ -39,6 +39,7 @@ final class CrashLoggerService {
         }
         // Persist metadata once for the signal handler to read later.
         shared.writeMetadata()
+        shared.installMemoryWarningObserver()
         // OOM / Jetsam marker: written here, removed on clean exit.
         shared.writeRunningMarker()
         // ObjC uncaught-exception handler (full Foundation available).
@@ -98,12 +99,25 @@ final class CrashLoggerService {
         }
     }
 
+    func recordScreen(_ name: String) {
+        updateDiagnostics(screen: name, action: nil)
+    }
+
+    func recordAction(_ action: String) {
+        updateDiagnostics(screen: nil, action: action)
+    }
+
+    func recordLifecycle(_ phase: String) {
+        updateDiagnostics(screen: nil, action: "lifecycle: \(phase)")
+    }
+
     // MARK: - Internals
 
     private static let crashDirName    = "crash_logs"
     private static let metaFileName    = "crash_meta.json"
     private static let markerFileName  = "app_running.marker"
     private static let maxStoredReports = 20
+    private static let diagnosticsKey = "crash_diagnostics_v1"
 
     // Pre-computed crash-dir path as a C string buffer (populated at install() time).
     // Safe to read from a signal handler — no heap allocation required.
@@ -160,6 +174,94 @@ final class CrashLoggerService {
         }
     }
 
+    private struct Diagnostics: Codable {
+        var lastScreen: String?
+        var lastAction: String?
+        var lifecycle: String?
+        var memoryWarningCount: Int
+        var lastMemoryWarningAt: String?
+        var updatedAt: String
+        var recentActions: [String]
+
+        var plainText: String {
+            var lines: [String] = []
+            lines.append("Last screen: \(lastScreen ?? "unknown")")
+            lines.append("Last action: \(lastAction ?? "unknown")")
+            lines.append("Lifecycle: \(lifecycle ?? "unknown")")
+            lines.append("Memory warnings: \(memoryWarningCount)")
+            lines.append("Last memory warning: \(lastMemoryWarningAt ?? "none")")
+            lines.append("Diagnostics updated: \(updatedAt)")
+            if !recentActions.isEmpty {
+                lines.append("Recent actions:")
+                lines.append(contentsOf: recentActions.suffix(12).map { "  - \($0)" })
+            }
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    private static func readDiagnostics() -> Diagnostics? {
+        guard let data = UserDefaults.standard.data(forKey: diagnosticsKey) else { return nil }
+        return try? JSONDecoder().decode(Diagnostics.self, from: data)
+    }
+
+    private func updateDiagnostics(screen: String?, action: String?) {
+        var diagnostics = Self.readDiagnostics() ?? Diagnostics(
+            lastScreen: nil,
+            lastAction: nil,
+            lifecycle: nil,
+            memoryWarningCount: 0,
+            lastMemoryWarningAt: nil,
+            updatedAt: "",
+            recentActions: []
+        )
+        let now = ISO8601DateFormatter().string(from: Date())
+        if let screen { diagnostics.lastScreen = screen }
+        if let action {
+            diagnostics.lastAction = action
+            diagnostics.recentActions.append("\(now) \(action)")
+            if diagnostics.recentActions.count > 20 {
+                diagnostics.recentActions.removeFirst(diagnostics.recentActions.count - 20)
+            }
+            if action.hasPrefix("lifecycle: ") {
+                diagnostics.lifecycle = String(action.dropFirst("lifecycle: ".count))
+            }
+        }
+        diagnostics.updatedAt = now
+        if let data = try? JSONEncoder().encode(diagnostics) {
+            UserDefaults.standard.set(data, forKey: Self.diagnosticsKey)
+        }
+    }
+
+    private func installMemoryWarningObserver() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            var diagnostics = Self.readDiagnostics() ?? Diagnostics(
+                lastScreen: nil,
+                lastAction: nil,
+                lifecycle: nil,
+                memoryWarningCount: 0,
+                lastMemoryWarningAt: nil,
+                updatedAt: "",
+                recentActions: []
+            )
+            let now = ISO8601DateFormatter().string(from: Date())
+            diagnostics.memoryWarningCount += 1
+            diagnostics.lastMemoryWarningAt = now
+            diagnostics.lastAction = "memory warning"
+            diagnostics.updatedAt = now
+            diagnostics.recentActions.append("\(now) memory warning")
+            if diagnostics.recentActions.count > 20 {
+                diagnostics.recentActions.removeFirst(diagnostics.recentActions.count - 20)
+            }
+            if let data = try? JSONEncoder().encode(diagnostics) {
+                UserDefaults.standard.set(data, forKey: Self.diagnosticsKey)
+            }
+        }
+    }
+
     // MARK: - Writing a JSON report (Foundation-safe: ObjC handler + Jetsam detector)
 
     static func writeReport(type: String, name: String, reason: String, stackTrace: String) {
@@ -181,7 +283,8 @@ final class CrashLoggerService {
             id: fileName, date: now, timestamp: ts,
             type: type, name: name, reason: reason, stackTrace: stackTrace,
             appVersion: appVersion, buildNumber: buildNumber,
-            osVersion: osVersion, deviceModel: deviceModel
+            osVersion: osVersion, deviceModel: deviceModel,
+            diagnostics: Self.readDiagnostics()?.plainText
         )
 
         if let dir = crashDirURL, let data = try? JSONEncoder().encode(report) {
@@ -281,6 +384,7 @@ struct CrashReport: Codable, Identifiable {
     let buildNumber: String
     let osVersion: String
     let deviceModel: String
+    let diagnostics: String?
 
     var plainText: String {
         """
@@ -294,6 +398,9 @@ struct CrashReport: Codable, Identifiable {
 
         Stack Trace:
         \(stackTrace)
+        
+        Diagnostics:
+        \(diagnostics ?? "Not available")
         ========================
         """
     }

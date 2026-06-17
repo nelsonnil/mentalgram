@@ -1409,3 +1409,11 @@ He ji, jian jie he bian qian zhong yi ci zhi neng ji huo yi zhong jie mian lei x
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "当观众打开探索时，你预选的Reel出现在与捕获数字对应的确切位置——与真正的探索动态无法区分。";
 "upload.tap_to_upload" = "点击上传";
+"pp.test_mode.note" = "测试模式仅使用模板图片。不会向 Instagram 上传或取消归档任何内容。在测试模式中，图片会显示在网格顶部，因此位置可能与真实表演不一致。";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

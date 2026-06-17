@@ -1890,3 +1890,11 @@ Un seul type d'interface peut etre actif a la fois pour les Sets, la Bio et les 
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Quand le spectateur ouvre Explore, le reel présélectionné apparaît exactement à la position correspondant au chiffre capturé — indiscernable d'un vrai feed Explore.";
 "upload.tap_to_upload" = "Appuyer pour envoyer";
+"pp.test_mode.note" = "Le mode Test utilise uniquement des images de modèle. Rien n'est envoyé ni désarchivé sur Instagram. En mode Test, les images apparaissent en haut de la grille, leur position peut donc ne pas correspondre à une vraie performance.";
+
+// Performance Mode
+"performance.mode.title" = "Mode Performance";
+"performance.mode.normal" = "Mode normal";
+"performance.mode.test" = "Mode test";
+"performance.mode.subtitle" = "Choisissez comment Performance gere les entrees.";
+"performance.mode.test.note" = "Le mode test permet de pratiquer localement. Le faux Instagram peut changer, y compris Bio, Notes, Photo de profil et Post Prediction, mais rien nest envoye a Instagram. Les changements temporaires sont reinitialises en quittant Performance.";

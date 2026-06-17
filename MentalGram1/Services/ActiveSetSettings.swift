@@ -177,3 +177,80 @@ class ActiveSetSettings: ObservableObject {
         return UUID(uuidString: str)
     }
 }
+
+// MARK: - Performance Test Mode
+
+/// Global practice mode for Performance.
+///
+/// When enabled, Performance inputs are allowed to update the fake Instagram UI,
+/// but write actions are kept local: Post Prediction uses bundled templates,
+/// Notes/Bio are painted only in the replica, and no Instagram write API is called.
+final class PostPredictionTestMode: ObservableObject {
+    static let shared = PostPredictionTestMode()
+
+    @Published var isEnabled: Bool {
+        didSet { UserDefaults.standard.set(isEnabled, forKey: enabledKey) }
+    }
+    @Published private(set) var insertedPseudoURLs: Set<String> = []
+
+    private(set) var letterTemplate: LetterTemplate?
+    private(set) var numberTemplate: NumberTemplate?
+
+    private let enabledKey = "performance_test_mode_enabled"
+
+    var isActive: Bool { isEnabled }
+
+    private init() {
+        isEnabled = UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    func isTesting(_ set: PhotoSet) -> Bool {
+        guard isEnabled,
+              ActiveSetSettings.shared.isPostPredictionEnabled,
+              ActiveSetSettings.shared.activeSetId == set.id else { return false }
+
+        switch set.type {
+        case .word:
+            let alphabet = set.selectedAlphabet ?? .latin
+            letterTemplate = TemplateManager.shared.templates(for: alphabet).first
+            numberTemplate = nil
+            return true
+        case .number:
+            numberTemplate = TemplateManager.shared.numberTemplates().first
+            letterTemplate = nil
+            return true
+        case .custom, .card, .list:
+            letterTemplate = nil
+            numberTemplate = nil
+            return true
+        }
+    }
+
+    func makePseudoURL(setId: UUID, token: String, index: Int) -> String {
+        let safeToken = token
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: " ", with: "_")
+        return "reveal://test-\(setId.uuidString)-\(safeToken)-\(index)"
+    }
+
+    func markInserted(_ urls: [String]) {
+        insertedPseudoURLs.formUnion(urls.filter { $0.hasPrefix("reveal://test-") })
+    }
+
+    func restorePendingSessionIfNeeded(availableSets: [PhotoSet]) {
+        guard isEnabled,
+              let activeId = ActiveSetSettings.shared.activeSetId,
+              let set = availableSets.first(where: { $0.id == activeId }) else { return }
+        _ = isTesting(set)
+    }
+
+    func clear(restoreActiveSet: Bool = true) {
+        clearRuntimeState()
+    }
+
+    func clearRuntimeState() {
+        letterTemplate = nil
+        numberTemplate = nil
+        insertedPseudoURLs.removeAll()
+    }
+}

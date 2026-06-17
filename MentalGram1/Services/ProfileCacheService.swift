@@ -499,12 +499,12 @@ class ProfileCacheService: ObservableObject {
 
     /// Persists the list of reveal:// URLs and their dates so they survive app restarts.
     func saveRevealState(urls: [String], dates: [String: Date], userId: String) {
-        let revealURLs = urls.filter { $0.hasPrefix("reveal://") }
+        let revealURLs = urls.filter { $0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
         guard !revealURLs.isEmpty else {
             clearRevealState(userId: userId)
             return
         }
-        let revealDates = dates.filter { $0.key.hasPrefix("reveal://") }
+        let revealDates = dates.filter { $0.key.hasPrefix("reveal://") && !$0.key.hasPrefix("reveal://test-") }
         let state = RevealState(revealURLs: revealURLs, revealDates: revealDates)
         guard let fileURL = revealStateFileURL(for: userId) else { return }
         let encoder = JSONEncoder()

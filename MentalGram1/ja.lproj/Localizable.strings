@@ -1707,3 +1707,11 @@ Setto, profairu, noto de douji ni tsukaeru intafeisu wa hitotsu dake desu. Tsuzu
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "スペクテーターがExpLoreを開くと、事前に選択したリールがキャプチャした数字に対応するまさにその位置に表示されます。";
 "upload.tap_to_upload" = "タップしてアップロード";
+"pp.test_mode.note" = "テストモードではテンプレート画像のみを使用します。Instagramには何もアップロードされず、アーカイブ解除も行われません。テストモードでは画像がグリッドの一番上に表示されるため、実際の演技での位置とは一致しない場合があります。";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

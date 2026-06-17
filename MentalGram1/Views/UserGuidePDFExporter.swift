@@ -454,10 +454,12 @@ private enum UserGuidePDFPages {
                     .paragraph("Biography uses templates and placeholders just like Notes, but it stays on the Instagram profile until changed. It supports four independent slots (T1–T4) and a built-in Acrostic Mode."),
                     .frames(.biographyConfig, "Frames: template tabs → placeholder text → input source → Acrostic Mode toggle → Update Biography."),
                     .heading("Acrostic Mode"),
-                    .paragraph("Enable the 'Acrostic Mode' toggle in the Biography card. When a single word arrives via API or OCR, it is automatically converted into an acrostic poem before being sent to Instagram."),
+                    .paragraph("Enable the 'Acrostic Mode' toggle in the Biography card. When a single word or code arrives via API, OCR or URL Scheme, it is automatically converted before being sent to Instagram."),
                     .bullets([
                         "Each letter of the word → one line, starting with that letter.",
+                        "Each digit → one 6-digit line starting with that digit.",
                         "Example: VASO → Viento / Árbol / Sol / Origen.",
+                        "Mixed example: 3c → 356754 / Car. Number example: 123456 → 143553 / 265474 / 3xxxxx / 4xxxxx / 5xxxxx / 6xxxxx.",
                         "Repeated letters cycle through 3 different words (BANANA never repeats the same word).",
                         "Works in the device language — 17 languages supported.",
                         "Multi-word inputs are sent as-is (no transformation)."
@@ -1039,7 +1041,7 @@ private struct UserGuidePrintDocument: View {
                     .body("Same input system as Note (see above). Additionally supports Bio Templates (T1–T4): pre-configured text blocks you can switch between. T1 can be your normal bio, T2 the prediction bio, T3 a follow-up line and T4 a reset/alternate version. Templates can include {text1}, {text2} and {text3}, and can include line breaks."),
                     .body("vault://bio?text=<text> — trigger the bio update from any Shortcut or automation. Combine T1/T2 switch with URL Scheme for completely hands-free bio swaps."),
                     .label("Acrostic Mode"),
-                    .body("Enable the 'Acrostic Mode' toggle in the Biography card. When a single word arrives via API or OCR, it is automatically converted into an acrostic poem before being sent to Instagram — each letter of the word becomes a line starting with that letter.\n\nExample — word received: VASO\nBio sent to Instagram:\n  Viento\n  Árbol\n  Sol\n  Origen\n\nRepeated letters cycle through 3 different words so the same word never appears twice (e.g. BANANA uses Barco / Árbol / Norte / Avión / Nube / Azul). Works in 17 languages — the word bank is built into the app and adapts to the device language automatically."),
+                    .body("Enable the 'Acrostic Mode' toggle in the Biography card. When a single word or code arrives via API, OCR or URL Scheme, it is automatically converted before being sent to Instagram. Each letter becomes a line starting with a word in the device language; each digit becomes a 6-digit line starting with that digit.\n\nExample — word received: VASO\nBio sent to Instagram:\n  Viento\n  Árbol\n  Sol\n  Origen\n\nMixed example — code received: 3c\nBio sent to Instagram:\n  356754\n  Car\n\nNumber example — code received: 123456\nBio sent to Instagram:\n  143553\n  265474\n  3xxxxx\n  4xxxxx\n  5xxxxx\n  6xxxxx\n\nRepeated letters cycle through 3 different words so the same word never appears twice (e.g. BANANA uses Barco / Árbol / Norte / Avión / Nube / Azul). Works in 17 languages — the word bank is built into the app and adapts to the device language automatically."),
                     .highlight("Acrostic Mode only transforms single words (no spaces). Multi-word inputs are sent unchanged."),
                     .highlight("Fake app vs. real Instagram: Same as Note — wait for double vibration + orange ring before showing the spectator."),
                     .label("During the Show"),

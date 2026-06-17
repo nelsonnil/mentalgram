@@ -13,12 +13,13 @@ import AVFoundation
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        // Install crash logger as early as possible so any subsequent crash
-        // (including during app startup) is captured and written to disk.
-        CrashLoggerService.install()
         // Detect Jetsam/OOM kills from the previous session BEFORE the new
         // running marker overwrites the old one.
         CrashLoggerService.checkAndLogPreviousSessionCrash()
+        // Install crash logger as early as possible so any subsequent crash
+        // (including during app startup) is captured and written to disk.
+        CrashLoggerService.install()
+        CrashLoggerService.shared.recordAction("app launched")
         return true
     }
 
@@ -96,11 +97,13 @@ struct MentalGram1App: App {
             let um = UploadManager.shared
             switch phase {
             case .background:
+                CrashLoggerService.shared.recordLifecycle("background")
                 UIApplication.shared.isIdleTimerDisabled = false
                 um.beginBackgroundWork()
                 lastBackgroundedAt = Date()
                 // Backups are manual-only. Never overwrite cloud backup on background.
             case .active:
+                CrashLoggerService.shared.recordLifecycle("active")
                 UIApplication.shared.isIdleTimerDisabled = true
                 um.endBackgroundWork()
                 um.restoreTimersIfNeeded()

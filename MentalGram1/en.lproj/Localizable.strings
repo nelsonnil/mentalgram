@@ -1354,3 +1354,11 @@
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "When the spectator opens Explore, the reel you pre-selected appears at the exact position matching the digit you captured — indistinguishable from a genuine Explore feed.";
 "upload.tap_to_upload" = "Tap to upload";
+"pp.test_mode.note" = "Test Mode uses template images only. Nothing is uploaded or unarchived on Instagram. In Test Mode, images appear at the top of the grid, so their position may not match a real performance.";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

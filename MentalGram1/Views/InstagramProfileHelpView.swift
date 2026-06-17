@@ -897,15 +897,17 @@ struct BiographyHelpView: View {
                 }
 
                 IPHBullet(icon: "text.badge.star", iconColor: Color(hex: "F472B6"),
-                          text: "When enabled, a single word received via API or OCR is automatically converted into an acrostic poem. Each letter of the word becomes its own line, starting with a common word beginning with that letter.")
+                          text: "When enabled, a single word or code received via API, OCR, URL Scheme, or another Bio input is automatically converted before being sent. Each letter becomes a line starting with a word in the device language; each digit becomes a 6-digit line that starts with that digit.")
                 // Live example in device language
                 AcrosticExampleBullet()
+                IPHBullet(icon: "number.circle.fill", iconColor: Color(hex: "F472B6"),
+                          text: "Numbers are supported: \"3c\" becomes a random line like \"356754\" and then a word line such as \"Car\". \"123456\" becomes six lines, each starting with its original digit, e.g. \"143553\", \"265474\", and so on.")
                 IPHBullet(icon: "text.badge.star", iconColor: Color(hex: "F472B6"),
                           text: "Repeated letters cycle through 3 different words automatically — so \"BANANA\" never repeats the same word for B, A, or N.")
                 IPHBullet(icon: "text.badge.star", iconColor: Color(hex: "F472B6"),
                           text: "Works in the device language — Spanish, English, French, German, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Korean, Chinese, Hindi, Thai, Vietnamese and more.")
                 IPHBullet(icon: "text.badge.star", iconColor: Color(hex: "F472B6"),
-                          text: "Activate the toggle labeled \"Acrostic Mode\" in the Biography card. The conversion is automatic — the spectator never sees a single word, only a meaningful poetic bio.")
+                          text: "Activate the toggle labeled \"Acrostic Mode\" in the Biography card. The conversion is automatic — the spectator never sees the raw word or number, only the transformed poetic bio.")
                 IPHBullet(icon: "exclamationmark.triangle.fill", iconColor: VaultTheme.Colors.warning,
                           text: "Only works with single words (no spaces). Multi-word inputs are sent as-is, unchanged.")
             }

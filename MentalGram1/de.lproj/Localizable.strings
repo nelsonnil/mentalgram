@@ -1889,3 +1889,11 @@ Nur ein Schnittstellentyp kann gleichzeitig fuer Sets, Bio und Notizen aktiv sei
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Wenn der Zuschauer Explore öffnet, erscheint das von dir vorgewählte Reel genau an der Position, die der erfassten Ziffer entspricht — nicht von einem echten Explore-Feed zu unterscheiden.";
 "upload.tap_to_upload" = "Zum Hochladen tippen";
+"pp.test_mode.note" = "Der Testmodus verwendet nur Vorlagenbilder. Auf Instagram wird nichts hochgeladen oder aus dem Archiv geholt. Im Testmodus erscheinen die Bilder oben im Raster, daher stimmt ihre Position möglicherweise nicht mit einer echten Vorführung überein.";
+
+// Performance Mode
+"performance.mode.title" = "Performance-Modus";
+"performance.mode.normal" = "Normaler Modus";
+"performance.mode.test" = "Testmodus";
+"performance.mode.subtitle" = "Wahle, wie Performance Eingaben verarbeitet.";
+"performance.mode.test.note" = "Im Testmodus kannst du lokal ueben. Die Fake-Instagram-Ansicht kann sich andern, inklusive Bio, Notes, Profilbild und Post Prediction, aber nichts wird an Instagram gesendet. Temporare Testanderungen werden beim Verlassen von Performance zuruckgesetzt.";

@@ -1356,3 +1356,11 @@ Sets, Bio aur Notes mein ek samay par keval ek interface prakar sakriy ho sakta 
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "जब दर्शक Explore खोलता है, तो आपका पूर्व-चयनित reel ठीक उस स्थान पर दिखाई देता है जो कैप्चर किए गए अंक से मेल खाती है।";
 "upload.tap_to_upload" = "अपलोड करने के लिए टैप करें";
+"pp.test_mode.note" = "Test Mode केवल template images का उपयोग करता है। Instagram पर कुछ भी upload या unarchive नहीं किया जाता। Test Mode में images grid के सबसे ऊपर दिखाई देती हैं, इसलिए उनकी position वास्तविक performance से मेल नहीं खा सकती।";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

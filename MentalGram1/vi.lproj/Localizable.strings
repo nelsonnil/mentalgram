@@ -908,3 +908,11 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "input.guide.numpadcard.activate" = "Open Performance, tap the black screen once, select the card value, then select the suit. As soon as value + suit are selected, Vault confirms with haptic feedback and dismisses the view.";
 "input.guide.numpadcard.tip" = "Use this when you want a faster, more visual card input than Card Clock, but still want the first screen to look completely black.";
 "upload.tap_to_upload" = "Nhấn để tải lên";
+"pp.test_mode.note" = "Chế độ Test chỉ dùng hình ảnh mẫu. Không có gì được tải lên hoặc bỏ lưu trữ trên Instagram. Trong chế độ Test, hình ảnh xuất hiện ở đầu lưới, vì vậy vị trí có thể không khớp với một buổi biểu diễn thật.";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

@@ -1705,3 +1705,11 @@ W zestawach, bio i notatkach jednoczesnie moze byc aktywny tylko jeden typ inter
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Gdy widz otwiera Eksplorator, wybrany przez ciebie reel pojawia się dokładnie na pozycji odpowiadającej przechwyconej cyfrze — nie do odróżnienia od prawdziwego feedu Eksploratora.";
 "upload.tap_to_upload" = "Dotknij, aby przesłać";
+"pp.test_mode.note" = "Tryb Test używa tylko obrazów z szablonu. Nic nie jest przesyłane ani przywracane z archiwum na Instagramie. W trybie Test obrazy pojawiają się na górze siatki, więc ich pozycja może nie odpowiadać prawdziwemu występowi.";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

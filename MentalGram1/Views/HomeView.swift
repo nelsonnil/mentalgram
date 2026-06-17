@@ -56,9 +56,20 @@ struct HomeView: View {
                     }
                 }
                 selectedTab = newValue
+                CrashLoggerService.shared.recordScreen(tabName(for: newValue))
                 updateTabBarAppearance(forTab: newValue)
             }
         )
+    }
+
+    private func tabName(for index: Int) -> String {
+        switch index {
+        case 0: return "Performance"
+        case 1: return "Sets"
+        case 2: return "Settings"
+        case 3: return "Guide"
+        default: return "Tab \(index)"
+        }
     }
     
     var body: some View {
@@ -138,6 +149,7 @@ struct HomeView: View {
             requestPerformanceEntry()
         }
         .onAppear {
+            CrashLoggerService.shared.recordScreen(tabName(for: selectedTab))
             // Auto-unlock the Limits gate for users who already have a cached profile
             // (i.e. experienced users who had the app before this feature was added).
             if !limitsGuideRead && instagram.isLoggedIn
@@ -640,6 +652,8 @@ struct SetsListView: View {
     @State private var showingCreateSet = false
     @State private var newlyCreatedSet: PhotoSet? = nil
     @State private var navigateToNewSet = false
+    @State private var detailSet: PhotoSet? = nil
+    @State private var navigateToDetail = false
     // Rename state
     @State private var setToRename: PhotoSet? = nil
     @State private var renameText = ""
@@ -659,6 +673,13 @@ struct SetsListView: View {
                 NavigationLink(
                     destination: SetDetailView(set: newSet),
                     isActive: $navigateToNewSet
+                ) { EmptyView() }
+                .hidden()
+            }
+            if let detailSet {
+                NavigationLink(
+                    destination: SetDetailView(set: detailSet),
+                    isActive: $navigateToDetail
                 ) { EmptyView() }
                 .hidden()
             }
@@ -754,22 +775,23 @@ struct SetsListView: View {
                             .padding(.top, 40)
                         } else {
                             ForEach(dataManager.sets) { set in
-                                NavigationLink(destination: SetDetailView(set: set)) {
-                                    SetRowView(
-                                        set: set,
-                                        isLoggedIn: instagram.isLoggedIn,
-                                        onRename: {
-                                            setToRename = set
-                                            renameText = set.name
-                                            showRenameAlert = true
-                                        },
-                                        onDelete: {
-                                            setToDelete = set
-                                            showDeleteAlert = true
-                                        }
-                                    )
-                                }
-                                .buttonStyle(.plain)
+                                SetRowView(
+                                    set: set,
+                                    isLoggedIn: instagram.isLoggedIn,
+                                    onRename: {
+                                        setToRename = set
+                                        renameText = set.name
+                                        showRenameAlert = true
+                                    },
+                                    onDelete: {
+                                        setToDelete = set
+                                        showDeleteAlert = true
+                                    },
+                                    onOpenDetail: {
+                                        detailSet = set
+                                        navigateToDetail = true
+                                    }
+                                )
                                 .padding(.horizontal, VaultTheme.Spacing.lg)
                             }
                             .padding(.bottom, VaultTheme.Spacing.lg)
@@ -931,6 +953,7 @@ struct SetRowView: View {
     let isLoggedIn: Bool
     var onRename: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
+    var onOpenDetail: (() -> Void)? = nil
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     
     // Per-type accent colors
@@ -973,7 +996,7 @@ struct SetRowView: View {
         case .error:     return .error
         }
     }
-    
+
     var body: some View {
         let isActive = activeSetSettings.isActive(set.id, type: set.type)
 
@@ -1058,6 +1081,10 @@ struct SetRowView: View {
                                     .padding(.top, 1)
                             }
                         }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onOpenDetail?()
                     }
 
                     // Upload progress bar
@@ -1150,28 +1177,44 @@ struct SetRowView: View {
                         .background(Color.white.opacity(0.06))
                         .padding(.top, 4)
 
-                    HStack(spacing: 8) {
-                        Image(systemName: "icloud.and.arrow.up.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(typeAccent)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Upload to Instagram")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(typeAccent)
-                            Text(set.type == .list ? "Add media to list items, then upload/archive the set." : "Add media to slots, then upload/archive the set.")
-                                .font(.system(size: 11))
-                                .foregroundColor(VaultTheme.Colors.textTertiary)
-                                .lineLimit(1)
+                    Button {
+                        onOpenDetail?()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "icloud.and.arrow.up.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Upload to Instagram")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                                Text(set.type == .list ? "Add media to list items, then upload/archive the set." : "Add media to slots, then upload/archive the set.")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.72))
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white.opacity(0.9))
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(typeAccent.opacity(0.8))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 13)
+                        .background(
+                            LinearGradient(
+                                colors: [typeAccent.opacity(0.78), typeAccent.opacity(0.52)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 11)
+                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                        )
+                        .cornerRadius(11)
+                        .shadow(color: typeAccent.opacity(0.22), radius: 8, x: 0, y: 4)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(typeAccent.opacity(0.10))
-                    .cornerRadius(9)
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.leading, isActive ? 8 : 0)
@@ -2073,6 +2116,7 @@ struct SettingsView: View {
     @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @ObservedObject private var profileCache = ProfileCacheService.shared
+    @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
     @State private var settingsProfilePic: UIImage? = nil
     @State private var showingLogoutAlert = false
     @State private var showingFollowerData = false
@@ -2273,6 +2317,7 @@ struct SettingsView: View {
         DuplicateNoteWarningBanner()
             .padding(.bottom, 4)
         accountSection
+        performanceModeSection
         instagramProfileSection
         tricksSection
         integrationsSection
@@ -2464,6 +2509,41 @@ struct SettingsView: View {
     }
 
     // MARK: - Section: Instagram Profile
+
+    @ViewBuilder private var performanceModeSection: some View {
+        settingsSectionLabel("performance.mode.title", icon: "testtube.2", color: Color.green)
+        accentedSection(color: Color.green) {
+            modernCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 10) {
+                        Image(systemName: ppTestMode.isEnabled ? "checkmark.shield.fill" : "play.circle.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(ppTestMode.isEnabled ? Color.green : VaultTheme.Colors.textTertiary)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(ppTestMode.isEnabled ? String(localized: "performance.mode.test") : String(localized: "performance.mode.normal"))
+                                .font(VaultTheme.Typography.bodyBold())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Text(String(localized: "performance.mode.subtitle"))
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $ppTestMode.isEnabled)
+                            .labelsHidden()
+                            .tint(Color.green)
+                    }
+
+                    Text(String(localized: "performance.mode.test.note"))
+                        .font(.system(size: 13))
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
 
     @ViewBuilder private var instagramProfileSection: some View {
         settingsSectionLabel("INSTAGRAM PROFILE", icon: "camera.fill", color: Self.colorProfile)

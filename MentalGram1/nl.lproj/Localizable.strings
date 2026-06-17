@@ -1706,3 +1706,11 @@ Slechts een interfacetype kan tegelijk actief zijn voor Sets, Bio en Notities. A
 "input.guide.force.reel.title" = "Force Reel";
 "input.guide.force.reel.body" = "Wanneer de toeschouwer Verkennen opent, verschijnt de door jou voorgeselecteerde reel precies op de positie die overeenkomt met het vastgelegde cijfer — niet te onderscheiden van een echt Verkennen-feed.";
 "upload.tap_to_upload" = "Tik om te uploaden";
+"pp.test_mode.note" = "Testmodus gebruikt alleen sjabloonafbeeldingen. Er wordt niets geüpload of uit het archief gehaald op Instagram. In Testmodus verschijnen afbeeldingen bovenaan het raster, dus hun positie komt mogelijk niet overeen met een echte performance.";
+
+// Performance Mode
+"performance.mode.title" = "Performance Mode";
+"performance.mode.normal" = "Normal Mode";
+"performance.mode.test" = "Test Mode";
+"performance.mode.subtitle" = "Choose how Performance handles inputs.";
+"performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";

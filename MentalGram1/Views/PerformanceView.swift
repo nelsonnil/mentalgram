@@ -48,6 +48,7 @@ struct PerformanceView: View {
     @ObservedObject private var followingMagic = FollowingMagicSettings.shared
     @ObservedObject private var volumeMonitor  = VolumeButtonMonitor.shared
     @ObservedObject private var amnesiaSettings = AmnesiaCarouselSettings.shared
+    @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
     @StateObject private var ocrCoordinator = OCRCoordinator()
     /// Set by OCR result handler; observed by InstagramProfileView to trigger post-prediction reveal.
     @State private var pendingOCRWord: String? = nil
@@ -72,6 +73,11 @@ struct PerformanceView: View {
     /// return the previous biography right after a successful POST; preserve the local
     /// value so the fake profile does not visually revert.
     @State private var localBioOverride: (text: String, timestamp: Date)? = nil
+    @State private var testOriginalNoteText: String? = nil
+    @State private var testOriginalNoteTimestamp: Double? = nil
+    @State private var testOriginalBiography: String? = nil
+    @State private var testOriginalProfilePicImages: [String: UIImage] = [:]
+    @State private var testOriginalProfilePicMissingURLs: Set<String> = []
     @State private var profile: InstagramProfile?
     @State private var isLoading = false
     @State private var cachedImages: [String: UIImage] = [:]
@@ -193,6 +199,12 @@ struct PerformanceView: View {
         return DataManager.shared.sets.first { $0.id == activeId && $0.type == .list }
     }
 
+    private var activePostPredictionInputMethod: InputMethod? {
+        guard ActiveSetSettings.shared.isPostPredictionEnabled,
+              let activeId = ActiveSetSettings.shared.activeSetId else { return nil }
+        return DataManager.shared.sets.first { $0.id == activeId }?.resolvedInputMethod
+    }
+
     private func resetFullscreenInputPresentationFlags() {
         lockscreenWasShown = false
         clockInputWasShown = false
@@ -208,6 +220,43 @@ struct PerformanceView: View {
         performanceCoverWasShown = false
         showingHomeScreenIllusion = false
         showingScreenOffCover = false
+    }
+
+    @MainActor
+    private func clearPostPredictionTestModeIfNeeded() {
+        guard ppTestMode.isActive || testOriginalNoteText != nil || testOriginalBiography != nil || !testOriginalProfilePicImages.isEmpty || !testOriginalProfilePicMissingURLs.isEmpty else { return }
+        let testURLs = ppTestMode.insertedPseudoURLs
+        allMediaURLs.removeAll { url in
+            url.hasPrefix("reveal://test-") || testURLs.contains(url)
+        }
+        for url in testURLs {
+            cachedImages.removeValue(forKey: url)
+            revealDates.removeValue(forKey: url)
+        }
+
+        if let originalNote = testOriginalNoteText {
+            lastNoteText = originalNote
+            lastNoteSentTimestamp = testOriginalNoteTimestamp ?? 0
+        }
+        if let originalBio = testOriginalBiography {
+            applyBiographyToVisibleProfile(originalBio)
+            localBioOverride = nil
+            pendingBioText = nil
+        }
+        for (profilePicURL, originalImage) in testOriginalProfilePicImages {
+            cachedImages[profilePicURL] = originalImage
+        }
+        for profilePicURL in testOriginalProfilePicMissingURLs {
+            cachedImages.removeValue(forKey: profilePicURL)
+        }
+
+        testOriginalNoteText = nil
+        testOriginalNoteTimestamp = nil
+        testOriginalBiography = nil
+        testOriginalProfilePicImages.removeAll()
+        testOriginalProfilePicMissingURLs.removeAll()
+        ppTestMode.clearRuntimeState()
+        print("🧪 [PP TEST] Cleared temporary test reveal state")
     }
 
     /// True when the black swipe-clock screen should appear on Performance open.
@@ -325,6 +374,11 @@ struct PerformanceView: View {
             // and the glass pill floats over real content, not an empty white gap.
             profileContent
             bottomBar
+            if ppTestMode.isActive {
+                testModeFloatingBadge
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(100)
+            }
             // First-time blocking preload overlay — covers everything (incl. bottom bar)
             if isFirstTimePreloading {
                 firstTimePreloadOverlay
@@ -332,6 +386,26 @@ struct PerformanceView: View {
                     .zIndex(2000)
             }
         }
+    }
+
+    private var testModeFloatingBadge: some View {
+        Text("TEST")
+            .font(.system(size: 12, weight: .black, design: .rounded))
+            .tracking(1.5)
+            .foregroundColor(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(Color.red.opacity(0.96))
+                    .shadow(color: Color.red.opacity(0.35), radius: 8, x: 0, y: 2)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
+            )
+            .padding(.bottom, 76)
+            .allowsHitTesting(false)
     }
 
     private var firstTimePreloadOverlay: some View {
@@ -537,17 +611,36 @@ struct PerformanceView: View {
         InstagramProfileView(
             profile: profile,
             cachedImages: $cachedImages,
-            onRefresh: loadProfileSync,
-            onAsyncRefresh: handlePerformancePullToRefresh,
-            isRefreshEnabled: isRefreshEnabled,
+            onRefresh: {
+                guard !ppTestMode.isActive else {
+                    print("🧪 [TEST MODE] Manual refresh skipped — no Instagram API")
+                    return
+                }
+                loadProfileSync()
+            },
+            onAsyncRefresh: {
+                guard !ppTestMode.isActive else {
+                    print("🧪 [TEST MODE] Pull refresh skipped — no Instagram API")
+                    return
+                }
+                await handlePerformancePullToRefresh()
+            },
+            isRefreshEnabled: isRefreshEnabled && !ppTestMode.isActive,
             onPlusPress: { selectedTab = 1 },
             highlightsLoadedOnce: $highlightsLoadedOnce,
             mediaURLs: allMediaURLs,
-            onMediaAppear: loadMoreIfNeeded,
+            onMediaAppear: { url in
+                guard !ppTestMode.isActive else { return }
+                loadMoreIfNeeded(currentURL: url)
+            },
             onAutoFollowedByTap: { handleAutoFollowedByTap() },
             onAddLocalImages: { photos in
                 batchInsertRevealURLs(photos)
-                print("⚡️ [PERF] \(photos.count) photo(s) pre-inserted instantly as contiguous block — API unarchive in progress")
+                if ppTestMode.isActive {
+                    print("🧪 [PP TEST] \(photos.count) template image(s) inserted into fake grid — no Instagram API")
+                } else {
+                    print("⚡️ [PERF] \(photos.count) photo(s) pre-inserted instantly as contiguous block — API unarchive in progress")
+                }
             },
             onRevealComplete: { revealedPhotos in
                 let revealedIds = revealedPhotos.compactMap { item -> String? in
@@ -652,6 +745,10 @@ struct PerformanceView: View {
     private let secondaryTabVisibleMinimum = 12
 
     private func handleTabSelected(_ tab: Int) {
+        guard !ppTestMode.isActive else {
+            print("🧪 [TEST MODE] Secondary tab remote load skipped")
+            return
+        }
         guard let profile else { return }
         switch tab {
         case 1:
@@ -1071,10 +1168,11 @@ struct PerformanceView: View {
                     print("📷 [OCR] Blocked — already used once in this Performance session")
                     return
                 }
-                // OCR is active when any slot has .ocr as its source, OR legacy OCR mode is set
+                // OCR is active when any slot has .ocr as its source, the legacy
+                // top-level mode is set, OR the active Post Prediction set uses OCR.
                 let noteOcr     = noteFeatureEnabled && (integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr")
                 let bioOcr      = bioFeatureEnabled && (integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr")
-                let postPredOcr = ppTopInputMode == "ocr"
+                let postPredOcr = ppTopInputMode == "ocr" || activePostPredictionInputMethod == .ocr
                 guard noteOcr || bioOcr || postPredOcr else { return }
                 if ocrCoordinator.isRunning {
                     ocrCoordinator.stop()
@@ -1092,12 +1190,14 @@ struct PerformanceView: View {
                 // INTER-REVEAL COOLDOWN (anti-bot): block reveal if the previous one
                 // finished less than `interRevealCooldown` seconds ago. This prevents
                 // back-to-back unarchive+comment POST pairs that Instagram flags.
-                let timeSinceLastReveal = Date().timeIntervalSince1970 - lastRevealCompletedTimestamp
-                if timeSinceLastReveal < interRevealCooldown {
-                    let remaining = Int(interRevealCooldown - timeSinceLastReveal)
-                    print("🚫 [OCR] Reveal blocked — inter-reveal cooldown active (\(remaining)s remaining)")
-                    LogManager.shared.warning("Reveal blocked: cooldown \(remaining)s remaining (anti-bot)", category: .api)
-                    return
+                if !ppTestMode.isActive {
+                    let timeSinceLastReveal = Date().timeIntervalSince1970 - lastRevealCompletedTimestamp
+                    if timeSinceLastReveal < interRevealCooldown {
+                        let remaining = Int(interRevealCooldown - timeSinceLastReveal)
+                        print("🚫 [OCR] Reveal blocked — inter-reveal cooldown active (\(remaining)s remaining)")
+                        LogManager.shared.warning("Reveal blocked: cooldown \(remaining)s remaining (anti-bot)", category: .api)
+                        return
+                    }
                 }
 
                 // Lock OCR for the rest of this Performance session — one reveal per trick.
@@ -1105,10 +1205,11 @@ struct PerformanceView: View {
                 // Execute all active OCR targets sequentially (bio → note → post prediction)
                 // to avoid concurrent API calls that could trigger bot detection.
                 Task {
-                    // Active when legacy OCR mode is set OR any slot has .ocr as its source
+                    // Active when legacy OCR mode is set, any slot has .ocr as its
+                    // source, or the active PP set uses OCR.
                     let hasBio  = bioFeatureEnabled && (bioTopInputMode  == "ocr" || integrations.ocrSlot(for: "bio")  != nil)
                     let hasNote = noteFeatureEnabled && (noteTopInputMode == "ocr" || integrations.ocrSlot(for: "note") != nil)
-                    let hasPost = ppTopInputMode == "ocr"
+                    let hasPost = ppTopInputMode == "ocr" || activePostPredictionInputMethod == .ocr
 
                     if hasBio {
                         print("📷 [OCR] Step 1/3 — applying to biography")
@@ -1338,16 +1439,22 @@ struct PerformanceView: View {
         // Persist reveal:// state whenever the grid changes so it survives app restarts.
         .onChange(of: allMediaURLs) { urls in
             guard let userId = profile?.userId, !userId.isEmpty else { return }
-            let hasReveal = urls.contains { $0.hasPrefix("reveal://") }
-            if hasReveal {
+            let realRevealURLs = urls.filter { $0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
+            if !realRevealURLs.isEmpty {
+                let realRevealDates = revealDates.filter { key, _ in
+                    key.hasPrefix("reveal://") && !key.hasPrefix("reveal://test-")
+                }
                 ProfileCacheService.shared.saveRevealState(
-                    urls: urls, dates: revealDates, userId: userId
+                    urls: realRevealURLs, dates: realRevealDates, userId: userId
                 )
             } else {
                 ProfileCacheService.shared.clearRevealState(userId: userId)
             }
         }
         .onAppear {
+            CrashLoggerService.shared.recordScreen("Performance")
+            ppTestMode.restorePendingSessionIfNeeded(availableSets: DataManager.shared.sets)
+
             // Sync pull-to-refresh availability with any persisted SafetyGate cooldown
             // so the first pull after re-entering PerformanceView doesn't flash a spinner.
             let entryPullDecision = InstagramSafetyGate.shared.decision(for: .pullRefresh)
@@ -1435,6 +1542,7 @@ struct PerformanceView: View {
                 || (noteFeatureEnabled && noteTopInputMode == "ocr")
                 || (bioFeatureEnabled && bioTopInputMode  == "ocr")
                 || ppTopInputMode == "ocr"
+                || activePostPredictionInputMethod == .ocr
                 || hasPlaceholderOCR
             if needsVolume {
                 VolumeButtonMonitor.shared.prepareVolume()
@@ -1443,7 +1551,7 @@ struct PerformanceView: View {
 
             // API polling can trigger network calls; keep Performance cache-only
             // while an upload is active/auto-paused to avoid POST+GET overlap.
-            if uploadManager.isActive || didAutoPauseUpload {
+            if !ppTestMode.isActive && (uploadManager.isActive || didAutoPauseUpload) {
                 print("🛡️ [PERF] API polling skipped — upload active/paused")
                 LogManager.shared.warning("Performance API polling skipped: upload active", category: .general)
             } else {
@@ -1469,6 +1577,30 @@ struct PerformanceView: View {
             // 0 Instagram calls. We only validate the session when this entry actually
             // needs remote data (first-time preload or true cache miss).
             Task { @MainActor in
+                if ppTestMode.isActive {
+                    if ProfileCacheService.shared.loadProfile() != nil {
+                        print("🧪 [TEST MODE] Performance entry using cached profile")
+                        LogManager.shared.info("TEST MODE — Performance entry used cached profile", category: .general)
+                        checkAndLoadProfile(allowRemote: false)
+                    } else {
+                        print("🧪 [TEST MODE] No cached profile — loading base profile once")
+                        LogManager.shared.info("TEST MODE — no cache, loading base profile once", category: .general)
+                        let sessionStatus = await instagram.validateSession()
+                        guard sessionStatus == .valid || sessionStatus == .networkError else {
+                            checkAndLoadProfile(allowRemote: false)
+                            return
+                        }
+                        let preloadUserId = currentSessionUserId()
+                        if shouldRunFirstTimePreload(userId: preloadUserId) {
+                            await runFirstTimePreload(userId: preloadUserId)
+                        } else {
+                            checkAndLoadProfile(allowRemote: true)
+                        }
+                    }
+                    triggerFirstTimeBannerIfNeeded()
+                    return
+                }
+
                 guard !uploadManager.isActive, !didAutoPauseUpload else {
                     print("🛡️ [PERF] Entry remote calls skipped — upload active/paused")
                     LogManager.shared.warning("CACHE ONLY — Performance entry skipped remote calls: upload active", category: .general)
@@ -1548,7 +1680,7 @@ struct PerformanceView: View {
             // Running them in parallel creates concurrent API calls from the
             // same session → strong bot signal (especially POST+GET combos).
             Task { @MainActor in
-                guard !uploadManager.isActive || didAutoPauseUpload else {
+                guard ppTestMode.isActive || !uploadManager.isActive || didAutoPauseUpload else {
                     print("🛡️ [PERF] Auto-actions skipped — upload active/paused")
                     LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped: upload active", category: .general)
                     return
@@ -1556,12 +1688,12 @@ struct PerformanceView: View {
                 // Abort auto-actions only if a previous real API action already marked
                 // the session expired. Normal cached Performance entry no longer spends
                 // a validation call just to display the local replica.
-                guard performanceRemoteCallsAllowed else {
+                guard ppTestMode.isActive || performanceRemoteCallsAllowed else {
                     print("🛡️ [PERF] Auto-actions skipped — cache-only safety entry")
                     LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped in cache-only mode", category: .general)
                     return
                 }
-                guard !instagram.isSessionExpired else {
+                guard ppTestMode.isActive || !instagram.isSessionExpired else {
                     print("🚫 [PERF] Auto-actions skipped — session expired")
                     return
                 }
@@ -1569,7 +1701,7 @@ struct PerformanceView: View {
                 // autoUploadLatestGalleryPhoto(); only the real Instagram POST is delayed
                 // by cold-start / profile-refresh safety gates.
                 if autoProfilePicOnPerformance {
-                    guard !instagram.isLocked, !instagram.isSessionChallenged else {
+                    guard ppTestMode.isActive || (!instagram.isLocked && !instagram.isSessionChallenged) else {
                         print("📷 [AUTO PIC] Skipped in serial queue — locked or challenged")
                         return
                     }
@@ -1609,8 +1741,11 @@ struct PerformanceView: View {
         .onChange(of: scenePhase) { phase in
             // Pause / resume full-profile pre-loader with app lifecycle.
             switch phase {
-            case .background, .inactive:
+            case .inactive:
                 if fullLoader.isBlockingPerformance { fullLoader.pause() }
+            case .background:
+                if fullLoader.isBlockingPerformance { fullLoader.pause() }
+                clearPostPredictionTestModeIfNeeded()
             case .active:
                 if fullLoader.isBlockingPerformance { fullLoader.startOrResume() }
             @unknown default: break
@@ -1659,7 +1794,7 @@ struct PerformanceView: View {
             guard !mode.isEmpty else { return }
             Task { @MainActor in
                 guard let action = urlAction.consume() else { return }
-                guard !instagram.isSessionExpired else { return }
+                guard ppTestMode.isActive || !instagram.isSessionExpired else { return }
                 print("📲 [URL] Consuming in-view action: \(action.mode)")
                 if action.mode.hasPrefix("profilepic") {
                     await applyURLProfilePicAction(mode: action.mode, data: action.text)
@@ -1854,6 +1989,10 @@ struct PerformanceView: View {
         }
         // Refresh triggered from Settings / Set screen via InstagramSyncCard button.
         .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefresh)) { _ in
+            guard !ppTestMode.isActive else {
+                print("🧪 [TEST MODE] External manual refresh skipped — no Instagram API")
+                return
+            }
             print("🔄 [PERF] Manual refresh requested from Settings/Set — starting loadProfileSync")
             loadProfileSync(source: "manual_remote")
         }
@@ -1871,6 +2010,7 @@ struct PerformanceView: View {
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
             stopApiPolling()
+            clearPostPredictionTestModeIfNeeded()
 
             // Clear the performance-context pause flag regardless of how we got here.
             uploadManager.isPausedByPerformance = false
@@ -1896,6 +2036,7 @@ struct PerformanceView: View {
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
             stopApiPolling()
+            clearPostPredictionTestModeIfNeeded()
             uploadManager.isPausedByPerformance = false
             if didAutoPauseUpload && uploadManager.isPaused {
                 uploadManager.autoResumePending = true
@@ -1910,7 +2051,7 @@ struct PerformanceView: View {
 
     /// Handles vault://profilepic in its three variants.
     private func applyURLProfilePicAction(mode: String, data: String) async {
-        guard instagram.isLoggedIn, !instagram.isLocked else {
+        guard ppTestMode.isActive || (instagram.isLoggedIn && !instagram.isLocked) else {
             print("🚫 [URL PIC] Not logged in or lockdown active — skipping")
             return
         }
@@ -1962,6 +2103,13 @@ struct PerformanceView: View {
 
         guard let finalData = imageData else {
             print("❌ [URL PIC] Could not prepare image data")
+            return
+        }
+
+        if ppTestMode.isActive {
+            guard let uiImage = UIImage(data: finalData) else { return }
+            await MainActor.run { applyTestProfilePicture(uiImage) }
+            LogManager.shared.info("TEST MODE — profile picture painted locally via URL scheme", category: .general)
             return
         }
 
@@ -2057,7 +2205,7 @@ struct PerformanceView: View {
     // MARK: - URL Scheme Action
 
     private func applyURLAction(mode: String, text: String, values: [String: String] = [:]) async {
-        guard !instagram.isLocked else {
+        guard ppTestMode.isActive || !instagram.isLocked else {
             print("🚫 [URL] Lockdown active — skipping URL action")
             return
         }
@@ -2091,7 +2239,7 @@ struct PerformanceView: View {
                 LogManager.shared.warning("URL slot reveal: no active custom/list set", category: .general)
                 return
             }
-            if UploadManager.shared.isActive && !didAutoPauseUpload {
+            if !ppTestMode.isActive && UploadManager.shared.isActive && !didAutoPauseUpload {
                 print("⚠️ [URL] Custom slot reveal blocked: upload is active and not paused by Performance")
                 return
             }
@@ -2121,7 +2269,7 @@ struct PerformanceView: View {
                 print("⚠️ [URL] Card reveal: '\(symbol)' is not a valid card symbol")
                 return
             }
-            if UploadManager.shared.isActive && !didAutoPauseUpload {
+            if !ppTestMode.isActive && UploadManager.shared.isActive && !didAutoPauseUpload {
                 print("⚠️ [URL] Card reveal blocked: upload is active and not paused by Performance")
                 return
             }
@@ -2150,6 +2298,11 @@ struct PerformanceView: View {
                 if final.count < composed.count {
                     print("✂️ [URL] Note truncated: \(composed.count)→\(final.count) chars")
                 }
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestNote(final) }
+                    LogManager.shared.info("TEST MODE — URL note painted locally", category: .general)
+                    return
+                }
                 // Optimistic: show note bubble immediately
                 await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final, userInitiated: true)
@@ -2160,13 +2313,26 @@ struct PerformanceView: View {
                     fireDoubleConfirmationVibration()
                 }
             } else if mode == "bio" {
-                let final = truncateAtWordBoundary(composed, limit: 150)
-                if final.count < composed.count {
-                    print("✂️ [URL] Bio truncated: \(composed.count)→\(final.count) chars")
+                // Match API/OCR/Clipboard behavior: when acrostic mode is ON,
+                // ignore the stored bio template and build the acrostic from the
+                // secret value received through the URL scheme.
+                let acrosticInput = ["text1", "text2", "text3", "text4", "text5"]
+                    .compactMap { effectiveValues[$0]?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .first { !$0.isEmpty } ?? text
+                let inputForBio = bioAcrosticEnabled ? expandEscapes(acrosticInput) : composed
+                let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
+                let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
+                if final.count < acrosticComposed.count {
+                    print("✂️ [URL] Bio truncated: \(acrosticComposed.count)→\(final.count) chars")
                 }
                 // Optimistic: show bio immediately.
                 // Pin pendingBioText so a concurrent loadProfile fetching the old bio
                 // from Instagram while the POST is in-flight cannot revert the UI.
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestBiography(final) }
+                    LogManager.shared.info("TEST MODE — URL bio painted locally", category: .general)
+                    return
+                }
                 await MainActor.run { pinLocalBiography(final) }
                 do {
                     let ok = try await instagram.changeBiography(text: final, userInitiated: true)
@@ -2201,6 +2367,42 @@ struct PerformanceView: View {
     }
 
     @MainActor
+    private func applyTestNote(_ text: String) {
+        if testOriginalNoteText == nil {
+            testOriginalNoteText = lastNoteText
+            testOriginalNoteTimestamp = lastNoteSentTimestamp
+        }
+        lastNoteText = text
+        lastNoteSentTimestamp = Date().timeIntervalSince1970
+        print("🧪 [TEST MODE] Note painted locally only")
+    }
+
+    @MainActor
+    private func applyTestBiography(_ text: String) {
+        if testOriginalBiography == nil {
+            testOriginalBiography = profile?.biography ?? profileCache.cachedProfile?.biography ?? ""
+        }
+        pinLocalBiography(text)
+        pendingBioText = nil
+        print("🧪 [TEST MODE] Biography painted locally only")
+    }
+
+    @MainActor
+    private func applyTestProfilePicture(_ image: UIImage) {
+        let profilePicURL = profile?.profilePicURL ?? profileCache.cachedProfile?.profilePicURL ?? "test_profile_pic"
+        if testOriginalProfilePicImages[profilePicURL] == nil,
+           !testOriginalProfilePicMissingURLs.contains(profilePicURL) {
+            if let originalImage = cachedImages[profilePicURL] {
+                testOriginalProfilePicImages[profilePicURL] = originalImage
+            } else {
+                testOriginalProfilePicMissingURLs.insert(profilePicURL)
+            }
+        }
+        cachedImages[profilePicURL] = image
+        print("🧪 [TEST MODE] Profile picture painted locally only")
+    }
+
+    @MainActor
     private func applyBiographyToVisibleProfile(_ text: String) {
         guard let current = profile else { return }
         profile = profileByReplacingBiography(current, biography: text)
@@ -2232,14 +2434,14 @@ struct PerformanceView: View {
             print("⏭️ [CLIPBOARD] \(clipboardAutoMode) disabled — skipping")
             return
         }
-        guard !instagram.isLocked else {
+        guard ppTestMode.isActive || !instagram.isLocked else {
             print("🚫 [CLIPBOARD] Lockdown active — skipping clipboard auto-mode")
             return
         }
         // Cold-start guard: clipboard often contains stale text from before the
         // app was opened. Defer until the window closes so a stale note/bio
         // POST doesn't fire right on top of the entry GETs.
-        if InstagramSafetyGate.shared.isInColdStartWindow {
+        if !ppTestMode.isActive && InstagramSafetyGate.shared.isInColdStartWindow {
             let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
             print("⏳ [COLD-START] Clipboard auto-mode deferred — \(remaining)s remaining")
             LogManager.shared.info("[COLD-START] Clipboard auto-mode deferred — \(remaining)s", category: .general)
@@ -2270,6 +2472,12 @@ struct PerformanceView: View {
                 if final.count < composed.count {
                     print("✂️ [CLIPBOARD] Note truncated at word boundary: \(composed.count)→\(final.count) chars")
                 }
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestNote(final) }
+                    clipboardAutoLastSent = text
+                    LogManager.shared.info("TEST MODE — clipboard note painted locally", category: .general)
+                    return
+                }
                 // Optimistic: show note bubble immediately
                 await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final)
@@ -2287,6 +2495,12 @@ struct PerformanceView: View {
                 let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
                 if final.count < acrosticComposed.count {
                     print("✂️ [CLIPBOARD] Biography truncated at word boundary: \(acrosticComposed.count)→\(final.count) chars")
+                }
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestBiography(final) }
+                    clipboardAutoLastSent = text
+                    LogManager.shared.info("TEST MODE — clipboard bio painted locally", category: .general)
+                    return
                 }
                 // Optimistic: show bio immediately
                 await MainActor.run { pinLocalBiography(final) }
@@ -2316,14 +2530,14 @@ struct PerformanceView: View {
             print("⏭️ [API AUTO] \(target) disabled — skipping")
             return
         }
-        guard instagram.isLoggedIn, !instagram.isLocked else {
+        guard ppTestMode.isActive || (instagram.isLoggedIn && !instagram.isLocked) else {
             print("🚫 [API AUTO] Lockdown active or not logged in — skipping")
             return
         }
         // Cold-start guard: if a fresh value arrives during the first 45s the
         // POST (createNote / changeBiography) would stack on top of the entry
         // GETs and trigger challenge_required. Wait until the window closes.
-        if InstagramSafetyGate.shared.isInColdStartWindow {
+        if !ppTestMode.isActive && InstagramSafetyGate.shared.isInColdStartWindow {
             let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
             print("⏳ [COLD-START] API auto-mode (\(target)) deferred — \(remaining)s remaining")
             LogManager.shared.info("[COLD-START] API auto-mode (\(target)) deferred — \(remaining)s", category: .general)
@@ -2359,7 +2573,10 @@ struct PerformanceView: View {
         let lastKey   = target == "note" ? "last_note_auto_input"      : "last_biography_text"
         let dateKey   = target == "note" ? "last_note_auto_sent_date"  : "last_biography_sent_date"
         let trimmed   = primaryText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty, let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
+        if !ppTestMode.isActive,
+           !trimmed.isEmpty,
+           let lastSent = ud.string(forKey: lastKey),
+           lastSent == trimmed {
             let sentDate   = ud.object(forKey: dateKey) as? Date ?? .distantPast
             let hoursSince = Date().timeIntervalSince(sentDate) / 3600
             if hoursSince < 2 {
@@ -2404,6 +2621,11 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(composed, limit: 60)
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestNote(final) }
+                    LogManager.shared.info("TEST MODE — API note painted locally", category: .general)
+                    return
+                }
                 // Optimistic: show note bubble immediately, before API confirms
                 await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final)
@@ -2421,6 +2643,11 @@ struct PerformanceView: View {
                 let inputForBio = bioAcrosticEnabled ? text : composed
                 let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
                 let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestBiography(final) }
+                    LogManager.shared.info("TEST MODE — API bio painted locally", category: .general)
+                    return
+                }
                 // Optimistic: update bio in fake profile instantly, before API confirms
                 await MainActor.run { pinLocalBiography(final) }
                 let ok = try await instagram.changeBiography(text: final)
@@ -2454,7 +2681,7 @@ struct PerformanceView: View {
         // .ocr sources are event-driven and excluded via isPolled.
         let bioActive  = integrations.bioText1Source.isPolled  || integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioText4Source.isPolled  || integrations.bioText5Source.isPolled  || integrations.bioApiSource.isPolled
         let noteActive = integrations.noteText1Source.isPolled || integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteText4Source.isPolled || integrations.noteText5Source.isPolled || integrations.noteApiSource.isPolled
-        let ppActive   = integrations.ppApiSource   != .none && ppTopInputMode   == "api"
+        let ppActive   = integrations.ppApiSource   != .none && (ppTopInputMode == "api" || activePostPredictionInputMethod == .api)
         guard bioActive || noteActive || ppActive else { return }
         guard apiPollingTask == nil else { return }
 
@@ -2465,7 +2692,7 @@ struct PerformanceView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 guard !Task.isCancelled else { break }
-                guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionExpired else { continue }
+                guard ppTestMode.isActive || (instagram.isLoggedIn && !instagram.isLocked && !instagram.isSessionExpired) else { continue }
 
                 // ── bio / note ────────────────────────────────────────────────
                 for target in ["bio", "note"] {
@@ -2498,7 +2725,8 @@ struct PerformanceView: View {
                 }
 
                 // ── Post Prediction word reveal ───────────────────────────────
-                guard integrations.ppApiSource != .none, ppTopInputMode == "api" else { continue }
+                guard integrations.ppApiSource != .none,
+                      ppTopInputMode == "api" || activePostPredictionInputMethod == .api else { continue }
                 guard let ppPayload = await integrations.fetchPayload(for: integrations.ppApiSource) else { continue }
                 let ppValue = ppPayload.value.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !ppValue.isEmpty else { continue }
@@ -2575,7 +2803,7 @@ struct PerformanceView: View {
             print("⏭️ [OCR] \(target) disabled — skipping")
             return
         }
-        guard instagram.isLoggedIn, !instagram.isLocked else {
+        guard ppTestMode.isActive || (instagram.isLoggedIn && !instagram.isLocked) else {
             print("🚫 [OCR] Not logged in or lockdown active — skipping")
             return
         }
@@ -2586,7 +2814,7 @@ struct PerformanceView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Dedup on the raw detected word — expires after 2 hours
-        if let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
+        if !ppTestMode.isActive, let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
             let sentDate   = ud.object(forKey: dateKey) as? Date ?? .distantPast
             let hoursSince = Date().timeIntervalSince(sentDate) / 3600
             if hoursSince < 2 {
@@ -2618,6 +2846,11 @@ struct PerformanceView: View {
         do {
             if target == "note" {
                 let final = truncateAtWordBoundary(composed, limit: 60)
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestNote(final) }
+                    LogManager.shared.info("TEST MODE — OCR note painted locally", category: .general)
+                    return
+                }
                 // Optimistic: show note bubble immediately, before API confirms
                 await MainActor.run { lastNoteText = final }
                 let ok = try await instagram.createNote(text: final)
@@ -2634,6 +2867,11 @@ struct PerformanceView: View {
                 let inputForBio = bioAcrosticEnabled ? trimmed : composed
                 let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
                 let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
+                if ppTestMode.isActive {
+                    await MainActor.run { applyTestBiography(final) }
+                    LogManager.shared.info("TEST MODE — OCR bio painted locally", category: .general)
+                    return
+                }
 
                 // ── Optimistic UI update (fake profile shows result instantly) ────────
                 // Pin pendingBioText so that a concurrent loadProfile (fetching the old
@@ -2691,11 +2929,11 @@ struct PerformanceView: View {
             print("⏭️ [INPUT] \(target) disabled — skipping")
             return
         }
-        guard instagram.isLoggedIn, !instagram.isLocked else { return }
+        guard ppTestMode.isActive || (instagram.isLoggedIn && !instagram.isLocked) else { return }
         // Don't stack a note/bio POST on top of a running upload (anti-bot).
-        guard !UploadManager.shared.isActive else { return }
+        guard ppTestMode.isActive || !UploadManager.shared.isActive else { return }
         // Respect cache-only mode (re-entry too soon safety gate).
-        guard performanceRemoteCallsAllowed else {
+        guard ppTestMode.isActive || performanceRemoteCallsAllowed else {
             print("⏭️ [INPUT] Skipped (\(target)): cache-only mode active")
             return
         }
@@ -2706,7 +2944,7 @@ struct PerformanceView: View {
         let cooldownKey = "last_interface_capture_sent_\(target)"
         let lastSentTime = UserDefaults.standard.double(forKey: cooldownKey)
         let timeSinceLast = Date().timeIntervalSince1970 - lastSentTime
-        if lastSentTime > 0, timeSinceLast < interfaceCaptureCooldown {
+        if !ppTestMode.isActive, lastSentTime > 0, timeSinceLast < interfaceCaptureCooldown {
             let remaining = Int(interfaceCaptureCooldown - timeSinceLast)
             print("⏭️ [INPUT] Cooldown: \(remaining)s remaining before next \(target) capture send")
             LogManager.shared.warning("Interface capture \(target) blocked: cooldown \(remaining)s remaining", category: .general)
@@ -2727,7 +2965,7 @@ struct PerformanceView: View {
         let dateKey = target == "note" ? "last_note_auto_sent_date" : "last_biography_sent_date"
 
         // Dedup (2h) on the raw captured value — same policy as OCR to avoid duplicate-note spam flags
-        if let lastSent = ud.string(forKey: lastKey), lastSent == value {
+        if !ppTestMode.isActive, let lastSent = ud.string(forKey: lastKey), lastSent == value {
             let sentDate = ud.object(forKey: dateKey) as? Date ?? .distantPast
             if Date().timeIntervalSince(sentDate) / 3600 < 2 {
                 print("⏭️ [INPUT] Dedup: same value sent recently — skipping (\(target))")
@@ -2754,9 +2992,19 @@ struct PerformanceView: View {
         let finalText: String
         if target == "note" {
             finalText = truncateAtWordBoundary(composed, limit: 60)
+            if ppTestMode.isActive {
+                await MainActor.run { applyTestNote(finalText) }
+                LogManager.shared.info("TEST MODE — interface note painted locally", category: .general)
+                return
+            }
             await MainActor.run { lastNoteText = finalText }
         } else {
             finalText = truncateAtWordBoundary(composed, limit: 150)
+            if ppTestMode.isActive {
+                await MainActor.run { applyTestBiography(finalText) }
+                LogManager.shared.info("TEST MODE — interface bio painted locally", category: .general)
+                return
+            }
             await MainActor.run { pinLocalBiography(finalText) }
         }
 
@@ -3209,6 +3457,7 @@ struct PerformanceView: View {
 
     @MainActor
     private func handlePerformancePullToRefresh() async {
+        CrashLoggerService.shared.recordAction("Performance pull refresh")
         // Guard against concurrent pulls.
         guard !isPullRefreshInFlight, !isLoading, !isSilentGridRefreshing else {
             print("🚫 [PERF] Pull refresh skipped — refresh already in progress")
@@ -4129,6 +4378,7 @@ struct PerformanceView: View {
         for item in photos {
             guard let img = item.image else { continue }
             cachedImages[item.pseudoURL] = img
+            guard !item.pseudoURL.hasPrefix("reveal://test-") else { continue }
             ProfileCacheService.shared.saveImage(img, forURL: item.pseudoURL)
         }
 
@@ -4534,7 +4784,7 @@ struct PerformanceView: View {
     /// Safe to call on every onAppear — does nothing if same photo as last upload.
     @MainActor
     private func autoUploadLatestGalleryPhoto() async {
-        guard instagram.isLoggedIn, !instagram.isLocked else {
+        guard ppTestMode.isActive || (instagram.isLoggedIn && !instagram.isLocked) else {
             print("📷 [AUTO PIC] Skipped — not logged in or locked")
             return
         }
@@ -4572,6 +4822,14 @@ struct PerformanceView: View {
         // ── Load image only when necessary ──
         guard let imageData = await loadImageData(from: asset) else {
             print("📷 [AUTO PIC] Failed to load image data from asset")
+            return
+        }
+
+        if ppTestMode.isActive {
+            guard let uiImage = UIImage(data: imageData) else { return }
+            applyTestProfilePicture(uiImage)
+            print("🧪 [TEST MODE] Auto profile picture painted locally — no Instagram upload")
+            LogManager.shared.info("TEST MODE — auto profile picture painted locally", category: .general)
             return
         }
 
@@ -5190,6 +5448,7 @@ struct InstagramProfileView: View {
     @State private var revealErrorTitle: String = ""
     @State private var revealErrorMessage: String = ""
     @State private var showRevealError: Bool = false
+    @State private var didShowUnsupportedTestSetAlert = false
 
     // Called after a successful Force Number Reveal with local images already loaded.
     // Each element: pseudo-URL key + optional UIImage from local storage.
@@ -5269,6 +5528,7 @@ struct InstagramProfileView: View {
     @ObservedObject private var secretManager      = SecretNumberManager.shared
     @ObservedObject private var instagram          = InstagramService.shared
     @ObservedObject private var followingMagic     = FollowingMagicSettings.shared
+    @ObservedObject private var ppTestMode         = PostPredictionTestMode.shared
     @ObservedObject private var volumeMonitor      = VolumeButtonMonitor.shared
     @State private var followingOverride: String?   = nil
     @State private var followerOverride: String?    = nil
@@ -5336,6 +5596,12 @@ struct InstagramProfileView: View {
         return nil
     }
 
+    private var activePostPredictionInputMethod: InputMethod? {
+        guard ActiveSetSettings.shared.isPostPredictionEnabled,
+              let activeId = ActiveSetSettings.shared.activeSetId else { return nil }
+        return DataManager.shared.sets.first { $0.id == activeId }?.resolvedInputMethod
+    }
+
     private var isDigitGridInputActive: Bool {
         activeDigitGridSet != nil
     }
@@ -5345,6 +5611,236 @@ struct InstagramProfileView: View {
             || followingMagic.isEnabled
             || (ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel)
             || ForceNumberRevealSettings.shared.isEnabled
+    }
+
+    @MainActor
+    private func showPostPredictionTestError(_ message: String) {
+        revealErrorTitle = "Test unavailable"
+        revealErrorMessage = message
+        showRevealError = true
+        clearOCRPeek()
+    }
+
+    private func showUnsupportedTestSetAlertIfNeeded() {
+        guard PostPredictionTestMode.shared.isActive,
+              !didShowUnsupportedTestSetAlert,
+              ActiveSetSettings.shared.isPostPredictionEnabled,
+              let activeId = ActiveSetSettings.shared.activeSetId,
+              let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId }),
+              activeSet.type == .custom || activeSet.type == .card || activeSet.type == .list,
+              !hasAnyReadyTestPhoto(in: activeSet) else { return }
+
+        didShowUnsupportedTestSetAlert = true
+        revealErrorTitle = "Test unavailable"
+        revealErrorMessage = "\(activeSet.type.title) sets do not have templates. Test Mode can use this set only after you upload photos to it."
+        showRevealError = true
+    }
+
+    private func testReadyBankCount(in set: PhotoSet) -> Int {
+        set.banks.filter { bank in
+            set.photos.contains { photo in
+                photo.bankId == bank.id && photo.imageData != nil
+            }
+        }.count
+    }
+
+    private func shouldUseSetPhotosInTest(set: PhotoSet) -> Bool {
+        switch set.type {
+        case .word, .number:
+            return testReadyBankCount(in: set) > 3
+        case .custom, .card, .list:
+            return true
+        }
+    }
+
+    private func ensureSetPhotoBanksAvailable(set: PhotoSet, requiredBankCount: Int, inputDescription: String) async -> Bool {
+        let readyCount = testReadyBankCount(in: set)
+        let availableCount = min(set.banks.count, readyCount)
+        guard set.banks.count >= requiredBankCount, readyCount >= requiredBankCount else {
+            await showPostPredictionTestError(
+                "\(inputDescription) needs \(requiredBankCount) banks, but this set only has \(availableCount) ready bank(s). Add more banks/photos or switch Test Mode to Templates."
+            )
+            return false
+        }
+        return true
+    }
+
+    private func testPhotoFromSet(_ set: PhotoSet, bankIndex: Int, symbol: String) -> SetPhoto? {
+        let sortedBanks = set.banks.sorted { $0.position < $1.position }
+        guard sortedBanks.indices.contains(bankIndex) else { return nil }
+        let bank = sortedBanks[bankIndex]
+        return set.photos.first { photo in
+            photo.bankId == bank.id
+                && photo.symbol.caseInsensitiveCompare(symbol) == .orderedSame
+                && photo.imageData != nil
+        }
+    }
+
+    private func testPhotoFromSet(_ set: PhotoSet, symbol: String) -> SetPhoto? {
+        set.photos.first { photo in
+            photo.symbol.caseInsensitiveCompare(symbol) == .orderedSame
+                && photo.imageData != nil
+        }
+    }
+
+    private func hasAnyReadyTestPhoto(in set: PhotoSet) -> Bool {
+        set.photos.contains { $0.imageData != nil }
+    }
+
+    private func insertTestPhotos(_ photos: [(pseudoURL: String, image: UIImage?)], logMessage: String) async {
+        await MainActor.run {
+            ppTestMode.markInserted(photos.map(\.pseudoURL))
+            onAddLocalImages?(photos)
+            clearOCRPeek()
+        }
+        print(logMessage)
+    }
+
+    private func revealTestSlot(symbol: String, label: String, fromSet set: PhotoSet) async {
+        guard ppTestMode.isTesting(set) else { return }
+        guard let photo = testPhotoFromSet(set, symbol: symbol),
+              let data = photo.imageData,
+              let image = UIImage(data: data) else {
+            await showPostPredictionTestError("Test Mode needs uploaded/local photos for this set. No template is available for \(set.type.title) sets.")
+            return
+        }
+
+        let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "set-\(label)-\(symbol)", index: 0)
+        await insertTestPhotos(
+            [(pseudoURL: pseudoURL, image: image)],
+            logMessage: "🧪 [PP TEST] Inserted local \(label) image from set '\(set.name)'"
+        )
+    }
+
+    private func revealTestDigits(_ digits: [Int], fromSet set: PhotoSet) async {
+        guard ppTestMode.isTesting(set) else { return }
+
+        let reversedDigits = Array(digits.reversed())
+        if shouldUseSetPhotosInTest(set: set) {
+            guard await ensureSetPhotoBanksAvailable(
+                set: set,
+                requiredBankCount: reversedDigits.count,
+                inputDescription: "This number"
+            ) else { return }
+
+            var setPhotos: [(pseudoURL: String, image: UIImage?)] = []
+            for (index, digit) in reversedDigits.enumerated() {
+                let symbol = String(digit)
+                guard let photo = testPhotoFromSet(set, bankIndex: index, symbol: symbol),
+                      let data = photo.imageData,
+                      let image = UIImage(data: data) else {
+                    await showPostPredictionTestError("The selected set photo source is missing digit \(symbol) in bank \(index + 1).")
+                    return
+                }
+
+                let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "set-digit-\(symbol)", index: index)
+                setPhotos.append((pseudoURL: pseudoURL, image: image))
+            }
+
+            if !setPhotos.isEmpty {
+                await insertTestPhotos(
+                    setPhotos,
+                    logMessage: "🧪 [PP TEST] Inserted \(setPhotos.count) digit image(s) from set '\(set.name)'"
+                )
+                return
+            }
+        }
+
+        guard let template = ppTestMode.numberTemplate else {
+            await showPostPredictionTestError("No number template is available for Test Mode.")
+            return
+        }
+
+        var photos: [(pseudoURL: String, image: UIImage?)] = []
+
+        for (index, digit) in reversedDigits.enumerated() {
+            let symbol = String(digit)
+            guard let data = TemplateManager.shared.numberImageData(for: symbol, template: template),
+                  let image = UIImage(data: data) else {
+                await showPostPredictionTestError("The selected number template is missing image \(symbol).")
+                return
+            }
+
+            let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "digit-\(symbol)", index: index)
+            photos.append((pseudoURL: pseudoURL, image: image))
+        }
+
+        await insertTestPhotos(
+            photos,
+            logMessage: "🧪 [PP TEST] Inserted \(photos.count) digit template image(s) for '\(set.name)'"
+        )
+    }
+
+    private func revealTestLetters(_ word: String, fromSet set: PhotoSet) async {
+        guard ppTestMode.isTesting(set) else { return }
+
+        let alphabet = set.selectedAlphabet ?? .latin
+        let normalizedWord = word.lowercased()
+        let letters: [String] = alphabet.isRightToLeft
+            ? normalizedWord.map { String($0) }
+            : normalizedWord.reversed().map { String($0) }
+        if shouldUseSetPhotosInTest(set: set) {
+            guard await ensureSetPhotoBanksAvailable(
+                set: set,
+                requiredBankCount: letters.count,
+                inputDescription: "The word \"\(word)\""
+            ) else { return }
+
+            var setPhotos: [(pseudoURL: String, image: UIImage?)] = []
+            for (index, letter) in letters.enumerated() {
+                guard let charIndex = alphabet.indexFor(letter) else {
+                    await showPostPredictionTestError("The letter \(letter.uppercased()) is not part of this set alphabet.")
+                    return
+                }
+                let symbol = alphabet.characters[charIndex]
+                guard let photo = testPhotoFromSet(set, bankIndex: index, symbol: symbol),
+                      let data = photo.imageData,
+                      let image = UIImage(data: data) else {
+                    await showPostPredictionTestError("The selected set photo source is missing \(symbol.uppercased()) in bank \(index + 1).")
+                    return
+                }
+
+                let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "set-letter-\(symbol)", index: index)
+                setPhotos.append((pseudoURL: pseudoURL, image: image))
+            }
+
+            if !setPhotos.isEmpty {
+                await insertTestPhotos(
+                    setPhotos,
+                    logMessage: "🧪 [PP TEST] Inserted \(setPhotos.count) letter image(s) from set '\(set.name)'"
+                )
+                return
+            }
+        }
+
+        guard let template = ppTestMode.letterTemplate else {
+            await showPostPredictionTestError("No letter template is available for this alphabet in Test Mode.")
+            return
+        }
+
+        var photos: [(pseudoURL: String, image: UIImage?)] = []
+
+        for (index, letter) in letters.enumerated() {
+            guard let charIndex = alphabet.indexFor(letter) else {
+                await showPostPredictionTestError("The letter \(letter.uppercased()) is not part of this set alphabet.")
+                return
+            }
+
+            let symbol = alphabet.characters[charIndex]
+            guard let data = TemplateManager.shared.imageData(for: symbol, template: template),
+                  let image = UIImage(data: data) else {
+                await showPostPredictionTestError("The selected letter template is missing image \(symbol).")
+                return
+            }
+
+            let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "letter-\(symbol)", index: index)
+            photos.append((pseudoURL: pseudoURL, image: image))
+        }
+
+        await insertTestPhotos(
+            photos,
+            logMessage: "🧪 [PP TEST] Inserted \(photos.count) letter template image(s) for '\(set.name)'"
+        )
     }
 
     private var activeCardClockSet: PhotoSet? {
@@ -5393,6 +5889,7 @@ struct InstagramProfileView: View {
             }
         }
         .onAppear {
+            showUnsupportedTestSetAlertIfNeeded()
             applyPendingTransferDeflation()
             logVisibleCountState(reason: "profile appear")
         }
@@ -5471,23 +5968,27 @@ struct InstagramProfileView: View {
             pendingOCRWord = nil  // consume immediately
             let fromURL = ForceNumberRevealSettings.shared.urlRevealActive
             ForceNumberRevealSettings.shared.urlRevealActive = false  // reset immediately
-            // URL reveals bypass the ocrEnabled guard — they only need the master switch
-            guard ppTopInputMode == "ocr" || fromURL else { return }
-            guard !UploadManager.shared.isActive else {
+            // URL reveals bypass the OCR guard. Per-set OCR is the modern source of truth;
+            // ppTopInputMode is kept for older/global configurations.
+            guard ppTopInputMode == "ocr" || activePostPredictionInputMethod == .ocr || fromURL else { return }
+            guard ppTestMode.isActive || !UploadManager.shared.isActive else {
                 print("⚠️ [OCR-PP] Reveal blocked: upload is active")
                 return
             }
-            // INTER-REVEAL COOLDOWN (anti-bot)
-            let timeSinceLastReveal = Date().timeIntervalSince1970 - lastRevealCompletedTimestamp
-            if timeSinceLastReveal < interRevealCooldown {
-                let remaining = Int(interRevealCooldown - timeSinceLastReveal)
-                print("🚫 [OCR-PP] Reveal blocked — inter-reveal cooldown active (\(remaining)s remaining)")
-                LogManager.shared.warning("PP reveal blocked: cooldown \(remaining)s remaining (anti-bot)", category: .api)
-                return
+            // INTER-REVEAL COOLDOWN (anti-bot). Test Mode never touches Instagram,
+            // so it should remain available even during the real reveal cooldown.
+            if !ppTestMode.isActive {
+                let timeSinceLastReveal = Date().timeIntervalSince1970 - lastRevealCompletedTimestamp
+                if timeSinceLastReveal < interRevealCooldown {
+                    let remaining = Int(interRevealCooldown - timeSinceLastReveal)
+                    print("🚫 [OCR-PP] Reveal blocked — inter-reveal cooldown active (\(remaining)s remaining)")
+                    LogManager.shared.warning("PP reveal blocked: cooldown \(remaining)s remaining (anti-bot)", category: .api)
+                    return
+                }
             }
             // Anti-bot: if a profile pic upload is running, delay reveal until it finishes.
             // Two simultaneous POST operations from the same session is a bot signal.
-            guard !InstagramService.shared.isUploadingProfilePic else {
+            guard ppTestMode.isActive || !InstagramService.shared.isUploadingProfilePic else {
                 print("⚠️ [OCR-PP] Reveal blocked: profile pic upload in progress (anti-bot)")
                 LogManager.shared.warning("OCR reveal blocked: profile pic upload active", category: .general)
                 // Retry once after a short delay to avoid losing the reveal
@@ -5614,7 +6115,7 @@ struct InstagramProfileView: View {
         followingOverride = nil
         followerOverride = nil
 
-        guard !UploadManager.shared.isActive else {
+        guard PostPredictionTestMode.shared.isActive || !UploadManager.shared.isActive else {
             print("⚠️ [LOCKSCREEN] Reveal blocked: upload is active")
             LogManager.shared.warning("Lockscreen reveal blocked: upload in progress", category: .general)
             onUploadConflict?()
@@ -6168,7 +6669,7 @@ struct InstagramProfileView: View {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
-            guard !UploadManager.shared.isActive else {
+            guard PostPredictionTestMode.shared.isActive || !UploadManager.shared.isActive else {
                 LogManager.shared.warning("Card clock reveal blocked: upload in progress", category: .general)
                 onUploadConflict?(); return
             }
@@ -6192,7 +6693,7 @@ struct InstagramProfileView: View {
             captureGridSideEffects(digits: digits, source: "post-prediction")
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
-            guard !UploadManager.shared.isActive else {
+            guard PostPredictionTestMode.shared.isActive || !UploadManager.shared.isActive else {
                 LogManager.shared.warning("Force reveal blocked: upload in progress", category: .general)
                 onUploadConflict?(); return
             }
@@ -6204,7 +6705,7 @@ struct InstagramProfileView: View {
             captureGridSideEffects(digits: secretManager.digitBuffer, source: "post-prediction")
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
-            guard !UploadManager.shared.isActive else {
+            guard PostPredictionTestMode.shared.isActive || !UploadManager.shared.isActive else {
                 LogManager.shared.warning("Custom reveal blocked: upload in progress", category: .general)
                 onUploadConflict?(); return
             }
@@ -6217,7 +6718,7 @@ struct InstagramProfileView: View {
             let digits = secretManager.digitBuffer
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
-            guard !UploadManager.shared.isActive else {
+            guard PostPredictionTestMode.shared.isActive || !UploadManager.shared.isActive else {
                 LogManager.shared.warning("Card reveal blocked: upload in progress", category: .general)
                 onUploadConflict?(); return
             }
@@ -6362,6 +6863,19 @@ struct InstagramProfileView: View {
     /// Unarchives the photo matching each digit in the corresponding bank, sequentially.
     /// Digit at position i (0-based) → bank i+1 → find photo with symbol == String(digit).
     private func revealByDigits(_ digits: [Int], fromSet set: PhotoSet) async {
+        CrashLoggerService.shared.recordAction("Post Prediction reveal digits \(digits.map(String.init).joined()) set=\(set.name)")
+        ppTestMode.restorePendingSessionIfNeeded(availableSets: DataManager.shared.sets)
+        if ppTestMode.isTesting(set) {
+            await revealTestDigits(digits, fromSet: set)
+            return
+        }
+        guard !ppTestMode.isActive else {
+            print("🧪 [TEST MODE] Number reveal blocked because no test template is available")
+            await MainActor.run { clearOCRPeek() }
+            return
+        }
+        print("🧪 [PP TEST] Not active for digits reveal — using real flow")
+
         let sortedBanks = set.banks.sorted { $0.position < $1.position }
         let instagram = InstagramService.shared
         let dataManager = DataManager.shared
@@ -6488,6 +7002,7 @@ struct InstagramProfileView: View {
         // If at least one photo was actually unarchived via API, pass local images
         // to PerformanceView for an immediate grid update — no GET call needed.
         if successCount > 0 {
+            InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .unarchive)
             onRevealComplete?(revealedPhotos)
         }
 
@@ -6502,6 +7017,10 @@ struct InstagramProfileView: View {
     /// Uses the same anti-bot delays, rate-limit guards, and re-archive scheduling as
     /// the number reveal, but without the multi-bank logic (custom has one bank).
     private func revealByCustomSlot(_ slot: Int, fromSet set: PhotoSet) async {
+        if PostPredictionTestMode.shared.isActive {
+            await revealTestSlot(symbol: String(slot), label: set.type == .list ? "list" : "custom", fromSet: set)
+            return
+        }
         let instagram = InstagramService.shared
         let dataManager = DataManager.shared
         let symbol = String(slot)
@@ -6569,6 +7088,7 @@ struct InstagramProfileView: View {
 
                 // Schedule auto re-archive
                 ForceNumberRevealSettings.shared.scheduleReArchive(mediaIds: [mediaId])
+                InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .unarchive)
 
                 // Instant grid update with local image
                 let localImage: UIImage? = photo.imageData.flatMap { UIImage(data: $0) }
@@ -6675,6 +7195,10 @@ struct InstagramProfileView: View {
     /// Identical flow to `revealByCustomSlot` — anti-bot delays, rate-limit guards,
     /// re-archive scheduling, and instant grid update.
     private func revealByCardSlot(symbol: String, fromSet set: PhotoSet) async {
+        if PostPredictionTestMode.shared.isActive {
+            await revealTestSlot(symbol: symbol, label: "card", fromSet: set)
+            return
+        }
         let instagram = InstagramService.shared
         let dataManager = DataManager.shared
 
@@ -6738,6 +7262,7 @@ struct InstagramProfileView: View {
                 LogManager.shared.success("Card reveal \(symbol) ok (ID: \(mediaId))", category: .general)
 
                 ForceNumberRevealSettings.shared.scheduleReArchive(mediaIds: [mediaId])
+                InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .unarchive)
 
                 let localImage: UIImage? = photo.imageData.flatMap { UIImage(data: $0) }
                 await MainActor.run {
@@ -6771,6 +7296,18 @@ struct InstagramProfileView: View {
     ///  Phase 2 — API (async): unarchive each photo on Instagram sequentially.
     ///  Phase 3 — Finish: trigger CDN refresh once, clear override.
     private func revealByLetters(_ word: String, fromSet set: PhotoSet) async {
+        ppTestMode.restorePendingSessionIfNeeded(availableSets: DataManager.shared.sets)
+        if ppTestMode.isTesting(set) {
+            await revealTestLetters(word, fromSet: set)
+            return
+        }
+        guard !ppTestMode.isActive else {
+            print("🧪 [TEST MODE] Letter reveal blocked because no test template is available")
+            await MainActor.run { clearOCRPeek() }
+            return
+        }
+        print("🧪 [PP TEST] Not active for word reveal — using real flow")
+
         let dm          = DataManager.shared
         let instagram   = InstagramService.shared
         let alphabet    = set.selectedAlphabet ?? .latin
@@ -6907,6 +7444,9 @@ struct InstagramProfileView: View {
 
         // ── PHASE 3: Finish ───────────────────────────────────────────────────────
         ForceNumberRevealSettings.shared.scheduleReArchive(mediaIds: revealedIds)
+        if !revealedIds.isEmpty {
+            InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .reveal)
+        }
         print("📷 [OCR-PP] ═══ Done — \(revealedIds.count)/\(jobs.count) unarchived on Instagram")
 
         // Persist which set was last revealed so SetDetailView can warn if the
