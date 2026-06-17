@@ -698,12 +698,18 @@ struct PerformanceView: View {
                     for delaySeconds: UInt64 in [5, 25, 55] {
                         Task {
                             try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
-                            await refreshMediaGridSilently()
+                            await refreshMediaGridSilently(bypassQuietWindow: true, reason: "video reveal reconciliation")
                         }
                     }
                 } else {
-                    Task { await refreshMediaGridSilently() }
+                    Task { await refreshMediaGridSilently(bypassQuietWindow: true, reason: "post prediction reconciliation") }
                 }
+            },
+            onAmnesiaRevealStarted: {
+                paintAmnesiaCarouselLocally(revealed: true)
+            },
+            onAmnesiaRevealFailed: {
+                paintAmnesiaCarouselLocally(revealed: false)
             },
             onAmnesiaSwapComplete: {
                 // InstagramProfileView completed a swap — refresh the grid after a
@@ -1419,8 +1425,8 @@ struct PerformanceView: View {
             //   1) Bring in metadata for any newly-arrived URLs from the cached profile.
             //   2) Drop entries whose URLs no longer appear in the grid (avoids leaking
             //      stale CDN URLs that rotated, which left orphan items in the dict).
-            //   3) Always preserve reveal:// metadata since those are local-only entries
-            //      injected by performance actions, not present in the profile cache.
+            //   3) Always preserve local-only metadata injected by performance actions,
+            //      not present in the profile cache.
             if let cachedItems = profileCache.cachedProfile?.cachedMediaItems {
                 for item in cachedItems where newSet.contains(item.imageURL) {
                     mediaItemsByURL[item.imageURL] = item
@@ -1428,9 +1434,10 @@ struct PerformanceView: View {
             }
             let urlsToKeep = newSet
             mediaItemsByURL = mediaItemsByURL.filter { key, _ in
-                urlsToKeep.contains(key) || key.hasPrefix("reveal://")
+                urlsToKeep.contains(key) || key.hasPrefix("reveal://") || key.hasPrefix("amnesia://carousel/")
             }
             revealDates = revealDates.filter { key, _ in urlsToKeep.contains(key) }
+            paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
             // Download thumbnails for any new URLs not yet cached
             let missing = newURLs.filter { cachedImages[$0] == nil }
             if !missing.isEmpty { downloadImagesForURLs(missing) }
@@ -3086,6 +3093,93 @@ struct PerformanceView: View {
         }
     }
 
+    @MainActor
+    private func paintAmnesiaCarouselLocally(revealed: Bool) {
+        guard amnesiaSettings.isEnabled,
+              amnesiaSettings.isReady,
+              amnesiaSettings.images.count >= 5 else { return }
+
+        let mediaId = revealed ? amnesiaSettings.fullCarouselMediaId : amnesiaSettings.shortCarouselMediaId
+        let oppositeMediaId = revealed ? amnesiaSettings.shortCarouselMediaId : amnesiaSettings.fullCarouselMediaId
+        guard let mediaId, !mediaId.isEmpty else { return }
+
+        let imageCount = revealed ? 5 : 4
+        let images = Array(amnesiaSettings.images.prefix(imageCount))
+        guard images.count == imageCount, images.allSatisfy({ $0 != nil }) else { return }
+
+        let oppositeURL = oppositeMediaId.flatMap { id in
+            allMediaURLs.first { url in mediaItemsByURL[url]?.mediaId == id || url.contains(id) }
+        }
+        let existingURL = allMediaURLs.first { url in
+            mediaItemsByURL[url]?.mediaId == mediaId || url.contains(mediaId)
+        }
+        let fallbackURL = "amnesia://carousel/\(mediaId)/cover"
+        let gridURL = existingURL ?? fallbackURL
+        let insertIndex = oppositeURL.flatMap { allMediaURLs.firstIndex(of: $0) }
+            ?? existingURL.flatMap { allMediaURLs.firstIndex(of: $0) }
+            ?? amnesiaLocalInsertionIndex()
+
+        if let oppositeMediaId {
+            let urlsToRemove = allMediaURLs.filter { url in
+                url != gridURL && (mediaItemsByURL[url]?.mediaId == oppositeMediaId || url.contains(oppositeMediaId))
+            }
+            for url in urlsToRemove {
+                mediaItemsByURL.removeValue(forKey: url)
+                cachedImages.removeValue(forKey: url)
+            }
+            allMediaURLs.removeAll { urlsToRemove.contains($0) }
+        }
+        allMediaURLs.removeAll { $0.hasPrefix("amnesia://carousel/") && $0 != gridURL }
+
+        let childURLs = (0..<imageCount).map { "amnesia://carousel/\(mediaId)/\($0)" }
+        for (index, url) in childURLs.enumerated() {
+            if let image = images[index] {
+                cachedImages[url] = image
+            }
+        }
+        if let cover = images[0] {
+            cachedImages[gridURL] = cover
+        }
+
+        mediaItemsByURL[gridURL] = InstagramMediaItem(
+            id: mediaId,
+            mediaId: mediaId,
+            imageURL: gridURL,
+            videoURL: nil,
+            caption: nil,
+            takenAt: Date(),
+            likeCount: nil,
+            commentCount: nil,
+            mediaType: .carousel,
+            carouselImageURLs: childURLs,
+            ownerUsername: profile?.username
+        )
+
+        if !allMediaURLs.contains(gridURL) {
+            allMediaURLs.insert(gridURL, at: min(insertIndex, allMediaURLs.count))
+        }
+
+        print("🎭 [AMNESIA] Painted local \(revealed ? "full" : "short") carousel (\(imageCount) image(s))")
+    }
+
+    private func amnesiaLocalInsertionIndex() -> Int {
+        var maxDate: Date = .distantPast
+        var maxDateIndex = 0
+
+        for (index, url) in allMediaURLs.enumerated() {
+            guard !url.hasPrefix("amnesia://carousel/"),
+                  let date = url.hasPrefix("reveal://") ? revealDates[url] : mediaItemsByURL[url]?.takenAt else {
+                continue
+            }
+            if date > maxDate {
+                maxDate = date
+                maxDateIndex = index
+            }
+        }
+
+        return maxDate == .distantPast ? 0 : maxDateIndex
+    }
+
     private func fireDoubleConfirmationVibration() {
         Task {
             await MainActor.run {
@@ -3170,9 +3264,10 @@ struct PerformanceView: View {
             // Drop stale CDN entries; preserve reveal:// (local-only placeholders).
             let activeURLs = Set(cached.cachedMediaURLs)
             mediaItemsByURL = mediaItemsByURL.filter { key, _ in
-                activeURLs.contains(key) || key.hasPrefix("reveal://")
+                activeURLs.contains(key) || key.hasPrefix("reveal://") || key.hasPrefix("amnesia://carousel/")
             }
             for item in cached.cachedMediaItems { mediaItemsByURL[item.imageURL] = item }
+            paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
 
             loadCachedImages()
 
@@ -3672,6 +3767,7 @@ struct PerformanceView: View {
                 for item in mergedProfile.cachedMediaItems {
                     mediaItemsByURL[item.imageURL] = item
                 }
+                paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
                 // If the full refresh already brought reels/tagged, mark them as loaded
                 // so the lazy-tab loader doesn't make redundant API calls.
                 // For reels we also require the full items (with videoURL); without
@@ -4396,12 +4492,14 @@ struct PerformanceView: View {
 
         // Anchor = newest date in the batch (position the whole group here)
         guard let anchorDate = photos.compactMap({ revealDates[$0.pseudoURL] }).max() else {
-            // No dates at all — fallback: insert all at position 0 (same as individual fallback)
+            // No dates at all — never prepend. Fallback below the newest real post
+            // so newly uploaded Instagram posts still remain above Post Prediction.
+            let safeIndex = safeRevealFallbackInsertIndex()
             for item in photos {
                 guard !allMediaURLs.contains(item.pseudoURL) else { continue }
-                allMediaURLs.insert(item.pseudoURL, at: 0)
+                allMediaURLs.insert(item.pseudoURL, at: safeIndex)
             }
-            print("⚡️ [REVEAL BATCH] No dates — \(photos.count) photos at pos 0 (fallback)")
+            print("⚡️ [REVEAL BATCH] No dates — \(photos.count) photos at safe pos \(safeIndex) (fallback, never top)")
             return
         }
 
@@ -4443,7 +4541,9 @@ struct PerformanceView: View {
     ///  3. Scan `allMediaURLs` newest-first; insert just before the first item that is OLDER.
     ///     - CDN items:    compare via `mediaItemsByURL[url]?.takenAt`
     ///     - reveal:// items: compare via `revealDates[url]`
-    ///  4. Fallback: insert at position 0 if no date is available (safe default, old behavior).
+    ///  4. Fallback: if no date can be repaired, insert below the newest real post,
+    ///     never at position 0. Position 0 makes hidden prediction posts look newer
+    ///     than real Instagram posts uploaded after the set was prepared.
     ///
     /// Example — word "julia", grid has two new real posts (Mar 28) and old posts (Jan 10):
     ///   Each magic photo has uploadDate in Feb 2026 → they land AFTER the Mar 28 posts, BEFORE Jan 10.
@@ -4464,8 +4564,9 @@ struct PerformanceView: View {
         let uploadDate = revealUploadDate(for: mediaId)
 
         guard let revealDate = uploadDate else {
-            allMediaURLs.insert(pseudoURL, at: 0)
-            print("⚡️ [REVEAL] No uploadDate for \(mediaId) — inserted at position 0 (fallback)")
+            let safeIndex = safeRevealFallbackInsertIndex()
+            allMediaURLs.insert(pseudoURL, at: safeIndex)
+            print("⚡️ [REVEAL] No uploadDate for \(mediaId) — inserted at safe pos \(safeIndex) (fallback, never top)")
             return
         }
 
@@ -4536,19 +4637,40 @@ struct PerformanceView: View {
     private func revealUploadDate(for mediaId: String) -> Date? {
         for set in DataManager.shared.sets {
             guard let photo = set.photos.first(where: { $0.mediaId == mediaId }) else { continue }
-            guard let rawDate = photo.uploadDate else { return nil }
+
+            let validSiblingDates = set.photos.compactMap { sibling -> Date? in
+                guard sibling.mediaId != mediaId, let date = sibling.uploadDate else { return nil }
+                if let completedAt = set.completedAt {
+                    return date <= completedAt.addingTimeInterval(300) ? date : nil
+                }
+                return date
+            }.sorted()
+
+            guard let rawDate = photo.uploadDate else {
+                if !validSiblingDates.isEmpty {
+                    let repairedDate = validSiblingDates[validSiblingDates.count / 2]
+                    DataManager.shared.updatePhoto(photoId: photo.id, uploadDate: repairedDate)
+                    print("🛠️ [REVEAL] Missing uploadDate for \(mediaId) repaired from siblings → \(repairedDate)")
+                    return repairedDate
+                }
+                if let completedAt = set.completedAt {
+                    DataManager.shared.updatePhoto(photoId: photo.id, uploadDate: completedAt)
+                    print("🛠️ [REVEAL] Missing uploadDate for \(mediaId) repaired from set.completedAt → \(completedAt)")
+                    return completedAt
+                }
+                return nil
+            }
 
             guard let completedAt = set.completedAt,
                   rawDate > completedAt.addingTimeInterval(300) else {
                 return rawDate
             }
 
-            let validSiblingDates = set.photos.compactMap { sibling -> Date? in
-                guard sibling.mediaId != mediaId, let date = sibling.uploadDate else { return nil }
-                return date <= completedAt.addingTimeInterval(300) ? date : nil
-            }.sorted()
-
-            guard !validSiblingDates.isEmpty else { return rawDate }
+            guard !validSiblingDates.isEmpty else {
+                DataManager.shared.updatePhoto(photoId: photo.id, uploadDate: completedAt)
+                print("🛠️ [REVEAL] Future uploadDate for \(mediaId) repaired from set.completedAt: \(rawDate) → \(completedAt)")
+                return completedAt
+            }
 
             let repairedDate = validSiblingDates[validSiblingDates.count / 2]
             DataManager.shared.updatePhoto(photoId: photo.id, uploadDate: repairedDate)
@@ -4559,9 +4681,32 @@ struct PerformanceView: View {
         return nil
     }
 
+    @MainActor
+    private func safeRevealFallbackInsertIndex() -> Int {
+        // Find the newest dated real grid item. In normal Instagram order, any
+        // hidden prediction post with unknown date should never appear above it.
+        var newestIndex: Int? = nil
+        var newestDate: Date = .distantPast
+        for (index, url) in allMediaURLs.enumerated() where !url.hasPrefix("reveal://") {
+            guard let date = mediaItemsByURL[url]?.takenAt else { continue }
+            if date > newestDate {
+                newestDate = date
+                newestIndex = index
+            }
+        }
+
+        if let newestIndex {
+            return min(newestIndex + 1, allMediaURLs.count)
+        }
+
+        // If no dates are available, append rather than prepend. Appending is less
+        // visually risky than making the prediction look like the newest post.
+        return allMediaURLs.count
+    }
+
     /// Does NOT touch profile stats, bio, follower count, etc. — zero visible disruption.
     @MainActor
-    private func refreshMediaGridSilently() async {
+    private func refreshMediaGridSilently(bypassQuietWindow: Bool = false, reason: String = "silent grid refresh") async {
         guard !isLoading, !isPullRefreshInFlight, !isSilentGridRefreshing else {
             print("⚠️ [PERF] Silent refresh skipped — another refresh is active")
             return
@@ -4569,7 +4714,7 @@ struct PerformanceView: View {
         // Cold-start guard: never run an automatic silent refresh during the
         // first ~45s of the app session — this is the API burst Instagram
         // fingerprints as bot behaviour.
-        guard InstagramSafetyGate.shared.allowAutoCall("silent grid refresh") else {
+        guard bypassQuietWindow || InstagramSafetyGate.shared.allowAutoCall(reason) else {
             return
         }
         isSilentGridRefreshing = true
@@ -4591,13 +4736,18 @@ struct PerformanceView: View {
             LogManager.shared.warning("Silent refresh skipped: session recently challenged", category: .general)
             return
         }
-        let safetyDecision = InstagramSafetyGate.shared.decision(for: .silentGridRefresh)
-        guard safetyDecision.allowed else {
-            print("🛡️ [PERF] Silent refresh skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
-            LogManager.shared.warning("SAFETY BLOCK — silent grid refresh: \(safetyDecision.reason)", category: .general)
-            return
+        if !bypassQuietWindow {
+            let safetyDecision = InstagramSafetyGate.shared.decision(for: .silentGridRefresh)
+            guard safetyDecision.allowed else {
+                print("🛡️ [PERF] Silent refresh skipped — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+                LogManager.shared.warning("SAFETY BLOCK — silent grid refresh: \(safetyDecision.reason)", category: .general)
+                return
+            }
+            InstagramSafetyGate.shared.record(.silentGridRefresh)
+        } else {
+            InstagramSafetyGate.shared.record(.silentGridRefresh)
+            LogManager.shared.info("Silent media refresh bypassed optional-call throttle for reveal position reconciliation", category: .general)
         }
-        InstagramSafetyGate.shared.record(.silentGridRefresh)
 
         // ANTI-BOT: Staged loading. If another API request was made in the last
         // 2 seconds (e.g. validateSession on Performance entry, post-reveal API,
@@ -4613,8 +4763,8 @@ struct PerformanceView: View {
 
         // No delay needed: the grid already shows local images via pseudo-URLs.
         // This GET only replaces pseudo-URLs with real CDN URLs in the background.
-        print("🔄 [PERF] Silent refresh: fetching updated media grid (no delay — local images shown already)…")
-        LogManager.shared.info("Silent media refresh triggered after reveal", category: .general)
+        print("🔄 [PERF] Silent refresh: fetching updated media grid (reason: \(reason), bypassQuiet:\(bypassQuietWindow))…")
+        LogManager.shared.info("Silent media refresh triggered (\(reason), bypassQuiet:\(bypassQuietWindow))", category: .general)
 
         do {
             let (items, refreshedMaxId) = try await instagram.getUserMediaItems(userId: userId, amount: 21, maxId: nil)
@@ -4681,17 +4831,25 @@ struct PerformanceView: View {
                 if merged.contains(revealURL) { continue }
 
                 // Determine the date to use for positioning
-                let revealDate: Date? = revealDates[revealURL] ?? {
-                    DataManager.shared.sets
-                        .flatMap { $0.photos }
-                        .first(where: { $0.mediaId == mediaId })
-                        .flatMap { $0.uploadDate }
-                }()
+                let revealDate: Date? = revealDates[revealURL] ?? revealUploadDate(for: mediaId)
 
                 guard let anchorDate = revealDate else {
-                    // No date info — prepend as fallback
-                    merged.insert(revealURL, at: 0)
-                    print("⚡️ [REVEAL PRESERVE] \(mediaId) — no date, re-inserted at 0")
+                    // No date info — never prepend. Insert below the newest real post
+                    // or append if the merged grid has no dated items.
+                    let safeIndex: Int = {
+                        var newestIndex: Int? = nil
+                        var newestDate: Date = .distantPast
+                        for (index, url) in merged.enumerated() where !url.hasPrefix("reveal://") {
+                            guard let date = mediaItemsByURL[url]?.takenAt else { continue }
+                            if date > newestDate {
+                                newestDate = date
+                                newestIndex = index
+                            }
+                        }
+                        return newestIndex.map { min($0 + 1, merged.count) } ?? merged.count
+                    }()
+                    merged.insert(revealURL, at: safeIndex)
+                    print("⚡️ [REVEAL PRESERVE] \(mediaId) — no date, re-inserted at safe pos \(safeIndex)")
                     continue
                 }
 
@@ -5458,6 +5616,10 @@ struct InstagramProfileView: View {
     var onAddLocalImages: (([(pseudoURL: String, image: UIImage?)]) -> Void)? = nil
     /// Called after all API unarchives complete — inserts any remaining images AND triggers CDN refresh.
     var onRevealComplete: (([(pseudoURL: String, image: UIImage?)]) -> Void)? = nil
+    /// Called immediately when Amnesia starts, before Instagram confirms the swap.
+    var onAmnesiaRevealStarted: (() -> Void)? = nil
+    /// Called if the real Instagram swap fails after the optimistic local paint.
+    var onAmnesiaRevealFailed: (() -> Void)? = nil
     /// Called after a successful Amnesia Carousel swap so PerformanceView can
     /// silently refresh the grid and show the new carousel images automatically.
     var onAmnesiaSwapComplete: (() -> Void)? = nil
@@ -5586,10 +5748,11 @@ struct InstagramProfileView: View {
     }
 
     private var activeDigitGridSet: PhotoSet? {
-        if let activeId = ActiveSetSettings.shared.activeSetId,
+        if ActiveSetSettings.shared.isPostPredictionEnabled,
+           let activeId = ActiveSetSettings.shared.activeSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId }),
            (activeSet.type == .number || activeSet.type == .custom),
-           (activeSet.resolvedInputMethod == .digitGrid || ForceNumberRevealSettings.shared.isEnabled) {
+           activeSet.resolvedInputMethod == .digitGrid {
             return activeSet
         }
 
@@ -5610,7 +5773,6 @@ struct InstagramProfileView: View {
         isDigitGridInputActive
             || followingMagic.isEnabled
             || (ForceReelSettings.shared.isEnabled && ForceReelSettings.shared.hasReel)
-            || ForceNumberRevealSettings.shared.isEnabled
     }
 
     @MainActor
@@ -5858,6 +6020,18 @@ struct InstagramProfileView: View {
 
     private var isSecretGridInputActive: Bool {
         shouldCaptureDigitGridCellInput || isCardClockGridInputActive
+    }
+
+    private func isAmnesiaCarouselIndex(_ index: Int) -> Bool {
+        guard amnesiaSettings.isEnabled, amnesiaSettings.isReady else { return false }
+        let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+        guard urlsToShow.indices.contains(index) else { return false }
+
+        let url = urlsToShow[index]
+        let item = mediaItemsByURL[url]
+        let ids = [amnesiaSettings.shortCarouselMediaId, amnesiaSettings.fullCarouselMediaId].compactMap { $0 }
+        return url.hasPrefix("amnesia://carousel/")
+            || ids.contains { id in item?.mediaId == id || url.contains(id) }
     }
     
     var body: some View {
@@ -6463,7 +6637,7 @@ struct InstagramProfileView: View {
                     mediaItemsByURL: mediaItemsByURL,
                     onMediaAppear: onMediaAppear,
                     onTapIndex: { index in
-                        guard !isSecretGridInputActive else { return }
+                        guard !isSecretGridInputActive || isAmnesiaCarouselIndex(index) else { return }
                         lastPostViewerIndex = index
                         lastDismissedViewerWasPosts = true
                         activeViewer = .posts(index: index)
@@ -6595,6 +6769,7 @@ struct InstagramProfileView: View {
         let absDx = abs(dx)
         let absDy = abs(dy)
         let minDist: CGFloat = 40
+        guard isSecretGridInputActive else { return }
         print("🔢 [GRID SWIPE] digitSet:\(activeDigitGridSet?.name ?? "nil") cardSet:\(activeCardClockSet?.name ?? "nil") captureCell:\(shouldCaptureDigitGridCellInput) followingMagic:\(followingMagic.isEnabled) forceReel:\(ForceReelSettings.shared.isEnabled)/\(ForceReelSettings.shared.hasReel) forceGrid:\(ForceNumberRevealSettings.shared.isEnabled)/\(ForceNumberRevealSettings.shared.gridSwipeEnabled)")
 
         if let activeSet = activeCardClockSet {
@@ -7476,6 +7651,7 @@ struct InstagramProfileView: View {
               amnesiaSettings.uploadState != .swapping,
               !instagram.isLocked else { return }
 
+        onAmnesiaRevealStarted?()
         amnesiaSettings.uploadState = .swapping
         Task {
             do {
@@ -7497,7 +7673,10 @@ struct InstagramProfileView: View {
                     onAmnesiaSwapComplete?()
                 }
             } catch {
-                await MainActor.run { amnesiaSettings.uploadState = .ready }
+                await MainActor.run {
+                    amnesiaSettings.uploadState = .ready
+                    onAmnesiaRevealFailed?()
+                }
                 LogManager.shared.log("Amnesia swap error: \(error.localizedDescription)", level: .error, category: .general)
             }
         }

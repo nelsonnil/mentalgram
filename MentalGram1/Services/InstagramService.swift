@@ -2532,12 +2532,14 @@ class InstagramService: ObservableObject {
                 print("✅ [UNARCHIVE] Photo unarchived successfully")
                 LogManager.shared.success("Photo revealed/unarchived (ID: \(mediaId))", category: .api)
                 invalidateArchiveCache()
+                let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+                stateCheckCache.removeValue(forKey: pk)
                 return true
             }
 
             // Instagram returns various messages when a photo is already public/not-archived.
             // Treat these as success so we don't count them as failures or retry them.
-            let alreadyPublicHints = ["not archived", "already", "media not found", "not archived", "media_not_found"]
+            let alreadyPublicHints = ["not archived", "already"]
             if alreadyPublicHints.contains(where: { message.contains($0) }) {
                 print("ℹ️ [UNARCHIVE] Photo already public / not archived (ID: \(mediaId)) — treating as success")
                 LogManager.shared.success("Photo already public (ID: \(mediaId))", category: .api)
@@ -5683,23 +5685,49 @@ class InstagramService: ObservableObject {
         guard !isLocked else { throw InstagramError.apiError("Lockdown activo") }
 
         if !settings.isRevealed {
-            // Reveal: archive short (4-img), unarchive full (5-img)
-            print("🎭 [AMNESIA] Swap → REVEAL (archive A, unarchive B)…")
+            // Reveal: unarchive full (5-img), then archive short (4-img).
+            // The 5-image carousel is the spectator-facing success condition; doing
+            // it first avoids the fake app showing 5 while Instagram still shows 4
+            // if the second request is delayed or rejected.
+            print("🎭 [AMNESIA] Swap → REVEAL (unarchive B, archive A)…")
             LogManager.shared.info("Amnesia Carousel → Reveal iniciado", category: .api)
-            _ = try await archivePhoto(mediaId: shortId, skipPreCheck: true)
+            let fullUnarchived = try await unarchivePhoto(mediaId: fullId, skipPreCheck: true)
+            guard fullUnarchived else {
+                throw InstagramError.apiError("Amnesia reveal failed: full carousel was not unarchived")
+            }
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            var fullArchivedState = try await getMediaIsArchived(mediaId: fullId)
+            if fullArchivedState != false {
+                try await Task.sleep(nanoseconds: 4_000_000_000)
+                let pk = fullId.split(separator: "_").first.map(String.init) ?? fullId
+                stateCheckCache.removeValue(forKey: pk)
+                fullArchivedState = try await getMediaIsArchived(mediaId: fullId)
+            }
+            guard fullArchivedState == false else {
+                throw InstagramError.apiError("Amnesia reveal not confirmed: full carousel is not public yet")
+            }
             // Anti-bot: brief gap between the two operations
             try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
-            _ = try await unarchivePhoto(mediaId: fullId, skipPreCheck: true)
+            let shortArchived = try await archivePhoto(mediaId: shortId, skipPreCheck: true)
+            if !shortArchived {
+                LogManager.shared.warning("Amnesia reveal partial: full carousel is public, but short carousel was not archived", category: .api)
+            }
             await MainActor.run { settings.isRevealed = true }
             print("✅ [AMNESIA] Reveal complete — spectator now sees 5 images")
             LogManager.shared.success("Amnesia Carousel revelado (5 imágenes visibles)", category: .api)
         } else {
-            // Reset: archive full (5-img), unarchive short (4-img)
-            print("🎭 [AMNESIA] Swap → RESET (archive B, unarchive A)…")
+            // Reset: unarchive short (4-img), then archive full (5-img).
+            print("🎭 [AMNESIA] Swap → RESET (unarchive A, archive B)…")
             LogManager.shared.info("Amnesia Carousel → Reset iniciado", category: .api)
-            _ = try await archivePhoto(mediaId: fullId, skipPreCheck: true)
+            let shortUnarchived = try await unarchivePhoto(mediaId: shortId, skipPreCheck: true)
+            guard shortUnarchived else {
+                throw InstagramError.apiError("Amnesia reset failed: short carousel was not unarchived")
+            }
             try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
-            _ = try await unarchivePhoto(mediaId: shortId, skipPreCheck: true)
+            let fullArchived = try await archivePhoto(mediaId: fullId, skipPreCheck: true)
+            if !fullArchived {
+                LogManager.shared.warning("Amnesia reset partial: short carousel is public, but full carousel was not archived", category: .api)
+            }
             await MainActor.run { settings.isRevealed = false }
             print("✅ [AMNESIA] Reset complete — ready for next performance")
             LogManager.shared.success("Amnesia Carousel reseteado (4 imágenes visibles)", category: .api)

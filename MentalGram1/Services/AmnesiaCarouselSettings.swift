@@ -95,6 +95,7 @@ final class AmnesiaCarouselSettings: ObservableObject {
         fullCarouselMediaId  = ud.string(forKey: Keys.fullId)
         isRevealed           = ud.bool(forKey: Keys.revealed)
         loadImagesFromDisk()
+        applyRevealStateSafetyMigrationIfNeeded()
 
         // Derive upload state from persisted data
         if isReady {
@@ -138,6 +139,20 @@ final class AmnesiaCarouselSettings: ObservableObject {
                   let data = try? Data(contentsOf: url),
                   let image = UIImage(data: data) else { continue }
             images[slot] = image
+        }
+    }
+
+    private func applyRevealStateSafetyMigrationIfNeeded() {
+        let key = "amnesia_reveal_state_safety_migration_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+
+        // Builds before the validated swap flow could persist `isRevealed = true`
+        // after an optimistic local paint even when Instagram still showed the
+        // 4-image carousel. Start updated users from the safe initial state once.
+        if isRevealed {
+            isRevealed = false
+            print("🎭 [AMNESIA] Safety migration reset revealed state to initial")
         }
     }
 

@@ -4996,7 +4996,7 @@ struct SetDetailView: View {
         await MainActor.run {
             uploadManager.autoRetryCountdown = seconds
             uploadManager.uploadPhase = .autoRetrying(remainingSeconds: seconds, attempt: attempt)
-            uploadManager.currentPhaseDescription = String(format: String(localized: "Auto-retrying %@ in %ds"), photoInfo, seconds)
+            uploadManager.currentPhaseDescription = "Auto-retrying \(photoInfo) in \(seconds)s"
             
             uploadManager.autoRetryTimer?.invalidate()
             uploadManager.autoRetryTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak uploadManager] _ in
