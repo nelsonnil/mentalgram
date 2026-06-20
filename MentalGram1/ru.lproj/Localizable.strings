@@ -1109,6 +1109,16 @@
 "preload.failed.subtitle" = "Проверьте подключение и повторите попытку. Для первой загрузки рекомендуется Wi-Fi.";
 "preload.retry" = "Повторить";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "Архивация %d/%d…";
+"post_reveal_archive.visible" = "%d фото видно после раскрытия";
+"post_reveal_archive.error" = "Ошибка: %@";
+"post_reveal_archive.cooldown" = "Можно архивировать через %@ — подождите anti-bot паузу";
+"post_reveal_archive.upload_active" = "Выгрузка активна — дождитесь завершения перед архивацией";
+"post_reveal_archive.description" = "Post Prediction оставил фото видимыми в Instagram. Архивируйте их перед следующим трюком.";
+"post_reveal_archive.button" = "Архивировать сейчас";
+"post_reveal_archive.hold_error" = "Пауза активна: %@ — подождите %dс";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Синхронизация с Instagram";
 "sync.never_synced" = "Никогда не синхронизировалось";
@@ -1373,3 +1383,8 @@ Odnovremenno mozhet byt' aktiven tolko odin tip interfeisa dlya naborov, opisani
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "Сет раскрыт %d мин назад";
+"set.sync.recent_reveal.body" = "Слишком быстрое архивирование того же сета после reveal (цикл reveal -> archive -> reveal) — самая частая причина обнаружения бота Instagram. Подождите еще минимум %d мин.";
+"set.sync.archive.button.visible" = "Архивировать сейчас (%d видимо)";

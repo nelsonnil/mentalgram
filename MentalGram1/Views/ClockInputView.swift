@@ -33,6 +33,8 @@ enum ClockInputMode { case number, card }
 ///   After the third swipe, stop swiping for 3 seconds to confirm → onRevealCard("Q♣").
 struct ClockInputView: View {
 
+    @Environment(\.scenePhase) private var scenePhase
+
     /// Capture mode. Defaults to number for existing call sites.
     var mode: ClockInputMode = .number
 
@@ -60,10 +62,21 @@ struct ClockInputView: View {
 
     // Flash feedback: briefly dims screen on invalid swipe pair
     @State private var flashError = false
+    /// Basic input debounce. Prevents accidental swipe storms from creating a
+    /// cascade of haptics, animations and commit tasks on the black screen.
+    @State private var lastSwipeAt: Date = .distantPast
+    @State private var lastErrorFeedbackAt: Date = .distantPast
+    @State private var lastHapticAt: Date = .distantPast
 
     /// Debounced validation task. Restarted after every swipe; commits only after
     /// 3 seconds without another swipe.
     @State private var inactivityCommitTask: Task<Void, Never>? = nil
+    @State private var flashResetTask: Task<Void, Never>? = nil
+    @State private var secondVibrationTask: Task<Void, Never>? = nil
+
+    private let minSwipeInterval: TimeInterval = 0.24
+    private let minErrorFeedbackInterval: TimeInterval = 0.75
+    private let minHapticInterval: TimeInterval = 0.12
 
     var body: some View {
         ZStack {
@@ -72,8 +85,10 @@ struct ClockInputView: View {
                 .opacity(flashError ? 0.6 : 1.0)
                 .animation(.easeInOut(duration: 0.15), value: flashError)
         }
+        .background(Color.black.ignoresSafeArea(.all))
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
+        .defersSystemGestures(on: .all)
         // Swipe detection — each completed pair adds one digit
         .gesture(
             DragGesture(minimumDistance: 25)
@@ -81,6 +96,23 @@ struct ClockInputView: View {
                     handleSwipe(swipeDirection(from: value))
                 }
         )
+        .onAppear {
+            CrashLoggerService.shared.recordScreen(mode == .card ? "ClockInput: Card Clock" : "ClockInput: Number Clock")
+            CrashLoggerService.shared.recordAction(mode == .card ? "ClockInput card opened" : "ClockInput number opened")
+            lastSwipeAt = Date()
+        }
+        .onChange(of: scenePhase) { phase in
+            switch phase {
+            case .active:
+                lastSwipeAt = Date()
+                CrashLoggerService.shared.recordScreen(mode == .card ? "ClockInput: Card Clock" : "ClockInput: Number Clock")
+                CrashLoggerService.shared.recordAction(mode == .card ? "ClockInput card active" : "ClockInput number active")
+            case .inactive, .background:
+                suspendInputForLifecycle()
+            @unknown default:
+                break
+            }
+        }
         .onTapGesture {
             // Once the value has been sent to Instagram, keep the black screen as cover
             // until the performer intentionally reveals the fake profile.
@@ -89,8 +121,8 @@ struct ClockInputView: View {
             }
         }
         .onDisappear {
-            inactivityCommitTask?.cancel()
-            inactivityCommitTask = nil
+            cancelPendingFeedbackAndCommit()
+            CrashLoggerService.shared.recordAction(mode == .card ? "ClockInput card closed" : "ClockInput number closed")
         }
     }
 
@@ -111,6 +143,8 @@ struct ClockInputView: View {
     private func handleSwipe(_ dir: SwipeDir) {
         // Ignore swipes once the value has already been committed
         guard !revealed else { return }
+        guard isAppActiveForInput else { return }
+        guard acceptSwipeNow() else { return }
 
         if mode == .card {
             handleCardSwipe(dir)
@@ -121,23 +155,30 @@ struct ClockInputView: View {
             // Second swipe of a pair — try to decode
             pendingSwipe = nil
             if let digit = SecretNumberManager.decodeDigit(first, dir) {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                impact(.medium)
                 digitBuffer.append(digit)
                 print("🖤 [CLOCK-INPUT] pair \(first)\(dir) → digit \(digit)  buffer: \(digitBuffer.map(String.init).joined())")
             } else {
                 // Invalid pair — error flash; treat second swipe as start of a new pair
                 triggerErrorFlash()
                 pendingSwipe = dir
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                impact(.light)
                 print("🖤 [CLOCK-INPUT] invalid pair \(first)\(dir) — restarting with \(dir)")
             }
         } else {
             // First swipe of a new pair
             pendingSwipe = dir
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            impact(.light)
             print("🖤 [CLOCK-INPUT] first swipe \(dir) — waiting for second")
         }
         scheduleInactivityCommit()
+    }
+
+    private func acceptSwipeNow() -> Bool {
+        let now = Date()
+        guard now.timeIntervalSince(lastSwipeAt) >= minSwipeInterval else { return false }
+        lastSwipeAt = now
+        return true
     }
 
     // MARK: - Card swipe processing
@@ -151,25 +192,32 @@ struct ClockInputView: View {
         switch idx {
         case 0:
             cardSwipes.append(dir)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            impact(.light)
+            scheduleInactivityCommit()
         case 1:
             if SecretNumberManager.decodeCardValue(cardSwipes[0], dir) != nil {
                 cardSwipes.append(dir)
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                impact(.medium)
+                scheduleInactivityCommit()
             } else {
                 triggerErrorFlash()
                 cardSwipes = [dir]
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                impact(.light)
+                scheduleInactivityCommit()
             }
         case 2:
             // Single suit swipe — any direction is valid
             cardSwipes.append(dir)
-            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            impact(.heavy)
+            // Schedule confirmation once. Further swipes are ignored so a nervous
+            // performer cannot keep pushing the commit timer back forever.
+            scheduleInactivityCommit()
             print("🖤 [CLOCK-INPUT] card complete: \(decodedCardSymbol ?? "?")")
         default:
+            // Card already has value+suit. Ignore extra swipes completely:
+            // no haptic, no animation, no timer reset.
             break
         }
-        scheduleInactivityCommit()
     }
 
     private var decodedCardSymbol: String? {
@@ -186,6 +234,7 @@ struct ClockInputView: View {
         inactivityCommitTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
+            guard isAppActiveForInput else { return }
             commitBuffer()
         }
     }
@@ -194,11 +243,12 @@ struct ClockInputView: View {
         if mode == .card {
             guard let symbol = decodedCardSymbol else {
                 // Card not complete yet — keep the black screen waiting for more swipes.
-                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                notify(.warning)
                 return
             }
             revealed = true
             print("📳 [CLOCK-INPUT] Committed card: \(symbol)")
+            CrashLoggerService.shared.recordAction("ClockInput card committed \(symbol)")
             fireDoubleVibration()
             onRevealCard?(symbol)
             return
@@ -206,7 +256,7 @@ struct ClockInputView: View {
 
         guard !digitBuffer.isEmpty else {
             // Nothing to commit yet — gentle warning haptic
-            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            notify(.warning)
             return
         }
         // Discard any in-progress partial pair
@@ -214,6 +264,7 @@ struct ClockInputView: View {
         revealed = true
         let number = digitBuffer.reduce(0) { $0 * 10 + $1 }
         print("📳 [CLOCK-INPUT] Committed: \(number) — digits: \(digitBuffer)")
+        CrashLoggerService.shared.recordAction("ClockInput number committed \(number)")
         fireDoubleVibration()
         onReveal(digitBuffer)
     }
@@ -221,9 +272,17 @@ struct ClockInputView: View {
     // MARK: - Error flash
 
     private func triggerErrorFlash() {
-        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        guard isAppActiveForInput else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastErrorFeedbackAt) >= minErrorFeedbackInterval else { return }
+        lastErrorFeedbackAt = now
+        notify(.error)
         withAnimation(.easeInOut(duration: 0.15)) { flashError = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        flashResetTask?.cancel()
+        flashResetTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            guard isAppActiveForInput else { return }
             withAnimation(.easeInOut(duration: 0.15)) { flashError = false }
         }
     }
@@ -231,11 +290,63 @@ struct ClockInputView: View {
     // MARK: - Haptics
 
     private func fireDoubleVibration() {
+        guard isAppActiveForInput else { return }
         let gen = UINotificationFeedbackGenerator()
         gen.prepare()
         gen.notificationOccurred(.success)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        secondVibrationTask?.cancel()
+        secondVibrationTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            guard isAppActiveForInput else { return }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
+    }
+
+    private func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        guard shouldFireHapticNow() else { return }
+        let gen = UIImpactFeedbackGenerator(style: style)
+        gen.prepare()
+        gen.impactOccurred()
+    }
+
+    private func notify(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        guard shouldFireHapticNow() else { return }
+        let gen = UINotificationFeedbackGenerator()
+        gen.prepare()
+        gen.notificationOccurred(type)
+    }
+
+    private var isAppActiveForInput: Bool {
+        scenePhase == .active && UIApplication.shared.applicationState == .active
+    }
+
+    private func shouldFireHapticNow() -> Bool {
+        guard isAppActiveForInput else { return false }
+        let now = Date()
+        guard now.timeIntervalSince(lastHapticAt) >= minHapticInterval else { return false }
+        lastHapticAt = now
+        return true
+    }
+
+    private func suspendInputForLifecycle() {
+        cancelPendingFeedbackAndCommit()
+        lastSwipeAt = Date()
+        if !revealed {
+            pendingSwipe = nil
+            digitBuffer.removeAll()
+            cardSwipes.removeAll()
+        }
+        flashError = false
+        CrashLoggerService.shared.recordAction(mode == .card ? "ClockInput card suspended" : "ClockInput number suspended")
+    }
+
+    private func cancelPendingFeedbackAndCommit() {
+        inactivityCommitTask?.cancel()
+        inactivityCommitTask = nil
+        flashResetTask?.cancel()
+        flashResetTask = nil
+        secondVibrationTask?.cancel()
+        secondVibrationTask = nil
     }
 }

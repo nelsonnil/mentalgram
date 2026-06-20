@@ -353,6 +353,13 @@ final class IntegrationsSettings: ObservableObject {
     private func tokenIsUsed(target: String, token: String) -> Bool {
         let template = target == "note" ? noteTemplate : activeBioTemplate
         if token == "{text1}" {
+            // Acrostic Mode bypasses the biography template entirely and feeds the
+            // captured value directly into the acrostic engine. Therefore text1's
+            // selected input source must remain active even when the bio field is empty.
+            if target == "bio",
+               UserDefaults.standard.bool(forKey: "bio_acrostic_enabled") {
+                return true
+            }
             return template.contains("{text1}") || template.contains("{word}")
         }
         return template.contains(token)

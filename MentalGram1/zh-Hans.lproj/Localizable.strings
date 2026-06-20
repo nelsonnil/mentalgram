@@ -1153,6 +1153,16 @@
 "preload.failed.subtitle" = "请检查网络连接后重试。首次加载建议使用 Wi-Fi。";
 "preload.retry" = "重试";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "正在归档 %d/%d…";
+"post_reveal_archive.visible" = "揭示后有 %d 张照片仍可见";
+"post_reveal_archive.error" = "错误：%@";
+"post_reveal_archive.cooldown" = "%@ 后可归档 — 请等待 anti-bot 暂停";
+"post_reveal_archive.upload_active" = "上传进行中 — 请等完成后再归档";
+"post_reveal_archive.description" = "Post Prediction 让照片仍在 Instagram 上可见。请在下一个效果前归档它们。";
+"post_reveal_archive.button" = "立即归档";
+"post_reveal_archive.hold_error" = "暂停中：%@ — 请等待 %d 秒";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Instagram 同步";
 "sync.never_synced" = "从未同步";
@@ -1417,3 +1427,8 @@ He ji, jian jie he bian qian zhong yi ci zhi neng ji huo yi zhong jie mian lei x
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "套组已在 %d 分钟前揭示";
+"set.sync.recent_reveal.body" = "在 reveal 后过快归档同一套组（reveal -> archive -> reveal 循环）是 Instagram 检测到机器行为最常见的原因。请至少再等待 %d 分钟。";
+"set.sync.archive.button.visible" = "立即归档（%d 个可见）";

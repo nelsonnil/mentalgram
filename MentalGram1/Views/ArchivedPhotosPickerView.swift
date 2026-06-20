@@ -46,12 +46,18 @@ struct ArchivedPhotosPickerView: View {
     @ObservedObject var instagram = InstagramService.shared
 
     let targetSlotSymbol: String
+    var multiSelectMode: Bool = false
+    var maxSelection: Int = 1
+    var destinationLabels: [String] = []
+    var excludedMediaIds: Set<String> = []
     let onPhotoSelected: (ArchivedPhoto) -> Void
+    var onPhotosSelected: (([ArchivedPhoto]) -> Void)? = nil
 
     // Accumulated photos across all loaded pages
     @State private var archivedPhotos: [ArchivedPhoto] = []
     @State private var downloadedImages: [String: UIImage] = [:]
     @State private var selectedPhoto: ArchivedPhoto? = nil
+    @State private var selectedMediaIds: [String] = []
 
     // Pagination state
     @State private var nextCursor: String? = nil
@@ -119,13 +125,44 @@ struct ArchivedPhotosPickerView: View {
                     .padding()
                 } else {
                     ScrollView {
+                        if multiSelectMode {
+                            VStack(spacing: 4) {
+                                Text("\(selectedMediaIds.count)/\(maxSelection) selected")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.primary)
+                                Text("Photos will fill empty slots in the order selected. The badge shows the destination slot.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                if hasMore {
+                                    Text("Use Load more if you need older archived photos.")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 12)
+                        }
+
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(archivedPhotos) { photo in
+                                let isExcluded = excludedMediaIds.contains(photo.mediaId)
                                 ArchivedPhotoCell(
                                     photo: photo,
                                     thumbnailImage: downloadedImages[photo.mediaId],
-                                    isSelected: selectedPhoto?.mediaId == photo.mediaId,
-                                    onTap: { selectedPhoto = photo }
+                                    isSelected: multiSelectMode
+                                        ? selectedMediaIds.contains(photo.mediaId)
+                                        : selectedPhoto?.mediaId == photo.mediaId,
+                                    isDisabled: isExcluded,
+                                    selectionLabel: selectionLabel(for: photo.mediaId),
+                                    onTap: {
+                                        if multiSelectMode {
+                                            toggleMultiSelection(photo)
+                                        } else if !isExcluded {
+                                            selectedPhoto = photo
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -181,7 +218,7 @@ struct ArchivedPhotosPickerView: View {
                     }
                 }
             }
-            .navigationTitle("Select Photo for \(targetSlotSymbol)")
+            .navigationTitle(multiSelectMode ? "Select Archived Photos" : "Select Photo for \(targetSlotSymbol)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -197,15 +234,21 @@ struct ArchivedPhotosPickerView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Select") {
-                        if let selected = selectedPhoto {
+                    Button(multiSelectMode ? "Import" : "Select") {
+                        if multiSelectMode {
+                            let selected = selectedMediaIds.compactMap { mediaId in
+                                archivedPhotos.first(where: { $0.mediaId == mediaId })
+                            }
+                            onPhotosSelected?(selected)
+                            dismiss()
+                        } else if let selected = selectedPhoto {
                             onPhotoSelected(selected)
                             dismiss()
                         }
                     }
                     .foregroundColor(.white)
-                    .disabled(selectedPhoto == nil)
-                    .opacity(selectedPhoto == nil ? 0.5 : 1.0)
+                    .disabled(multiSelectMode ? selectedMediaIds.isEmpty : selectedPhoto == nil)
+                    .opacity((multiSelectMode ? selectedMediaIds.isEmpty : selectedPhoto == nil) ? 0.5 : 1.0)
                 }
             }
             .toolbarBackground(VaultTheme.Colors.backgroundSecondary, for: .navigationBar)
@@ -213,6 +256,23 @@ struct ArchivedPhotosPickerView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .onAppear { loadFirstPage() }
+    }
+
+    private func toggleMultiSelection(_ photo: ArchivedPhoto) {
+        guard !excludedMediaIds.contains(photo.mediaId) else { return }
+        if let existingIndex = selectedMediaIds.firstIndex(of: photo.mediaId) {
+            selectedMediaIds.remove(at: existingIndex)
+        } else if selectedMediaIds.count < maxSelection {
+            selectedMediaIds.append(photo.mediaId)
+        }
+    }
+
+    private func selectionLabel(for mediaId: String) -> String? {
+        guard let index = selectedMediaIds.firstIndex(of: mediaId) else { return nil }
+        if destinationLabels.indices.contains(index) {
+            return destinationLabels[index]
+        }
+        return "\(index + 1)"
     }
 
     // MARK: - Load Logic
@@ -339,6 +399,8 @@ struct ArchivedPhotoCell: View {
     let photo: ArchivedPhoto
     let thumbnailImage: UIImage?
     let isSelected: Bool
+    var isDisabled: Bool = false
+    var selectionLabel: String? = nil
     let onTap: () -> Void
     
     var body: some View {
@@ -359,15 +421,40 @@ struct ArchivedPhotoCell: View {
                     )
             }
             
+            if isDisabled {
+                Rectangle()
+                    .fill(Color.black.opacity(0.45))
+                    .frame(width: 110, height: 110)
+
+                Text("Used")
+                    .font(.caption.bold())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.65))
+                    .cornerRadius(6)
+            }
+
             // Selection overlay
             if isSelected {
                 Rectangle()
                     .fill(VaultTheme.Colors.primary.opacity(0.3))
                     .frame(width: 110, height: 110)
 
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundColor(VaultTheme.Colors.primary)
+                if let selectionLabel {
+                    Text(selectionLabel)
+                        .font(.system(size: selectionLabel.count > 2 ? 13 : 18, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                        .padding(.horizontal, 8)
+                        .frame(minWidth: 32, minHeight: 32)
+                        .background(Capsule().fill(VaultTheme.Colors.primary))
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundColor(VaultTheme.Colors.primary)
+                }
             }
 
             // Video badge (top-left) — indicates this is a video, not a photo
@@ -412,7 +499,9 @@ struct ArchivedPhotoCell: View {
                 .strokeBorder(isSelected ? VaultTheme.Colors.primary : Color.clear, lineWidth: 3)
         )
         .onTapGesture {
-            onTap()
+            if !isDisabled {
+                onTap()
+            }
         }
     }
     

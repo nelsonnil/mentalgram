@@ -1100,6 +1100,16 @@
 "preload.failed.subtitle" = "अपना कनेक्शन जांचें और फिर से प्रयास करें। पहली बार लोड करने के लिए Wi-Fi की सलाह दी जाती है।";
 "preload.retry" = "पुनः प्रयास करें";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "%d/%d आर्काइव हो रहा है…";
+"post_reveal_archive.visible" = "रिवील के बाद %d फोटो दिखाई दे रही हैं";
+"post_reveal_archive.error" = "त्रुटि: %@";
+"post_reveal_archive.cooldown" = "%@ में आर्काइव कर सकते हैं — anti-bot विराम की प्रतीक्षा करें";
+"post_reveal_archive.upload_active" = "अपलोड सक्रिय है — आर्काइव करने से पहले इसके समाप्त होने तक प्रतीक्षा करें";
+"post_reveal_archive.description" = "Post Prediction ने Instagram पर फोटो दिखाई हुई छोड़ दी हैं। अगले ट्रिक से पहले उन्हें आर्काइव करें।";
+"post_reveal_archive.button" = "अभी आर्काइव करें";
+"post_reveal_archive.hold_error" = "विराम सक्रिय: %@ — %dसे प्रतीक्षा करें";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Instagram सिंक";
 "sync.never_synced" = "कभी सिंक नहीं हुआ";
@@ -1364,3 +1374,8 @@ Sets, Bio aur Notes mein ek samay par keval ek interface prakar sakriy ho sakta 
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "सेट %d मिनट पहले रिवील हुआ";
+"set.sync.recent_reveal.body" = "रिवील के तुरंत बाद उसी सेट को आर्काइव करना (reveal -> archive -> reveal चक्र) Instagram bot detection का सबसे आम कारण है। कम से कम %d मिनट और इंतज़ार करें।";
+"set.sync.archive.button.visible" = "अभी आर्काइव करें (%d visible)";

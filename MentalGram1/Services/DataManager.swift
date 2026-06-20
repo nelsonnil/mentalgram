@@ -305,6 +305,32 @@ class DataManager: ObservableObject {
         objectWillChange.send()
         print("✅ [REPLACE] Photo replaced for symbol '\(symbol)'")
     }
+
+    /// Replace image data for a single slot. Used by bank-aware bulk imports so
+    /// filling Bank 2 does not accidentally replace the same symbol in every bank.
+    func replacePhoto(photoId: UUID, newFilename: String, newImageData: Data) {
+        for setIndex in sets.indices {
+            if let photoIndex = sets[setIndex].photos.firstIndex(where: { $0.id == photoId }) {
+                sets[setIndex].photos[photoIndex].filename = newFilename
+                let setId = sets[setIndex].photos[photoIndex].setId
+                let path = "photos/\(setId.uuidString)/\(photoId.uuidString).jpg"
+                sets[setIndex].photos[photoIndex].imagePath = SetPhoto.saveImageToFilesystem(data: newImageData, path: path)
+                sets[setIndex].photos[photoIndex].mediaId = nil
+                sets[setIndex].photos[photoIndex].isArchived = false
+                sets[setIndex].photos[photoIndex].uploadStatus = .pending
+                sets[setIndex].photos[photoIndex].errorMessage = nil
+                sets[setIndex].photos[photoIndex].uploadDate = nil
+                sets[setIndex].photos[photoIndex].lastCommentId = nil
+                sets[setIndex].photos[photoIndex].isVideo = false
+                sets[setIndex].photos[photoIndex].videoURL = nil
+                sets[setIndex].photos[photoIndex].videoAspectRatio = nil
+                saveSets()
+                objectWillChange.send()
+                print("✅ [REPLACE] Photo replaced for id '\(photoId)'")
+                return
+            }
+        }
+    }
     
     // MARK: - Delete Photos by Symbol
     

@@ -162,7 +162,7 @@ class ProfileCacheService: ObservableObject {
         // response from Instagram never downgrades good data we already had.
         // This protects against the soft-block pattern where /users/{id}/info
         // returns a 200 with an empty user object.
-        let merged = mergeWithCachedIfNeeded(profile)
+        let merged = sanitizeProfileSnapshot(mergeWithCachedIfNeeded(profile))
 
         guard isCacheable(merged) else {
             print("🛡️ [CACHE] Refusing to cache invalid profile userId=\(merged.userId) username='\(merged.username)' picURL.isEmpty=\(merged.profilePicURL.isEmpty)")
@@ -236,6 +236,13 @@ class ProfileCacheService: ObservableObject {
         )
     }
 
+    private func sanitizeProfileSnapshot(_ profile: InstagramProfile) -> InstagramProfile {
+        let remoteItems = deduplicatedMediaItems(profile.cachedMediaItems)
+        let remoteURLs = profile.cachedMediaURLs.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
+        let filteredURLs = deduplicatedURLs(remoteURLs, items: remoteItems)
+        return rebuildProfile(profile, mediaURLs: filteredURLs, mediaItems: remoteItems)
+    }
+
     private func isCacheable(_ profile: InstagramProfile) -> Bool {
         let userId = profile.userId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userId.isEmpty, userId != "0" else { return false }
@@ -301,9 +308,12 @@ class ProfileCacheService: ObservableObject {
     /// and removeMediaItem(byMediaId:) can resolve the correct URL to remove.
     func updateMediaURLsAndItems(_ urls: [String], items: [InstagramMediaItem]) {
         guard let p = cachedProfile else { return }
-        let updated = rebuildProfile(p, mediaURLs: urls, mediaItems: items)
+        let remoteURLs = urls.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
+        let remoteItems = deduplicatedMediaItems(items)
+        let filteredURLs = deduplicatedURLs(remoteURLs, items: remoteItems)
+        let updated = rebuildProfile(p, mediaURLs: filteredURLs, mediaItems: remoteItems)
         saveProfile(updated)
-        print("🗂️ [CACHE] updateMediaURLsAndItems: \(urls.count) URLs, \(items.count) items saved")
+        print("🗂️ [CACHE] updateMediaURLsAndItems: \(filteredURLs.count) URLs, \(remoteItems.count) items saved")
     }
 
     /// Removes a photo by mediaId from both the URL list and the full items list.
@@ -315,24 +325,95 @@ class ProfileCacheService: ObservableObject {
         }
         print("🔍 [CACHE] removeMediaItem: searching for \(mediaId) among \(p.cachedMediaItems.count) cached items, \(p.cachedMediaURLs.count) cached URLs")
 
-        guard let item = p.cachedMediaItems.first(where: { $0.mediaId == mediaId }) else {
-            print("⚠️ [CACHE] removeMediaItem: mediaId \(mediaId) NOT in cachedMediaItems")
-            print("⚠️ [CACHE]   Known mediaIds: \(p.cachedMediaItems.map { $0.mediaId }.joined(separator: ", "))")
-            // Fallback: try direct scan if the items list is stale (no silent refresh happened)
-            // We can't remove without knowing the URL — log and bail.
-            return
+        let targetKeys = mediaIdKeys(mediaId)
+        let urlsForMediaId = Set(p.cachedMediaItems.compactMap { item -> String? in
+            guard targetKeys.contains(mediaIdKey(item.mediaId)) else { return nil }
+            return item.imageURL
+        })
+
+        var urls = p.cachedMediaURLs
+        let beforeURLCount = urls.count
+        urls.removeAll { url in
+            if url.hasPrefix("reveal://") {
+                let raw = String(url.dropFirst("reveal://".count))
+                return targetKeys.contains(mediaIdKey(raw))
+            }
+            return urlsForMediaId.contains(url)
         }
 
-        let url = item.imageURL
-        let urlWasPresent = p.cachedMediaURLs.contains(url)
-        print("🔍 [CACHE] removeMediaItem: found item, imageURL=\(url.suffix(60))")
-        print("🔍 [CACHE]   URL present in cachedMediaURLs: \(urlWasPresent)")
+        var items = p.cachedMediaItems
+        let beforeItemCount = items.count
+        items.removeAll { targetKeys.contains(mediaIdKey($0.mediaId)) }
 
-        var urls  = p.cachedMediaURLs;  urls.removeAll  { $0 == url }
-        var items = p.cachedMediaItems; items.removeAll { $0.mediaId == mediaId }
         p = rebuildProfile(p, mediaURLs: urls, mediaItems: items)
         saveProfile(p)
-        print("✅ [CACHE] removeMediaItem done — \(urlWasPresent ? "removed" : "URL not in list (stale?)") — remaining: \(urls.count) URLs, \(items.count) items")
+        let removedURLs = beforeURLCount - urls.count
+        let removedItems = beforeItemCount - items.count
+        if removedURLs == 0 && removedItems == 0 {
+            print("⚠️ [CACHE] removeMediaItem: \(mediaId) not found, but cache was re-saved to keep observers consistent")
+        } else {
+            print("✅ [CACHE] removeMediaItem done — removed \(removedURLs) URL(s), \(removedItems) item(s)")
+        }
+    }
+
+    /// Removes a mediaId from the persisted reveal overlay file as well as the
+    /// profile snapshot. Use after any successful archive/re-archive.
+    func removeMediaEverywhere(mediaId: String, userId: String? = nil) {
+        removeMediaItem(byMediaId: mediaId)
+        let resolvedUserId = userId ?? cachedProfile?.userId ?? activeUserId()
+        guard let resolvedUserId, let revealState = loadRevealState(userId: resolvedUserId) else { return }
+        let targetKeys = mediaIdKeys(mediaId)
+        let urls = revealState.urls.filter { url in
+            guard url.hasPrefix("reveal://"), !url.hasPrefix("reveal://test-") else { return true }
+            let raw = String(url.dropFirst("reveal://".count))
+            return !targetKeys.contains(mediaIdKey(raw))
+        }
+        let dates = revealState.dates.filter { key, _ in
+            guard key.hasPrefix("reveal://"), !key.hasPrefix("reveal://test-") else { return true }
+            let raw = String(key.dropFirst("reveal://".count))
+            return !targetKeys.contains(mediaIdKey(raw))
+        }
+        saveRevealState(urls: urls, dates: dates, userId: resolvedUserId)
+        print("🧹 [CACHE] Removed mediaId \(mediaId) from profile + reveal state")
+    }
+
+    private func mediaIdKey(_ mediaId: String) -> String {
+        mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+    }
+
+    private func mediaIdKeys(_ mediaId: String) -> Set<String> {
+        [mediaId, mediaIdKey(mediaId)]
+    }
+
+    private func deduplicatedMediaItems(_ items: [InstagramMediaItem]) -> [InstagramMediaItem] {
+        var seen = Set<String>()
+        var result: [InstagramMediaItem] = []
+        for item in items {
+            let key = item.mediaId.isEmpty ? item.imageURL : mediaIdKey(item.mediaId)
+            guard seen.insert(key).inserted else { continue }
+            result.append(item)
+        }
+        return result
+    }
+
+    private func deduplicatedURLs(_ urls: [String], items: [InstagramMediaItem]) -> [String] {
+        var itemByURL: [String: InstagramMediaItem] = [:]
+        for item in items where itemByURL[item.imageURL] == nil {
+            itemByURL[item.imageURL] = item
+        }
+        var seen = Set<String>()
+        var result: [String] = []
+        for url in urls {
+            let key: String
+            if let mediaId = itemByURL[url]?.mediaId, !mediaId.isEmpty {
+                key = mediaIdKey(mediaId)
+            } else {
+                key = url
+            }
+            guard seen.insert(key).inserted else { continue }
+            result.append(url)
+        }
+        return result
     }
 
     private func rebuildProfile(_ p: InstagramProfile,

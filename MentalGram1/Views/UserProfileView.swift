@@ -261,7 +261,6 @@ struct UserProfileView: View {
                                 }
                                 
                             }
-                            .padding(.leading, UIScreen.main.bounds.width * 0.04)
                             .onTapGesture {
                                 if dateForce.isEnabled {
                                     cancelDateForceSpectator()
@@ -290,8 +289,9 @@ struct UserProfileView: View {
                                         .frame(maxWidth: .infinity)
                                 }
                             }
-                            .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .responsiveHorizontalPadding()
 
                         // Bio
                         VStack(alignment: .leading, spacing: 4) {

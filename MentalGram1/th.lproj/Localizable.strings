@@ -1100,6 +1100,16 @@
 "preload.failed.subtitle" = "ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง แนะนำให้ใช้ Wi-Fi สำหรับการโหลดครั้งแรก";
 "preload.retry" = "ลองอีกครั้ง";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "กำลังเก็บถาวร %d/%d…";
+"post_reveal_archive.visible" = "มีรูป %d รูปที่ยังมองเห็นหลัง reveal";
+"post_reveal_archive.error" = "ข้อผิดพลาด: %@";
+"post_reveal_archive.cooldown" = "เก็บถาวรได้ใน %@ — รอช่วงพัก anti-bot";
+"post_reveal_archive.upload_active" = "กำลังอัปโหลด — รอให้เสร็จก่อนเก็บถาวร";
+"post_reveal_archive.description" = "Post Prediction ทำให้รูปยังมองเห็นบน Instagram เก็บถาวรก่อนทริกถัดไป";
+"post_reveal_archive.button" = "เก็บถาวรตอนนี้";
+"post_reveal_archive.hold_error" = "พักอยู่: %@ — รอ %dวิ";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "ซิงค์ Instagram";
 "sync.never_synced" = "ยังไม่เคยซิงค์";
@@ -1364,3 +1374,8 @@ Chai interface dai khrae nueng prapet tho khriang samrap Sets, Bio lae Notes. Da
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "เซ็ตถูก reveal เมื่อ %d นาทีที่แล้ว";
+"set.sync.recent_reveal.body" = "การ archive เซ็ตเดิมเร็วเกินไปหลัง reveal (วงจร reveal -> archive -> reveal) เป็นสาเหตุที่พบบ่อยที่สุดของการตรวจจับบอทบน Instagram รออย่างน้อยอีก %d นาที";
+"set.sync.archive.button.visible" = "Archive ตอนนี้ (%d รายการที่มองเห็น)";

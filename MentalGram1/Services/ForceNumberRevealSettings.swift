@@ -55,6 +55,9 @@ class ForceNumberRevealSettings: ObservableObject {
 
     /// Tracks the pending re-archive task so it can be cancelled if a new reveal fires first
     private var reArchiveTask: Task<Void, Never>?
+    /// Hard lock: prevents duplicate restored/scheduled tasks from archiving the
+    /// same mediaIds in parallel after fast app resume/scene changes.
+    private var isExecutingReArchive = false
 
     /// Prevents restoreIfNeeded from creating duplicate tasks when called
     /// multiple times (init + scenePhase .active + rapid app switches).
@@ -80,6 +83,7 @@ class ForceNumberRevealSettings: ObservableObject {
     /// Call after a successful reveal with the mediaIds that were unarchived.
     /// Schedules a re-archive after the configured delay, persisted to survive app restarts.
     func scheduleReArchive(mediaIds: [String]) {
+        let mediaIds = uniqueMediaIds(mediaIds)
         guard autoReArchiveEnabled, !mediaIds.isEmpty else { return }
 
         // Cancel any previous pending re-archive
@@ -119,8 +123,12 @@ class ForceNumberRevealSettings: ObservableObject {
             return
         }
 
-        guard let ids = UserDefaults.standard.stringArray(forKey: pendingIdsKey),
-              !ids.isEmpty else { return }
+        guard let rawIds = UserDefaults.standard.stringArray(forKey: pendingIdsKey) else { return }
+        let ids = uniqueMediaIds(rawIds)
+        guard !ids.isEmpty else {
+            clearPersisted()
+            return
+        }
 
         let rawDeadline = UserDefaults.standard.double(forKey: deadlineKey)
         guard rawDeadline > 0 else { clearPersisted(); return }
@@ -161,6 +169,11 @@ class ForceNumberRevealSettings: ObservableObject {
     private let maxOverdueStecs_: TimeInterval = 3600.0
 
     private func scheduleTask(ids: [String], afterSeconds: TimeInterval, deadline: Date) {
+        let ids = uniqueMediaIds(ids)
+        guard !ids.isEmpty else {
+            clearPersisted()
+            return
+        }
         restoreAlreadyScheduled = true  // block any further restoreIfNeeded calls
         reArchiveTask = Task.detached(priority: .background) { [weak self] in
             guard let self else { return }
@@ -174,7 +187,7 @@ class ForceNumberRevealSettings: ObservableObject {
     }
 
     private func persistPending(ids: [String], deadline: Date) {
-        UserDefaults.standard.set(ids, forKey: pendingIdsKey)
+        UserDefaults.standard.set(uniqueMediaIds(ids), forKey: pendingIdsKey)
         UserDefaults.standard.set(deadline.timeIntervalSinceReferenceDate, forKey: deadlineKey)
     }
 
@@ -187,6 +200,23 @@ class ForceNumberRevealSettings: ObservableObject {
         }
     }
 
+    private func mediaIdKey(_ mediaId: String) -> String {
+        mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+    }
+
+    private func uniqueMediaIds(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for id in ids {
+            let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = mediaIdKey(trimmed)
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return result
+    }
+
     private func clearPersisted() {
         UserDefaults.standard.removeObject(forKey: pendingIdsKey)
         UserDefaults.standard.removeObject(forKey: deadlineKey)
@@ -194,10 +224,34 @@ class ForceNumberRevealSettings: ObservableObject {
         reArchiveTask = nil
     }
 
+    @MainActor
+    private func deferReArchiveForSafety(mediaIds: [String], minimumSeconds: Int, reason: String) {
+        let seconds = max(60, minimumSeconds)
+        let retryDate = Date().addingTimeInterval(TimeInterval(seconds))
+        reArchiveScheduledAt = retryDate
+        persistPending(ids: mediaIds, deadline: retryDate)
+        scheduleTask(ids: mediaIds, afterSeconds: TimeInterval(seconds), deadline: retryDate)
+        print("⏸️ [RE-ARCHIVE] Deferred \(seconds)s — \(reason)")
+        LogManager.shared.warning("Auto re-archive deferred \(seconds)s: \(reason)", category: .upload)
+    }
+
     // MARK: - Execute re-archive
 
     @MainActor
     private func executeReArchive(mediaIds: [String]) async {
+        let mediaIds = uniqueMediaIds(mediaIds)
+        guard !mediaIds.isEmpty else {
+            clearPersisted()
+            return
+        }
+        guard !isExecutingReArchive else {
+            print("⏱️ [RE-ARCHIVE] Execution already active — ignoring duplicate trigger")
+            LogManager.shared.warning("Auto re-archive duplicate trigger ignored", category: .upload)
+            return
+        }
+        isExecutingReArchive = true
+        defer { isExecutingReArchive = false }
+
         let instagram = InstagramService.shared
         let dataManager = DataManager.shared
 
@@ -206,6 +260,20 @@ class ForceNumberRevealSettings: ObservableObject {
         LogManager.shared.info("Auto re-archive starting: \(mediaIds.count) photo(s)", category: .upload)
 
         reArchiveScheduledAt = nil
+
+        // ── COLD-START / WARM-RESUME LOCK ─────────────────────────────────────
+        // Restored auto tasks are invisible to the performer. If a pending deadline
+        // lands during app launch / foreground warm-up, do NOT fire a POST. The
+        // tester log showed POST /only_me/ inside cold-start, which can look like
+        // bot activity because the user did not touch anything.
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            deferReArchiveForSafety(
+                mediaIds: mediaIds,
+                minimumSeconds: InstagramSafetyGate.shared.coldStartSecondsRemaining + Int.random(in: 25...45),
+                reason: "cold-start/warm-resume active"
+            )
+            return
+        }
 
         // ── SYNC & ARCHIVE LOCK ────────────────────────────────────────────────
         // Defer if user triggered a unified Sync & Archive operation to avoid parallel API calls.
@@ -218,6 +286,20 @@ class ForceNumberRevealSettings: ObservableObject {
             // returned. If the app was killed before the 5-min retry, the
             // re-archive job was silently lost. Persist + reschedule the task
             // so the retry actually fires after the deferral window.
+            persistPending(ids: mediaIds, deadline: retryDate)
+            scheduleTask(ids: mediaIds, afterSeconds: 5 * 60, deadline: retryDate)
+            return
+        }
+
+        // ── UPLOAD LOCK ───────────────────────────────────────────────────────
+        // Never mix auto re-archive with an active upload/auto-archive pipeline.
+        // Both use sensitive POST /only_me/ calls and sharing the same session can
+        // look like bot-like parallel mutation traffic to Instagram.
+        if UploadManager.shared.activeTask != nil || UploadManager.shared.isUploading {
+            print("⏸️ [RE-ARCHIVE] Upload is active — deferring auto re-archive by 5 min")
+            LogManager.shared.warning("Auto re-archive deferred: upload in progress", category: .upload)
+            let retryDate = Date().addingTimeInterval(5 * 60)
+            reArchiveScheduledAt = retryDate
             persistPending(ids: mediaIds, deadline: retryDate)
             scheduleTask(ids: mediaIds, afterSeconds: 5 * 60, deadline: retryDate)
             return
@@ -298,6 +380,16 @@ class ForceNumberRevealSettings: ObservableObject {
                 return
             }
 
+            if InstagramSafetyGate.shared.isInColdStartWindow {
+                updatePersisted(remaining: remaining)
+                deferReArchiveForSafety(
+                    mediaIds: remaining,
+                    minimumSeconds: InstagramSafetyGate.shared.coldStartSecondsRemaining + Int.random(in: 25...45),
+                    reason: "cold-start/warm-resume became active mid-run"
+                )
+                return
+            }
+
             // Re-check rate limit before each call
             let midCheck = instagram.checkRateLimit()
             if midCheck.remaining < 2 {
@@ -322,8 +414,9 @@ class ForceNumberRevealSettings: ObservableObject {
                 return
             }
 
-            // Anti-bot: random human-like delay between each call
-            let delay = UInt64.random(in: 800_000_000...2_200_000_000)
+            // Anti-bot: auto re-archive is not performer-visible. Use a much
+            // slower human cadence than reveal calls to avoid POST bursts.
+            let delay = UInt64.random(in: 35_000_000_000...70_000_000_000)
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else {
                 updatePersisted(remaining: remaining)
@@ -331,7 +424,7 @@ class ForceNumberRevealSettings: ObservableObject {
             }
 
             do {
-                let archived = try await instagram.archivePhoto(mediaId: mediaId)
+                let archived = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
                 if archived {
                     // Update local state
                     for set in dataManager.sets {
@@ -343,8 +436,11 @@ class ForceNumberRevealSettings: ObservableObject {
                         }
                     }
                     // Remove from remaining and update persisted IDs (partial progress saved)
-                    remaining.removeAll { $0 == mediaId }
+                    let key = mediaIdKey(mediaId)
+                    remaining.removeAll { mediaIdKey($0) == key }
                     updatePersisted(remaining: remaining)
+                    ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
+                    InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .archive)
 
                     print("✅ [RE-ARCHIVE] Re-archived (\(mediaId)) — \(remaining.count) remaining")
                     LogManager.shared.success("Auto re-archived (\(mediaId))", category: .upload)

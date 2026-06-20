@@ -1455,6 +1455,16 @@
 "preload.failed.subtitle" = "연결을 확인한 후 다시 시도하세요. 첫 로딩에는 Wi-Fi를 권장합니다.";
 "preload.retry" = "다시 시도";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "%d/%d 보관 중…";
+"post_reveal_archive.visible" = "리빌 후 %d장의 사진이 표시됨";
+"post_reveal_archive.error" = "오류: %@";
+"post_reveal_archive.cooldown" = "%@ 후 보관 가능 — anti-bot 대기를 기다리세요";
+"post_reveal_archive.upload_active" = "업로드 진행 중 — 보관하기 전에 완료될 때까지 기다리세요";
+"post_reveal_archive.description" = "Post Prediction이 Instagram에 사진을 표시한 상태로 남겼습니다. 다음 트릭 전에 보관하세요.";
+"post_reveal_archive.button" = "지금 보관";
+"post_reveal_archive.hold_error" = "대기 활성: %@ — %d초 기다리세요";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Instagram 동기화";
 "sync.never_synced" = "동기화된 적 없음";
@@ -1719,3 +1729,8 @@ Set, soGae, noteeseo han beon e hana ui in teopeoiseu yuhyeong man hwalseonghwa 
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "세트가 %d분 전에 공개됨";
+"set.sync.recent_reveal.body" = "리빌 직후 같은 세트를 너무 빨리 보관 처리하는 것(reveal -> archive -> reveal 반복)은 Instagram 봇 감지의 가장 흔한 원인입니다. 최소 %d분 더 기다리세요.";
+"set.sync.archive.button.visible" = "지금 보관하기(%d개 표시됨)";

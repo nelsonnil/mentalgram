@@ -1632,6 +1632,16 @@
 "preload.failed.subtitle" = "Verifique sua conexão e tente novamente. Recomendamos Wi-Fi para o primeiro carregamento.";
 "preload.retry" = "Tentar novamente";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "Arquivando %d/%d…";
+"post_reveal_archive.visible" = "%d foto(s) visível(is) após a revelação";
+"post_reveal_archive.error" = "Erro: %@";
+"post_reveal_archive.cooldown" = "Pode arquivar em %@ — aguarde a pausa anti-bot";
+"post_reveal_archive.upload_active" = "Envio ativo — espere terminar antes de arquivar";
+"post_reveal_archive.description" = "O Post Prediction deixou fotos visíveis no Instagram. Arquive-as antes do próximo truque.";
+"post_reveal_archive.button" = "Arquivar agora";
+"post_reveal_archive.hold_error" = "Pausa ativa: %@ — aguarde %ds";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Sincronização com Instagram";
 "sync.never_synced" = "Nunca sincronizado";
@@ -1896,3 +1906,8 @@ Apenas um tipo de interface pode estar ativo por vez entre Sets, Bio e Notas. Co
 "performance.mode.test" = "Modo teste";
 "performance.mode.subtitle" = "Escolha como o Performance trata os inputs.";
 "performance.mode.test.note" = "O modo teste permite praticar localmente. O Instagram falso pode mudar, incluindo Bio, Notes, Profile Picture e Post Prediction, mas nada e enviado ao Instagram. As alteracoes temporarias sao redefinidas ao sair do Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "Set revelado há %d min";
+"set.sync.recent_reveal.body" = "Arquivar o mesmo set cedo demais depois de um reveal (ciclo reveal -> archive -> reveal) é a causa mais comum de detecção de bot no Instagram. Aguarde pelo menos mais %d min.";
+"set.sync.archive.button.visible" = "Arquivar agora (%d visíveis)";

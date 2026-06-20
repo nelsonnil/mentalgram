@@ -1451,6 +1451,16 @@
 "preload.failed.subtitle" = "接続を確認して、もう一度お試しください。初回読み込みはWi-Fiを推奨します。";
 "preload.retry" = "再試行";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "%d/%dをアーカイブ中…";
+"post_reveal_archive.visible" = "リビール後に%d枚の写真が表示中";
+"post_reveal_archive.error" = "エラー: %@";
+"post_reveal_archive.cooldown" = "%@後にアーカイブ可能 — anti-bot待機を待ってください";
+"post_reveal_archive.upload_active" = "アップロード中です — アーカイブする前に完了を待ってください";
+"post_reveal_archive.description" = "Post PredictionによりInstagramで写真が表示されたままです。次のトリックの前にアーカイブしてください。";
+"post_reveal_archive.button" = "今すぐアーカイブ";
+"post_reveal_archive.hold_error" = "待機中: %@ — %d秒待ってください";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Instagramと同期";
 "sync.never_synced" = "未同期";
@@ -1715,3 +1725,8 @@ Setto, profairu, noto de douji ni tsukaeru intafeisu wa hitotsu dake desu. Tsuzu
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "セットは%d分前にリビール済み";
+"set.sync.recent_reveal.body" = "リビール直後に同じセットをアーカイブすること（reveal -> archive -> reveal）は、Instagram のBot検出で最も多い原因です。少なくともあと%d分待ってください。";
+"set.sync.archive.button.visible" = "今すぐアーカイブ（%d件表示中）";

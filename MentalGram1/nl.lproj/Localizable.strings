@@ -1450,6 +1450,16 @@
 "preload.failed.subtitle" = "Controleer je verbinding en probeer het opnieuw. Wifi wordt aanbevolen voor de eerste keer laden.";
 "preload.retry" = "Opnieuw proberen";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "Archiveren %d/%d…";
+"post_reveal_archive.visible" = "%d foto('s) zichtbaar na reveal";
+"post_reveal_archive.error" = "Fout: %@";
+"post_reveal_archive.cooldown" = "Archiveerbaar over %@ — wacht op de anti-botpauze";
+"post_reveal_archive.upload_active" = "Upload actief — wacht tot deze klaar is voordat je archiveert";
+"post_reveal_archive.description" = "Post Prediction liet foto's zichtbaar op Instagram. Archiveer ze voor de volgende truc.";
+"post_reveal_archive.button" = "Nu archiveren";
+"post_reveal_archive.hold_error" = "Pauze actief: %@ — wacht %ds";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Instagram-synchronisatie";
 "sync.never_synced" = "Nog nooit gesynchroniseerd";
@@ -1714,3 +1724,8 @@ Slechts een interfacetype kan tegelijk actief zijn voor Sets, Bio en Notities. A
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "Set %d min geleden onthuld";
+"set.sync.recent_reveal.body" = "Dezelfde set te snel na een reveal archiveren (reveal -> archive -> reveal) is de meest voorkomende oorzaak van Instagram-botdetectie. Wacht nog minstens %d min.";
+"set.sync.archive.button.visible" = "Nu archiveren (%d zichtbaar)";

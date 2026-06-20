@@ -106,6 +106,7 @@ struct SetDetailView: View {
 
     // ARCHIVED PHOTO MAPPING
     @State private var showArchivedPicker = false
+    @State private var showBulkArchivedPicker = false
     @State private var archivedPickerTargetSymbol: String? = nil
     @State private var showSlotSourcePicker = false
     @State private var slotSourcePickerSymbol: String? = nil
@@ -850,6 +851,21 @@ struct SetDetailView: View {
                 )
             }
         }
+        .sheet(isPresented: $showBulkArchivedPicker) {
+            let emptyLabels = emptySlotLabelsForCurrentSet()
+            let emptyCount = emptyLabels.count
+            ArchivedPhotosPickerView(
+                targetSlotSymbol: "\(emptyCount) empty slots",
+                multiSelectMode: true,
+                maxSelection: emptyCount,
+                destinationLabels: emptyLabels,
+                excludedMediaIds: Set(currentSet.photos.compactMap { $0.mediaId }),
+                onPhotoSelected: { _ in },
+                onPhotosSelected: { archivedPhotos in
+                    loadBulkArchivedPhotosIntoEmptySlots(photos: archivedPhotos)
+                }
+            )
+        }
         .fileImporter(
             isPresented: $showListImport,
             allowedContentTypes: [.plainText, .text, UTType(filenameExtension: "csv") ?? .plainText],
@@ -1119,10 +1135,10 @@ struct SetDetailView: View {
                                 .foregroundColor(Color(hex: "FF9F0A"))
                                 .padding(.top, 1)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Set revelado hace \(minutesSinceReveal) min")
+                                Text(String(format: String(localized: "set.sync.recent_reveal.title"), minutesSinceReveal))
                                     .font(.subheadline.bold())
                                     .foregroundColor(Color(hex: "FF9F0A"))
-                                Text("Archivar el mismo set demasiado pronto después de un reveal (ciclo reveal→archive→reveal) es la causa más frecuente de detección de bot en Instagram. Se recomienda esperar al menos \(waitLeft) min más.")
+                                Text(String(format: String(localized: "set.sync.recent_reveal.body"), waitLeft))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -1191,7 +1207,7 @@ struct SetDetailView: View {
                                 .foregroundColor(saIconColor)
                                 .opacity(saDisabled ? 0.6 : 1.0)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Sync & Archive (\(visibleUploadedPhotos.count) visible)")
+                                Text(String(format: String(localized: "set.sync.archive.button.visible"), visibleUploadedPhotos.count))
                                     .font(.subheadline.bold())
                                     .foregroundColor(saTitleColor)
                                 Text(saSubtitle)
@@ -1358,8 +1374,8 @@ struct SetDetailView: View {
                             errorMessage: nil
                         )
                     }
-                    // Remove from ProfileCache so PerformanceView grid updates instantly
-                    ProfileCacheService.shared.removeMediaItem(byMediaId: mediaId)
+                    // Remove from ProfileCache + reveal_state so Performance cannot restore stale placeholders.
+                    ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                 }
             } else {
                 LogManager.shared.warning("Archive All: failed to archive \(mediaId)", category: .api)
@@ -1372,6 +1388,12 @@ struct SetDetailView: View {
         await MainActor.run {
             isArchivingAll = false
             archiveAllCompleted = true
+        }
+        if archiveAllProgress > 0 {
+            UserDefaults.standard.set(true, forKey: "perf_needs_authoritative_grid_sync")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            NotificationCenter.default.post(name: .performanceManualRefresh, object: nil)
         }
     }
 
@@ -1447,10 +1469,27 @@ struct SetDetailView: View {
             var visibleOnIG: Set<String> = []
             var nextMaxId: String? = nil
             var page = 0
+            let maxReverifyFeedPages = 4
+            var feedScanCompleted = false
+            var feedScanPausedReason: String? = nil
 
             do {
                 await MainActor.run { manager.reverifyError = nil }
                 repeat {
+                    guard page < maxReverifyFeedPages else {
+                        feedScanPausedReason = "Re-verify paused after \(maxReverifyFeedPages) feed pages for account safety. Try again later if needed."
+                        LogManager.shared.warning("Re-verify paused after \(maxReverifyFeedPages) /feed/user pages", category: .api)
+                        break
+                    }
+
+                    let pageDecision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+                    guard pageDecision.allowed else {
+                        feedScanPausedReason = "Re-verify paused for safety. Wait \(pageDecision.waitSeconds)s before trying again."
+                        LogManager.shared.warning("Re-verify feed page blocked: \(pageDecision.reason) (\(pageDecision.waitSeconds)s)", category: .api)
+                        break
+                    }
+                    InstagramSafetyGate.shared.record(.ownProfilePagination)
+
                     page += 1
                     print("🔍 [RE-VERIFY] Fetching page \(page) from /feed/user/…")
                     let (items, cursor) = try await ig.getUserMedia(maxId: nextMaxId)
@@ -1468,9 +1507,16 @@ struct SetDetailView: View {
                         print("🔍 [RE-VERIFY]   Sample IDs from feed: \(sample)")
                     }
                     // Stop if page returned no items (avoid infinite pagination)
-                    if items.isEmpty { break }
+                    if items.isEmpty {
+                        feedScanCompleted = true
+                        break
+                    }
                     if nextMaxId != nil {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        let pauseSeconds = UInt64.random(in: 8...14)
+                        print("🔍 [RE-VERIFY] Human pause before next feed page — \(pauseSeconds)s")
+                        try? await Task.sleep(nanoseconds: pauseSeconds * 1_000_000_000)
+                    } else {
+                        feedScanCompleted = true
                     }
                 } while nextMaxId != nil
             } catch let igErr as InstagramError {
@@ -1511,6 +1557,13 @@ struct SetDetailView: View {
                     manager.reverifyTask = nil
                 }
                 return
+            }
+
+            if !feedScanCompleted {
+                let warning = feedScanPausedReason ?? "Re-verify paused before scanning every feed page to protect the account."
+                print("🛡️ [RE-VERIFY] \(warning)")
+                LogManager.shared.warning(warning, category: .api)
+                await MainActor.run { manager.reverifyError = warning }
             }
 
             print("🔍 [RE-VERIFY] Instagram reports \(visibleOnIG.count / 2) visible post(s) — comparing with \(photoSnapshots.count) local photo(s)")
@@ -1571,6 +1624,7 @@ struct SetDetailView: View {
             // the Performance grid even though the set believed everything was archived.
             // NOTE: reads from disk directly (loadProfile) so it works even when
             //       the in-memory cachedProfile is nil (e.g. cleared by another path).
+            if feedScanCompleted {
             await MainActor.run {
                 let cache = ProfileCacheService.shared
                 // Prefer in-memory; fall back to disk so we never miss orphans
@@ -1617,6 +1671,10 @@ struct SetDetailView: View {
                 }
                 LogManager.shared.info("Re-verify: removed \(orphanItems.count) ghost post(s) from profile cache", category: .general)
             }
+            } else {
+                print("🔍 [RE-VERIFY] Orphan cleanup skipped — feed scan was partial")
+                LogManager.shared.info("Re-verify: orphan cleanup skipped because feed scan was partial", category: .general)
+            }
             // ────────────────────────────────────────────────────────────────────
 
             // ── GHOST ARCHIVER ────────────────────────────────────────────────────
@@ -1627,7 +1685,7 @@ struct SetDetailView: View {
             // old user posts have much lower IDs and are never matched.
             let allTrackedMediaIds = Set(photoSnapshots.map { $0.mediaId })
             let trackedInt64s = allTrackedMediaIds.compactMap { Int64($0) }
-            if let minTracked = trackedInt64s.min() {
+            if feedScanCompleted, let minTracked = trackedInt64s.min() {
                 // Collect unique numeric IDs from the live feed
                 let uniqueVisibleNumericIds = visibleOnIG.filter { Int64($0) != nil }
                 let ghostIds = uniqueVisibleNumericIds.filter { id in
@@ -1661,6 +1719,9 @@ struct SetDetailView: View {
                 } else {
                     print("🔍 [RE-VERIFY] Ghost archiver: no untracked posts in upload range")
                 }
+            } else if !feedScanCompleted {
+                print("🔍 [RE-VERIFY] Ghost archiver skipped — feed scan was partial")
+                LogManager.shared.info("Re-verify: ghost archiver skipped because feed scan was partial", category: .general)
             }
             // ────────────────────────────────────────────────────────────────────
 
@@ -2018,8 +2079,8 @@ struct SetDetailView: View {
                             errorMessage: nil
                         )
                     }
-                    // Remove from ProfileCache so PerformanceView grid updates instantly
-                    ProfileCacheService.shared.removeMediaItem(byMediaId: mediaId)
+                    // Remove from ProfileCache + reveal_state so Performance cannot restore stale placeholders.
+                    ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                 }
             } else {
                 LogManager.shared.warning("S&A: failed to archive \(mediaId) after retry", category: .api)
@@ -2047,6 +2108,12 @@ struct SetDetailView: View {
             archiveAllCompleted = true
             uploadManager.isSyncArchiveActive = false
             archiveStopReason = finalStopReason
+        }
+        if archived > 0 {
+            UserDefaults.standard.set(true, forKey: "perf_needs_authoritative_grid_sync")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            NotificationCenter.default.post(name: .performanceManualRefresh, object: nil)
         }
     }
 
@@ -3124,54 +3191,88 @@ struct SetDetailView: View {
             // Summary + Select All
             let filled = labels.count - emptyLabels.count
             let total = labels.count
+            let supportsBulkImport = currentSet.type == .custom
+                || currentSet.type == .word
+                || currentSet.type == .number
+                || currentSet.type == .card
+            let canBulkImport = supportsBulkImport
+                && !emptyLabels.isEmpty
+                && !isBulkLoading
+                && !isProcessingSlotPhoto
+                && !uploadManager.isActive
+                && !uploadManager.isSyncArchiveActive
+                && !uploadManager.isReverifying
 
-            HStack(spacing: 8) {
-                Image(systemName: filled == total ? "checkmark.circle.fill" : "circle.dotted")
-                    .foregroundColor(filled == total ? .green : .orange)
-                Text("\(filled)/\(total) slots filled")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: filled == total ? "checkmark.circle.fill" : "circle.dotted")
+                        .foregroundColor(filled == total ? .green : .orange)
+                    Text("\(filled)/\(total) slots filled")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
 
-                if filled < total {
-                    Text("(\(emptyLabels.count) missing)")
-                        .font(.caption)
-                        .foregroundColor(.red)
+                    if filled < total {
+                        Text("(\(emptyLabels.count) missing)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+
+                    Spacer()
                 }
 
-                Spacer()
+                if supportsBulkImport && filled < total {
+                    HStack(spacing: 10) {
+                        PhotosPicker(
+                            selection: $bulkSelectedItems,
+                            maxSelectionCount: emptyLabels.count,
+                            matching: .images
+                        ) {
+                            Label("Gallery", systemImage: "photo.stack")
+                                .font(.caption.bold())
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(canBulkImport ? VaultTheme.Colors.primary : Color.gray.opacity(0.35))
+                                .cornerRadius(8)
+                        }
+                        .disabled(!canBulkImport)
 
-                // Import Photos (bulk load) — hidden until needed
-                // if !emptyLabels.isEmpty && !isBulkLoading {
-                //     PhotosPicker(
-                //         selection: $bulkSelectedItems,
-                //         maxSelectionCount: emptyLabels.count,
-                //         matching: .images
-                //     ) {
-                //         HStack(spacing: 5) {
-                //             Image(systemName: "photo.stack")
-                //                 .font(.system(size: 13))
-                //             Text("Import Photos")
-                //                 .font(.caption.bold())
-                //         }
-                //         .foregroundColor(.white)
-                //         .padding(.horizontal, 12)
-                //         .padding(.vertical, 7)
-                //         .background(VaultTheme.Colors.primary)
-                //         .cornerRadius(8)
-                //     }
-                // }
+                        if instagram.isLoggedIn {
+                            Button {
+                                if emptySlotLabelsForCurrentSet().isEmpty {
+                                    uploadManager.showingError = "There are no empty slots to fill."
+                                } else {
+                                    showBulkArchivedPicker = true
+                                }
+                            } label: {
+                                Label("Archived", systemImage: "archivebox")
+                                    .font(.caption.bold())
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(canBulkImport ? Color.blue.opacity(0.85) : Color.gray.opacity(0.35))
+                                    .cornerRadius(8)
+                            }
+                            .disabled(!canBulkImport)
+                        }
+                    }
+
+                    Text("Photos are placed in slot order (\(emptyLabels.prefix(4).joined(separator: ", "))\(emptyLabels.count > 4 ? "…" : "")). You can also add one by one by tapping any empty slot.")
+                        .font(.caption)
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal)
 
-            // Bulk loading progress — hidden until Import Photos is re-enabled
-            // if isBulkLoading {
-            //     HStack(spacing: 8) {
-            //         ProgressView().scaleEffect(0.8).tint(VaultTheme.Colors.primary)
-            //         Text("Loading \(bulkLoadProgress.current)/\(bulkLoadProgress.total)…")
-            //             .font(.caption)
-            //             .foregroundColor(.secondary)
-            //     }
-            // }
+            if isBulkLoading {
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.8).tint(VaultTheme.Colors.primary)
+                    Text("Loading \(bulkLoadProgress.current)/\(bulkLoadProgress.total)…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
 
             if isProcessingSlotPhoto {
                 HStack(spacing: 8) {
@@ -3557,8 +3658,23 @@ struct SetDetailView: View {
     
     // MARK: - Bulk Load (Select All empty slots)
 
+    private func currentSlotPhotosForBulkImport() -> [SetPhoto] {
+        if currentSet.banks.isEmpty {
+            return currentSet.photos
+        }
+        guard let bank = selectedBankIfAvailable else { return [] }
+        return dataManager.getPhotosForBank(setId: currentSet.id, bankId: bank.id)
+    }
+
     private func loadBulkPhotosIntoEmptySlots(items: [PhotosPickerItem]) {
-        let photos = currentSet.photos
+        guard !uploadManager.isActive,
+              !uploadManager.isSyncArchiveActive,
+              !uploadManager.isReverifying else {
+            uploadManager.showingError = "Import is disabled while upload or sync is active."
+            bulkSelectedItems = []
+            return
+        }
+        let photos = currentSlotPhotosForBulkImport()
         let labels = effectiveSlotLabels
         let photosBySymbol = Dictionary(grouping: photos, by: { $0.symbol })
         let emptyLabels = labels.filter { label in
@@ -3579,12 +3695,14 @@ struct SetDetailView: View {
                 let validData    = InstagramService.adjustImageAspectRatio(imageData: data)
                 let optimized    = InstagramService.compressImageForUpload(imageData: validData, photoIndex: idx)
                 let filename     = item.itemIdentifier ?? "photo_\(UUID().uuidString)"
-                let existingPhotos = currentSet.photos.filter { $0.symbol == symbol }
+                let existingPhotos = photos.filter { $0.symbol == symbol }
                 await MainActor.run {
-                    if !existingPhotos.isEmpty {
-                        dataManager.replacePhotoAtSymbol(
-                            setId: currentSet.id, symbol: symbol,
-                            newFilename: filename, newImageData: optimized)
+                    if let existingPhoto = existingPhotos.first {
+                        dataManager.replacePhoto(
+                            photoId: existingPhoto.id,
+                            newFilename: filename,
+                            newImageData: optimized
+                        )
                     } else {
                         let position = labels.firstIndex(of: symbol) ?? labels.count
                         dataManager.insertPhotoAtPosition(
@@ -3602,82 +3720,122 @@ struct SetDetailView: View {
         }
     }
 
+    private func emptySlotLabelsForCurrentSet() -> [String] {
+        let labels = effectiveSlotLabels
+        let photosBySymbol = Dictionary(grouping: currentSlotPhotosForBulkImport(), by: { $0.symbol })
+        return labels.filter { label in
+            guard let p = photosBySymbol[label]?.first else { return true }
+            return p.imageData == nil
+        }
+    }
+
+    private func loadBulkArchivedPhotosIntoEmptySlots(photos archivedPhotos: [ArchivedPhoto]) {
+        guard !uploadManager.isActive,
+              !uploadManager.isSyncArchiveActive,
+              !uploadManager.isReverifying else {
+            uploadManager.showingError = "Import is disabled while upload or sync is active."
+            return
+        }
+
+        let emptyLabels = emptySlotLabelsForCurrentSet()
+        guard !emptyLabels.isEmpty, !archivedPhotos.isEmpty else { return }
+
+        let usedMediaIds = Set(currentSet.photos.compactMap { $0.mediaId })
+        var seenMediaIds = Set<String>()
+        let uniquePhotos = archivedPhotos.filter { photo in
+            guard !usedMediaIds.contains(photo.mediaId), !seenMediaIds.contains(photo.mediaId) else { return false }
+            seenMediaIds.insert(photo.mediaId)
+            return true
+        }
+        let photosToMap = Array(zip(uniquePhotos, emptyLabels))
+        guard !photosToMap.isEmpty else {
+            uploadManager.showingError = "Selected archived photos are already used in this set."
+            return
+        }
+
+        isBulkLoading = true
+        bulkLoadProgress = (0, photosToMap.count)
+
+        Task {
+            for (idx, (archivedPhoto, symbol)) in photosToMap.enumerated() {
+                do {
+                    try await mapArchivedPhotoToSlotAsync(archivedPhoto: archivedPhoto, symbol: symbol, photoIndex: idx)
+                    await MainActor.run {
+                        bulkLoadProgress = (idx + 1, photosToMap.count)
+                    }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                } catch {
+                    LogManager.shared.error("Bulk archived import failed for \(archivedPhoto.mediaId): \(error.localizedDescription)", category: .general)
+                }
+            }
+
+            await MainActor.run {
+                isBulkLoading = false
+                bulkLoadProgress = (0, 0)
+                let allPhotosReady = currentSet.photos.allSatisfy { $0.mediaId != nil && $0.uploadStatus == .completed }
+                if allPhotosReady && currentSet.status != .completed {
+                    dataManager.updateSetStatus(id: currentSet.id, status: .completed)
+                }
+            }
+        }
+    }
+
     
     // MARK: - Map Archived Photo to Slot
+
+    private func mapArchivedPhotoToSlotAsync(archivedPhoto: ArchivedPhoto, symbol: String, photoIndex: Int = 0) async throws {
+        guard let url = URL(string: archivedPhoto.imageURL) else {
+            throw InstagramError.invalidURL
+        }
+
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let validImageData = InstagramService.adjustImageAspectRatio(imageData: data)
+        let optimizedImageData = InstagramService.compressImageForUpload(imageData: validImageData, photoIndex: photoIndex)
+        let filename = "archived_\(archivedPhoto.mediaId)"
+
+        await MainActor.run {
+            let existingPhotos = currentSlotPhotosForBulkImport().filter { $0.symbol == symbol }
+            if let existingPhoto = existingPhotos.first {
+                dataManager.replacePhoto(
+                    photoId: existingPhoto.id,
+                    newFilename: filename,
+                    newImageData: optimizedImageData
+                )
+            } else {
+                let labels = effectiveSlotLabels
+                let position = labels.firstIndex(of: symbol) ?? labels.count
+                dataManager.insertPhotoAtPosition(
+                    setId: currentSet.id,
+                    symbol: symbol,
+                    filename: filename,
+                    imageData: optimizedImageData,
+                    position: position
+                )
+            }
+
+            if let mappedPhoto = currentSlotPhotosForBulkImport().first(where: { $0.symbol == symbol }) {
+                dataManager.updatePhoto(
+                    photoId: mappedPhoto.id,
+                    mediaId: archivedPhoto.mediaId,
+                    isArchived: true,
+                    uploadStatus: .completed,
+                    errorMessage: nil,
+                    uploadDate: archivedPhoto.timestamp,
+                    isVideo: archivedPhoto.isVideo,
+                    videoURL: archivedPhoto.videoURL,
+                    videoAspectRatio: archivedPhoto.videoAspectRatio
+                )
+            }
+        }
+    }
     
     private func mapArchivedPhotoToSlot(archivedPhoto: ArchivedPhoto, symbol: String) {
         isProcessingSlotPhoto = true
         
         Task {
             do {
-                // Download the full image from Instagram
-                guard let url = URL(string: archivedPhoto.imageURL) else {
-                    throw InstagramError.invalidURL
-                }
-                
-                let (data, _) = try await URLSession.shared.data(from: url)
-                
-                // Apply same compression pipeline
-                let validImageData = InstagramService.adjustImageAspectRatio(imageData: data)
-                let optimizedImageData = InstagramService.compressImageForUpload(imageData: validImageData, photoIndex: 0)
-                
-                let filename = "archived_\(archivedPhoto.mediaId)"
-                
-                // Check if slot already has a photo (replace) or is empty (insert)
-                let existingPhotos = currentSet.photos.filter { $0.symbol == symbol }
-                
+                try await mapArchivedPhotoToSlotAsync(archivedPhoto: archivedPhoto, symbol: symbol)
                 await MainActor.run {
-                    if !existingPhotos.isEmpty {
-                        // Replace existing photo
-                        dataManager.replacePhotoAtSymbol(
-                            setId: currentSet.id,
-                            symbol: symbol,
-                            newFilename: filename,
-                            newImageData: optimizedImageData
-                        )
-                        
-                        // Update with archived metadata (including video info if applicable)
-                        if let updatedPhoto = currentSet.photos.first(where: { $0.symbol == symbol }) {
-                            dataManager.updatePhoto(
-                                photoId: updatedPhoto.id,
-                                mediaId: archivedPhoto.mediaId,
-                                isArchived: true,
-                                uploadStatus: .completed,
-                                errorMessage: nil,
-                                uploadDate: archivedPhoto.timestamp,
-                                isVideo: archivedPhoto.isVideo,
-                                videoURL: archivedPhoto.videoURL,
-                                videoAspectRatio: archivedPhoto.videoAspectRatio
-                            )
-                        }
-                    } else {
-                        // Insert new photo
-                        let labels = effectiveSlotLabels
-                        let position = labels.firstIndex(of: symbol) ?? labels.count
-                        dataManager.insertPhotoAtPosition(
-                            setId: currentSet.id,
-                            symbol: symbol,
-                            filename: filename,
-                            imageData: optimizedImageData,
-                            position: position
-                        )
-
-                        // Update with archived metadata (including video info if applicable)
-                        if let newPhoto = currentSet.photos.first(where: { $0.symbol == symbol }) {
-                            dataManager.updatePhoto(
-                                photoId: newPhoto.id,
-                                mediaId: archivedPhoto.mediaId,
-                                isArchived: true,
-                                uploadStatus: .completed,
-                                errorMessage: nil,
-                                uploadDate: archivedPhoto.timestamp,
-                                isVideo: archivedPhoto.isVideo,
-                                videoURL: archivedPhoto.videoURL,
-                                videoAspectRatio: archivedPhoto.videoAspectRatio
-                            )
-                        }
-                    }
-                    
                     isProcessingSlotPhoto = false
                     LogManager.shared.success("Mapped archived photo (ID: \(archivedPhoto.mediaId)) to slot '\(symbol)'", category: .general)
                     
@@ -4000,6 +4158,7 @@ struct SetDetailView: View {
                 let archived = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
                 if archived {
                     dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                    ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                     await MainActor.run {
                         uploadManager.uploadProgress = UploadManager.UploadProgressInfo(current: 1, total: 1)
                         uploadManager.uploadPhase = .completed
@@ -4168,6 +4327,15 @@ struct SetDetailView: View {
     private func resetErrorState() {
         uploadManager.resetErrorState()
     }
+
+    private let maxAutomaticBankRepairDepth = 96   // ~8+ hours with the waits below
+
+    private func automaticBankRepairWaitSeconds(depth: Int) -> Int {
+        // Start gently, then settle into long overnight-safe retries.
+        if depth < 3 { return 90 + Int.random(in: 0...30) }
+        if depth < 12 { return 180 + Int.random(in: 0...60) }
+        return 300 + Int.random(in: 0...120)
+    }
     
     // Helper: Check if error is network-related (retryable)
     private func isNetworkRelatedError(_ error: Error) -> Bool {
@@ -4210,6 +4378,25 @@ struct SetDetailView: View {
             || description.contains("checkpoint")
             || description.contains("checkpoint_challenge_required")
             || description.contains("instagram verification")
+    }
+
+    private func isRecentRevealProtectionError(_ error: Error) -> Bool {
+        let description = error.localizedDescription.lowercased()
+        return description.contains("recent reveal protection")
+            || description.contains("recently revealed media")
+    }
+
+    private func recentRevealProtectionWaitSeconds(from error: Error) -> Int {
+        let description = error.localizedDescription.lowercased()
+        let safetyRemaining = InstagramSafetyGate.shared.postRevealSecondsRemaining
+        let regex = try? NSRegularExpression(pattern: #"wait\s+(\d+)s"#, options: [])
+        let range = NSRange(description.startIndex..<description.endIndex, in: description)
+        if let match = regex?.firstMatch(in: description, options: [], range: range),
+           let secondsRange = Range(match.range(at: 1), in: description),
+           let seconds = Int(description[secondsRange]) {
+            return max(seconds, safetyRemaining)
+        }
+        return max(safetyRemaining, 30)
     }
 
     @MainActor
@@ -4255,7 +4442,20 @@ struct SetDetailView: View {
         return false
     }
     
-    private func uploadAllPhotos(startFrom: Int = 0) async {
+    private func firstIncompleteBank(in set: PhotoSet) -> (bank: Bank, photos: [SetPhoto])? {
+        for bank in set.banks.sorted(by: { $0.position < $1.position }) {
+            let incompletePhotos = set.photos.filter { photo in
+                guard photo.bankId == bank.id, photo.imageData != nil else { return false }
+                return photo.mediaId == nil || photo.uploadStatus != .completed || !photo.isArchived
+            }
+            if !incompletePhotos.isEmpty {
+                return (bank, incompletePhotos)
+            }
+        }
+        return nil
+    }
+
+    private func uploadAllPhotos(startFrom: Int = 0, bankRepairDepth: Int = 0) async {
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
         LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
@@ -4388,6 +4588,7 @@ struct SetDetailView: View {
                     if archived {
                         dataManager.updatePhoto(photoId: stuckPhoto.id, mediaId: mediaId,
                                                 isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                        ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                         print("✅ [RESCUE] Archived \(stuckPhoto.symbol) (ID: \(mediaId))")
                         LogManager.shared.success("Rescue archive OK (ID: \(mediaId))", category: .upload)
                     } else {
@@ -4398,6 +4599,25 @@ struct SetDetailView: View {
                         print("⚠️ [RESCUE] Archive returned false for \(stuckPhoto.symbol) — marked as error")
                     }
                 } catch {
+                    if isRecentRevealProtectionError(error) {
+                        let wait = recentRevealProtectionWaitSeconds(from: error) + Int.random(in: 3...8)
+                        LogManager.shared.info("Rescue archive deferred by post-reveal protection — waiting \(wait)s", category: .upload)
+                        await waitWithCountdown(seconds: wait, label: "Post-reveal safety pause")
+                        if await checkPauseRequested(atPhotoIndex: 0) { return }
+                        do {
+                            let archived = try await instagram.archivePhoto(mediaId: mediaId)
+                            if archived {
+                                dataManager.updatePhoto(photoId: stuckPhoto.id, mediaId: mediaId,
+                                                        isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                                ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
+                                print("✅ [RESCUE] Archived after post-reveal wait \(stuckPhoto.symbol) (ID: \(mediaId))")
+                                LogManager.shared.success("Rescue archive OK after post-reveal wait (ID: \(mediaId))", category: .upload)
+                                continue
+                            }
+                        } catch {
+                            LogManager.shared.warning("Rescue archive retry after post-reveal wait failed: \(error.localizedDescription)", category: .upload)
+                        }
+                    }
                     if isInstagramSafetyPauseError(error) {
                         await pauseUploadForSafety(
                             photoIndex: 0,
@@ -4438,17 +4658,40 @@ struct SetDetailView: View {
             }
         }
 
-        let pendingPhotoEntries = currentSet.photos.enumerated().filter { $0.element.mediaId == nil }
+        let latestSetForUpload = dataManager.sets.first(where: { $0.id == currentSet.id }) ?? currentSet
+        let isBankedWordOrNumber = (latestSetForUpload.type == .word || latestSetForUpload.type == .number)
+            && !latestSetForUpload.banks.isEmpty
 
-        // If retrying, resume by the original photo index. Do NOT drop `startFrom`
-        // items from the filtered pending list; completed photos before the failed
-        // index are already removed from that list, so dropFirst(startFrom) can skip
-        // the actual failed photo and continue with the next letter.
-        let photosToUpload = pendingPhotoEntries.filter { $0.offset >= startFrom }
+        let pendingPhotoEntries: [(offset: Int, element: SetPhoto)]
+        if isBankedWordOrNumber, let bankToFinish = firstIncompleteBank(in: latestSetForUpload)?.bank {
+            pendingPhotoEntries = latestSetForUpload.photos.enumerated().filter {
+                $0.element.bankId == bankToFinish.id && $0.element.mediaId == nil
+            }
+            await MainActor.run {
+                selectedBankIndex = max(0, bankToFinish.position - 1)
+            }
+            print("🏦 [BANK] Upload locked to Bank \(bankToFinish.position) until all its photos are completed")
+            LogManager.shared.info("Upload locked to Bank \(bankToFinish.position) before later banks", category: .upload)
+        } else {
+            pendingPhotoEntries = latestSetForUpload.photos.enumerated().filter { $0.element.mediaId == nil }
+        }
+
+        // If retrying, resume by the original photo index, unless an earlier bank
+        // still has pending photos. Banks must be completed strictly in order.
+        let effectiveStartFrom: Int
+        if isBankedWordOrNumber, let earliestPending = pendingPhotoEntries.map({ $0.offset }).min() {
+            effectiveStartFrom = min(startFrom, earliestPending)
+        } else {
+            effectiveStartFrom = startFrom
+        }
+        let photosToUpload = pendingPhotoEntries.filter { $0.offset >= effectiveStartFrom }
 
         // Safety: if nothing has imageData ready, stop cleanly (prevents infinite auto-bank recursion)
         let anyReady = photosToUpload.contains { $0.element.imageData != nil }
-        if !anyReady {
+        let hasArchiveOnlyBankIssue = isBankedWordOrNumber
+            && pendingPhotoEntries.isEmpty
+            && firstIncompleteBank(in: latestSetForUpload) != nil
+        if !anyReady && !hasArchiveOnlyBankIssue {
             print("⚠️ [UPLOAD ALL] No photos with imageData — stopping upload cleanly")
             await MainActor.run {
                 uploadManager.showingError = String(localized: "upload.error.no_images")
@@ -4457,6 +4700,8 @@ struct SetDetailView: View {
             }
             dataManager.updateSetStatus(id: currentSet.id, status: .ready)
             return
+        } else if hasArchiveOnlyBankIssue {
+            print("🏦 [BANK] No uploadable photos remain, but a bank still needs archive completion — deferring to completion gate")
         }
 
         let totalPhotos = pendingPhotoEntries.count
@@ -4590,6 +4835,7 @@ struct SetDetailView: View {
                         if archived {
                             print("✅ [UPLOAD] Photo #\(index + 1) archived successfully")
                             dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                            ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                             photoUploadSuccess = true
                             
                             // Reset consecutive retries on success
@@ -4661,6 +4907,32 @@ struct SetDetailView: View {
                     
                     // ===== HANDLE BY TYPE =====
                     
+                    if isRecentRevealProtectionError(error),
+                       let uploadedMediaId = currentSet.photos.first(where: { $0.id == photo.id })?.mediaId {
+                        let wait = recentRevealProtectionWaitSeconds(from: error) + Int.random(in: 3...8)
+                        LogManager.shared.info("Upload archive deferred by post-reveal protection at \(photoInfo) — waiting \(wait)s", category: .upload)
+                        await waitWithCountdown(seconds: wait, label: "Post-reveal safety pause")
+                        if await checkPauseRequested(atPhotoIndex: index) { return }
+
+                        do {
+                            await MainActor.run {
+                                uploadManager.uploadPhase = .archiving(photoNumber: index + 1)
+                                uploadManager.currentPhaseDescription = String(format: String(localized: "Archiving photo #%d..."), index + 1)
+                            }
+                            let archived = try await instagram.archivePhoto(mediaId: uploadedMediaId, skipPreCheck: true)
+                            if archived {
+                                print("✅ [UPLOAD] Photo #\(index + 1) archived after post-reveal wait")
+                                dataManager.updatePhoto(photoId: photo.id, mediaId: uploadedMediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                                ProfileCacheService.shared.removeMediaEverywhere(mediaId: uploadedMediaId)
+                                photoUploadSuccess = true
+                                await MainActor.run { uploadManager.consecutiveAutoRetries = 0 }
+                                continue
+                            }
+                        } catch {
+                            LogManager.shared.warning("Archive retry after post-reveal wait failed at \(photoInfo): \(error.localizedDescription)", category: .upload)
+                        }
+                    }
+
                     if isSafetyPause {
                         let streak = await MainActor.run { InstagramService.shared.challengeRequiredStreak }
                         let message: String
@@ -4912,44 +5184,121 @@ struct SetDetailView: View {
             }
         } // end for (photos loop)
         
-        // ── AUTO-NEXT BANK ────────────────────────────────────────────────
-        // For word/number sets: automatically add the next bank and keep uploading,
-        // but ONLY if the target bank count hasn't been reached yet.
+        // ── STRICT BANK COMPLETION GATE ───────────────────────────────────
+        // Banks must be completed in order. Before creating the next bank or
+        // marking the set completed, re-read the latest data and ensure no
+        // previous bank still has a locally-ready photo pending upload/archive.
         let setForBankCheck = dataManager.sets.first(where: { $0.id == currentSet.id })
         let isWordOrNumber = setForBankCheck?.type == .word || setForBankCheck?.type == .number
         let currentBankCount = setForBankCheck?.banks.count ?? 0
         let targetBanks = setForBankCheck?.targetBankCount ?? currentBankCount
         let canAddMoreBanks = currentBankCount < targetBanks
+        if isWordOrNumber,
+           let setForBankCheck,
+           let incomplete = firstIncompleteBank(in: setForBankCheck) {
+            let uploadable = incomplete.photos.filter { $0.mediaId == nil && $0.imageData != nil }
+            if let firstUploadable = uploadable.first,
+               bankRepairDepth < maxAutomaticBankRepairDepth,
+               let repairIndex = setForBankCheck.photos.firstIndex(where: { $0.id == firstUploadable.id }) {
+                let wait = automaticBankRepairWaitSeconds(depth: bankRepairDepth)
+                print("🔁 [BANK] Bank \(incomplete.bank.position) still has \(uploadable.count) pending photo(s) — retrying automatically in \(wait)s")
+                LogManager.shared.warning("Bank \(incomplete.bank.position) incomplete before next bank; automatic repair pass \(bankRepairDepth + 1) in \(wait)s", category: .upload)
+                await MainActor.run {
+                    selectedBankIndex = max(0, incomplete.bank.position - 1)
+                    uploadManager.uploadPhase = .waiting(nextPhoto: repairIndex + 1, remainingSeconds: wait)
+                    uploadManager.currentPhaseDescription = "Finishing Bank \(incomplete.bank.position) — retrying in \(wait / 60):\(String(format: "%02d", wait % 60))"
+                }
+                await waitWithCountdown(seconds: wait, label: "Finishing Bank \(incomplete.bank.position)")
+                if await checkPauseRequested(atPhotoIndex: repairIndex) { return }
+                await uploadAllPhotos(startFrom: repairIndex, bankRepairDepth: bankRepairDepth + 1)
+                return
+            }
+
+            let archivePending = incomplete.photos.filter { $0.mediaId != nil && !$0.isArchived }
+            if let photoToArchive = archivePending.first,
+               let mediaId = photoToArchive.mediaId,
+               bankRepairDepth < maxAutomaticBankRepairDepth,
+               let repairIndex = setForBankCheck.photos.firstIndex(where: { $0.id == photoToArchive.id }) {
+                let wait = automaticBankRepairWaitSeconds(depth: bankRepairDepth)
+                print("🔁 [BANK] Bank \(incomplete.bank.position) has \(archivePending.count) uploaded photo(s) pending archive — retrying archive in \(wait)s")
+                LogManager.shared.warning("Bank \(incomplete.bank.position) archive repair pass \(bankRepairDepth + 1) in \(wait)s", category: .upload)
+                await MainActor.run {
+                    selectedBankIndex = max(0, incomplete.bank.position - 1)
+                    uploadManager.uploadPhase = .waiting(nextPhoto: repairIndex + 1, remainingSeconds: wait)
+                    uploadManager.currentPhaseDescription = "Archiving Bank \(incomplete.bank.position) pending photo — retrying in \(wait / 60):\(String(format: "%02d", wait % 60))"
+                }
+                await waitWithCountdown(seconds: wait, label: "Archiving Bank \(incomplete.bank.position)")
+                if await checkPauseRequested(atPhotoIndex: repairIndex) { return }
+
+                do {
+                    await MainActor.run {
+                        uploadManager.uploadPhase = .archiving(photoNumber: repairIndex + 1)
+                        uploadManager.currentPhaseDescription = "Archiving Bank \(incomplete.bank.position) pending photo…"
+                    }
+                    let archived = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
+                    if archived {
+                        dataManager.updatePhoto(photoId: photoToArchive.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                        ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
+                    } else {
+                        dataManager.updatePhoto(photoId: photoToArchive.id, mediaId: mediaId, isArchived: false, uploadStatus: .uploaded, errorMessage: "Archive retry returned false")
+                    }
+                    await uploadAllPhotos(startFrom: repairIndex, bankRepairDepth: bankRepairDepth + 1)
+                    return
+                } catch {
+                    if isRecentRevealProtectionError(error) {
+                        let wait = recentRevealProtectionWaitSeconds(from: error) + Int.random(in: 3...8)
+                        LogManager.shared.info("Bank archive repair deferred by post-reveal protection — waiting \(wait)s", category: .upload)
+                        await waitWithCountdown(seconds: wait, label: "Post-reveal safety pause")
+                        await uploadAllPhotos(startFrom: repairIndex, bankRepairDepth: bankRepairDepth + 1)
+                        return
+                    }
+                    if isInstagramSafetyPauseError(error) {
+                        await pauseUploadForSafety(
+                            photoIndex: repairIndex,
+                            message: """
+                            Upload paused for safety.
+
+                            Vault detected Instagram verification or a safety pause while finishing Bank \(incomplete.bank.position). It stopped instead of retrying to avoid a stronger checkpoint.
+                            """
+                        )
+                        return
+                    }
+                    dataManager.updatePhoto(photoId: photoToArchive.id, mediaId: mediaId, isArchived: false, uploadStatus: .uploaded, errorMessage: "Archive retry error: \(error.localizedDescription)")
+                    LogManager.shared.warning("Bank archive repair failed for \(mediaId): \(error.localizedDescription)", category: .upload)
+                    await uploadAllPhotos(startFrom: repairIndex, bankRepairDepth: bankRepairDepth + 1)
+                    return
+                }
+            }
+
+            let count = incomplete.photos.count
+            let plural = count == 1 ? "photo" : "photos"
+            let message: String
+            if bankRepairDepth >= maxAutomaticBankRepairDepth {
+                message = "Bank \(incomplete.bank.position) still has \(count) \(plural) pending after many automatic retries. Vault stopped to avoid unsafe repeated Instagram actions."
+            } else {
+                message = "Bank \(incomplete.bank.position) still has \(count) \(plural) pending upload/archive, but none are ready for automatic upload. Check that each pending slot still has a local image."
+            }
+            print("⛔️ [BANK] Completion gate blocked — \(message)")
+            LogManager.shared.warning("Bank completion gate blocked: \(message)", category: .upload)
+            await MainActor.run {
+                selectedBankIndex = max(0, incomplete.bank.position - 1)
+                uploadManager.showingError = message
+                uploadManager.uploadPhase = .paused
+                uploadManager.currentPhaseDescription = "Bank \(incomplete.bank.position) needs attention"
+                uploadManager.activeTask = nil
+                dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+            }
+            return
+        }
+
+        // ── AUTO-NEXT BANK ────────────────────────────────────────────────
+        // For word/number sets: automatically add the next bank and keep uploading,
+        // but ONLY if the target bank count hasn't been reached yet.
         if isWordOrNumber && !canAddMoreBanks {
             print("✅ [BANK] All \(currentBankCount)/\(targetBanks) banks complete — stopping auto-bank")
             LogManager.shared.success("All \(currentBankCount) banks completed for set '\(setForBankCheck?.name ?? "")'", category: .upload)
         }
         if isWordOrNumber && canAddMoreBanks {
-            if let activeBank = setForBankCheck?.banks.max(by: { $0.position < $1.position }) {
-                let activeBankPhotos = dataManager.getPhotosForBank(setId: currentSet.id, bankId: activeBank.id)
-                let incompletePhotos = activeBankPhotos.filter { photo in
-                    guard photo.imageData != nil else { return false }
-                    return photo.mediaId == nil || photo.uploadStatus != .completed || !photo.isArchived
-                }
-
-                guard incompletePhotos.isEmpty else {
-                    let count = incompletePhotos.count
-                    let plural = count == 1 ? "photo" : "photos"
-                    let message = "Bank \(activeBank.position) still has \(count) \(plural) pending upload/archive. Fix that bank before continuing to the next bank."
-                    print("⛔️ [BANK] Auto-next blocked — \(message)")
-                    LogManager.shared.warning("Auto-next bank blocked: \(message)", category: .upload)
-                    await MainActor.run {
-                        selectedBankIndex = max(0, currentBankCount - 1)
-                        uploadManager.showingError = message
-                        uploadManager.uploadPhase = .paused
-                        uploadManager.currentPhaseDescription = "Bank \(activeBank.position) needs attention"
-                        uploadManager.activeTask = nil
-                        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
-                    }
-                    return
-                }
-            }
-
             print("➕ [BANK] Bank \(currentBankCount)/\(targetBanks) complete — auto-adding next bank and continuing upload…")
             LogManager.shared.info("Bank \(currentBankCount)/\(targetBanks) complete — auto-adding next bank", category: .upload)
             let newBank = await MainActor.run { dataManager.addBank(setId: currentSet.id) }
@@ -5068,20 +5417,17 @@ struct SetDetailView: View {
     private func handleEscalation(photoIndex: Int) async {
         let escalationWaitSeconds = 300 // 5 minutes
         
-        print("🚨 [ESCALATION] Multiple failures - pausing for \(escalationWaitSeconds)s")
-        LogManager.shared.warning("Upload escalated at Photo #\(photoIndex + 1) - pausing for 5 minutes after multiple failures", category: .upload)
+        print("🚨 [ESCALATION] Multiple failures - cooling down for \(escalationWaitSeconds)s, then auto-resuming")
+        LogManager.shared.warning("Upload escalated at Photo #\(photoIndex + 1) - cooling down 5 minutes before automatic retry", category: .upload)
         
         await MainActor.run {
             uploadManager.failedPhotoIndex = photoIndex
-            uploadManager.activeTask = nil
-            
             let pauseEndDate = Date().addingTimeInterval(Double(escalationWaitSeconds))
             uploadManager.escalatedPauseEndTime = pauseEndDate
             uploadManager.escalatedPauseCountdown = escalationWaitSeconds
             uploadManager.uploadPhase = .escalatedPause(remainingSeconds: escalationWaitSeconds)
-            uploadManager.currentPhaseDescription = String(localized: "Multiple errors - Cooling down")
-            
-            dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+            uploadManager.currentPhaseDescription = "Multiple errors — cooling down before retry"
+            dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
             
             uploadManager.escalatedPauseTimer?.invalidate()
             uploadManager.escalatedPauseTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak uploadManager] _ in
@@ -5090,17 +5436,35 @@ struct SetDetailView: View {
                 if left > 0 {
                     um.escalatedPauseCountdown = left
                     um.uploadPhase = .escalatedPause(remainingSeconds: left)
-                    um.currentPhaseDescription = String(localized: "Multiple errors - Cooling down")
+                    um.currentPhaseDescription = "Multiple errors — cooling down before retry"
                 } else {
                     um.escalatedPauseTimer?.invalidate()
                     um.escalatedPauseTimer = nil
                     um.escalatedPauseEndTime = nil
                     um.escalatedPauseCountdown = 0
-                    um.uploadPhase = .paused
-                    um.currentPhaseDescription = String(localized: "Upload Paused - Ready to Resume")
                 }
             }
         }
+
+        for _ in 0..<escalationWaitSeconds {
+            if uploadManager.requestPause {
+                _ = await checkPauseRequested(atPhotoIndex: photoIndex)
+                return
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        await MainActor.run {
+            uploadManager.escalatedPauseTimer?.invalidate()
+            uploadManager.escalatedPauseTimer = nil
+            uploadManager.escalatedPauseEndTime = nil
+            uploadManager.escalatedPauseCountdown = 0
+            uploadManager.consecutiveAutoRetries = 0
+            uploadManager.failedPhotoIndex = nil
+            uploadManager.currentPhaseDescription = "Retrying after cooldown…"
+        }
+
+        await uploadAllPhotos(startFrom: photoIndex)
     }
     
     // MARK: - Reveal All Archived

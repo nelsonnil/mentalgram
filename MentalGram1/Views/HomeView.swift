@@ -34,6 +34,8 @@ struct HomeView: View {
     @State private var budgetWarningRemaining: Int = 55
     @State private var budgetWarningRenewal: Date? = nil
     @State private var showListInputConflictAlert = false
+    @State private var didHandleLaunchDirectToPerformance = false
+    @State private var performanceEntryRequestInFlight = false
     
     /// Custom binding that intercepts tab switches to Performance (0)
     /// and shows the pre-check alert if there are visible photos.
@@ -157,13 +159,7 @@ struct HomeView: View {
                 limitsGuideRead = true
             }
 
-            if launchDirectlyToPerformance && instagram.isLoggedIn {
-                if !limitsGuideRead {
-                    showLimitsGate = true
-                } else {
-                    requestPerformanceEntry()
-                }
-            }
+            handleLaunchDirectToPerformanceIfNeeded()
             updateTabBarAppearance(forTab: selectedTab)
             // Clean up any stuck upload state (e.g. deleted active set from infinite-loop bug)
             UploadManager.shared.clearStuckState()
@@ -327,7 +323,42 @@ struct HomeView: View {
         return "List Input cannot be used at the same time as fullscreen card, Clock, or Lockscreen inputs in Biography or Notes.\n\nDisable one of those inputs before entering Performance.\(list)"
     }
 
+    private func handleLaunchDirectToPerformanceIfNeeded() {
+        guard launchDirectlyToPerformance,
+              instagram.isLoggedIn,
+              !didHandleLaunchDirectToPerformance else { return }
+
+        didHandleLaunchDirectToPerformance = true
+        CrashLoggerService.shared.recordAction("launch-direct-to-performance requested")
+
+        // Let TabView finish its first layout pass before switching tabs. Repeated
+        // quick launches were able to re-enter the Performance gate while the root
+        // view was still settling, which could stack startup tasks.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if !limitsGuideRead {
+                showLimitsGate = true
+            } else {
+                requestPerformanceEntry()
+            }
+        }
+    }
+
     private func requestPerformanceEntry() {
+        guard !performanceEntryRequestInFlight else {
+            print("🎩 [PERF] Entry request ignored — already processing")
+            LogManager.shared.info("Performance entry request deduplicated", category: .general)
+            return
+        }
+        performanceEntryRequestInFlight = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+            performanceEntryRequestInFlight = false
+        }
+
+        guard selectedTab != 0 else {
+            updateTabBarAppearance(forTab: 0)
+            return
+        }
+
         guard instagram.isLoggedIn else {
             enterPerformanceDirectly()
             return
@@ -394,6 +425,7 @@ struct HomeView: View {
         let photos = visiblePhotosToArchive
         archiveProgress = (0, photos.count)
         isArchivingBeforePerformance = true
+        var archivedCount = 0
 
         for (i, photo) in photos.enumerated() {
             guard let mediaId = photo.mediaId else { continue }
@@ -410,13 +442,24 @@ struct HomeView: View {
                 let archived = try await InstagramService.shared.archivePhoto(mediaId: mediaId, skipPreCheck: false)
                 if archived {
                     dataManager.updatePhoto(photoId: photo.id, isArchived: true, uploadStatus: .completed)
-                    // Remove from ProfileCache so PerformanceView grid is already clean on entry
-                    ProfileCacheService.shared.removeMediaItem(byMediaId: mediaId)
+                    // Remove from ProfileCache + reveal_state so Performance is already clean on entry.
+                    ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
+                    archivedCount += 1
                 }
             } catch {
                 print("⚠️ [PRE-PERF] Failed to archive \(mediaId): \(error.localizedDescription)")
             }
             archiveProgress = (i + 1, photos.count)
+        }
+
+        if archivedCount > 0 {
+            print("🔄 [PRE-PERF] \(archivedCount) archived — syncing profile before entering Performance")
+            LogManager.shared.info("Pre-Performance archive complete — syncing profile before entry", category: .general)
+            if let freshProfile = try? await InstagramService.shared.getProfileInfo() {
+                ProfileCacheService.shared.saveProfile(freshProfile)
+            } else {
+                LogManager.shared.warning("Pre-Performance sync failed after archive; entering with cleaned local cache", category: .general)
+            }
         }
 
         isArchivingBeforePerformance = false
@@ -756,11 +799,6 @@ struct SetsListView: View {
                         .padding(.top, VaultTheme.Spacing.md)
                         .padding(.bottom, VaultTheme.Spacing.sm)
 
-                        if hasPendingPrePerformanceActions {
-                            pendingArchiveBanner
-                                .padding(.horizontal, VaultTheme.Spacing.lg)
-                        }
-
                         postPredictionToggleCard
                             .padding(.horizontal, VaultTheme.Spacing.lg)
 
@@ -913,31 +951,6 @@ struct SetsListView: View {
         return "Post Prediction is on, but no set is active. Select a set below to enable reveals."
     }
 
-    @ViewBuilder
-    private var pendingArchiveBanner: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
-                Text("Pre-Performance Check Required")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                Spacer()
-            }
-            Text("Detected \(visibleSetPhotosCount) visible photo(s) across \(setsWithVisiblePhotosCount) set(s). Archive them before performance. \(hasAmnesiaPendingReset ? "Amnesia Carousel is revealed — reset it." : "")")
-                .font(.system(size: 12))
-                .foregroundColor(VaultTheme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .background(Color.orange.opacity(0.12))
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
-        )
-    }
-    
     private func deleteSets(at offsets: IndexSet) {
         for index in offsets {
             let set = dataManager.sets[index]
@@ -1239,7 +1252,7 @@ struct SetURLSchemeRow: View {
         switch set.type {
         case .word:           return "vault://reveal?\(mode)=<word>&set=\(safeName)"
         case .number, .custom, .list: return "vault://reveal?\(mode)=<value>&set=\(safeName)"
-        case .card:           return "vault://reveal?\(mode)=<card>&set=\(safeName)"
+        case .card:           return "vault://reveal?\(mode)=3D&set=\(safeName)"
         }
     }
 
@@ -1691,12 +1704,14 @@ struct CooldownWarningBanner: View {
 
 // MARK: - Post-Reveal Re-Archive Banner
 
-/// Rojo parpadeante que aparece en Settings tras un reveal de Post Prediction
-/// mientras haya fotos sin archivar. Muestra el countdown del hold anti-bot
-/// y ofrece un botón "Archivar ahora" que respeta todos los cooldowns de SafetyGate.
+/// Fixed red pre-performance warning shown while Instagram-facing state still needs cleanup.
+/// Covers visible set photos and Amnesia Carousel reset state. The archive button respects
+/// SafetyGate cooldowns before sending any Instagram write calls.
 struct PostRevealArchiveBanner: View {
     @ObservedObject private var instagram = InstagramService.shared
     @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var uploadManager = UploadManager.shared
+    @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isArchiving      = false
@@ -1709,7 +1724,7 @@ struct PostRevealArchiveBanner: View {
     @State private var blink: Bool          = false
     @State private var refreshTick: Int     = 0
 
-    // Photos that were unarchived by PP reveal and still need to be re-archived
+    // Photos that are currently visible on Instagram and should be re-archived before performance.
     private var revealedPhotos: [(setId: UUID, photo: SetPhoto)] {
         dataManager.sets.flatMap { set in
             set.photos
@@ -1719,7 +1734,10 @@ struct PostRevealArchiveBanner: View {
     }
 
     private var count: Int { revealedPhotos.count }
-    private var hasPhotos: Bool { count > 0 }
+    private var hasAmnesiaPendingReset: Bool {
+        amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
+    }
+    private var hasPhotos: Bool { count > 0 || hasAmnesiaPendingReset }
 
     var body: some View {
         ZStack {
@@ -1751,36 +1769,41 @@ struct PostRevealArchiveBanner: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(isArchiving
-                     ? "Archivando \(doneSoFar)/\(totalToArchive)…"
-                     : "\(count) foto\(count == 1 ? "" : "s") visible\(count == 1 ? "" : "s") tras el reveal")
+                     ? String(format: String(localized: "post_reveal_archive.archiving"), doneSoFar, totalToArchive)
+                     : bannerTitle)
                     .font(.system(size: 13, weight: .black))
                     .foregroundColor(blink ? .red : Color.red.opacity(0.45))
                     .scaleEffect(blink ? 1.03 : 1.0, anchor: .leading)
                     .animation(.easeInOut(duration: 0.5), value: blink)
 
                 if let err = archiveError {
-                    Text("Error: \(err)")
+                    Text(String(format: String(localized: "post_reveal_archive.error"), err))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if postRevealLeft > 0 {
-                    Text("Archivable en \(formatSeconds(postRevealLeft)) — espera el hold anti-bot")
+                    Text(String(format: String(localized: "post_reveal_archive.cooldown"), formatSeconds(postRevealLeft)))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(blink ? .red : Color.red.opacity(0.8))
                         .animation(.easeInOut(duration: 0.5), value: blink)
+                } else if isUploadActive {
+                    Text(String(localized: "post_reveal_archive.upload_active"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color.red.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if !isArchiving {
-                    Text("Post Prediction dejó fotos visibles en Instagram. Archívalas para el próximo truco.")
+                    Text(bannerDescription)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(Color.red.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if !isArchiving {
+                if !isArchiving && count > 0 {
                     Button(action: {
                         archiveError = nil
                         Task { await runArchive() }
                     }) {
-                        Label("Archivar ahora", systemImage: "archivebox.fill")
+                        Label(String(localized: "post_reveal_archive.button"), systemImage: "archivebox.fill")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
@@ -1810,12 +1833,35 @@ struct PostRevealArchiveBanner: View {
         .padding(.bottom, 8)
     }
 
+    private var bannerTitle: String {
+        if count > 0 {
+            return "Visible photos before performance (\(count))"
+        }
+        return "Amnesia Carousel needs reset"
+    }
+
+    private var bannerDescription: String {
+        var parts: [String] = []
+        if count > 0 {
+            parts.append("Archive visible photos before entering Performance so they do not appear publicly on Instagram.")
+        }
+        if hasAmnesiaPendingReset {
+            parts.append("Amnesia Carousel is revealed — reset it before the next show.")
+        }
+        return parts.joined(separator: " ")
+    }
+
     private var archiveButtonEnabled: Bool {
         !isArchiving
         && postRevealLeft == 0
+        && !isUploadActive
         && !instagram.isLocked
         && !instagram.isSessionChallenged
         && !instagram.isSessionExpired
+    }
+
+    private var isUploadActive: Bool {
+        uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isSyncArchiveActive
     }
 
     // MARK: - Archive action
@@ -1823,6 +1869,12 @@ struct PostRevealArchiveBanner: View {
     private func runArchive() async {
         let photos = revealedPhotos
         guard !photos.isEmpty else { return }
+        guard !isUploadActive else {
+            await MainActor.run {
+                archiveError = String(localized: "post_reveal_archive.upload_active")
+            }
+            return
+        }
 
         await MainActor.run {
             isArchiving      = true
@@ -1839,7 +1891,7 @@ struct PostRevealArchiveBanner: View {
             let mediaSafety = InstagramSafetyGate.shared.canArchive(mediaId: mediaId)
             guard mediaSafety.allowed else {
                 await MainActor.run {
-                    archiveError = "Hold activo: \(mediaSafety.reason) — espera \(mediaSafety.waitSeconds)s"
+                    archiveError = String(format: String(localized: "post_reveal_archive.hold_error"), mediaSafety.reason, mediaSafety.waitSeconds)
                     isArchiving  = false
                 }
                 return
@@ -1853,6 +1905,7 @@ struct PostRevealArchiveBanner: View {
                 if success {
                     await MainActor.run {
                         dataManager.updatePhoto(photoId: photo.id, isArchived: true)
+                        ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                         doneSoFar += 1
                     }
                 }

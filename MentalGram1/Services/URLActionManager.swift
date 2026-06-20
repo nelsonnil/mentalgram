@@ -8,9 +8,11 @@ import Combine
 ///   vault://note?text1=<v>&text2=<v>&text3=<v>&text4=<v>&text5=<v>   → multi-placeholder Note
 ///   vault://bio?text=<encoded text>                      → update Instagram Biography (legacy)
 ///   vault://bio?text1=<v>&text2=<v>&text3=<v>&text4=<v>&text5=<v>    → multi-placeholder Biography
+///   vault://perform?bio=<encoded text>&reveal=<word>      → bio first, then queued Post Prediction
+///   vault://perform?bio=<encoded text>&card=3D            → bio first, then queued Playing Card (S/H/C/D)
 ///   vault://reveal?word=<encoded word>  → Word Reveal: unarchive letter photos for the given word
 ///   vault://reveal?slot=<number>        → Custom Set Reveal: unarchive the photo at slot 1–100
-///   vault://reveal?card=<symbol>        → Playing Card Reveal: unarchive a card (e.g. J♠, 10♥, K♦)
+///   vault://reveal?card=<symbol>        → Playing Card Reveal: unarchive a card (e.g. AS, 10H, 3D)
 ///
 /// Line breaks in note/bio text — supported encodings (any of these work):
 ///   %0A          — standard URL-encoded newline  (vault://bio?text=Line1%0ALine2)
@@ -73,6 +75,51 @@ class URLActionManager: ObservableObject {
             return true
         }
 
+        // Helper: extract a named param from URLComponents or raw query string
+        func extractParam(_ name: String) -> String? {
+            if let v = components?.queryItems?.first(where: { $0.name == name })?.value,
+               !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return v.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard let rawQuery = url.query ?? url.absoluteString.components(separatedBy: "?").dropFirst().first else { return nil }
+            for param in rawQuery.components(separatedBy: "&") {
+                guard param.hasPrefix("\(name)=") else { continue }
+                let raw = String(param.dropFirst(name.count + 1))
+                let decoded = raw.removingPercentEncoding ?? raw
+                let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            return nil
+        }
+
+        // ── Combined performance flow: bio first, then Post Prediction ────────
+        if host == "perform" {
+            guard let bio = extractParam("bio") else {
+                print("⚠️ [URL] vault://perform missing 'bio' parameter")
+                return false
+            }
+
+            var values: [String: String] = ["bio": bio]
+            if let reveal = extractParam("reveal") ?? extractParam("word") {
+                values["reveal"] = reveal
+            } else if let slot = extractParam("slot") {
+                values["slot"] = slot
+            } else if let card = extractParam("card") {
+                values["card"] = card
+            } else {
+                print("⚠️ [URL] vault://perform missing 'reveal', 'slot', or 'card' parameter")
+                return false
+            }
+
+            print("📲 [URL] vault://perform received (bio + queued reveal)")
+            DispatchQueue.main.async {
+                self.pendingMode = "perform"
+                self.pendingText = bio
+                self.pendingValues = values
+            }
+            return true
+        }
+
         // ── Reveal variants: word / custom slot / playing card ───────────────
         if host == "reveal" {
             let items = components?.queryItems ?? []
@@ -95,7 +142,7 @@ class URLActionManager: ObservableObject {
                 return true
             }
 
-            // vault://reveal?card=J%E2%99%A0  (Playing Card Reveal, e.g. J♠ 10♥ K♦)
+            // vault://reveal?card=3D  (Playing Card Reveal: S/H/C/D suits)
             if let raw = items.first(where: { $0.name == "card" })?.value,
                !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let symbol = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -112,23 +159,6 @@ class URLActionManager: ObservableObject {
         guard host == "note" || host == "bio" else {
             print("⚠️ [URL] Unknown action: \(host)")
             return false
-        }
-
-        // Helper: extract a named param from URLComponents or raw query string
-        func extractParam(_ name: String) -> String? {
-            if let v = components?.queryItems?.first(where: { $0.name == name })?.value,
-               !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return v.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            guard let rawQuery = url.query ?? url.absoluteString.components(separatedBy: "?").dropFirst().first else { return nil }
-            for param in rawQuery.components(separatedBy: "&") {
-                guard param.hasPrefix("\(name)=") else { continue }
-                let raw = String(param.dropFirst(name.count + 1))
-                let decoded = raw.removingPercentEncoding ?? raw
-                let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? nil : trimmed
-            }
-            return nil
         }
 
         // Try multi-placeholder params first (text1..text5), then legacy "text"

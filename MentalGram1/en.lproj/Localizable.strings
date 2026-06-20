@@ -1053,6 +1053,16 @@
 "preload.failed.subtitle" = "Check your connection and try again. Wi-Fi is recommended for the first load.";
 "preload.retry" = "Try again";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "Archiving %d/%d…";
+"post_reveal_archive.visible" = "%d visible photo(s) after reveal";
+"post_reveal_archive.error" = "Error: %@";
+"post_reveal_archive.cooldown" = "Archivable in %@ — wait for the anti-bot hold";
+"post_reveal_archive.upload_active" = "Upload active — wait until it finishes before archiving";
+"post_reveal_archive.description" = "Post Prediction left photos visible on Instagram. Archive them before the next trick.";
+"post_reveal_archive.button" = "Archive now";
+"post_reveal_archive.hold_error" = "Hold active: %@ — wait %ds";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Instagram Sync";
 "sync.never_synced" = "Never synced";
@@ -1362,3 +1372,8 @@
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "Set revealed %d min ago";
+"set.sync.recent_reveal.body" = "Archiving the same set too soon after a reveal (reveal -> archive -> reveal cycle) is the most common cause of Instagram bot detection. Wait at least %d more min.";
+"set.sync.archive.button.visible" = "Archive now (%d visible)";

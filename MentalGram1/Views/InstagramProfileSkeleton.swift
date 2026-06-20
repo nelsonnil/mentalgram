@@ -44,7 +44,6 @@ struct InstagramProfileSkeleton: View {
                     HStack(alignment: .center, spacing: 0) {
                         // Profile Picture on LEFT
                         SkeletonCircle(size: 86)
-                            .padding(.leading, UIScreen.main.bounds.width * 0.04)
 
                         Spacer(minLength: 8)
 
@@ -54,8 +53,9 @@ struct InstagramProfileSkeleton: View {
                             SkeletonStatView()
                             SkeletonStatView()
                         }
-                        .padding(.trailing, UIScreen.main.bounds.width * 0.04)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .responsiveHorizontalPadding()
 
                     // Name + Bio placeholders
                     VStack(alignment: .leading, spacing: 6) {

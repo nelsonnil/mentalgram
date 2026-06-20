@@ -2039,6 +2039,12 @@ class InstagramService: ObservableObject {
         
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
             LogManager.shared.bot("\(method) \(shortPath) → HTTP \(httpResponse.statusCode) Session expired [\(duration)]")
+            if method == "GET", shortPath.contains("/feed/user/") {
+                InstagramSafetyGate.shared.markFeedReadCircuit(
+                    duration: 20 * 60,
+                    reason: "feed returned HTTP \(httpResponse.statusCode)"
+                )
+            }
             // Infer context: if no challenge history this is likely an account restriction;
             // otherwise attribute to the ongoing challenge streak.
             let expiredCtx: SessionExpiredContext = challengeRequiredStreak > 0 ? .challenge : .restriction
@@ -2067,6 +2073,12 @@ class InstagramService: ObservableObject {
                 // we throw the error so the caller can show a message and let the user retry.
                 // For POST/write operations the lockdown is still required.
                 if message.contains("challenge_required") {
+                    if method == "GET", shortPath.contains("/feed/user/") {
+                        InstagramSafetyGate.shared.markFeedReadCircuit(
+                            duration: 20 * 60,
+                            reason: "feed returned challenge_required"
+                        )
+                    }
                     await MainActor.run { challengeRequiredStreak += 1 }
                     // After 3+ consecutive challenges, escalate to session expired so
                     // SessionGuardView appears and prompts the magician to re-login.
@@ -2113,6 +2125,23 @@ class InstagramService: ObservableObject {
                     }
                     throw InstagramError.challengeRequired
                 }
+
+                let lowerMessage = message.lowercased()
+                let feedback = (errorJson["feedback_message"] as? String ?? "").lowercased()
+                let errorType = (errorJson["error_type"] as? String ?? "").lowercased()
+                let isFeedRestriction = lowerMessage.contains("feedback_required")
+                    || lowerMessage.contains("restriction")
+                    || feedback.contains("feedback_required")
+                    || feedback.contains("restriction")
+                    || errorType.contains("feedback_required")
+                if method == "GET",
+                   shortPath.contains("/feed/user/"),
+                   isFeedRestriction {
+                    InstagramSafetyGate.shared.markFeedReadCircuit(
+                        duration: 20 * 60,
+                        reason: "feed returned \(message.isEmpty ? "restriction" : message)"
+                    )
+                }
                 
                 if !message.isEmpty {
                     print("❌ [API] HTTP \(httpResponse.statusCode): \(message)")
@@ -2121,6 +2150,15 @@ class InstagramService: ObservableObject {
             }
             
             if let errorString = String(data: data, encoding: .utf8) {
+                let lower = errorString.lowercased()
+                if method == "GET",
+                   shortPath.contains("/feed/user/"),
+                   lower.contains("feedback_required") || lower.contains("restriction") {
+                    InstagramSafetyGate.shared.markFeedReadCircuit(
+                        duration: 20 * 60,
+                        reason: "feed returned restriction"
+                    )
+                }
                 print("❌ [API] HTTP \(httpResponse.statusCode)")
                 print("❌ [API] Response: \(String(errorString.prefix(200)))")
             }
@@ -7519,6 +7557,7 @@ final class InstagramSafetyGate {
         case visitedProfileOpen
         case visitedProfilePagination
         case visitedProfileRefresh
+        case feedUserRead
         case apiRead
         case apiWrite
         case probe
@@ -7700,6 +7739,13 @@ final class InstagramSafetyGate {
     func waitForPostMutationQuietWindowIfNeeded(action: Action) async throws {
         guard sensitiveMutationActionsContain(action) else { return }
         while true {
+            if action == .unarchive {
+                let bypassUntil = UserDefaults.standard.double(forKey: "combined_pp_cooldown_bypass_until")
+                if bypassUntil > Date().timeIntervalSince1970 {
+                    LogManager.shared.info("[QUIET] Combined Bio + PP bypass active — allowing unarchive", category: .api)
+                    return
+                }
+            }
             let remaining = postMutationQuietSecondsRemaining
             guard remaining > 0 else { return }
             LogManager.shared.info("[QUIET] Delaying \(action.rawValue) for \(remaining)s after recent Instagram write", category: .api)
@@ -7844,6 +7890,9 @@ final class InstagramSafetyGate {
         if let circuit = activeChallengeCircuit(now: now) {
             return circuit
         }
+        if action == .feedUserRead, let circuit = activeFeedReadCircuit(now: now) {
+            return circuit
+        }
 
         if action == .archive, isPostRevealProtected(now: now) {
             return Decision(
@@ -7878,17 +7927,15 @@ final class InstagramSafetyGate {
             if let recentRefresh = recentActionDecision(
                 actions: [.silentGridRefresh, .entryRefresh, .pullRefresh],
                 now: now,
-                // 6s gap: enough to separate the entry burst from the first user-triggered
-                // pagination, but short enough that scrolling down immediately after
-                // the grid appears doesn't stall. Pagination is a GET to the same
-                // endpoint that already ran during the refresh, so the pattern looks
-                // like organic browsing (not a warmup burst) at this spacing.
-                minGap: 6,
+                // The tester log showed /feed/user/ repeating every ~2s until the
+                // account reached 55/55. Keep profile pagination well separated from
+                // any entry/silent refresh that already hit the same endpoint.
+                minGap: 20,
                 reason: "recent feed refresh"
             ) {
                 return recentRefresh
             }
-            return pacedWindowDecision(action: action, now: now, minGap: 4, maxCount: 10, window: 600)
+            return pacedWindowDecision(action: action, now: now, minGap: 12, maxCount: 6, window: 600)
         case .exploreRefresh:
             return minGapDecision(action: action, now: now, minGap: 900)
         case .explorePagination:
@@ -7909,6 +7956,8 @@ final class InstagramSafetyGate {
             return pacedWindowDecision(action: action, now: now, minGap: 3, maxCount: 10, window: 600)
         case .visitedProfileRefresh:
             return minGapDecision(action: action, now: now, minGap: 900)
+        case .feedUserRead:
+            return pacedWindowDecision(action: action, now: now, minGap: 10, maxCount: 6, window: 600)
         case .archive:
             return windowDecision(action: action, now: now, maxCount: 8, window: 600)
         case .unarchive:
@@ -7963,6 +8012,15 @@ final class InstagramSafetyGate {
         defer { lock.unlock() }
         defaults.removeObject(forKey: key("challenge_until"))
         defaults.removeObject(forKey: key("probe_fail_count"))
+    }
+
+    func markFeedReadCircuit(duration: TimeInterval, reason: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        let until = Date().timeIntervalSince1970 + duration
+        defaults.set(until, forKey: key("feed_read_until"))
+        defaults.set(reason, forKey: key("feed_read_reason"))
+        logBlock("Feed read circuit active for \(Int(duration))s — \(reason)")
     }
 
     func canProbeSession() -> Decision {
@@ -8129,6 +8187,17 @@ final class InstagramSafetyGate {
         return Decision(allowed: false, waitSeconds: Int(until - now), reason: "Instagram verification pending")
     }
 
+    private func activeFeedReadCircuit(now: Double) -> Decision? {
+        guard let until = defaults.object(forKey: key("feed_read_until")) as? Double else { return nil }
+        if until <= now {
+            defaults.removeObject(forKey: key("feed_read_until"))
+            defaults.removeObject(forKey: key("feed_read_reason"))
+            return nil
+        }
+        let reason = defaults.string(forKey: key("feed_read_reason")) ?? "recent Instagram feed warning"
+        return Decision(allowed: false, waitSeconds: Int(until - now), reason: reason)
+    }
+
     private func isPostRevealProtected(now: Double) -> Bool {
         guard let until = defaults.object(forKey: key("post_reveal_protected_until")) as? Double else { return false }
         if until <= now {
@@ -8156,7 +8225,10 @@ final class InstagramSafetyGate {
     }
 
     private func actionFor(method: String, path: String) -> Action {
-        guard method != "GET" else { return .apiRead }
+        guard method != "GET" else {
+            if path.contains("/feed/user/") { return .feedUserRead }
+            return .apiRead
+        }
         if path.contains("/accounts/edit_profile/") { return .biography }
         if path.contains("/notes/create_note/") { return .note }
         if path.contains("/notes/delete_note/") { return .noteDelete }

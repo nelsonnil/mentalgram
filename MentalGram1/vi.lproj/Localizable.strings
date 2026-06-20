@@ -540,6 +540,16 @@
 "preload.failed.subtitle" = "Kiểm tra kết nối và thử lại. Nên dùng Wi-Fi cho lần tải đầu tiên.";
 "preload.retry" = "Thử lại";
 
+// MARK: - Post-Reveal Archive Banner
+"post_reveal_archive.archiving" = "Đang lưu trữ %d/%d…";
+"post_reveal_archive.visible" = "%d ảnh vẫn hiển thị sau reveal";
+"post_reveal_archive.error" = "Lỗi: %@";
+"post_reveal_archive.cooldown" = "Có thể lưu trữ sau %@ — chờ khoảng nghỉ anti-bot";
+"post_reveal_archive.upload_active" = "Tải lên đang chạy — chờ hoàn tất trước khi lưu trữ";
+"post_reveal_archive.description" = "Post Prediction đã để ảnh hiển thị trên Instagram. Hãy lưu trữ chúng trước màn diễn tiếp theo.";
+"post_reveal_archive.button" = "Lưu trữ ngay";
+"post_reveal_archive.hold_error" = "Đang tạm dừng: %@ — chờ %dgiây";
+
 // MARK: - Instagram Sync Card
 "sync.title" = "Đồng bộ Instagram";
 "sync.never_synced" = "Chưa đồng bộ lần nào";
@@ -916,3 +926,8 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "performance.mode.test" = "Test Mode";
 "performance.mode.subtitle" = "Choose how Performance handles inputs.";
 "performance.mode.test.note" = "Test Mode lets you practice locally. The fake Instagram view can change, including Bio, Notes, Profile Picture and Post Prediction, but nothing is sent to Instagram. Temporary test changes reset when you leave Performance.";
+
+/* Sync & Archive visible reveal banner */
+"set.sync.recent_reveal.title" = "Set đã reveal %d phút trước";
+"set.sync.recent_reveal.body" = "Lưu trữ cùng một set quá sớm sau khi reveal (vòng reveal -> archive -> reveal) là nguyên nhân phổ biến nhất khiến Instagram phát hiện bot. Hãy chờ thêm ít nhất %d phút.";
+"set.sync.archive.button.visible" = "Lưu trữ ngay (%d đang hiển thị)";
