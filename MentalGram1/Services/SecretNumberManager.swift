@@ -258,9 +258,15 @@ class SecretNumberManager: ObservableObject {
 
     /// Map swipe-start position inside the 3-column photo grid to a digit.
     /// Row 1 → 1–3, Row 2 → 4–6, Row 3 → 7–9, Row 4+ → 0.
-    static func digit(x: CGFloat, y: CGFloat, gridWidth: CGFloat) -> Int {
+    static func digit(
+        x: CGFloat,
+        y: CGFloat,
+        gridWidth: CGFloat,
+        cellAspectRatio: CGFloat = 1.0,
+        spacing: CGFloat = 1.0
+    ) -> Int {
         let cellW = gridWidth / 3.0
-        let cellH = cellW + 1.0
+        let cellH = (cellW / max(cellAspectRatio, 0.1)) + spacing
         let col = min(2, max(0, Int(x / cellW)))
         let row = max(0, Int(y / cellH))
         if row >= 3 { return 0 }

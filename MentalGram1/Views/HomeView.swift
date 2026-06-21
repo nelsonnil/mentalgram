@@ -1820,7 +1820,9 @@ struct ProfileCacheIncompleteBanner: View {
                         .font(.system(size: 15, weight: .black))
                         .foregroundColor(Color.red.opacity(0.55))
 
-                    Text("Cached \(status.cached)/\(status.required) posts. Highlights, Reels or Tagged may still be missing.")
+                    Text(status.cached >= status.required
+                         ? "Posts loaded (\(status.cached)). Highlights, Reels or Tagged need loading."
+                         : "Cached \(status.cached)/\(status.required) posts. Highlights, Reels or Tagged may still be missing.")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Color.red.opacity(0.78))
                         .fixedSize(horizontal: false, vertical: true)

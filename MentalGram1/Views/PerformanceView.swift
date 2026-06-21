@@ -3,6 +3,13 @@ import Photos
 import AVFoundation
 import AudioToolbox
 
+enum InstagramGridMetrics {
+    /// Instagram's modern profile grids use portrait thumbnails rather than
+    /// perfect squares. Keep the secret digit-grid hit map in sync with this.
+    static let profileCellAspectRatio: CGFloat = 4.0 / 5.0
+    static let spacing: CGFloat = 1.0
+}
+
 // MARK: - Performance View (Instagram Profile Replica)
 
 struct PerformanceView: View {
@@ -470,7 +477,7 @@ struct PerformanceView: View {
                     Button {
                         let uid = currentSessionUserId()
                         guard !uid.isEmpty else { return }
-                        Task { @MainActor in await runFirstTimePreload(userId: uid) }
+                        Task { @MainActor in await continueIncompletePerformancePreload(userId: uid) }
                     } label: {
                         Text(String(localized: "preload.retry"))
                             .font(.system(size: 15, weight: .semibold))
@@ -4202,11 +4209,41 @@ struct PerformanceView: View {
         }
 
         if hasCompleteFirstTimePreloadCache(cached, userId: userId) {
-            print("📦 [PRELOAD] Posts complete — continuing optional preload only")
+            // Posts already cached — show overlay and run only the optional stage.
+            print("📦 [PRELOAD] Posts complete — continuing optional preload only (blocking)")
+            withAnimation(.easeIn(duration: 0.2)) {
+                isFirstTimePreloading = true
+                preloadFailed = false
+            }
+            firstTimePreloadStartedAt = Date()
+            preloadProgress = "Loading highlights, reels and tagged posts…"
+
+            // Wait out the cold-start API lockdown window (max 50 s) so API calls are allowed.
+            if InstagramSafetyGate.shared.isInColdStartWindow {
+                preloadProgress = "Waiting for Instagram safety window…"
+                var waited = 0
+                while InstagramSafetyGate.shared.isInColdStartWindow, waited < 50 {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    waited += 2
+                }
+                preloadProgress = "Loading highlights, reels and tagged posts…"
+            }
+
             UserDefaults.standard.set(true, forKey: "perf_fully_preloaded_\(userId)")
             UserDefaults.standard.set(false, forKey: "perf_optional_preloaded_\(userId)")
             checkAndLoadProfile(allowRemote: false)
-            scheduleFirstTimeOptionalPreload(profile: cached, userId: userId)
+
+            let optionalComplete = await runFirstTimeOptionalPreloadNow(profile: cached, userId: userId)
+            if optionalComplete {
+                firstTimePreloadStartedAt = nil
+                withAnimation(.easeOut(duration: 0.3)) { isFirstTimePreloading = false }
+                print("✅ [PRELOAD] Optional-only continue finished for \(userId)")
+            } else {
+                UserDefaults.standard.set(false, forKey: "perf_fully_preloaded_\(userId)")
+                preloadProgress = ""
+                withAnimation(.easeIn(duration: 0.2)) { preloadFailed = true }
+                print("⚠️ [PRELOAD] Optional-only continue incomplete for \(userId)")
+            }
         } else {
             await runFirstTimePreload(userId: userId)
         }
@@ -6911,6 +6948,7 @@ struct InstagramProfileView: View {
     let onPlusPress: () -> Void
     @Binding var highlightsLoadedOnce: Bool
     @State private var selectedTab = 0
+    @State private var measuredSecretGridWidth: CGFloat = 0
 
     // Infinite scroll support
     var mediaURLs: [String]? = nil // If provided, use instead of profile.cachedMediaURLs
@@ -7124,6 +7162,7 @@ struct InstagramProfileView: View {
         isDigitGridInputActive
             || followingMagic.isEnabled
             || isForceReelGridInputActive
+            || (ForceNumberRevealSettings.shared.isEnabled && ForceNumberRevealSettings.shared.gridSwipeEnabled)
     }
 
     private func waitForLocalBioPostPredictionComboIfNeeded() async -> Bool {
@@ -8212,7 +8251,18 @@ struct InstagramProfileView: View {
             }
         }
         .coordinateSpace(name: "secretGrid")
-        .simultaneousGesture(
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        measuredSecretGridWidth = proxy.size.width
+                    }
+                    .onChange(of: proxy.size.width) { width in
+                        measuredSecretGridWidth = width
+                    }
+            }
+        )
+        .highPriorityGesture(
             DragGesture(minimumDistance: 30, coordinateSpace: .named("secretGrid"))
                 .onEnded { value in handleGridSwipe(value) }
         )
@@ -8314,13 +8364,15 @@ struct InstagramProfileView: View {
 
         if shouldCaptureDigitGridCellInput,
            isDigitGridInputActive || isForceReelGridInputActive || activeCardClockSet == nil {
-            let gridWidth = UIScreen.main.bounds.width
+            let gridWidth = measuredSecretGridWidth > 0 ? measuredSecretGridWidth : UIScreen.main.bounds.width
             let digit = SecretNumberManager.digit(
                 x: value.startLocation.x,
                 y: value.startLocation.y,
-                gridWidth: gridWidth
+                gridWidth: gridWidth,
+                cellAspectRatio: InstagramGridMetrics.profileCellAspectRatio,
+                spacing: InstagramGridMetrics.spacing
             )
-            print("🔢 [DIGIT GRID] Cell swipe start x:\(Int(value.startLocation.x)) y:\(Int(value.startLocation.y)) → \(digit)")
+            print("🔢 [DIGIT GRID] Cell swipe start x:\(Int(value.startLocation.x)) y:\(Int(value.startLocation.y)) gridW:\(Int(gridWidth)) → \(digit)")
             secretManager.pendingDir = nil
             secretManager.cardSwipeBuffer.removeAll()
             secretManager.addDigit(digit)
@@ -9322,17 +9374,17 @@ struct ReelsGridView: View {
     var onTapIndex: ((Int) -> Void)? = nil
 
     let columns = [
-        GridItem(.flexible(), spacing: 1),
-        GridItem(.flexible(), spacing: 1),
-        GridItem(.flexible(), spacing: 1)
+        GridItem(.flexible(), spacing: InstagramGridMetrics.spacing),
+        GridItem(.flexible(), spacing: InstagramGridMetrics.spacing),
+        GridItem(.flexible(), spacing: InstagramGridMetrics.spacing)
     ]
 
     var body: some View {
         let placeholderCount = max(0, minCells - reelURLs.count)
-        LazyVGrid(columns: columns, spacing: 1) {
+        LazyVGrid(columns: columns, spacing: InstagramGridMetrics.spacing) {
             ForEach(Array(reelURLs.enumerated()), id: \.element) { index, url in
                 Color.clear
-                    .aspectRatio(1, contentMode: .fit)
+                    .aspectRatio(InstagramGridMetrics.profileCellAspectRatio, contentMode: .fit)
                     .overlay(
                         ZStack(alignment: .bottomLeading) {
                             if let image = cachedImages[url] {
@@ -9354,7 +9406,7 @@ struct ReelsGridView: View {
             if placeholderCount > 0 {
                 ForEach(0..<placeholderCount, id: \.self) { _ in
                     Color.clear
-                        .aspectRatio(1, contentMode: .fit)
+                        .aspectRatio(InstagramGridMetrics.profileCellAspectRatio, contentMode: .fit)
                         .overlay(
                             ZStack(alignment: .bottomLeading) {
                                 Rectangle().fill(Color.gray.opacity(0.15))
@@ -9848,20 +9900,20 @@ struct PhotosGridView: View {
     var minCells: Int = 12
 
     let columns = [
-        GridItem(.flexible(), spacing: 1),
-        GridItem(.flexible(), spacing: 1),
-        GridItem(.flexible(), spacing: 1)
+        GridItem(.flexible(), spacing: InstagramGridMetrics.spacing),
+        GridItem(.flexible(), spacing: InstagramGridMetrics.spacing),
+        GridItem(.flexible(), spacing: InstagramGridMetrics.spacing)
     ]
 
     var body: some View {
         let placeholderCount = max(0, minCells - mediaURLs.count)
-        LazyVGrid(columns: columns, spacing: 1) {
+        LazyVGrid(columns: columns, spacing: InstagramGridMetrics.spacing) {
             // Identify cells by URL (element) instead of position (offset). Otherwise
             // reveal:// insertions and refreshes cause SwiftUI to reuse cells by index
             // and show the wrong thumbnail in a slot.
             ForEach(Array(mediaURLs.enumerated()), id: \.element) { index, url in
                 Color.clear
-                    .aspectRatio(1, contentMode: .fit)
+                    .aspectRatio(InstagramGridMetrics.profileCellAspectRatio, contentMode: .fit)
                     .overlay(gridCell(for: url))
                     .clipped()
                     .onAppear { onMediaAppear?(url) }
@@ -9871,7 +9923,7 @@ struct PhotosGridView: View {
             if placeholderCount > 0 {
                 ForEach(0..<placeholderCount, id: \.self) { _ in
                     Color.clear
-                        .aspectRatio(1, contentMode: .fit)
+                        .aspectRatio(InstagramGridMetrics.profileCellAspectRatio, contentMode: .fit)
                         .overlay(Rectangle().fill(Color.gray.opacity(0.15)))
                         .clipped()
                 }
