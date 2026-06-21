@@ -1913,3 +1913,26 @@ Un seul type d'interface peut etre actif a la fois pour les Sets, la Bio et les 
 "set.sync.recent_reveal.title" = "Set révélé il y a %d min";
 "set.sync.recent_reveal.body" = "Archiver le même set trop tôt après un reveal (cycle reveal -> archive -> reveal) est la cause la plus fréquente de détection bot par Instagram. Attendez encore au moins %d min.";
 "set.sync.archive.button.visible" = "Archiver maintenant (%d visibles)";
+
+// Bulk import and upload repair
+"home.preperformance.visible_photos.title" = "Photos visibles avant Performance (%d)";
+"home.preperformance.amnesia_reset.title" = "Amnesia Carousel doit etre reinitialise";
+"home.preperformance.visible_photos.description" = "Archivez les photos visibles avant Performance afin qu elles ne soient pas publiques sur Instagram.";
+"home.preperformance.amnesia_reset.description" = "Amnesia Carousel est revele - reinitialisez-le avant le prochain spectacle.";
+"set.bulk.no_empty_slots" = "Aucun slot vide a remplir.";
+"set.bulk.slot_order_help" = "Les photos sont placees dans l ordre des slots (%@). Vous pouvez aussi les ajouter une par une en touchant un slot vide.";
+"set.bulk.import_blocked" = "L importation est desactivee pendant un upload ou une synchronisation.";
+"set.bulk.archived_already_used" = "Les photos archivees selectionnees sont deja utilisees dans ce set.";
+"archive_picker.bulk_help" = "Les photos rempliront les slots vides dans l ordre choisi. Le badge indique le slot de destination.";
+"archive_picker.load_more_hint" = "Utilisez Charger plus si vous avez besoin de photos archivees plus anciennes.";
+"upload.bank.finishing_retry" = "Finishing Bank %d - retrying in %@";
+"upload.bank.finishing_label" = "Finishing Bank %d";
+"upload.bank.archiving_retry" = "Archiving Bank %d pending photo - retrying in %@";
+"upload.bank.archiving_label" = "Archiving Bank %d";
+"upload.bank.archiving_pending" = "Archiving Bank %d pending photo...";
+"upload.bank.safety_pause_message" = "Upload paused for safety.\n\nVault detected Instagram verification or a safety pause while finishing Bank %d. It stopped instead of retrying to avoid a stronger checkpoint.";
+"upload.bank.max_retries_error" = "Bank %d still has %d pending photo(s) after many automatic retries. Vault stopped to avoid unsafe repeated Instagram actions.";
+"upload.bank.not_ready_error" = "Bank %d still has %d pending photo(s), but none are ready for automatic upload. Check that each pending slot still has a local image.";
+"upload.bank.needs_attention" = "Le Bank %d necessite votre attention";
+"upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
+"upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";

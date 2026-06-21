@@ -93,6 +93,8 @@ struct InstagramProfile: Codable, Identifiable {
     var cachedMediaItems: [InstagramMediaItem] // Full items for post viewer (likes, date, caption)
     /// Full reel items including videoURL — used by ReelsGridView for in-grid playback.
     var cachedReelItems: [InstagramMediaItem]  // Reel items with video URLs
+    /// Full tagged items, used for stable mediaId thumbnail hydration after app relaunch.
+    var cachedTaggedItems: [InstagramMediaItem]
     /// Pagination cursor from the initial media fetch. Stored so that the first
     /// pagination call can start from page 2 instead of re-fetching page 1
     /// (which would waste a request and cause a 3-4s artificial delay).
@@ -104,7 +106,7 @@ struct InstagramProfile: Codable, Identifiable {
         case isVerified, isPrivate, followerCount, followingCount, mediaCount
         case followedBy, isFollowing, isFollowRequested, cachedAt
         case cachedMediaURLs, cachedReelURLs, cachedTaggedURLs, cachedHighlights, cachedMediaItems
-        case cachedReelItems, cachedNextMaxId
+        case cachedReelItems, cachedTaggedItems, cachedNextMaxId
     }
 
     init(from decoder: Decoder) throws {
@@ -130,6 +132,7 @@ struct InstagramProfile: Codable, Identifiable {
         cachedHighlights   = try c.decodeIfPresent([InstagramHighlight].self, forKey: .cachedHighlights) ?? []
         cachedMediaItems   = try c.decodeIfPresent([InstagramMediaItem].self, forKey: .cachedMediaItems) ?? []
         cachedReelItems    = try c.decodeIfPresent([InstagramMediaItem].self, forKey: .cachedReelItems) ?? []
+        cachedTaggedItems  = try c.decodeIfPresent([InstagramMediaItem].self, forKey: .cachedTaggedItems) ?? []
         cachedNextMaxId    = try c.decodeIfPresent(String.self, forKey: .cachedNextMaxId)
     }
 
@@ -142,6 +145,7 @@ struct InstagramProfile: Codable, Identifiable {
          cachedHighlights: [InstagramHighlight] = [],
          cachedMediaItems: [InstagramMediaItem] = [],
          cachedReelItems: [InstagramMediaItem] = [],
+         cachedTaggedItems: [InstagramMediaItem] = [],
          cachedNextMaxId: String? = nil) {
         self.userId = userId; self.username = username; self.fullName = fullName
         self.biography = biography; self.externalUrl = externalUrl
@@ -155,6 +159,7 @@ struct InstagramProfile: Codable, Identifiable {
         self.cachedHighlights = cachedHighlights
         self.cachedMediaItems = cachedMediaItems
         self.cachedReelItems = cachedReelItems
+        self.cachedTaggedItems = cachedTaggedItems
         self.cachedNextMaxId = cachedNextMaxId
     }
 }

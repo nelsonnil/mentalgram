@@ -383,6 +383,11 @@ struct SetDetailView: View {
             && !isArchivingAll
             && !archiveAllCompleted
             && !uploadManager.isSyncArchiveActive {
+            let _ = safetyCountdownTick
+            let reverifyKey = "reverify_\(currentSet.id.uuidString)"
+            let reverifyCooldown = InstagramSafetyGate.shared.canSyncSet(setId: reverifyKey, minGap: 90)
+            let reverifyCooldownLeft = reverifyCooldown.allowed ? 0 : reverifyCooldown.waitSeconds
+            let reverifyBlockedByCooldown = reverifyCooldownLeft > 0
             VStack(spacing: 6) {
                 if uploadManager.isReverifying {
                     HStack(spacing: 8) {
@@ -408,6 +413,7 @@ struct SetDetailView: View {
                             Spacer()
                             Button {
                                 uploadManager.reverifyError = nil
+                                uploadManager.reverifyStatusMessage = nil
                                 startReverify()
                             } label: {
                                 Text("Retry")
@@ -419,8 +425,48 @@ struct SetDetailView: View {
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.2), lineWidth: 1))
                     }
 
+                    if let status = uploadManager.reverifyStatusMessage, uploadManager.reverifyError == nil {
+                        HStack(spacing: 8) {
+                            Image(systemName: uploadManager.reverifyDesynced > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(uploadManager.reverifyDesynced > 0 ? .orange : .green)
+                            Text(status)
+                                .font(.caption)
+                                .foregroundColor(uploadManager.reverifyDesynced > 0 ? .orange : .green)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background((uploadManager.reverifyDesynced > 0 ? Color.orange : Color.green).opacity(0.08)).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke((uploadManager.reverifyDesynced > 0 ? Color.orange : Color.green).opacity(0.2), lineWidth: 1))
+                    }
+
+                    if reverifyBlockedByCooldown {
+                        HStack(spacing: 8) {
+                            Image(systemName: "clock.badge.exclamationmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(Color(hex: "FF9F0A"))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Re-verify disponible en \(formatCountdown(reverifyCooldownLeft))")
+                                    .font(.caption.bold())
+                                    .foregroundColor(Color(hex: "FF9F0A"))
+                                    .monospacedDigit()
+                                Text("Cooldown activo para evitar llamadas repetidas a Instagram en el mismo set.")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .background(Color(hex: "FF9F0A").opacity(0.08)).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: "FF9F0A").opacity(0.25), lineWidth: 1))
+                    }
+
                     Button {
                         uploadManager.reverifyError = nil
+                        uploadManager.reverifyStatusMessage = nil
                         startReverify()
                     } label: {
                         HStack(spacing: 10) {
@@ -431,25 +477,29 @@ struct SetDetailView: View {
                                 Text("Re-verify All (\(allUploadedPhotos.count) photos)")
                                     .font(.subheadline.bold())
                                     .foregroundColor(.white)
-                                Text("Check if any photo is currently unarchived on Instagram")
+                                Text(reverifyBlockedByCooldown
+                                     ? "Wait \(formatCountdown(reverifyCooldownLeft)) before checking Instagram again"
+                                     : "Check if any photo is currently unarchived on Instagram")
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.8))
                                     .lineLimit(2)
+                                    .monospacedDigit()
                             }
                             Spacer()
-                            Image(systemName: "chevron.right")
+                            Image(systemName: reverifyBlockedByCooldown ? "lock.fill" : "chevron.right")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.6))
                         }
                         .padding(12)
-                        .background(Color.blue.opacity(0.55))
+                        .background((reverifyBlockedByCooldown ? Color.gray : Color.blue).opacity(0.55))
                         .cornerRadius(10)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.blue.opacity(0.7), lineWidth: 1)
+                                .stroke((reverifyBlockedByCooldown ? Color.gray : Color.blue).opacity(0.7), lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
+                    .disabled(reverifyBlockedByCooldown)
 
                     Text("Use Re-verify All before Performance to detect public photos and avoid accidental reveal.")
                         .font(.caption)
@@ -1078,7 +1128,7 @@ struct SetDetailView: View {
                                     .font(.subheadline.bold())
                                     .foregroundColor(.orange)
                                 Text("Wait a few minutes before syncing. Instagram limits API calls per hour.")
-                                    .font(.caption)
+                                    .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .lineLimit(2)
                             }
@@ -1103,7 +1153,7 @@ struct SetDetailView: View {
                                     .font(.subheadline.bold())
                                     .foregroundColor(.blue)
                                 Text("Arrastrar para refrescar en Performance llamará a Instagram cuando el contador llegue a cero.")
-                                    .font(.caption)
+                                    .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .lineLimit(2)
                             }
@@ -1139,7 +1189,7 @@ struct SetDetailView: View {
                                     .font(.subheadline.bold())
                                     .foregroundColor(Color(hex: "FF9F0A"))
                                 Text(String(format: String(localized: "set.sync.recent_reveal.body"), waitLeft))
-                                    .font(.caption)
+                                    .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -1211,7 +1261,7 @@ struct SetDetailView: View {
                                     .font(.subheadline.bold())
                                     .foregroundColor(saTitleColor)
                                 Text(saSubtitle)
-                                    .font(.caption)
+                                    .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .lineLimit(2)
                                     .monospacedDigit()
@@ -1241,6 +1291,7 @@ struct SetDetailView: View {
                 // otherwise idle redraws are wasted work.
                 let needsTick = InstagramSafetyGate.shared.postRevealSecondsRemaining > 0
                     || !InstagramSafetyGate.shared.canSyncSet(setId: currentSet.id.uuidString).allowed
+                    || !InstagramSafetyGate.shared.canSyncSet(setId: "reverify_\(currentSet.id.uuidString)", minGap: 90).allowed
                     || !InstagramSafetyGate.shared.decision(for: .pullRefresh).allowed
                 if needsTick {
                     safetyCountdownTick &+= 1
@@ -1402,17 +1453,25 @@ struct SetDetailView: View {
     /// Fetches all VISIBLE media from Instagram in 1-2 API calls, then compares
     /// against local state. Much faster than checking 100+ photos one by one.
     private func startReverify() {
+        let photos = allUploadedPhotos
+
         // ── DIAGNOSTIC DUMP ─────────────────────────────────────────────
         print("🔍 [RE-VERIFY] startReverify() called")
-        print("🔍 [RE-VERIFY] allUploadedPhotos=\(allUploadedPhotos.count)  isReverifying=\(uploadManager.isReverifying)  isLocked=\(instagram.isLocked)")
-        print("🔍 [RE-VERIFY] All photos in set (\(currentSet.photos.count) total):")
-        for p in currentSet.photos {
+        print("🔍 [RE-VERIFY] uploadedPhotos=\(photos.count)  localTotal=\(currentSet.photos.count)  isReverifying=\(uploadManager.isReverifying)  isLocked=\(instagram.isLocked)")
+        let skippedPlaceholders = currentSet.photos.count - photos.count
+        if skippedPlaceholders > 0 {
+            print("🔍 [RE-VERIFY] Skipping \(skippedPlaceholders) placeholder/pending photo(s) without a completed upload")
+        }
+        for p in photos.prefix(20) {
             print("🔍 [RE-VERIFY]   symbol=\(p.symbol)  mediaId=\(p.mediaId ?? "nil")  status=\(p.uploadStatus)  isArchived=\(p.isArchived)")
+        }
+        if photos.count > 20 {
+            print("🔍 [RE-VERIFY]   … \(photos.count - 20) more uploaded photo(s)")
         }
         // ────────────────────────────────────────────────────────────────
 
-        let photos = allUploadedPhotos
         guard !photos.isEmpty else {
+            uploadManager.reverifyStatusMessage = "No uploaded Instagram photos found in this set yet."
             print("🔍 [RE-VERIFY] Guard exit: allUploadedPhotos is EMPTY — no photos to verify")
             return
         }
@@ -1425,21 +1484,29 @@ struct SetDetailView: View {
             print("⚠️ [RE-VERIFY] Skipped — lockdown active")
             return
         }
-        // ANTI-BOT: Cooldown 5 min between re-verify runs. The log showed the
+        // ANTI-BOT: Cooldown 90s between re-verify runs. The log showed the
         // re-verify firing twice within 36 seconds (13:25:50 and 13:26:11),
-        // generating 12 GET /feed/user/ calls in 53s. Same per-set gate used
-        // by S&A, keyed by set ID so different sets don't share the cooldown.
+        // generating 12 GET /feed/user/ calls in 53s. Keep it shorter than
+        // S&A's 5-minute cooldown because this is mostly a read-only diagnosis.
         let reverifyKey = "reverify_\(currentSet.id.uuidString)"
-        let reverifyCooldown = InstagramSafetyGate.shared.canSyncSet(setId: reverifyKey)
+        let reverifyCooldown = InstagramSafetyGate.shared.canSyncSet(setId: reverifyKey, minGap: 90)
         guard reverifyCooldown.allowed else {
             let m = reverifyCooldown.waitSeconds / 60
             let s = reverifyCooldown.waitSeconds % 60
             let label = m > 0 ? "\(m)m \(s)s" : "\(s)s"
             print("🛡️ [RE-VERIFY] Skipped — cooldown active (\(label))")
             LogManager.shared.info("Re-verify cooldown: \(reverifyCooldown.waitSeconds)s remaining", category: .general)
+            safetyCountdownTick &+= 1
             return
         }
-        InstagramSafetyGate.shared.markSetSyncStarted(setId: reverifyKey)
+        let firstPageDecision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+        guard firstPageDecision.allowed else {
+            uploadManager.reverifyError = "Re-verify paused for safety. Wait \(formatCountdown(firstPageDecision.waitSeconds)) before trying again."
+            print("🛡️ [RE-VERIFY] Skipped — feed pagination cooldown active (\(firstPageDecision.waitSeconds)s)")
+            LogManager.shared.info("Re-verify feed cooldown: \(firstPageDecision.waitSeconds)s remaining", category: .general)
+            safetyCountdownTick &+= 1
+            return
+        }
 
         let photoSnapshots: [(id: UUID, mediaId: String, isArchived: Bool, status: PhotoUploadStatus)] = photos.compactMap { p in
             guard let mid = p.mediaId else { return nil }
@@ -1455,6 +1522,7 @@ struct SetDetailView: View {
         manager.reverifyProgress = 0
         manager.reverifyTotal = photoSnapshots.count
         manager.reverifyDesynced = 0
+        manager.reverifyStatusMessage = nil
 
         manager.reverifyTask = Task.detached(priority: .utility) {
             print("🔍 [RE-VERIFY] ─────────────────────────────────────")
@@ -1472,6 +1540,7 @@ struct SetDetailView: View {
             let maxReverifyFeedPages = 4
             var feedScanCompleted = false
             var feedScanPausedReason: String? = nil
+            var didStartReverifyCooldown = false
 
             do {
                 await MainActor.run { manager.reverifyError = nil }
@@ -1487,6 +1556,10 @@ struct SetDetailView: View {
                         feedScanPausedReason = "Re-verify paused for safety. Wait \(pageDecision.waitSeconds)s before trying again."
                         LogManager.shared.warning("Re-verify feed page blocked: \(pageDecision.reason) (\(pageDecision.waitSeconds)s)", category: .api)
                         break
+                    }
+                    if !didStartReverifyCooldown {
+                        InstagramSafetyGate.shared.markSetSyncStarted(setId: reverifyKey)
+                        didStartReverifyCooldown = true
                     }
                     InstagramSafetyGate.shared.record(.ownProfilePagination)
 
@@ -1564,6 +1637,15 @@ struct SetDetailView: View {
                 print("🛡️ [RE-VERIFY] \(warning)")
                 LogManager.shared.warning(warning, category: .api)
                 await MainActor.run { manager.reverifyError = warning }
+                if page == 0 {
+                    await MainActor.run {
+                        manager.isReverifying = false
+                        manager.reverifyTask = nil
+                    }
+                    print("🛡️ [RE-VERIFY] Stopped before reading Instagram feed — no conclusion made")
+                    LogManager.shared.info("Re-verify paused before any feed page; no archive-state conclusion made", category: .general)
+                    return
+                }
             }
 
             print("🔍 [RE-VERIFY] Instagram reports \(visibleOnIG.count / 2) visible post(s) — comparing with \(photoSnapshots.count) local photo(s)")
@@ -1685,6 +1767,7 @@ struct SetDetailView: View {
             // old user posts have much lower IDs and are never matched.
             let allTrackedMediaIds = Set(photoSnapshots.map { $0.mediaId })
             let trackedInt64s = allTrackedMediaIds.compactMap { Int64($0) }
+            var archivedGhosts = 0
             if feedScanCompleted, let minTracked = trackedInt64s.min() {
                 // Collect unique numeric IDs from the live feed
                 let uniqueVisibleNumericIds = visibleOnIG.filter { Int64($0) != nil }
@@ -1698,6 +1781,7 @@ struct SetDetailView: View {
                         print("🔍 [RE-VERIFY]   archiving ghost: \(ghostId)")
                         do {
                             let ok = try await InstagramService.shared.archivePhoto(mediaId: ghostId, skipPreCheck: true)
+                            if ok { archivedGhosts += 1 }
                             print("🔍 [RE-VERIFY]   \(ok ? "✅" : "⚠️") archive result for ghost \(ghostId): \(ok)")
                         } catch {
                             print("🔍 [RE-VERIFY]   ❌ failed to archive ghost \(ghostId): \(error)")
@@ -1726,12 +1810,27 @@ struct SetDetailView: View {
             // ────────────────────────────────────────────────────────────────────
 
             await MainActor.run {
+                if feedScanCompleted {
+                    if desynced > 0 {
+                        manager.reverifyStatusMessage = "Found \(desynced) public photo\(desynced == 1 ? "" : "s") from this set. Tap Sync & Archive to archive safely."
+                    } else if archivedGhosts > 0 {
+                        manager.reverifyStatusMessage = "Checked \(photoSnapshots.count) photo\(photoSnapshots.count == 1 ? "" : "s") and archived \(archivedGhosts) untracked ghost post\(archivedGhosts == 1 ? "" : "s")."
+                    } else {
+                        manager.reverifyStatusMessage = "Checked \(photoSnapshots.count) uploaded photo\(photoSnapshots.count == 1 ? "" : "s"): no public photos from this set found."
+                    }
+                } else {
+                    manager.reverifyStatusMessage = nil
+                }
                 manager.isReverifying = false
                 manager.reverifyTask = nil
             }
             print("🔍 [RE-VERIFY] Done — \(desynced) desync(s) found out of \(photoSnapshots.count) photos (used \(page) API call(s))")
-            if desynced > 0 {
+            if !feedScanCompleted {
+                LogManager.shared.warning("Re-verify partial: scanned \(page) page(s), result is not conclusive", category: .general)
+            } else if desynced > 0 {
                 LogManager.shared.info("Re-verify: fixed \(desynced) desync(s) — S&A button should now appear", category: .general)
+            } else if archivedGhosts > 0 {
+                LogManager.shared.info("Re-verify: archived \(archivedGhosts) ghost post(s)", category: .general)
             } else {
                 LogManager.shared.info("Re-verify: all \(photoSnapshots.count) photos confirmed archived (\(page) API calls)", category: .general)
             }
@@ -1754,6 +1853,12 @@ struct SetDetailView: View {
         guard !photos.isEmpty, !isSyncing, !isArchivingAll else {
             print("⚠️ [S&A] Already running or no photos")
             return
+        }
+        if uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive {
+            print("🛑 [S&A] Cancelling active upload before Sync & Archive")
+            LogManager.shared.warning("Upload cancelled before Sync & Archive", category: .upload)
+            await MainActor.run { uploadManager.resetAllState() }
+            try? await Task.sleep(nanoseconds: 300_000_000)
         }
         guard !instagram.isLocked else {
             print("⚠️ [S&A] Skipped — lockdown active")
@@ -1969,20 +2074,6 @@ struct SetDetailView: View {
         }
 
         // ── PHASE 2: ARCHIVE ──────────────────────────────────────────────
-        // Anti-bot: if a photo upload is running in parallel, pause it first.
-        // Concurrent POST requests (archive + upload) from the same session
-        // increase bot-detection risk and can cause silent archive failures.
-        if uploadManager.isUploading {
-            print("⏸️ [S&A] Pausing active upload before archiving (anti-bot)")
-            LogManager.shared.info("S&A: pausing upload to avoid concurrent API calls", category: .general)
-            await MainActor.run { uploadManager.requestPause = true }
-            // Give the upload loop up to 6 s to react and actually stop
-            for _ in 0..<12 {
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 s
-                if uploadManager.isPaused || !uploadManager.isUploading { break }
-            }
-            print("⏸️ [S&A] Upload stopped — starting archive phase")
-        }
 
         print("📦 [S&A] Phase 2: archiving \(confirmedToArchive.count) photo(s) (no pre-check GET)")
         LogManager.shared.info("Archive All started: \(confirmedToArchive.count) photo(s)", category: .general)
@@ -3240,7 +3331,7 @@ struct SetDetailView: View {
                         if instagram.isLoggedIn {
                             Button {
                                 if emptySlotLabelsForCurrentSet().isEmpty {
-                                    uploadManager.showingError = "There are no empty slots to fill."
+                                    uploadManager.showingError = String(localized: "set.bulk.no_empty_slots")
                                 } else {
                                     showBulkArchivedPicker = true
                                 }
@@ -3257,7 +3348,7 @@ struct SetDetailView: View {
                         }
                     }
 
-                    Text("Photos are placed in slot order (\(emptyLabels.prefix(4).joined(separator: ", "))\(emptyLabels.count > 4 ? "…" : "")). You can also add one by one by tapping any empty slot.")
+                    Text(String(format: String(localized: "set.bulk.slot_order_help"), "\(emptyLabels.prefix(4).joined(separator: ", "))\(emptyLabels.count > 4 ? "…" : "")"))
                         .font(.caption)
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3670,7 +3761,7 @@ struct SetDetailView: View {
         guard !uploadManager.isActive,
               !uploadManager.isSyncArchiveActive,
               !uploadManager.isReverifying else {
-            uploadManager.showingError = "Import is disabled while upload or sync is active."
+            uploadManager.showingError = String(localized: "set.bulk.import_blocked")
             bulkSelectedItems = []
             return
         }
@@ -3733,7 +3824,7 @@ struct SetDetailView: View {
         guard !uploadManager.isActive,
               !uploadManager.isSyncArchiveActive,
               !uploadManager.isReverifying else {
-            uploadManager.showingError = "Import is disabled while upload or sync is active."
+            uploadManager.showingError = String(localized: "set.bulk.import_blocked")
             return
         }
 
@@ -3749,7 +3840,7 @@ struct SetDetailView: View {
         }
         let photosToMap = Array(zip(uniquePhotos, emptyLabels))
         guard !photosToMap.isEmpty else {
-            uploadManager.showingError = "Selected archived photos are already used in this set."
+            uploadManager.showingError = String(localized: "set.bulk.archived_already_used")
             return
         }
 
@@ -4441,6 +4532,50 @@ struct SetDetailView: View {
         }
         return false
     }
+
+    private func stopIfUploadWasCancelled(_ error: Error? = nil, runGeneration: Int, photoIndex: Int, photoId: UUID) async -> Bool {
+        let cancelledError: Bool
+        if let error {
+            let message = error.localizedDescription.lowercased()
+            cancelledError = error is CancellationError ||
+                (error as? URLError)?.code == .cancelled ||
+                message.contains("cancelled") ||
+                message.contains("canceled")
+        } else {
+            cancelledError = false
+        }
+
+        guard Task.isCancelled ||
+                uploadManager.cancellationGeneration != runGeneration ||
+                cancelledError else {
+            return false
+        }
+
+        print("🛑 [UPLOAD] Cancelled intentionally — stopping without auto-retry")
+        LogManager.shared.info("Upload cancelled intentionally at photo #\(photoIndex + 1); auto-retry suppressed", category: .upload)
+
+        await MainActor.run {
+            if let latest = dataManager.sets
+                .flatMap({ $0.photos })
+                .first(where: { $0.id == photoId }),
+               latest.mediaId == nil,
+               latest.uploadStatus == .uploading {
+                dataManager.updatePhoto(
+                    photoId: photoId,
+                    mediaId: nil,
+                    uploadStatus: .pending,
+                    errorMessage: nil
+                )
+            }
+            uploadManager.requestPause = false
+            uploadManager.activeTask = nil
+            uploadManager.activeSetId = nil
+            uploadManager.uploadPhase = .idle
+            uploadManager.currentPhaseDescription = ""
+            dataManager.updateSetStatus(id: currentSet.id, status: .ready)
+        }
+        return true
+    }
     
     private func firstIncompleteBank(in set: PhotoSet) -> (bank: Bank, photos: [SetPhoto])? {
         for bank in set.banks.sorted(by: { $0.position < $1.position }) {
@@ -4456,6 +4591,7 @@ struct SetDetailView: View {
     }
 
     private func uploadAllPhotos(startFrom: Int = 0, bankRepairDepth: Int = 0) async {
+        let uploadRunGeneration = uploadManager.cancellationGeneration
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
         LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
@@ -4767,6 +4903,9 @@ struct SetDetailView: View {
             var photoUploadSuccess = false
             
             while retryAttempt <= maxRetries && !photoUploadSuccess {
+                if await stopIfUploadWasCancelled(runGeneration: uploadRunGeneration, photoIndex: index, photoId: photo.id) {
+                    return
+                }
                 // Check if pause requested between retries
                 if await checkPauseRequested(atPhotoIndex: index) { return }
                 
@@ -4872,6 +5011,9 @@ struct SetDetailView: View {
                     }
                     
                 } catch {
+                    if await stopIfUploadWasCancelled(error, runGeneration: uploadRunGeneration, photoIndex: index, photoId: photo.id) {
+                        return
+                    }
                     print("❌ [UPLOAD] Error at Photo #\(index + 1): \(error)")
                     let photoInfo = "Photo #\(index + 1) (\(photo.symbol))"
                     let errorDescription = error.localizedDescription.lowercased()
@@ -5060,6 +5202,9 @@ struct SetDetailView: View {
                             LogManager.shared.info("Auto-retry: waiting \(waitSeconds)s for cooldown (attempt \(retryAttempt))", category: .upload)
                             
                             await autoRetryWait(seconds: waitSeconds, attempt: retryAttempt, photoInfo: photoInfo)
+                            if await stopIfUploadWasCancelled(runGeneration: uploadRunGeneration, photoIndex: index, photoId: photo.id) {
+                                return
+                            }
                             
                         } else if isNetworkErr {
                             print("🌐 [AUTO-RETRY] Network error. Waiting for connection...")
@@ -5073,6 +5218,9 @@ struct SetDetailView: View {
                             // Wait up to 120s for network
                             var networkWait = 0
                             while networkWait < 120 {
+                                if await stopIfUploadWasCancelled(runGeneration: uploadRunGeneration, photoIndex: index, photoId: photo.id) {
+                                    return
+                                }
                                 if uploadManager.requestPause {
                                     if await checkPauseRequested(atPhotoIndex: index) { return }
                                 }
@@ -5095,6 +5243,9 @@ struct SetDetailView: View {
                             LogManager.shared.info("Auto-retry: waiting \(waitSeconds)s for generic error (attempt \(retryAttempt))", category: .upload)
                             
                             await autoRetryWait(seconds: waitSeconds, attempt: retryAttempt, photoInfo: photoInfo)
+                            if await stopIfUploadWasCancelled(runGeneration: uploadRunGeneration, photoIndex: index, photoId: photo.id) {
+                                return
+                            }
                         }
                         
                         continue
@@ -5206,9 +5357,13 @@ struct SetDetailView: View {
                 await MainActor.run {
                     selectedBankIndex = max(0, incomplete.bank.position - 1)
                     uploadManager.uploadPhase = .waiting(nextPhoto: repairIndex + 1, remainingSeconds: wait)
-                    uploadManager.currentPhaseDescription = "Finishing Bank \(incomplete.bank.position) — retrying in \(wait / 60):\(String(format: "%02d", wait % 60))"
+                    uploadManager.currentPhaseDescription = String(
+                        format: String(localized: "upload.bank.finishing_retry"),
+                        incomplete.bank.position,
+                        "\(wait / 60):\(String(format: "%02d", wait % 60))"
+                    )
                 }
-                await waitWithCountdown(seconds: wait, label: "Finishing Bank \(incomplete.bank.position)")
+                await waitWithCountdown(seconds: wait, label: String(format: String(localized: "upload.bank.finishing_label"), incomplete.bank.position))
                 if await checkPauseRequested(atPhotoIndex: repairIndex) { return }
                 await uploadAllPhotos(startFrom: repairIndex, bankRepairDepth: bankRepairDepth + 1)
                 return
@@ -5225,15 +5380,19 @@ struct SetDetailView: View {
                 await MainActor.run {
                     selectedBankIndex = max(0, incomplete.bank.position - 1)
                     uploadManager.uploadPhase = .waiting(nextPhoto: repairIndex + 1, remainingSeconds: wait)
-                    uploadManager.currentPhaseDescription = "Archiving Bank \(incomplete.bank.position) pending photo — retrying in \(wait / 60):\(String(format: "%02d", wait % 60))"
+                    uploadManager.currentPhaseDescription = String(
+                        format: String(localized: "upload.bank.archiving_retry"),
+                        incomplete.bank.position,
+                        "\(wait / 60):\(String(format: "%02d", wait % 60))"
+                    )
                 }
-                await waitWithCountdown(seconds: wait, label: "Archiving Bank \(incomplete.bank.position)")
+                await waitWithCountdown(seconds: wait, label: String(format: String(localized: "upload.bank.archiving_label"), incomplete.bank.position))
                 if await checkPauseRequested(atPhotoIndex: repairIndex) { return }
 
                 do {
                     await MainActor.run {
                         uploadManager.uploadPhase = .archiving(photoNumber: repairIndex + 1)
-                        uploadManager.currentPhaseDescription = "Archiving Bank \(incomplete.bank.position) pending photo…"
+                        uploadManager.currentPhaseDescription = String(format: String(localized: "upload.bank.archiving_pending"), incomplete.bank.position)
                     }
                     let archived = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
                     if archived {
@@ -5256,9 +5415,7 @@ struct SetDetailView: View {
                         await pauseUploadForSafety(
                             photoIndex: repairIndex,
                             message: """
-                            Upload paused for safety.
-
-                            Vault detected Instagram verification or a safety pause while finishing Bank \(incomplete.bank.position). It stopped instead of retrying to avoid a stronger checkpoint.
+                            \(String(format: String(localized: "upload.bank.safety_pause_message"), incomplete.bank.position))
                             """
                         )
                         return
@@ -5271,12 +5428,11 @@ struct SetDetailView: View {
             }
 
             let count = incomplete.photos.count
-            let plural = count == 1 ? "photo" : "photos"
             let message: String
             if bankRepairDepth >= maxAutomaticBankRepairDepth {
-                message = "Bank \(incomplete.bank.position) still has \(count) \(plural) pending after many automatic retries. Vault stopped to avoid unsafe repeated Instagram actions."
+                message = String(format: String(localized: "upload.bank.max_retries_error"), incomplete.bank.position, count)
             } else {
-                message = "Bank \(incomplete.bank.position) still has \(count) \(plural) pending upload/archive, but none are ready for automatic upload. Check that each pending slot still has a local image."
+                message = String(format: String(localized: "upload.bank.not_ready_error"), incomplete.bank.position, count)
             }
             print("⛔️ [BANK] Completion gate blocked — \(message)")
             LogManager.shared.warning("Bank completion gate blocked: \(message)", category: .upload)
@@ -5284,7 +5440,7 @@ struct SetDetailView: View {
                 selectedBankIndex = max(0, incomplete.bank.position - 1)
                 uploadManager.showingError = message
                 uploadManager.uploadPhase = .paused
-                uploadManager.currentPhaseDescription = "Bank \(incomplete.bank.position) needs attention"
+                uploadManager.currentPhaseDescription = String(format: String(localized: "upload.bank.needs_attention"), incomplete.bank.position)
                 uploadManager.activeTask = nil
                 dataManager.updateSetStatus(id: currentSet.id, status: .paused)
             }
@@ -5362,6 +5518,13 @@ struct SetDetailView: View {
         
         // Wait in 1-second chunks (respects pause)
         for _ in 0..<seconds {
+            if Task.isCancelled {
+                await MainActor.run {
+                    uploadManager.autoRetryTimer?.invalidate()
+                    uploadManager.autoRetryTimer = nil
+                }
+                return
+            }
             if uploadManager.requestPause {
                 await MainActor.run {
                     uploadManager.autoRetryTimer?.invalidate()
@@ -5426,7 +5589,7 @@ struct SetDetailView: View {
             uploadManager.escalatedPauseEndTime = pauseEndDate
             uploadManager.escalatedPauseCountdown = escalationWaitSeconds
             uploadManager.uploadPhase = .escalatedPause(remainingSeconds: escalationWaitSeconds)
-            uploadManager.currentPhaseDescription = "Multiple errors — cooling down before retry"
+            uploadManager.currentPhaseDescription = String(localized: "upload.escalation.cooldown_before_retry")
             dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
             
             uploadManager.escalatedPauseTimer?.invalidate()
@@ -5436,7 +5599,7 @@ struct SetDetailView: View {
                 if left > 0 {
                     um.escalatedPauseCountdown = left
                     um.uploadPhase = .escalatedPause(remainingSeconds: left)
-                    um.currentPhaseDescription = "Multiple errors — cooling down before retry"
+                    um.currentPhaseDescription = String(localized: "upload.escalation.cooldown_before_retry")
                 } else {
                     um.escalatedPauseTimer?.invalidate()
                     um.escalatedPauseTimer = nil
@@ -5461,7 +5624,7 @@ struct SetDetailView: View {
             uploadManager.escalatedPauseCountdown = 0
             uploadManager.consecutiveAutoRetries = 0
             uploadManager.failedPhotoIndex = nil
-            uploadManager.currentPhaseDescription = "Retrying after cooldown…"
+            uploadManager.currentPhaseDescription = String(localized: "upload.escalation.retrying_after_cooldown")
         }
 
         await uploadAllPhotos(startFrom: photoIndex)

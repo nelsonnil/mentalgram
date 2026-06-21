@@ -325,6 +325,7 @@ class ProfileFullLoaderService: ObservableObject {
     @MainActor
     private func mergeTaggedIntoProfileCache(_ items: [InstagramMediaItem]) {
         guard var profile = ProfileCacheService.shared.loadProfile() else { return }
+        profile.cachedTaggedItems = items
         profile.cachedTaggedURLs = items.map { $0.imageURL }
         profile.cachedAt = Date()
         ProfileCacheService.shared.saveProfile(profile)

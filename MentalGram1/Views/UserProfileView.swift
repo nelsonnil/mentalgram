@@ -586,6 +586,7 @@ struct UserProfileView: View {
                     cachedHighlights: newProfile.cachedHighlights.isEmpty ? currentProfile.cachedHighlights : newProfile.cachedHighlights,
                     cachedMediaItems: newProfile.cachedMediaItems.isEmpty ? currentProfile.cachedMediaItems : newProfile.cachedMediaItems,
                     cachedReelItems: newProfile.cachedReelItems.isEmpty ? currentProfile.cachedReelItems : newProfile.cachedReelItems,
+                    cachedTaggedItems: newProfile.cachedTaggedItems.isEmpty ? currentProfile.cachedTaggedItems : newProfile.cachedTaggedItems,
                     cachedNextMaxId: newProfile.cachedNextMaxId ?? currentProfile.cachedNextMaxId
                 )
             }
@@ -631,6 +632,7 @@ struct UserProfileView: View {
                 cachedHighlights: currentProfile.cachedHighlights,
                 cachedMediaItems: items,
                 cachedReelItems: currentProfile.cachedReelItems,
+                cachedTaggedItems: currentProfile.cachedTaggedItems,
                 cachedNextMaxId: cursor ?? currentProfile.cachedNextMaxId
             )
             currentProfile = updated
@@ -668,6 +670,7 @@ struct UserProfileView: View {
                 cachedHighlights: currentProfile.cachedHighlights,
                 cachedMediaItems: currentProfile.cachedMediaItems,
                 cachedReelItems: currentProfile.cachedReelItems,
+                cachedTaggedItems: currentProfile.cachedTaggedItems,
                 cachedNextMaxId: currentProfile.cachedNextMaxId
             )
             currentProfile = updated
@@ -1303,6 +1306,7 @@ struct UserProfileView: View {
                 let tagged = try await InstagramService.shared.getUserTagged(userId: currentProfile.userId, amount: 18)
                 let taggedURLs = tagged.map { $0.imageURL }
                 await MainActor.run {
+                    currentProfile.cachedTaggedItems = tagged
                     currentProfile.cachedTaggedURLs = taggedURLs
                     // Store full metadata for the tagged viewer (captions, dates, mediaId).
                     for item in tagged { taggedMediaItemsByURL[item.imageURL] = item }

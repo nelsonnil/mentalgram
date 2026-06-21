@@ -1301,6 +1301,14 @@ extension Notification.Name {
     /// the manual Refresh button. PerformanceView listens and calls `loadProfileSync`.
     static let performanceManualRefresh = Notification.Name("com.vault.performanceManualRefresh")
 
+    /// Posted by PerformanceView after a manual remote refresh finishes.
+    /// userInfo["success"] -> Bool
+    static let performanceManualRefreshResult = Notification.Name("com.vault.performanceManualRefreshResult")
+
+    /// Posted by Settings/Sets when the user wants to resume an incomplete
+    /// first-time Performance cache preload.
+    static let performanceContinuePreload = Notification.Name("com.vault.performanceContinuePreload")
+
     /// Posted by `InstagramService.getProfileInfo` for a visited (searched)
     /// profile as soon as the header (username, profile pic, follower /
     /// following / media counts) is ready, BEFORE the media + followers chain.

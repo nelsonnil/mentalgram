@@ -12,6 +12,7 @@ struct UserGuideView: View {
     @StateObject private var pdfExporter = UserGuidePDFExporter()
     @State private var pdfURL: URL? = nil
     @State private var showShareSheet = false
+    private let tutorialPlaylistURL = URL(string: "https://www.youtube.com/playlist?list=PLpz4HmN92GnS9twqdEhzxk28iulTv1nxe")!
 
     private enum GuideSheet: Identifiable {
         case introduction
@@ -67,29 +68,7 @@ struct UserGuideView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
 
-                    // PDF notice banner
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "arrow.up.doc.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(Color(hex: "FF9F0A"))
-                            .padding(.top, 1)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Quick Reference PDF available")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(VaultTheme.Colors.textPrimary)
-                            Text("The PDF export (↑ top right) is a condensed reference guide. For full instructions with interactive demos and step-by-step animations, use the sections below or watch the tutorial video.")
-                                .font(.system(size: 12))
-                                .foregroundColor(VaultTheme.Colors.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .padding(14)
-                    .background(Color(hex: "FF9F0A").opacity(0.08))
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(hex: "FF9F0A").opacity(0.25), lineWidth: 1)
-                    )
+                    learningResourcesCard
 
                     // GETTING STARTED
                     guideSectionLabel("GETTING STARTED", icon: "star.fill", color: colorStart)
@@ -345,28 +324,6 @@ struct UserGuideView: View {
         }
         .navigationTitle("User Guide")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    Task {
-                        if let url = await pdfExporter.export() {
-                            pdfURL = url
-                            showShareSheet = true
-                        }
-                    }
-                } label: {
-                    if pdfExporter.isExporting {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "arrow.up.doc.fill")
-                            .font(.system(size: 15, weight: .medium))
-                    }
-                }
-                .disabled(pdfExporter.isExporting)
-                .help("Export PDF")
-            }
-        }
         .sheet(item: $activeSheet) { sheet in
             sheetContent(for: sheet)
         }
@@ -376,6 +333,110 @@ struct UserGuideView: View {
                     showShareSheet = false
                 }
                 .ignoresSafeArea()
+            }
+        }
+    }
+
+    // MARK: - Learning resources
+
+    private var learningResourcesCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color(hex: "FF9F0A").opacity(0.16))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "graduationcap.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(Color(hex: "FF9F0A"))
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Learning Resources")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Use the video playlist for a fast visual overview, then continue with the in-app guide below. The app guide contains the full details, exact setup steps, safety notes, scripts and performance handling for each routine.")
+                        .font(.system(size: 13))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.black)
+                    .padding(.top, 1)
+                Text("Important: after watching the video, follow the instructions inside the app. The videos explain the flow; the in-app guide is the complete reference for preparing and performing safely.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.black)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(Color(hex: "FFCC00"))
+            .cornerRadius(10)
+
+            HStack(spacing: 10) {
+                Button {
+                    exportPDF()
+                } label: {
+                    resourceButtonContent(
+                        icon: pdfExporter.isExporting ? "hourglass" : "doc.richtext.fill",
+                        title: pdfExporter.isExporting ? "Preparing PDF…" : "Reference PDF",
+                        subtitle: "Condensed guide",
+                        color: Color(hex: "0A84FF")
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(pdfExporter.isExporting)
+
+                Link(destination: tutorialPlaylistURL) {
+                    resourceButtonContent(
+                        icon: "play.rectangle.fill",
+                        title: "Video Instructions",
+                        subtitle: "YouTube playlist",
+                        color: Color(hex: "FF3B30")
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(hex: "FF9F0A").opacity(0.08))
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color(hex: "FF9F0A").opacity(0.28), lineWidth: 1)
+        )
+    }
+
+    private func resourceButtonContent(icon: String, title: String, subtitle: String, color: Color) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 10, weight: .medium))
+                    .opacity(0.85)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(color)
+        .cornerRadius(12)
+    }
+
+    private func exportPDF() {
+        Task {
+            if let url = await pdfExporter.export() {
+                pdfURL = url
+                showShareSheet = true
             }
         }
     }

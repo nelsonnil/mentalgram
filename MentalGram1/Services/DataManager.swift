@@ -39,6 +39,7 @@ class DataManager: ObservableObject {
                 guard let self else { return }
                 print("👤 [ACCOUNT] User changed → '\(newUserId.isEmpty ? "guest" : newUserId)' — reloading sets")
                 self.currentUserId = newUserId
+                self.migrateGuestRestoreToCurrentUserIfNeeded()
                 self.migrateImageDataToFilesystem()
                 self.migrateLegacySetsIfNeeded()
                 self.loadSets()
@@ -776,6 +777,20 @@ class DataManager: ObservableObject {
         print("👤 [ACCOUNT] Legacy sets key '\(legacySetsKey)' removed")
     }
 
+    private func migrateGuestRestoreToCurrentUserIfNeeded() {
+        guard !currentUserId.isEmpty else { return }
+        let guestKey = "com.vault.sets.guest"
+        let targetKey = setsKey
+        guard targetKey != guestKey,
+              UserDefaults.standard.data(forKey: targetKey) == nil,
+              let guestData = UserDefaults.standard.data(forKey: guestKey) else { return }
+
+        UserDefaults.standard.set(guestData, forKey: targetKey)
+        UserDefaults.standard.removeObject(forKey: guestKey)
+        print("👤 [ACCOUNT] Moved restored guest sets → '\(targetKey)' after login (\(guestData.count / 1024) KB)")
+        LogManager.shared.info("Moved restored guest sets to logged-in account", category: .general)
+    }
+
     /// Called after a cloud restore to reload sets from the newly written UserDefaults.
     /// restoreFromCloud() writes data to the legacy "com.vault.sets" key.
     /// We must run migrateLegacySetsIfNeeded() first so it gets moved to the scoped key,
@@ -797,11 +812,41 @@ class DataManager: ObservableObject {
 
             // Now load from the scoped key
             self.loadSets()
+            self.resetPerformanceCacheAfterRestore()
 
             let postScopedData = UserDefaults.standard.data(forKey: scopedKey)
             print("☁️ [BACKUP] ✅ Restore complete: \(self.sets.count) sets loaded (scoped key now \(postScopedData != nil ? "\(postScopedData!.count / 1024) KB" : "EMPTY"))")
             LogManager.shared.success("iCloud restore: \(self.sets.count) sets reloaded into DataManager", category: .general)
         }
+    }
+
+    private func resetPerformanceCacheAfterRestore() {
+        let userId = currentUserId.isEmpty ? (InstagramService.shared.session.userId) : currentUserId
+        guard !userId.isEmpty else {
+            print("☁️ [BACKUP] Performance cache reset skipped — no current userId")
+            return
+        }
+
+        let defaults = UserDefaults.standard
+        let exactKeys = [
+            "perf_fully_preloaded_\(userId)",
+            "perf_optional_preloaded_\(userId)",
+            "perf_no_more_pages_\(userId)",
+            "reels_paginated_\(userId)",
+            "tagged_paginated_\(userId)",
+            "highlights_checked_at_\(userId)",
+            "reels_checked_at_\(userId)",
+            "tagged_checked_at_\(userId)"
+        ]
+        for key in exactKeys { defaults.removeObject(forKey: key) }
+
+        // Profile cache is device-local and should be rebuilt after a restore so
+        // restored sets/mediaIds cannot be mixed with stale first-install profile state.
+        ProfileCacheService.shared.clearProfile()
+        ProfileCacheService.shared.clearRevealState(userId: userId)
+        defaults.synchronize()
+        print("☁️ [BACKUP] Performance cache/preload state reset after restore for userId=\(userId). Sets and photo files were preserved.")
+        LogManager.shared.info("Restore reset Performance cache state; sets preserved", category: .general)
     }
     
     // MARK: - Migration: Move imageData from UserDefaults to Filesystem

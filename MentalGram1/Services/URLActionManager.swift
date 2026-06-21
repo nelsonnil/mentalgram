@@ -9,6 +9,8 @@ import Combine
 ///   vault://bio?text=<encoded text>                      → update Instagram Biography (legacy)
 ///   vault://bio?text1=<v>&text2=<v>&text3=<v>&text4=<v>&text5=<v>    → multi-placeholder Biography
 ///   vault://perform?bio=<encoded text>&reveal=<word>      → bio first, then queued Post Prediction
+///   vault://perform?text1=<v>&text2=<v>&card=3D           → multi-placeholder bio first, then queued card
+///   vault://perform?bio1=<v>&bio2=<v>&card=3D             → alias for text1/text2
 ///   vault://perform?bio=<encoded text>&card=3D            → bio first, then queued Playing Card (S/H/C/D)
 ///   vault://reveal?word=<encoded word>  → Word Reveal: unarchive letter photos for the given word
 ///   vault://reveal?slot=<number>        → Custom Set Reveal: unarchive the photo at slot 1–100
@@ -94,12 +96,25 @@ class URLActionManager: ObservableObject {
 
         // ── Combined performance flow: bio first, then Post Prediction ────────
         if host == "perform" {
-            guard let bio = extractParam("bio") else {
-                print("⚠️ [URL] vault://perform missing 'bio' parameter")
+            var bioValues: [String: String] = [:]
+            for idx in 1...5 {
+                if let value = extractParam("text\(idx)") ?? extractParam("bio\(idx)") {
+                    bioValues["text\(idx)"] = value
+                }
+            }
+            if bioValues["text1"] == nil, let bio = extractParam("bio") {
+                bioValues["text1"] = bio
+            }
+
+            guard let primaryBio = bioValues["text1"], !primaryBio.isEmpty else {
+                print("⚠️ [URL] vault://perform missing 'bio', 'text1', or 'bio1' parameter")
                 return false
             }
 
-            var values: [String: String] = ["bio": bio]
+            var values: [String: String] = ["bio": primaryBio]
+            for (key, value) in bioValues {
+                values[key] = value
+            }
             if let reveal = extractParam("reveal") ?? extractParam("word") {
                 values["reveal"] = reveal
             } else if let slot = extractParam("slot") {
@@ -114,7 +129,7 @@ class URLActionManager: ObservableObject {
             print("📲 [URL] vault://perform received (bio + queued reveal)")
             DispatchQueue.main.async {
                 self.pendingMode = "perform"
-                self.pendingText = bio
+                self.pendingText = primaryBio
                 self.pendingValues = values
             }
             return true

@@ -86,6 +86,7 @@ struct PerformanceView: View {
     @State private var showingConnectionError = false
     @State private var lastError: InstagramError?
     @State private var cdnForbiddenTimestamps: [Date] = []
+    @State private var cdnDownloadBlockedUntil: Date? = nil
     @State private var cdnRefreshScheduled = false
     @State private var lastCDNURLRefreshAttemptAt: Date? = nil
     /// Prevents multiple concurrent loadCachedImages runs from stacking up
@@ -121,6 +122,9 @@ struct PerformanceView: View {
     // Lazy-tab loading: track whether each secondary tab has been loaded at least once.
     @State private var reelsLoadedOnce      = false
     @State private var taggedLoadedOnce     = false
+    @State private var isLoadingReelsTab    = false
+    @State private var isLoadingTaggedTab   = false
+    @State private var isLoadingHighlights  = false
     // Highlights: once we know the result (empty or not) we hide the placeholder row.
     @State private var highlightsLoadedOnce = false
 
@@ -133,11 +137,13 @@ struct PerformanceView: View {
     @State private var preloadFailed = false
     @State private var firstTimePreloadStartedAt: Date? = nil
     @State private var firstTimeOptionalPreloadTask: Task<Void, Never>? = nil
+    @State private var isFirstTimeOptionalPreloadRunning = false
     /// Human-readable progress line shown under the spinner.
     @State private var preloadProgress = ""
-    /// How many posts to load on the first-time preload. Keeps the API budget
-    /// safe (1–2 pagination calls) while filling the grid convincingly.
-    private let preloadTargetPosts = 24
+    /// How many posts to load on the first-time preload. This may take a bit
+    /// longer on a clean install, but it builds the pagination tail so refreshes
+    /// cannot collapse the grid back to Instagram's first 12-item page.
+    private let preloadTargetPosts = 45
     /// Cancels old post-reveal reconciliation tasks when a new reveal starts or
     /// the app backgrounds. Local paint is already instant; this GET is optional.
     @State private var postRevealGridRefreshGeneration = 0
@@ -377,7 +383,9 @@ struct PerformanceView: View {
     @State private var isCombinedBioPostPredictionGuardActive = false
     @State private var showCombinedProfileNotReadyAlert = false
     @AppStorage("combined_pp_cooldown_bypass_until") private var combinedPPCooldownBypassUntil: Double = 0
-    private let combinedBioPostPredictionDelay: UInt64 = 30
+    @AppStorage("local_combo_earliest_pp_reveal_at") private var localComboEarliestRevealAt: Double = 0
+    @AppStorage("local_combo_bio_pending_until") private var localComboBioPendingUntil: Double = 0
+    private let combinedBioPostPredictionDelay: UInt64 = 5
 
     // MARK: - Auto-refresh on Performance entry
     /// Persisted timestamp of the last full profile refresh. Used to decide whether
@@ -473,6 +481,27 @@ struct PerformanceView: View {
                             .cornerRadius(10)
                     }
                     .padding(.top, 4)
+
+                    Button {
+                        firstTimePreloadStartedAt = nil
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            isFirstTimePreloading = false
+                        }
+                        selectedTab = 1
+                    } label: {
+                        Text("Go to Sets")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("Your loaded data is saved. You can continue from the warning banner when the API budget recovers.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 42)
                 } else {
                     ProgressView()
                         .scaleEffect(1.4)
@@ -796,6 +825,10 @@ struct PerformanceView: View {
         guard let profile else { return }
         switch tab {
         case 1:
+            let hydratedReels = hydrateCachedImagesForItems(profile.cachedReelItems)
+            if hydratedReels > 0 {
+                print("🎬 [REELS] Hydrated \(hydratedReels) cached reel thumbnail(s) from disk")
+            }
             // Allow re-fetch even if reelsLoadedOnce=true when no images are actually
             // visible — this handles the case where CDN URLs expired so re-download failed.
             // Exception: if a recent fetch confirmed 0 reels (gate active), don't force
@@ -813,6 +846,11 @@ struct PerformanceView: View {
                 )
             }
         case 2:
+            var hydratedTagged = hydrateCachedImagesForItems(profile.cachedTaggedItems)
+            hydratedTagged += hydrateCachedImagesForURLs(profile.cachedTaggedURLs)
+            if hydratedTagged > 0 {
+                print("🏷️ [TAGGED] Hydrated \(hydratedTagged) cached tagged thumbnail(s) from disk")
+            }
             let hasTaggedImages = profile.cachedTaggedURLs.contains { cachedImages[$0] != nil }
             let needsVisibleMinimum = profile.cachedTaggedURLs.count < secondaryTabVisibleMinimum
             let taggedKnownEmpty = profile.cachedTaggedURLs.isEmpty && taggedCheckIsFresh(for: profile.userId)
@@ -838,6 +876,10 @@ struct PerformanceView: View {
     private func scheduleBackgroundReelsTaggedPreload(for cached: InstagramProfile) {
         guard !isCombinedBioPostPredictionGuardActive else {
             print("🔗 [COMBO] Background reels/tagged preload skipped during Bio + PP queue")
+            return
+        }
+        guard !isFirstTimeOptionalPreloadRunning else {
+            print("🎬 [BG] Secondary preload skipped — first-time optional preload already running")
             return
         }
         // Already loaded → nothing to do
@@ -877,6 +919,24 @@ struct PerformanceView: View {
                 return
             }
             guard let current = profile else { return }
+            // Highlights are part of the visible header surface, so warm them
+            // before secondary tabs when the cache is incomplete.
+            let highlightCoversReady = !current.cachedHighlights.isEmpty
+                && cachedHighlightCoversAreReady(current.cachedHighlights)
+            if !current.cachedHighlights.isEmpty && !highlightCoversReady {
+                print("🌟 [BG] Highlight covers missing — refreshing metadata…")
+                await fetchHighlightsIfNeeded(for: current)
+            } else if current.cachedHighlights.isEmpty && !highlightsCheckIsFresh(for: current.userId) {
+                print("🌟 [BG] Highlights not cached — auto-fetching…")
+                await fetchHighlightsIfNeeded(for: current)
+            } else if current.cachedHighlights.isEmpty {
+                print("🌟 [BG] Highlights checked recently — skipping empty refresh")
+                highlightsLoadedOnce = true
+            } else {
+                print("🌟 [BG] Highlights already cached (\(current.cachedHighlights.count)) — skipping fetch")
+                highlightsLoadedOnce = true
+            }
+
             // Use the flag so we don't double-fetch if user swiped to the tab
             // during the 5s sleep and handleTabSelected already started a fetch.
             if !reelsReady && !reelsLoadedOnce {
@@ -892,23 +952,6 @@ struct PerformanceView: View {
                 print("🏷️ [BG] Auto-preloading tagged in background…")
                 taggedLoadedOnce = true
                 await fetchTaggedIfNeeded(for: current2)
-            }
-            // Fetch highlights if not yet cached (lazy, like reels/tagged).
-            guard let current3 = profile else { return }
-            let highlightCoversReady = !current3.cachedHighlights.isEmpty
-                && cachedHighlightCoversAreReady(current3.cachedHighlights)
-            if !current3.cachedHighlights.isEmpty && !highlightCoversReady {
-                print("🌟 [BG] Highlight covers missing — refreshing metadata…")
-                await fetchHighlightsIfNeeded(for: current3)
-            } else if current3.cachedHighlights.isEmpty && !highlightsCheckIsFresh(for: current3.userId) {
-                print("🌟 [BG] Highlights not cached — auto-fetching…")
-                await fetchHighlightsIfNeeded(for: current3)
-            } else if current3.cachedHighlights.isEmpty {
-                print("🌟 [BG] Highlights checked recently — skipping empty refresh")
-                highlightsLoadedOnce = true
-            } else {
-                print("🌟 [BG] Highlights already cached (\(current3.cachedHighlights.count)) — skipping fetch")
-                highlightsLoadedOnce = true
             }
         }
     }
@@ -970,6 +1013,10 @@ struct PerformanceView: View {
         forceIfNoImages: Bool = false,
         ensureVisibleMinimum: Bool = false
     ) async {
+        guard !isLoadingReelsTab else {
+            print("🎬 [REELS] Fetch already in progress — skipping duplicate")
+            return
+        }
         guard !isCombinedBioPostPredictionGuardActive else {
             print("🔗 [COMBO] Reels fetch skipped during Bio + PP queue")
             return
@@ -993,7 +1040,8 @@ struct PerformanceView: View {
         let reelsPaginationKey = "reels_paginated_\(cached.userId)"
         let alreadyPaginated = UserDefaults.standard.bool(forKey: reelsPaginationKey)
         let looksLikeOldSinglePage = cached.cachedReelItems.count == 10 && !alreadyPaginated
-        let needsVisibleMinimum = ensureVisibleMinimum && cached.cachedReelURLs.count < secondaryTabVisibleMinimum
+        let reelsPreloadTarget = 30
+        let needsVisibleMinimum = ensureVisibleMinimum && cached.cachedReelURLs.count < reelsPreloadTarget
         // Gate: if a previous fetch confirmed 0 reels, skip for 12h (same pattern as highlights).
         // forceIfNoImages is also gated: if we know reels are empty, fresh CDN URLs won't help.
         let reelsKnownEmpty = cached.cachedReelURLs.isEmpty && reelsCheckIsFresh(for: cached.userId)
@@ -1015,12 +1063,15 @@ struct PerformanceView: View {
             print("🎬 [REELS] No visible images — forcing fresh URL fetch (CDN may have expired)")
         }
         print("🎬 [REELS] Lazy-loading reels progressively (page by page)…")
+        isLoadingReelsTab = true
+        defer { isLoadingReelsTab = false }
         do {
             // Random human-like delay before the first API call.
             try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
 
             let reelsPaginationKey = "reels_paginated_\(cached.userId)"
-            let maxPages = ensureVisibleMinimum ? 2 : 1
+            let maxPages = ensureVisibleMinimum ? 3 : 1
+            let targetItems = ensureVisibleMinimum ? reelsPreloadTarget : secondaryTabVisibleMinimum
             var allItems: [InstagramMediaItem] = []
             var nextCursor: String? = nil
             var page = 0
@@ -1045,7 +1096,12 @@ struct PerformanceView: View {
                 // while the next page (if any) is being fetched.
                 let pageURLs = pageItems.map { $0.imageURL }
                 for item in pageItems where cachedImages[item.imageURL] == nil {
-                    if let img = await downloadImage(from: item.imageURL) {
+                    if let img = ProfileCacheService.shared.loadImage(forURL: item.imageURL)
+                        ?? ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) {
+                        cachedImages[item.imageURL] = img
+                        ProfileCacheService.shared.saveImage(img, forURL: item.imageURL)
+                        ProfileCacheService.shared.saveImage(img, forMediaId: item.mediaId)
+                    } else if let img = await downloadImage(from: item.imageURL) {
                         cachedImages[item.imageURL] = img
                         ProfileCacheService.shared.saveImage(img, forURL: item.imageURL)
                         ProfileCacheService.shared.saveImage(img, forMediaId: item.mediaId)
@@ -1056,10 +1112,10 @@ struct PerformanceView: View {
                 page += 1
 
                 // Anti-bot: small pause between pages
-                if nextCursor != nil && page < maxPages {
-                    try? await Task.sleep(nanoseconds: UInt64.random(in: 600_000_000...1_200_000_000))
+                if nextCursor != nil && page < maxPages && allItems.count < targetItems {
+                    try? await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...6_000_000_000))
                 }
-            } while nextCursor != nil && page < maxPages
+            } while nextCursor != nil && page < maxPages && allItems.count < targetItems
 
             // Persist final state
             var final = profile ?? cached
@@ -1086,6 +1142,10 @@ struct PerformanceView: View {
         forceIfNoImages: Bool = false,
         ensureVisibleMinimum: Bool = false
     ) async {
+        guard !isLoadingTaggedTab else {
+            print("🏷️ [TAGGED] Fetch already in progress — skipping duplicate")
+            return
+        }
         guard !isCombinedBioPostPredictionGuardActive else {
             print("🔗 [COMBO] Tagged fetch skipped during Bio + PP queue")
             return
@@ -1101,7 +1161,8 @@ struct PerformanceView: View {
         let taggedPaginationKey = "tagged_paginated_\(cached.userId)"
         let taggedAlreadyPaginated = UserDefaults.standard.bool(forKey: taggedPaginationKey)
         let taggedLooksOld = cached.cachedTaggedURLs.count == 18 && !taggedAlreadyPaginated
-        let needsVisibleMinimum = ensureVisibleMinimum && cached.cachedTaggedURLs.count < secondaryTabVisibleMinimum
+        let taggedPreloadTarget = 24
+        let needsVisibleMinimum = ensureVisibleMinimum && cached.cachedTaggedURLs.count < taggedPreloadTarget
         let taggedKnownEmpty = cached.cachedTaggedURLs.isEmpty && taggedCheckIsFresh(for: cached.userId)
         let effectiveForceTagged = forceIfNoImages && !taggedKnownEmpty
         guard (cached.cachedTaggedURLs.isEmpty && !taggedKnownEmpty) || taggedLooksOld || needsVisibleMinimum || effectiveForceTagged else {
@@ -1116,24 +1177,33 @@ struct PerformanceView: View {
             print("🏷️ [TAGGED] No visible images — forcing fresh URL fetch (CDN may have expired)")
         }
         print("🏷️ [TAGGED] Lazy-loading tagged for first tab visit…")
+        isLoadingTaggedTab = true
+        defer { isLoadingTaggedTab = false }
         do {
             try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
             let items = try await instagram.getUserTagged(
                 userId: cached.userId,
                 amount: 50,
                 maxPages: ensureVisibleMinimum ? 2 : 1,
-                minimumItems: ensureVisibleMinimum ? secondaryTabVisibleMinimum : 0
+                minimumItems: ensureVisibleMinimum ? taggedPreloadTarget : 0
             )
             let taggedURLs = items.map { $0.imageURL }
             var updated = cached
             updated.cachedTaggedURLs = taggedURLs
+            updated.cachedTaggedItems = items
             profile = updated
             ProfileCacheService.shared.saveProfile(updated)
             UserDefaults.standard.set(true, forKey: "tagged_paginated_\(cached.userId)")
             // Gate: if confirmed empty, don't retry for 12h
             if items.isEmpty { markTaggedChecked(for: cached.userId) }
+            for item in items { mediaItemsByURL[item.imageURL] = item }
             for item in items where cachedImages[item.imageURL] == nil {
-                if let img = await downloadImage(from: item.imageURL) {
+                if let img = ProfileCacheService.shared.loadImage(forURL: item.imageURL)
+                    ?? ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) {
+                    cachedImages[item.imageURL] = img
+                    ProfileCacheService.shared.saveImage(img, forURL: item.imageURL)
+                    ProfileCacheService.shared.saveImage(img, forMediaId: item.mediaId)
+                } else if let img = await downloadImage(from: item.imageURL) {
                     cachedImages[item.imageURL] = img
                     ProfileCacheService.shared.saveImage(img, forURL: item.imageURL)
                     ProfileCacheService.shared.saveImage(img, forMediaId: item.mediaId)
@@ -1149,6 +1219,10 @@ struct PerformanceView: View {
     /// Fetches story highlights for the own profile. Safe to call on-demand.
     @MainActor
     private func fetchHighlightsIfNeeded(for cached: InstagramProfile) async {
+        guard !isLoadingHighlights else {
+            print("🌟 [HIGHLIGHTS] Fetch already in progress — skipping duplicate")
+            return
+        }
         guard !isCombinedBioPostPredictionGuardActive else {
             print("🔗 [COMBO] Highlights fetch skipped during Bio + PP queue")
             return
@@ -1173,6 +1247,8 @@ struct PerformanceView: View {
             return
         }
         print("🌟 [HIGHLIGHTS] Lazy-loading highlights…")
+        isLoadingHighlights = true
+        defer { isLoadingHighlights = false }
         do {
             try? await Task.sleep(nanoseconds: UInt64.random(in: 800_000_000...1_800_000_000))
             let items = try await instagram.getUserHighlights(userId: cached.userId)
@@ -1301,7 +1377,8 @@ struct PerformanceView: View {
             }
     }
 
-    var body: some View {
+    @ViewBuilder
+    private var performanceRootContent: some View {
         ZStack {
             ocrModifiers
             if showingListInput, let set = activeListSet {
@@ -1327,11 +1404,15 @@ struct PerformanceView: View {
             // cache first, then one getProfileInfo() call if needed. The 90-second
             // "Getting ready" overlay (FullLoadOverlayView) is no longer rendered.
         }
+    }
+
+    private var performanceChromeAndAlerts: some View {
+        performanceRootContent
             .background(Color(UIColor.igPageBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .tabBar)
-        .edgesIgnoringSafeArea(.bottom)
-        .navigationBarHidden(true)
-        .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
+            .edgesIgnoringSafeArea(.bottom)
+            .navigationBarHidden(true)
+            .connectionErrorAlert(isPresented: $showingConnectionError, error: lastError)
             .alert("Error", isPresented: Binding(
                 get: { spectatorLoadError != nil },
                 set: { if !$0 { spectatorLoadError = nil } }
@@ -1356,6 +1437,10 @@ struct PerformanceView: View {
             } message: {
                 Text(performanceBudgetAlertMessage)
             }
+    }
+
+    private var performanceCoversView: some View {
+        performanceChromeAndAlerts
             // Spectator profile: bound to selectedSpectator to avoid the nil→item race
             // condition that caused stale profiles when tapping a second follower.
             .fullScreenCover(item: $selectedSpectator) { follower in
@@ -1403,6 +1488,10 @@ struct PerformanceView: View {
                     }
                 )
             }
+    }
+
+    private var performanceObservedView: some View {
+        performanceCoversView
         // selectedSpectator drives fullScreenCover directly — no extra onChange needed.
         // When Explore closes, reset digit buffer (InstagramProfileView's onChange clears followingOverride)
         .onChange(of: showingExplore) { isOpen in
@@ -1415,120 +1504,26 @@ struct PerformanceView: View {
         // cachedImages under the current profilePicURL key so the header and bottom bar
         // update immediately. The override is cleared on the next full profile refresh.
         .onChange(of: profileCache.pendingProfilePic) { newPic in
-            if let pic = newPic {
-                // New local pic available — show immediately regardless of CDN state
-                guard let url = profile?.profilePicURL, !url.isEmpty else { return }
-                cachedImages[url] = pic
-                print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
-                LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
-            } else {
-                // pendingProfilePic cleared (loadProfile migrated the pic to the new CDN URL).
-                // Vibrate only if the auto-pic flow didn't already vibrate on POST success.
-                if profilePicVibratedAlready {
-                    profilePicVibratedAlready = false
-                    print("📳 [PERF] Profile pic CDN migration complete — vibration already fired, skipping duplicate")
-                } else {
-                    fireDoubleConfirmationVibration()
-                    print("📳 [PERF] Double vibration: profile pic confirmed live on Instagram CDN")
-                    LogManager.shared.info("Profile pic confirmed live on Instagram (double vibration fired)", category: .general)
-                }
-            }
+            handlePendingProfilePicChange(newPic)
         }
         // Instantly reflect a biography update in the fake Instagram profile view.
         // changeBiography() saves to ProfileCacheService on success; we pick it up here.
         .onChange(of: profileCache.cachedProfile?.biography) { newBio in
-            guard let newBio else { return }
-            if isLoading && pendingBioText == nil && activeLocalBioOverride == nil {
-                return
-            }
-            // If a bio POST is in-flight (OCR / interface capture), block any revert that
-            // arrives from a concurrent loadProfile fetching the old bio from Instagram.
-            // Once the POST completes (success or fail) pendingBioText is cleared and
-            // the next cache change (which will carry the correct value) is accepted.
-            if let pending = pendingBioText, newBio != pending {
-                print("⚡️ [PERF] onChange bio: ignored revert to '\(newBio.prefix(30))' — pending POST for '\(pending.prefix(30))'")
-                return
-            }
-            if activeLocalBioOverride == newBio {
-                localBioOverride = nil
-                persistedLocalBioOverrideText = ""
-                persistedLocalBioOverrideTimestamp = 0
-            }
-            guard let current = profile, current.biography != newBio else { return }
-            profile = InstagramProfile(
-                userId: current.userId, username: current.username,
-                fullName: current.fullName, biography: newBio,
-                externalUrl: current.externalUrl, profilePicURL: current.profilePicURL,
-                isVerified: current.isVerified, isPrivate: current.isPrivate,
-                followerCount: current.followerCount, followingCount: current.followingCount,
-                mediaCount: current.mediaCount, followedBy: current.followedBy,
-                isFollowing: current.isFollowing, isFollowRequested: current.isFollowRequested,
-                cachedAt: current.cachedAt, cachedMediaURLs: current.cachedMediaURLs,
-                cachedReelURLs: current.cachedReelURLs, cachedTaggedURLs: current.cachedTaggedURLs,
-                cachedHighlights: current.cachedHighlights,
-                cachedMediaItems: current.cachedMediaItems,
-                cachedReelItems: current.cachedReelItems,
-                cachedNextMaxId: current.cachedNextMaxId
-            )
-            print("⚡️ [PERF] Biography updated instantly in fake profile (no GET needed)")
-            LogManager.shared.info("Biography updated instantly in profile view", category: .general)
+            handleCachedBiographyChange(newBio)
         }
         // React to local profile cache changes (archive/unarchive, etc.)
         // without making any extra API call.
         .onChange(of: profileCache.cachedProfile?.cachedMediaURLs) { newURLs in
-            guard let newURLs else { return }
-            // Only sync if the change came from somewhere else (not from our own full reload)
-            guard !isLoading else {
-                print("🔄 [PERF] onChange cachedMediaURLs fired but isLoading=true — skipped")
-                return
-            }
-            let currentSet = Set(allMediaURLs)
-            let newSet = Set(newURLs)
-            guard currentSet != newSet else {
-                print("🔄 [PERF] onChange cachedMediaURLs fired — no diff (both \(newURLs.count) items), skipped")
-                return
-            }
-            let removed = currentSet.subtracting(newSet).count
-            let added   = newSet.subtracting(currentSet).count
-            print("🔄 [PERF] onChange cachedMediaURLs: \(allMediaURLs.count)→\(newURLs.count) (-\(removed) +\(added))")
-            if profile == nil, let cached = profileCache.cachedProfile {
-                profile = cached
-            }
-            if let cachedItems = profileCache.cachedProfile?.cachedMediaItems {
-                for item in cachedItems where newSet.contains(item.imageURL) {
-                    mediaItemsByURL[item.imageURL] = item
-                }
-            }
-            allMediaURLs = deduplicatedGridURLs(newURLs)
-            // Keep mediaItemsByURL in sync with the new URL set:
-            //   1) Bring in metadata for any newly-arrived URLs from the cached profile.
-            //   2) Drop entries whose URLs no longer appear in the grid (avoids leaking
-            //      stale CDN URLs that rotated, which left orphan items in the dict).
-            //   3) Always preserve local-only metadata injected by performance actions,
-            //      not present in the profile cache.
-            let mergedRealIds = realMediaIds(in: newURLs)
-            allMediaURLs.removeAll { url in
-                guard let mediaId = revealMediaId(from: url), mergedRealIds.contains(mediaId) else { return false }
-                cachedImages.removeValue(forKey: url)
-                revealDates.removeValue(forKey: url)
-                mediaItemsByURL.removeValue(forKey: url)
-                return true
-            }
-            let urlsToKeep = Set(allMediaURLs)
-            mediaItemsByURL = mediaItemsByURL.filter { key, _ in
-                urlsToKeep.contains(key) || key.hasPrefix("reveal://") || key.hasPrefix("amnesia://carousel/")
-            }
-            revealDates = revealDates.filter { key, _ in urlsToKeep.contains(key) }
-            paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
-            // Download thumbnails for any new URLs not yet cached
-            let missing = newURLs.filter { cachedImages[$0] == nil }
-            if !missing.isEmpty { downloadImagesForURLs(missing) }
-            print("🔄 [PERF] Grid updated locally — \(newURLs.count) items (no API call)")
+            handleCachedMediaURLsChange(newURLs)
         }
         // Persist reveal:// state whenever the grid changes so it survives app restarts.
         .onChange(of: allMediaURLs) { _ in
             persistCurrentRevealState()
         }
+    }
+
+    var body: some View {
+        performanceObservedView
         .onAppear {
             CrashLoggerService.shared.recordScreen("Performance")
             ppTestMode.restorePendingSessionIfNeeded(availableSets: DataManager.shared.sets)
@@ -1921,6 +1916,7 @@ struct PerformanceView: View {
                 cachedHighlights: current.cachedHighlights,
                 cachedMediaItems: current.cachedMediaItems,
                 cachedReelItems: current.cachedReelItems,
+                cachedTaggedItems: current.cachedTaggedItems,
                 cachedNextMaxId: current.cachedNextMaxId
             )
             profile = updated
@@ -1997,6 +1993,7 @@ struct PerformanceView: View {
                 cachedHighlights: current.cachedHighlights,
                 cachedMediaItems: mediaItems,
                 cachedReelItems: current.cachedReelItems,
+                cachedTaggedItems: current.cachedTaggedItems,
                 cachedNextMaxId: nextCursor ?? current.cachedNextMaxId
             )
             profile = updated
@@ -2103,8 +2100,20 @@ struct PerformanceView: View {
                 LogManager.shared.warning("Manual refresh skipped during combined Bio + PP queue", category: .general)
                 return
             }
+            if uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive {
+                uploadManager.resetAllState()
+                print("🛑 [PERF] Upload cancelled — manual Instagram refresh requested")
+                LogManager.shared.warning("Upload cancelled before manual Instagram refresh", category: .upload)
+            }
             print("🔄 [PERF] Manual refresh requested from Settings/Set — starting loadProfileSync")
             loadProfileSync(source: "manual_remote")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .performanceContinuePreload)) { _ in
+            guard !ppTestMode.isActive else { return }
+            let userId = currentSessionUserId()
+            guard !userId.isEmpty else { return }
+            print("📦 [PRELOAD] Continue requested from warning banner")
+            Task { @MainActor in await continueIncompletePerformancePreload(userId: userId) }
         }
         .onDisappear {
             guard selectedTab != 0 else {
@@ -2165,6 +2174,88 @@ struct PerformanceView: View {
             }
             didAutoPauseUpload = false
         }
+    }
+
+    private func handlePendingProfilePicChange(_ newPic: UIImage?) {
+        if let pic = newPic {
+            guard let url = profile?.profilePicURL, !url.isEmpty else { return }
+            cachedImages[url] = pic
+            print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
+            LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
+        } else {
+            if profilePicVibratedAlready {
+                profilePicVibratedAlready = false
+                print("📳 [PERF] Profile pic CDN migration complete — vibration already fired, skipping duplicate")
+            } else {
+                fireDoubleConfirmationVibration()
+                print("📳 [PERF] Double vibration: profile pic confirmed live on Instagram CDN")
+                LogManager.shared.info("Profile pic confirmed live on Instagram (double vibration fired)", category: .general)
+            }
+        }
+    }
+
+    private func handleCachedBiographyChange(_ newBio: String?) {
+        guard let newBio else { return }
+        if isLoading && pendingBioText == nil && activeLocalBioOverride == nil { return }
+        if let pending = pendingBioText, newBio != pending {
+            print("⚡️ [PERF] onChange bio: ignored revert to '\(newBio.prefix(30))' — pending POST for '\(pending.prefix(30))'")
+            return
+        }
+        if activeLocalBioOverride == newBio {
+            localBioOverride = nil
+            persistedLocalBioOverrideText = ""
+            persistedLocalBioOverrideTimestamp = 0
+        }
+        guard let current = profile, current.biography != newBio else { return }
+        profile = profileByReplacingBiography(current, biography: newBio)
+        print("⚡️ [PERF] Biography updated instantly in fake profile (no GET needed)")
+        LogManager.shared.info("Biography updated instantly in profile view", category: .general)
+    }
+
+    private func handleCachedMediaURLsChange(_ newURLs: [String]?) {
+        guard let newURLs else { return }
+        guard !isLoading else {
+            print("🔄 [PERF] onChange cachedMediaURLs fired but isLoading=true — skipped")
+            return
+        }
+        let rawNewSet = Set(newURLs)
+        if let cachedItems = profileCache.cachedProfile?.cachedMediaItems {
+            for item in cachedItems where rawNewSet.contains(item.imageURL) {
+                mediaItemsByURL[item.imageURL] = item
+            }
+        }
+        let mergedURLs = cachedProfileURLsPreservingRevealOverlays(newURLs)
+        let currentSet = Set(allMediaURLs)
+        let newSet = Set(mergedURLs)
+        guard currentSet != newSet else {
+            print("🔄 [PERF] onChange cachedMediaURLs fired — no diff (both \(mergedURLs.count) items), skipped")
+            return
+        }
+        let removed = currentSet.subtracting(newSet).count
+        let added = newSet.subtracting(currentSet).count
+        print("🔄 [PERF] onChange cachedMediaURLs: \(allMediaURLs.count)→\(mergedURLs.count) (-\(removed) +\(added))")
+        if profile == nil, let cached = profileCache.cachedProfile { profile = cached }
+        allMediaURLs = deduplicatedGridURLs(mergedURLs)
+
+        let mergedRealIds = realMediaIds(in: newURLs)
+        allMediaURLs.removeAll { url in
+            guard let mediaId = revealMediaId(from: url), mergedRealIds.contains(mediaId) else { return false }
+            cachedImages.removeValue(forKey: url)
+            revealDates.removeValue(forKey: url)
+            mediaItemsByURL.removeValue(forKey: url)
+            return true
+        }
+        let urlsToKeep = Set(allMediaURLs)
+        mediaItemsByURL = mediaItemsByURL.filter { key, _ in
+            urlsToKeep.contains(key) || key.hasPrefix("reveal://") || key.hasPrefix("amnesia://carousel/")
+        }
+        revealDates = revealDates.filter { key, _ in urlsToKeep.contains(key) }
+        paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
+        let missing = mergedURLs.filter {
+            cachedImages[$0] == nil && !$0.hasPrefix("reveal://") && !$0.hasPrefix("amnesia://carousel/")
+        }
+        if !missing.isEmpty { downloadImagesForURLs(missing) }
+        print("🔄 [PERF] Grid updated locally — \(mergedURLs.count) items (no API call)")
     }
     
     // MARK: - URL Scheme Profile Pic Action
@@ -2351,10 +2442,16 @@ struct PerformanceView: View {
             return true
         }
 
-        await MainActor.run { pinLocalBiography(final) }
+        await MainActor.run {
+            pinLocalBiography(final)
+            beginLocalBioPostPredictionBioSend(source: "url-bio")
+        }
         do {
             let ok = try await instagram.changeBiography(text: final, userInitiated: true)
-            await MainActor.run { pendingBioText = nil }
+            await MainActor.run {
+                pendingBioText = nil
+                completeLocalBioPostPredictionBioSend(success: ok, source: "url-bio")
+            }
             if ok {
                 print("✅ [URL] Biography updated via URL scheme")
                 LogManager.shared.success("Biography updated via URL scheme (\(final.count) chars)", category: .general)
@@ -2364,7 +2461,10 @@ struct PerformanceView: View {
         } catch {
             print("⚠️ [URL] Bio change failed: \(error.localizedDescription)")
             LogManager.shared.warning("URL scheme bio failed: \(error.localizedDescription)", category: .general)
-            await MainActor.run { pendingBioText = nil }
+            await MainActor.run {
+                pendingBioText = nil
+                completeLocalBioPostPredictionBioSend(success: false, source: "url-bio")
+            }
             return false
         }
     }
@@ -2413,7 +2513,12 @@ struct PerformanceView: View {
     }
 
     private func applyCombinedBioPostPredictionAction(values: [String: String]) async {
-        guard let bioText = values["bio"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        let bioValues = Dictionary(uniqueKeysWithValues: values.compactMap { key, value -> (String, String)? in
+            guard key.hasPrefix("text") else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : (key, trimmed)
+        })
+        guard let bioText = (bioValues["text1"] ?? values["bio"])?.trimmingCharacters(in: .whitespacesAndNewlines),
               !bioText.isEmpty else {
             LogManager.shared.warning("Combined Bio + PP blocked: missing bio", category: .general)
             return
@@ -2427,7 +2532,8 @@ struct PerformanceView: View {
             return
         }
 
-        let finalLocalBio = composedURLBiography(text: bioText, values: ["text1": bioText])
+        let effectiveBioValues = bioValues.isEmpty ? ["text1": bioText] : bioValues
+        let finalLocalBio = composedURLBiography(text: bioText, values: effectiveBioValues)
         localBioOverride = (finalLocalBio, Date())
         applyBiographyToVisibleProfile(finalLocalBio)
 
@@ -2458,7 +2564,7 @@ struct PerformanceView: View {
 
             print("🔗 [COMBO] Starting Bio + Post Prediction queue")
             LogManager.shared.info("Combined Bio + PP queue started", category: .general)
-            let bioOK = await applyURLBiography(text: bioText, values: ["text1": bioText])
+            let bioOK = await applyURLBiography(text: bioText, values: effectiveBioValues)
             guard bioOK, !Task.isCancelled else {
                 isCombinedBioPostPredictionGuardActive = false
                 LogManager.shared.warning("Combined Bio + PP stopped: bio failed or cancelled", category: .general)
@@ -2660,6 +2766,54 @@ struct PerformanceView: View {
     }
 
     @MainActor
+    private func armLocalBioPostPredictionCombo(source: String) {
+        guard !ppTestMode.isActive,
+              bioFeatureEnabled,
+              ActiveSetSettings.shared.isPostPredictionEnabled,
+              ActiveSetSettings.shared.activeSetId != nil else { return }
+
+        let now = Date().timeIntervalSince1970
+        localComboEarliestRevealAt = now + Double(combinedBioPostPredictionDelay)
+        combinedPPCooldownBypassUntil = now + 90
+        UserDefaults.standard.set(localComboEarliestRevealAt, forKey: "local_combo_earliest_pp_reveal_at")
+        UserDefaults.standard.set(combinedPPCooldownBypassUntil, forKey: "combined_pp_cooldown_bypass_until")
+        print("🔗 [LOCAL COMBO] Armed by \(source) — PP allowed after \(combinedBioPostPredictionDelay)s")
+        LogManager.shared.info("Local Bio + PP combo armed by \(source): \(combinedBioPostPredictionDelay)s", category: .general)
+    }
+
+    @MainActor
+    private func beginLocalBioPostPredictionBioSend(source: String) {
+        guard !ppTestMode.isActive,
+              bioFeatureEnabled,
+              ActiveSetSettings.shared.isPostPredictionEnabled,
+              ActiveSetSettings.shared.activeSetId != nil else { return }
+
+        let now = Date().timeIntervalSince1970
+        localComboBioPendingUntil = now + 45
+        localComboEarliestRevealAt = 0
+        combinedPPCooldownBypassUntil = now + 90
+        UserDefaults.standard.set(localComboBioPendingUntil, forKey: "local_combo_bio_pending_until")
+        UserDefaults.standard.set(localComboEarliestRevealAt, forKey: "local_combo_earliest_pp_reveal_at")
+        UserDefaults.standard.set(combinedPPCooldownBypassUntil, forKey: "combined_pp_cooldown_bypass_until")
+        print("🔗 [LOCAL COMBO] Bio update in-flight by \(source) — PP locked until confirmation")
+        LogManager.shared.info("Local Bio + PP waiting for bio confirmation by \(source)", category: .general)
+    }
+
+    @MainActor
+    private func completeLocalBioPostPredictionBioSend(success: Bool, source: String) {
+        if success {
+            armLocalBioPostPredictionCombo(source: source)
+        } else {
+            localComboEarliestRevealAt = 0
+            print("🔗 [LOCAL COMBO] Bio update failed by \(source) — PP combo not armed")
+            LogManager.shared.warning("Local Bio + PP not armed because bio update failed by \(source)", category: .general)
+        }
+        localComboBioPendingUntil = 0
+        UserDefaults.standard.set(localComboBioPendingUntil, forKey: "local_combo_bio_pending_until")
+        UserDefaults.standard.set(localComboEarliestRevealAt, forKey: "local_combo_earliest_pp_reveal_at")
+    }
+
+    @MainActor
     private func applyTestNote(_ text: String) {
         if testOriginalNoteText == nil {
             testOriginalNoteText = lastNoteText
@@ -2715,6 +2869,7 @@ struct PerformanceView: View {
             cachedHighlights: current.cachedHighlights,
             cachedMediaItems: current.cachedMediaItems,
             cachedReelItems: current.cachedReelItems,
+            cachedTaggedItems: current.cachedTaggedItems,
             cachedNextMaxId: current.cachedNextMaxId
         )
     }
@@ -2796,8 +2951,14 @@ struct PerformanceView: View {
                     return
                 }
                 // Optimistic: show bio immediately
-                await MainActor.run { pinLocalBiography(final) }
+                await MainActor.run {
+                    pinLocalBiography(final)
+                    beginLocalBioPostPredictionBioSend(source: "clipboard-bio")
+                }
                 let ok = try await instagram.changeBiography(text: final)
+                await MainActor.run {
+                    completeLocalBioPostPredictionBioSend(success: ok, source: "clipboard-bio")
+                }
                 if ok {
                     clipboardAutoLastSent = text  // track original clipboard text to avoid re-sends
                     print("✅ [CLIPBOARD] Biography updated from clipboard")
@@ -2806,6 +2967,9 @@ struct PerformanceView: View {
                 }
             }
         } catch {
+            await MainActor.run {
+                completeLocalBioPostPredictionBioSend(success: false, source: "clipboard-bio")
+            }
             print("⚠️ [CLIPBOARD] Auto-mode error: \(error.localizedDescription)")
             LogManager.shared.warning("Clipboard auto-mode failed: \(error.localizedDescription)", category: .general)
         }
@@ -2942,8 +3106,14 @@ struct PerformanceView: View {
                     return
                 }
                 // Optimistic: update bio in fake profile instantly, before API confirms
-                await MainActor.run { pinLocalBiography(final) }
+                await MainActor.run {
+                    pinLocalBiography(final)
+                    beginLocalBioPostPredictionBioSend(source: "api-bio")
+                }
                 let ok = try await instagram.changeBiography(text: final)
+                await MainActor.run {
+                    completeLocalBioPostPredictionBioSend(success: ok, source: "api-bio")
+                }
                 if ok {
                     print("✅ [API AUTO] Biography updated: \"\(final)\"")
                     ud.set(trimmed, forKey: lastKey)          // raw text for dedup
@@ -2952,6 +3122,11 @@ struct PerformanceView: View {
                 }
             }
         } catch {
+            if target != "note" {
+                await MainActor.run {
+                    completeLocalBioPostPredictionBioSend(success: false, source: "api-bio")
+                }
+            }
             print("⚠️ [API AUTO] Error applying \(target): \(error.localizedDescription)")
             LogManager.shared.warning("Magic API auto-mode failed (\(target)): \(error.localizedDescription)", category: .general)
             // If Instagram says "already sent", mark as sent so we stop retrying it
@@ -3171,7 +3346,10 @@ struct PerformanceView: View {
                 // Pin pendingBioText so that a concurrent loadProfile (fetching the old
                 // bio from Instagram while our POST is in-flight) cannot revert the fake
                 // profile via onChange(of: profileCache.cachedProfile?.biography).
-                await MainActor.run { pinLocalBiography(final) }
+                await MainActor.run {
+                    pinLocalBiography(final)
+                    beginLocalBioPostPredictionBioSend(source: "ocr-bio")
+                }
 
                 // ── Direct POST — mirrors mentalgram5's proven pattern ─────────────
                 // No cold-start delay or jitter here. The real root cause of the previous
@@ -3185,7 +3363,10 @@ struct PerformanceView: View {
                 // UploadManager or isLocked state can change during the sleep window and
                 // silently abort the POST while leaving the fake profile reverted.
                 let ok = try await instagram.changeBiography(text: final)
-                await MainActor.run { pendingBioText = nil }
+                await MainActor.run {
+                    pendingBioText = nil
+                    completeLocalBioPostPredictionBioSend(success: ok, source: "ocr-bio")
+                }
                 if ok {
                     ud.set(trimmed, forKey: lastKey)  // raw word for dedup
                     ud.set(Date(), forKey: dateKey)   // timestamp so dedup expires in 2h
@@ -3194,7 +3375,14 @@ struct PerformanceView: View {
                 }
             }
         } catch {
-            await MainActor.run { pendingBioText = nil }
+            if target != "note" {
+                await MainActor.run {
+                    pendingBioText = nil
+                    completeLocalBioPostPredictionBioSend(success: false, source: "ocr-bio")
+                }
+            } else {
+                await MainActor.run { pendingBioText = nil }
+            }
             print("⚠️ [OCR] Error applying \(target): \(error.localizedDescription)")
             LogManager.shared.warning("OCR auto-mode failed (\(target)): \(error.localizedDescription)", category: .general)
         }
@@ -3321,6 +3509,9 @@ struct PerformanceView: View {
         // Stamp the cooldown timestamp before the POST so a second rapid send is
         // still blocked for 90s even if the request fails.
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cooldownKey)
+        if target != "note" {
+            await MainActor.run { beginLocalBioPostPredictionBioSend(source: "interface-bio") }
+        }
 
         do {
             if target == "note" {
@@ -3335,7 +3526,10 @@ struct PerformanceView: View {
                 }
             } else {
                 let ok = try await instagram.changeBiography(text: finalText)
-                await MainActor.run { pendingBioText = nil }
+                await MainActor.run {
+                    pendingBioText = nil
+                    completeLocalBioPostPredictionBioSend(success: ok, source: "interface-bio")
+                }
                 if ok {
                     ud.set(value, forKey: lastKey)
                     ud.set(Date(), forKey: dateKey)
@@ -3345,7 +3539,14 @@ struct PerformanceView: View {
                 }
             }
         } catch {
-            await MainActor.run { pendingBioText = nil }
+            if target != "note" {
+                await MainActor.run {
+                    pendingBioText = nil
+                    completeLocalBioPostPredictionBioSend(success: false, source: "interface-bio")
+                }
+            } else {
+                await MainActor.run { pendingBioText = nil }
+            }
             LogManager.shared.warning("Interface capture send failed (\(target)): \(error.localizedDescription)", category: .general)
         }
     }
@@ -3545,6 +3746,91 @@ struct PerformanceView: View {
     }
 
     @MainActor
+    private func cachedProfileURLsPreservingRevealOverlays(_ urls: [String]) -> [String] {
+        var merged = urls
+        let realIds = realMediaIds(in: urls)
+        let currentRevealURLs = allMediaURLs.filter {
+            $0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-")
+        }
+        guard !currentRevealURLs.isEmpty else { return urls }
+
+        var preserved = 0
+        for revealURL in currentRevealURLs {
+            guard let mediaId = revealMediaId(from: revealURL) else { continue }
+            let key = mediaIdKey(mediaId)
+            guard !realIds.contains(mediaId), !realIds.contains(key) else { continue }
+            guard !merged.contains(revealURL) else { continue }
+
+            let targetIndex = allMediaURLs.firstIndex(of: revealURL) ?? merged.count
+            merged.insert(revealURL, at: min(targetIndex, merged.count))
+            preserved += 1
+        }
+
+        if preserved > 0 {
+            print("⚡️ [REVEAL PRESERVE] Kept \(preserved) reveal overlay(s) during cache onChange")
+        }
+        return deduplicatedGridURLs(merged)
+    }
+
+    @MainActor
+    private func restoredGridURLsByPositioningRevealState(
+        baseURLs: [String],
+        revealURLs: [String],
+        storedDates: [String: Date]
+    ) -> [String] {
+        let pendingRevealURLs = revealURLs.filter { !baseURLs.contains($0) }
+        guard !pendingRevealURLs.isEmpty else { return baseURLs }
+
+        var dateByURL = storedDates
+        for revealURL in pendingRevealURLs where dateByURL[revealURL] == nil {
+            guard let mediaId = revealMediaId(from: revealURL),
+                  let uploadDate = revealUploadDate(for: mediaId) else { continue }
+            dateByURL[revealURL] = uploadDate
+        }
+
+        let positionedRevealURLs = pendingRevealURLs.filter { dateByURL[$0] != nil }
+        let fallbackRevealURLs = pendingRevealURLs.filter { dateByURL[$0] == nil }
+        revealDates.merge(dateByURL.filter { pendingRevealURLs.contains($0.key) }) { _, new in new }
+
+        guard let anchorDate = positionedRevealURLs.compactMap({ dateByURL[$0] }).max() else {
+            var fallback = baseURLs
+            let insertAt = min(1, fallback.count)
+            fallback.insert(contentsOf: pendingRevealURLs, at: insertAt)
+            print("💾 [REVEAL] Restored \(pendingRevealURLs.count) reveal URL(s) at safe fallback pos \(insertAt)")
+            return fallback
+        }
+
+        var maxDate: Date = .distantPast
+        var maxDateIndex = 0
+        for (i, url) in baseURLs.enumerated() {
+            guard let date = mediaItemsByURL[url]?.takenAt else { continue }
+            if date > maxDate {
+                maxDate = date
+                maxDateIndex = i
+            }
+        }
+        let pinnedEnd = maxDate == .distantPast ? 0 : maxDateIndex
+
+        var insertAt = baseURLs.count
+        for i in pinnedEnd..<baseURLs.count {
+            guard let itemDate = mediaItemsByURL[baseURLs[i]]?.takenAt else { continue }
+            if itemDate <= anchorDate {
+                insertAt = i
+                break
+            }
+        }
+
+        var merged = baseURLs
+        merged.insert(contentsOf: positionedRevealURLs, at: min(insertAt, merged.count))
+        if !fallbackRevealURLs.isEmpty {
+            let fallbackIndex = min(insertAt + positionedRevealURLs.count, merged.count)
+            merged.insert(contentsOf: fallbackRevealURLs, at: fallbackIndex)
+        }
+        print("💾 [REVEAL] Positioned restored reveal block at pos \(insertAt) (count:\(pendingRevealURLs.count), pinnedEnd:\(pinnedEnd))")
+        return deduplicatedGridURLs(merged)
+    }
+
+    @MainActor
     private func applyAuthoritativeMediaSnapshot(
         items: [InstagramMediaItem],
         nextCursor: String?,
@@ -3734,6 +4020,9 @@ struct PerformanceView: View {
             // Start from the cached posts, then re-inject any persisted reveal://
             // URLs so unarchived photos survive app restarts.
             var restoredURLs = cached.cachedMediaURLs
+            for item in cached.cachedMediaItems {
+                mediaItemsByURL[item.imageURL] = item
+            }
             if let revealState = ProfileCacheService.shared.loadRevealState(userId: cached.userId) {
                 let visibleCachedURLs = Set(cached.cachedMediaURLs)
                 let cachedRealIds = Set(cached.cachedMediaItems.compactMap { item in
@@ -3743,11 +4032,13 @@ struct PerformanceView: View {
                     guard let mediaId = revealMediaId(from: url) else { return false }
                     return !cachedRealIds.contains(mediaId)
                 }
-                for url in filteredRevealURLs where !restoredURLs.contains(url) {
-                    restoredURLs.insert(url, at: 0)
-                }
                 let filteredRevealSet = Set(filteredRevealURLs)
                 revealDates.merge(revealState.dates.filter { filteredRevealSet.contains($0.key) }) { _, new in new }
+                restoredURLs = restoredGridURLsByPositioningRevealState(
+                    baseURLs: restoredURLs,
+                    revealURLs: filteredRevealURLs,
+                    storedDates: revealState.dates
+                )
                 if filteredRevealURLs.count != revealState.urls.count {
                     ProfileCacheService.shared.saveRevealState(urls: filteredRevealURLs, dates: revealDates, userId: cached.userId)
                 }
@@ -3759,9 +4050,20 @@ struct PerformanceView: View {
             // more pages (all posts loaded), don't re-fetch page 1 from the API.
             let noMorePagesKey = "perf_no_more_pages_\(cached.userId)"
             let allPagesCached = UserDefaults.standard.bool(forKey: noMorePagesKey)
-            self.hasMorePages = !allPagesCached && (cached.cachedMediaURLs.count < maxPhotosOwnProfile)
-            if allPagesCached {
+            self.nextMaxId = cached.cachedNextMaxId
+            let expectedCachedCount = cached.mediaCount > 0
+                ? min(cached.mediaCount, maxPhotosOwnProfile)
+                : maxPhotosOwnProfile
+            let noMoreFlagLooksTrustworthy = allPagesCached && cached.cachedMediaURLs.count >= expectedCachedCount
+            // If a cursor exists, trust it even if an old session accidentally set
+            // the "no more pages" flag. Otherwise users can get stuck at page 1.
+            self.hasMorePages = cached.cachedNextMaxId != nil || (!noMoreFlagLooksTrustworthy && cached.cachedMediaURLs.count < maxPhotosOwnProfile)
+            if noMoreFlagLooksTrustworthy && cached.cachedNextMaxId == nil {
                 print("📦 [CACHE] All pages already loaded — pagination disabled until next refresh")
+            } else if let cursor = cached.cachedNextMaxId {
+                print("📦 [CACHE] Restored pagination cursor \(cursor.prefix(12))…")
+            } else if allPagesCached {
+                print("📦 [CACHE] Ignored stale no-more-pages flag — cached \(cached.cachedMediaURLs.count)/\(expectedCachedCount)")
             }
 
             // Build mediaItemsByURL in O(n) using a dictionary keyed by imageURL.
@@ -3770,10 +4072,12 @@ struct PerformanceView: View {
             mediaItemsByURL = mediaItemsByURL.filter { key, _ in
                 activeURLs.contains(key) || key.hasPrefix("reveal://") || key.hasPrefix("amnesia://carousel/")
             }
-            for item in cached.cachedMediaItems { mediaItemsByURL[item.imageURL] = item }
+            for item in cached.cachedMediaItems + cached.cachedTaggedItems { mediaItemsByURL[item.imageURL] = item }
+            persistExistingImagesByMediaId(cached.cachedMediaItems + cached.cachedReelItems + cached.cachedTaggedItems)
             paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
 
             loadCachedImages()
+            warmSecondaryTabImagesFromDisk(for: cached)
 
             // Background preload reels + tagged from cache hit so they are
             // ready immediately when the user swipes (or are already showing
@@ -3842,7 +4146,7 @@ struct PerformanceView: View {
     }
 
     /// Decides whether the blocking first-time preload should run for this account.
-    /// - Runs only when there is no "fully preloaded" flag AND no substantial cache.
+    /// - Runs only when there is no "fully preloaded" flag AND no complete-enough cache.
     /// - Existing accounts that already have a populated cache (e.g. users updating
     ///   the app) are migrated silently: the flag is set and the spinner is skipped.
     private func shouldRunFirstTimePreload(userId: String) -> Bool {
@@ -3856,16 +4160,32 @@ struct PerformanceView: View {
         let key = "perf_fully_preloaded_\(userId)"
         if UserDefaults.standard.bool(forKey: key) { return false }
 
-        // Migration: an account that already has a decent cache is treated as
-        // already preloaded so updating users never see a surprise full reload.
+        // Migration: only mark complete when the existing cache has a real tail.
+        // A clean install often starts with exactly Instagram's first 12 posts;
+        // treating that as "fully preloaded" makes refresh collapse back to 12.
         if let cached = ProfileCacheService.shared.loadProfile(),
            cached.userId == userId,
-           cached.cachedMediaURLs.count >= 12 {
+           hasCompleteFirstTimePreloadCache(cached, userId: userId) {
             UserDefaults.standard.set(true, forKey: key)
-            print("📦 [PRELOAD] Existing cache detected — marked preloaded, skipping spinner")
+            print("📦 [PRELOAD] Complete cache detected — marked preloaded, skipping spinner")
             return false
         }
         return true
+    }
+
+    private func requiredFirstTimePreloadPosts(for cached: InstagramProfile) -> Int {
+        let expected = cached.mediaCount > 0 ? cached.mediaCount : preloadTargetPosts
+        return min(preloadTargetPosts, expected, maxPhotosOwnProfile)
+    }
+
+    private func hasCompleteFirstTimePreloadCache(_ cached: InstagramProfile, userId: String) -> Bool {
+        guard cached.userId == userId, !cached.cachedMediaURLs.isEmpty else { return false }
+        let noMorePagesKey = "perf_no_more_pages_\(userId)"
+        if UserDefaults.standard.bool(forKey: noMorePagesKey), cached.cachedNextMaxId == nil {
+            return true
+        }
+        let required = requiredFirstTimePreloadPosts(for: cached)
+        return cached.cachedMediaURLs.count >= required && cached.cachedMediaItems.count >= required
     }
 
     private func hasCriticalPreloadCache(userId: String) -> Bool {
@@ -3875,10 +4195,29 @@ struct PerformanceView: View {
     }
 
     @MainActor
+    private func continueIncompletePerformancePreload(userId: String) async {
+        guard let cached = ProfileCacheService.shared.loadProfile(), cached.userId == userId else {
+            await runFirstTimePreload(userId: userId)
+            return
+        }
+
+        if hasCompleteFirstTimePreloadCache(cached, userId: userId) {
+            print("📦 [PRELOAD] Posts complete — continuing optional preload only")
+            UserDefaults.standard.set(true, forKey: "perf_fully_preloaded_\(userId)")
+            UserDefaults.standard.set(false, forKey: "perf_optional_preloaded_\(userId)")
+            checkAndLoadProfile(allowRemote: false)
+            scheduleFirstTimeOptionalPreload(profile: cached, userId: userId)
+        } else {
+            await runFirstTimePreload(userId: userId)
+        }
+    }
+
+    @MainActor
     private func recoverFirstTimePreloadAfterForegroundIfNeeded() {
         guard isFirstTimePreloading else { return }
         let userId = currentSessionUserId()
-        if hasCriticalPreloadCache(userId: userId) {
+        if let cached = ProfileCacheService.shared.loadProfile(),
+           hasCompleteFirstTimePreloadCache(cached, userId: userId) {
             UserDefaults.standard.set(true, forKey: "perf_fully_preloaded_\(userId)")
             firstTimePreloadStartedAt = nil
             preloadFailed = false
@@ -3939,24 +4278,42 @@ struct PerformanceView: View {
                 throw PreloadError.noProfile
             }
 
-            // 2) Paginate posts up to the target (1–2 extra calls), human-paced.
+            // 2) Paginate posts up to the target (up to 3 extra calls), human-paced.
             preloadProgress = String(localized: "preload.posts")
             var items = working.cachedMediaItems
             var cursor = working.cachedNextMaxId
             var calls = 0
+            var safetyRetries = 0
             while items.count < preloadTargetPosts, let maxId = cursor, calls < 3 {
-                try await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_800_000_000))
+                try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...8_000_000_000))
                 do {
+                    let feedDecision = InstagramSafetyGate.shared.decision(for: .feedUserRead)
+                    if !feedDecision.allowed {
+                        let wait = max(3, feedDecision.waitSeconds + 1)
+                        print("📦 [PRELOAD] Waiting \(wait)s for feed slot before page \(calls + 1)")
+                        try await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                    }
                     let (page, next) = try await instagram.getUserMediaItems(
-                        userId: working.userId, amount: 18, maxId: maxId
+                        userId: working.userId, amount: 21, maxId: maxId
                     )
                     calls += 1
+                    safetyRetries = 0
                     let existingIds = Set(items.map { $0.mediaId })
                     let fresh = page.filter { !$0.mediaId.isEmpty && !existingIds.contains($0.mediaId) }
                     items += fresh
                     cursor = next
+                    print("📦 [PRELOAD] Page \(calls) cached \(fresh.count) fresh post(s), total \(items.count)")
                     if next == nil { break }
                 } catch {
+                    let message = error.localizedDescription
+                    if message.localizedCaseInsensitiveContains("Safety pause"), safetyRetries < 3 {
+                        safetyRetries += 1
+                        let wait = 12 + (safetyRetries * 4)
+                        print("📦 [PRELOAD] Safety pause during pagination — retry \(safetyRetries)/3 in \(wait)s")
+                        LogManager.shared.warning("First-time preload pagination paused by SafetyGate; retrying in \(wait)s", category: .general)
+                        try await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                        continue
+                    }
                     LogManager.shared.warning("First-time preload pagination skipped: \(error.localizedDescription)", category: .general)
                     break
                 }
@@ -3969,10 +4326,16 @@ struct PerformanceView: View {
             ProfileCacheService.shared.saveProfile(working)
             self.profile = working
 
-            // 3) Download only the first visible thumbnails before letting the user in.
-            // The remaining thumbnails continue in the background.
+            // 3) Download all cached post thumbnails before letting the user in.
             preloadProgress = String(localized: "preload.images")
-            for item in items.prefix(12) {
+            for item in items {
+                if cachedImages[item.imageURL] != nil { continue }
+                if let cached = ProfileCacheService.shared.loadImage(forURL: item.imageURL)
+                    ?? ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) {
+                    cachedImages[item.imageURL] = cached
+                    ProfileCacheService.shared.saveImage(cached, forMediaId: item.mediaId)
+                    continue
+                }
                 if let img = await downloadImage(from: item.imageURL) {
                     cachedImages[item.imageURL] = img
                     ProfileCacheService.shared.saveImage(img, forURL: item.imageURL)
@@ -3998,21 +4361,41 @@ struct PerformanceView: View {
             lastRefreshTimestamp = now
             lastAutoRefreshTimestamp = now
 
-            // Mark fully preloaded — every later entry is instant, zero API calls.
-            UserDefaults.standard.set(true, forKey: "perf_fully_preloaded_\(userId)")
-            print("✅ [PRELOAD] Critical first-time preload complete for \(userId) — \(items.count) posts cached")
+            // Mark fully preloaded only when the cache has a real tail or we reached the end.
+            let requiredPosts = requiredFirstTimePreloadPosts(for: working)
+            let preloadComplete = cursor == nil || (items.count >= requiredPosts && calls > 0)
+            UserDefaults.standard.set(preloadComplete, forKey: "perf_fully_preloaded_\(userId)")
+            UserDefaults.standard.set(false, forKey: "perf_optional_preloaded_\(userId)")
+            print("✅ [PRELOAD] Critical first-time preload \(preloadComplete ? "complete" : "partial") for \(userId) — \(items.count)/\(requiredPosts) posts cached")
             LogManager.shared.info("First-time critical preload complete: \(items.count) posts", category: .general)
+
+            // 5) First install should enter Performance only when secondary surface
+            // is warmed too. Later entries are instant from disk.
+            preloadProgress = "Loading highlights, reels and tagged posts…"
+            let optionalComplete = await runFirstTimeOptionalPreloadNow(profile: working, userId: userId)
+            guard preloadComplete && optionalComplete else {
+                UserDefaults.standard.set(false, forKey: "perf_fully_preloaded_\(userId)")
+                preloadProgress = "Profile cache incomplete. Tap Retry to continue loading."
+                withAnimation(.easeIn(duration: 0.2)) { preloadFailed = true }
+                print("⚠️ [PRELOAD] Blocking first-time preload paused — postsComplete:\(preloadComplete) optionalComplete:\(optionalComplete)")
+                LogManager.shared.warning("First-time preload paused before showing Performance", category: .general)
+                return
+            }
 
             // Hide the overlay and render everything from the freshly-saved cache.
             firstTimePreloadStartedAt = nil
             withAnimation(.easeOut(duration: 0.3)) { isFirstTimePreloading = false }
             checkAndLoadProfile(allowRemote: false)
-            scheduleFirstTimeOptionalPreload(profile: working, userId: userId)
         } catch {
             print("❌ [PRELOAD] Failed: \(error.localizedDescription)")
             LogManager.shared.warning("First-time preload failed: \(error.localizedDescription)", category: .general)
             if hasCriticalPreloadCache(userId: userId) {
-                UserDefaults.standard.set(true, forKey: "perf_fully_preloaded_\(userId)")
+                if let cached = ProfileCacheService.shared.loadProfile(),
+                   hasCompleteFirstTimePreloadCache(cached, userId: userId) {
+                    UserDefaults.standard.set(true, forKey: "perf_fully_preloaded_\(userId)")
+                } else {
+                    UserDefaults.standard.set(false, forKey: "perf_fully_preloaded_\(userId)")
+                }
                 firstTimePreloadStartedAt = nil
                 preloadProgress = ""
                 preloadFailed = false
@@ -4031,37 +4414,65 @@ struct PerformanceView: View {
         firstTimeOptionalPreloadTask?.cancel()
         firstTimeOptionalPreloadTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard !Task.isCancelled else { return }
-            guard instagram.isLoggedIn,
-                  !instagram.isLocked,
-                  !instagram.isSessionChallenged else {
-                LogManager.shared.warning("First-time optional preload skipped: Instagram not ready", category: .general)
-                return
-            }
-
-            let remainingPostURLs = working.cachedMediaURLs.filter { cachedImages[$0] == nil }
-            if !remainingPostURLs.isEmpty {
-                LogManager.shared.info("First-time optional preload: downloading \(remainingPostURLs.count) remaining post thumbnails", category: .general)
-                downloadImagesForURLs(remainingPostURLs)
-            }
-
-            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_600_000_000))
-            guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "reels") else { return }
-            await fetchReelsIfNeeded(for: self.profile ?? working)
-
-            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_600_000_000))
-            guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "tagged") else { return }
-            await fetchTaggedIfNeeded(for: self.profile ?? working)
-
-            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_600_000_000))
-            guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "highlights") else { return }
-            await fetchHighlightsIfNeeded(for: self.profile ?? working)
-
-            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_200_000_000...2_000_000_000))
-            guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "explore") else { return }
-            await ExploreManager.shared.preloadIfNeeded()
-            LogManager.shared.info("First-time optional preload finished for \(userId)", category: .general)
+            _ = await runFirstTimeOptionalPreloadNow(profile: working, userId: userId)
         }
+    }
+
+    @MainActor
+    private func runFirstTimeOptionalPreloadNow(profile working: InstagramProfile, userId: String) async -> Bool {
+        guard !isFirstTimeOptionalPreloadRunning else {
+            print("📦 [PRELOAD] Optional preload already running")
+            return false
+        }
+        isFirstTimeOptionalPreloadRunning = true
+        defer { isFirstTimeOptionalPreloadRunning = false }
+
+        guard !Task.isCancelled else { return false }
+        guard instagram.isLoggedIn,
+              !instagram.isLocked,
+              !instagram.isSessionChallenged else {
+            LogManager.shared.warning("First-time optional preload skipped: Instagram not ready", category: .general)
+            return false
+        }
+
+        let remainingPostURLs = working.cachedMediaURLs.filter { cachedImages[$0] == nil }
+        if !remainingPostURLs.isEmpty {
+            LogManager.shared.info("First-time optional preload: downloading \(remainingPostURLs.count) remaining post thumbnails", category: .general)
+            for url in remainingPostURLs {
+                guard cachedImages[url] == nil else { continue }
+                let image = ProfileCacheService.shared.loadImage(forURL: url) ?? {
+                    nil
+                }()
+                if let image {
+                    cachedImages[url] = image
+                    ProfileCacheService.shared.saveImage(image, forURL: url)
+                    continue
+                }
+                if let image = await downloadImage(from: url) {
+                    cachedImages[url] = image
+                    ProfileCacheService.shared.saveImage(image, forURL: url)
+                }
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_600_000_000))
+        guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "highlights") else { return false }
+        await fetchHighlightsIfNeeded(for: self.profile ?? working)
+
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_600_000_000))
+        guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "reels") else { return false }
+        await fetchReelsIfNeeded(for: self.profile ?? working, ensureVisibleMinimum: true)
+
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 1_600_000_000...2_600_000_000))
+        guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "tagged") else { return false }
+        await fetchTaggedIfNeeded(for: self.profile ?? working, ensureVisibleMinimum: true)
+
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 1_200_000_000...2_000_000_000))
+        guard !Task.isCancelled, canRunOptionalFirstTimePreload(stage: "explore") else { return false }
+        await ExploreManager.shared.preloadIfNeeded()
+        UserDefaults.standard.set(true, forKey: "perf_optional_preloaded_\(userId)")
+        LogManager.shared.info("First-time optional preload finished for \(userId)", category: .general)
+        return true
     }
 
     private enum PreloadError: Error { case noProfile }
@@ -4118,19 +4529,30 @@ struct PerformanceView: View {
                 cachedTaggedURLs: taggedURLs,
                 cachedHighlights: cached.cachedHighlights,
                 cachedReelItems: reels,
+                cachedTaggedItems: tagged,
                 cachedNextMaxId: cached.cachedNextMaxId
             )
 
             self.profile = updated
+            for item in tagged { mediaItemsByURL[item.imageURL] = item }
             ProfileCacheService.shared.saveProfile(updated)
 
             // Download thumbnails for reels + tagged only. Highlight covers are
             // downloaded when they are explicitly rebuilt outside Performance.
-            let allNew = reelURLs + taggedURLs
-            for url in allNew {
+            for item in reels + tagged {
+                let url = item.imageURL
+                if let img = cachedImages[url]
+                    ?? ProfileCacheService.shared.loadImage(forURL: url)
+                    ?? ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) {
+                    cachedImages[url] = img
+                    ProfileCacheService.shared.saveImage(img, forURL: url)
+                    ProfileCacheService.shared.saveImage(img, forMediaId: item.mediaId)
+                    continue
+                }
                 if let img = await downloadImage(from: url) {
                     cachedImages[url] = img
                     ProfileCacheService.shared.saveImage(img, forURL: url)
+                    ProfileCacheService.shared.saveImage(img, forMediaId: item.mediaId)
                 }
             }
             print("✅ [CACHE] Background supplementary fetch complete")
@@ -4344,6 +4766,7 @@ struct PerformanceView: View {
                     mergedProfile = profileByReplacingBiography(mergedProfile, biography: localBio)
                 }
 
+                let previousProfileBeforeRefresh = self.profile
                         self.profile = mergedProfile
                 let isManualRefresh = source.hasPrefix("manual")
                 let isAuthoritativeRefresh = isManualRefresh || source == "authoritative_after_archive"
@@ -4352,9 +4775,28 @@ struct PerformanceView: View {
                     : []
 
                 if isAuthoritativeRefresh {
+                    let firstPageItems = mergedProfile.cachedMediaItems
+                    let firstPageIds = Set(firstPageItems.map { mediaIdKey($0.mediaId) })
+                    let preservedTailItems = allMediaURLs.compactMap { mediaItemsByURL[$0] }.filter { item in
+                        !item.mediaId.isEmpty && !firstPageIds.contains(mediaIdKey(item.mediaId))
+                    }
+                    var seenAuthoritativeIds = Set<String>()
+                    let authoritativeItems = (firstPageItems + preservedTailItems).filter { item in
+                        let key = item.mediaId.isEmpty ? item.imageURL : mediaIdKey(item.mediaId)
+                        return seenAuthoritativeIds.insert(key).inserted
+                    }
+                    let authoritativeCursor = preservedTailItems.isEmpty
+                        ? mergedProfile.cachedNextMaxId
+                        : (previousProfileBeforeRefresh?.cachedNextMaxId ?? mergedProfile.cachedNextMaxId)
+
+                    mergedProfile.cachedMediaItems = authoritativeItems
+                    mergedProfile.cachedMediaURLs = authoritativeItems.map(\.imageURL)
+                    mergedProfile.cachedNextMaxId = authoritativeCursor
+                    self.profile = mergedProfile
+
                     applyAuthoritativeMediaSnapshot(
-                        items: mergedProfile.cachedMediaItems,
-                        nextCursor: mergedProfile.cachedNextMaxId,
+                        items: authoritativeItems,
+                        nextCursor: authoritativeCursor,
                         source: source,
                         clearRevealState: true
                     )
@@ -4383,9 +4825,10 @@ struct PerformanceView: View {
                     self.hasMorePages = true
                 }
                 // Populate post viewer data (likes/comments already in items, 0 extra API calls)
-                for item in mergedProfile.cachedMediaItems {
+                for item in mergedProfile.cachedMediaItems + mergedProfile.cachedTaggedItems {
                     mediaItemsByURL[item.imageURL] = item
                 }
+                persistExistingImagesByMediaId(mergedProfile.cachedMediaItems + mergedProfile.cachedReelItems + mergedProfile.cachedTaggedItems)
                 paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
                 // If the full refresh already brought reels/tagged, mark them as loaded
                 // so the lazy-tab loader doesn't make redundant API calls.
@@ -4426,6 +4869,8 @@ struct PerformanceView: View {
                 }
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
                 ProfileCacheService.shared.pendingProfilePic = nil
+                cdnForbiddenTimestamps.removeAll()
+                cdnDownloadBlockedUntil = nil
                         downloadAndCacheImages(profile: mergedProfile)
                 // Background preload reels + tagged so they are ready before
                 // the user swipes to those tabs. Uses the same fetchReelsIfNeeded /
@@ -4481,7 +4926,18 @@ struct PerformanceView: View {
     }
 
     private func loadProfileSync(source: String) {
-        Task { _ = await loadProfile(source: source) }
+        Task {
+            let success = await loadProfile(source: source)
+            if source == "manual_remote" {
+                await MainActor.run {
+                    NotificationCenter.default.post(
+                        name: .performanceManualRefreshResult,
+                        object: nil,
+                        userInfo: ["success": success]
+                    )
+                }
+            }
+        }
     }
 
     private func isCancellationLike(_ error: Error) -> Bool {
@@ -4499,11 +4955,94 @@ struct PerformanceView: View {
         guard url.contains("fbcdn.net") || url.contains("instagram") else { return }
 
         let now = Date()
-        cdnForbiddenTimestamps = cdnForbiddenTimestamps.filter { now.timeIntervalSince($0) < 20 }
+        cdnForbiddenTimestamps = cdnForbiddenTimestamps.filter { now.timeIntervalSince($0) < 60 }
         cdnForbiddenTimestamps.append(now)
 
         guard cdnForbiddenTimestamps.count >= 8 else { return }
-        scheduleCDNURLRefresh(reason: "expired CDN image URLs (\(cdnForbiddenTimestamps.count) HTTP 403s)")
+
+        let blockedUntil = now.addingTimeInterval(90)
+        if cdnDownloadBlockedUntil.map({ $0 < blockedUntil }) ?? true {
+            cdnDownloadBlockedUntil = blockedUntil
+        }
+
+        LogManager.shared.warning(
+            "CDN thumbnail downloads paused for 90s after \(cdnForbiddenTimestamps.count) HTTP 403s",
+            category: .cache
+        )
+    }
+
+    @MainActor
+    private func cdnDownloadBlockSecondsRemaining() -> Int {
+        guard let blockedUntil = cdnDownloadBlockedUntil else { return 0 }
+        let remaining = Int(blockedUntil.timeIntervalSinceNow)
+        if remaining <= 0 {
+            cdnDownloadBlockedUntil = nil
+            cdnForbiddenTimestamps.removeAll()
+            return 0
+        }
+        return remaining
+    }
+
+    @MainActor
+    private func shouldSkipCDNImageDownload(url: String) -> Bool {
+        guard url.contains("fbcdn.net") || url.contains("instagram") else { return false }
+        let remaining = cdnDownloadBlockSecondsRemaining()
+        guard remaining > 0 else { return false }
+        return true
+    }
+
+    @MainActor
+    private func persistExistingImagesByMediaId(_ items: [InstagramMediaItem]) {
+        var persisted = 0
+        for item in items where !item.mediaId.isEmpty {
+            if let image = cachedImages[item.imageURL] ?? ProfileCacheService.shared.loadImage(forURL: item.imageURL) {
+                ProfileCacheService.shared.saveImage(image, forMediaId: item.mediaId)
+                persisted += 1
+            }
+        }
+        if persisted > 0 {
+            print("📦 [CACHE] Persisted \(persisted) existing image(s) by mediaId")
+        }
+    }
+
+    @MainActor
+    private func hydrateCachedImagesForItems(_ items: [InstagramMediaItem]) -> Int {
+        var hydrated = 0
+        for item in items where cachedImages[item.imageURL] == nil {
+            guard let image = ProfileCacheService.shared.loadImage(forURL: item.imageURL)
+                    ?? ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) else { continue }
+            cachedImages[item.imageURL] = image
+            ProfileCacheService.shared.saveImage(image, forURL: item.imageURL)
+            if !item.mediaId.isEmpty {
+                ProfileCacheService.shared.saveImage(image, forMediaId: item.mediaId)
+            }
+            hydrated += 1
+        }
+        return hydrated
+    }
+
+    @MainActor
+    private func hydrateCachedImagesForURLs(_ urls: [String]) -> Int {
+        var hydrated = 0
+        for url in urls where cachedImages[url] == nil {
+            guard let image = ProfileCacheService.shared.loadImage(forURL: url) else { continue }
+            cachedImages[url] = image
+            hydrated += 1
+        }
+        return hydrated
+    }
+
+    private func warmSecondaryTabImagesFromDisk(for cached: InstagramProfile) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            let reels = hydrateCachedImagesForItems(cached.cachedReelItems)
+            var tagged = hydrateCachedImagesForItems(cached.cachedTaggedItems)
+            tagged += hydrateCachedImagesForURLs(cached.cachedTaggedURLs)
+            if reels + tagged > 0 {
+                print("📦 [CACHE] Warmed secondary tab thumbnails from disk — reels:\(reels) tagged:\(tagged)")
+            }
+        }
     }
 
     @MainActor
@@ -4581,16 +5120,14 @@ struct PerformanceView: View {
             cachedImages[profile.profilePicURL] = image
         }
 
-        let highlightCoverURLs = profile.cachedHighlights.map { $0.coverImageURL }
         let followerPicURLs    = profile.followedBy.compactMap { $0.profilePicURL }
         // Include persisted reveal:// images so they load from disk on app restart.
         let revealURLs: [String] = allMediaURLs.filter { $0.hasPrefix("reveal://") }
         var allURLs: [String] = [profile.profilePicURL]
         allURLs += profile.cachedMediaURLs
         allURLs += followerPicURLs
-        allURLs += profile.cachedReelURLs
-        allURLs += profile.cachedTaggedURLs
-        allURLs += highlightCoverURLs
+        // Do not batch-download Reels/Tagged/Highlights from the Profile tab.
+        // Those secondary URLs are often stale and can block post thumbnails.
 
         var missingURLs: [String] = []
         var hitCount = 0
@@ -4623,14 +5160,20 @@ struct PerformanceView: View {
         print("📦 [CACHE] disk-hit \(hitCount), to-download \(missingURLs.count) — total \(cachedImages.count)")
 
         guard !missingURLs.isEmpty else { return }
+        if cdnDownloadBlockSecondsRemaining() > 0 {
+            print("📦 [CACHE] Skipping download batch — CDN 403 backoff active")
+            LogManager.shared.warning("Image download batch skipped: CDN 403 backoff active", category: .cache)
+            return
+        }
 
         // ── 2. Skip batch when CDN tokens are already known-expired ──────────
-        // If 8+ HTTP 403s were recorded in the last 20s the CDN URLs have
+        // If 8+ HTTP 403s were recorded in the last 60s the CDN URLs have
         // rotated — downloading them now would just produce 403s that inflate
-        // memory and trigger more OOM pressure.  Wait for the CDN refresh.
-        let recentForbidden = cdnForbiddenTimestamps.filter { Date().timeIntervalSince($0) < 20 }.count
+        // memory and look like automated traffic. Wait for manual refresh.
+        let recentForbidden = cdnForbiddenTimestamps.filter { Date().timeIntervalSince($0) < 60 }.count
         if recentForbidden >= 8 {
             print("📦 [CACHE] Skipping download — CDN URLs known-expired (\(recentForbidden) recent 403s)")
+            cdnDownloadBlockedUntil = Date().addingTimeInterval(90)
             return
         }
 
@@ -4672,10 +5215,13 @@ struct PerformanceView: View {
                     }
                     // Abort the whole batch early if CDN has gone stale mid-run
                     let forbidden = await MainActor.run {
-                        self.cdnForbiddenTimestamps.filter { Date().timeIntervalSince($0) < 20 }.count
+                        self.cdnForbiddenTimestamps.filter { Date().timeIntervalSince($0) < 60 }.count
                     }
                     guard forbidden < 8 else {
                         print("📦 [CACHE] Aborting download batch — CDN expired mid-run (\(forbidden) 403s)")
+                        await MainActor.run {
+                            self.cdnDownloadBlockedUntil = Date().addingTimeInterval(90)
+                        }
                         group.cancelAll()
                         break
                     }
@@ -4723,13 +5269,31 @@ struct PerformanceView: View {
                 print("✅ [CACHE] All \(profile.cachedMediaURLs.count) media thumbnails already in memory — skipped")
             } else {
                 print("🖼️ [CACHE] Downloading \(missingMedia.count)/\(profile.cachedMediaURLs.count) media thumbnails…")
+                var mediaByURL: [String: InstagramMediaItem] = [:]
+                for item in profile.cachedMediaItems where mediaByURL[item.imageURL] == nil {
+                    mediaByURL[item.imageURL] = item
+                }
                 for (index, url) in missingMedia.enumerated() {
+                    if let mediaId = mediaByURL[url]?.mediaId,
+                       let image = ProfileCacheService.shared.loadImage(forMediaId: mediaId) {
+                        await MainActor.run {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                cachedImages[url] = image
+                            }
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                        print("✅ [CACHE] Media \(index + 1)/\(missingMedia.count) restored by mediaId")
+                        continue
+                    }
                     if let image = await downloadImage(from: url) {
                         await MainActor.run {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 cachedImages[url] = image
                             }
                             ProfileCacheService.shared.saveImage(image, forURL: url)
+                            if let mediaId = mediaByURL[url]?.mediaId {
+                                ProfileCacheService.shared.saveImage(image, forMediaId: mediaId)
+                            }
                         }
                         print("✅ [CACHE] Media \(index + 1)/\(missingMedia.count) downloaded")
                     } else {
@@ -4756,46 +5320,11 @@ struct PerformanceView: View {
                     }
                 }
             }
-            
-            // Download reel thumbnails
-            if !profile.cachedReelURLs.isEmpty {
-                print("🎬 [CACHE] Downloading \(profile.cachedReelURLs.count) reel thumbnails...")
-                for url in profile.cachedReelURLs {
-                    if let image = await downloadImage(from: url) {
-                        await MainActor.run {
-                            cachedImages[url] = image
-                            ProfileCacheService.shared.saveImage(image, forURL: url)
-                        }
-                    }
-                }
-            }
-            
-            // Download tagged thumbnails
-            if !profile.cachedTaggedURLs.isEmpty {
-                print("🏷️ [CACHE] Downloading \(profile.cachedTaggedURLs.count) tagged thumbnails...")
-                for url in profile.cachedTaggedURLs {
-                    if let image = await downloadImage(from: url) {
-                        await MainActor.run {
-                            cachedImages[url] = image
-                            ProfileCacheService.shared.saveImage(image, forURL: url)
-                        }
-                    }
-                }
-            }
 
-            // Download highlight cover images
-            if !profile.cachedHighlights.isEmpty {
-                print("🌟 [CACHE] Downloading \(profile.cachedHighlights.count) highlight covers...")
-                for highlight in profile.cachedHighlights {
-                    let url = highlight.coverImageURL
-                    if let image = await downloadImage(from: url) {
-                        await MainActor.run {
-                            cachedImages[url] = image
-                            ProfileCacheService.shared.saveImage(image, forURL: url)
-                        }
-                    }
-                }
-            }
+            // Do not eagerly download Reels/Tagged/Highlights from the Profile tab.
+            // Expired secondary-tab CDN URLs were triggering 403 storms and blocking
+            // post thumbnails during live Performance. Those tabs lazy-load on tap.
+            print("✅ [CACHE] Primary profile images cached; secondary tabs deferred")
             
             print("✅ [CACHE] All images download process completed")
         }
@@ -4881,6 +5410,16 @@ struct PerformanceView: View {
                         } else {
                             print("🛡️ [PROFILE] Skipping internal nextPage — SafetyGate (\(nextPageDecision.reason), wait \(nextPageDecision.waitSeconds)s)")
                             LogManager.shared.warning("SAFETY BLOCK — internal nextPage skipped: \(nextPageDecision.reason)", category: .general)
+                            await MainActor.run {
+                                nextMaxId = discoveredMaxId
+                                hasMorePages = true
+                                isLoadingMore = false
+                                schedulePaginationRetry(
+                                    after: max(8, nextPageDecision.waitSeconds + 1),
+                                    reason: "internal nextPage gate"
+                                )
+                            }
+                            return
                         }
                     }
                 }
@@ -4971,30 +5510,51 @@ struct PerformanceView: View {
                 let decision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
                 if decision.allowed {
                     loadMoreMedia()
-                } else if !paginationRetryScheduled && decision.waitSeconds >= 10 {
-                    paginationRetryScheduled = true
-                    let wait = max(45, decision.waitSeconds) + Int.random(in: 5...15)
-                    print("⏳ [PROFILE] Pagination gated (\(decision.reason), \(wait)s) — will retry")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(wait) + 0.3) {
-                        paginationRetryScheduled = false
-                        guard !isLoadingMore,
-                              !isSilentGridRefreshing,
-                              hasMorePages,
-                              performanceRemoteCallsAllowed,
-                              !uploadManager.isActive,
-                              !uploadManager.isSyncArchiveActive else { return }
-                        loadMoreMedia()
-                    }
+                } else {
+                    schedulePaginationRetry(
+                        after: max(8, decision.waitSeconds + 1),
+                        reason: decision.reason
+                    )
                 }
             } else {
                 loadMoreMedia()  // cache-only guard handled inside loadMoreMedia itself
             }
         }
     }
+
+    private func schedulePaginationRetry(after wait: Int, reason: String) {
+        guard !paginationRetryScheduled else { return }
+        paginationRetryScheduled = true
+        let jitteredWait = wait + Int.random(in: 1...4)
+        print("⏳ [PROFILE] Pagination gated (\(reason), \(jitteredWait)s) — will retry")
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(jitteredWait) + 0.3) {
+            paginationRetryScheduled = false
+            guard !isLoadingMore,
+                  !isSilentGridRefreshing,
+                  hasMorePages,
+                  performanceRemoteCallsAllowed,
+                  !uploadManager.isActive,
+                  !uploadManager.isSyncArchiveActive else { return }
+            loadMoreMedia()
+        }
+    }
     
     private func downloadImagesForURLs(_ urls: [String]) {
         Task {
             for url in urls {
+                if cachedImages[url] == nil {
+                    if let image = ProfileCacheService.shared.loadImage(forURL: url)
+                        ?? mediaItemsByURL[url].flatMap({ ProfileCacheService.shared.loadImage(forMediaId: $0.mediaId) }) {
+                        await MainActor.run {
+                            cachedImages[url] = image
+                            ProfileCacheService.shared.saveImage(image, forURL: url)
+                        }
+                        continue
+                    }
+                }
+                if await MainActor.run(body: { shouldSkipCDNImageDownload(url: url) }) {
+                    break
+                }
                 if cachedImages[url] == nil, let image = await downloadImage(from: url) {
                     await MainActor.run {
                         cachedImages[url] = image
@@ -5012,6 +5572,10 @@ struct PerformanceView: View {
         guard !urlString.isEmpty else {
             print("⚠️ [DOWNLOAD] Empty URL string")
             LogManager.shared.warning("Image download skipped: empty URL", category: .cache)
+            return nil
+        }
+
+        if await MainActor.run(body: { shouldSkipCDNImageDownload(url: urlString) }) {
             return nil
         }
         
@@ -5387,13 +5951,18 @@ struct PerformanceView: View {
     private func schedulePostRevealGridRefresh(reason: String, includesVideo: Bool) {
         postRevealGridRefreshGeneration += 1
         let generation = postRevealGridRefreshGeneration
-        let delays: [UInt64] = includesVideo ? [5, 25, 55] : [5]
+        let delays: [UInt64] = includesVideo ? [5, 25, 55] : [5, 18]
 
         for delaySeconds in delays {
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
                 guard generation == postRevealGridRefreshGeneration else {
                     print("🔄 [PERF] Post-reveal refresh cancelled — newer reveal/background")
+                    return
+                }
+                if delaySeconds > delays[0],
+                   !allMediaURLs.contains(where: { $0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }) {
+                    print("🔄 [PERF] Post-reveal retry skipped — no local reveal overlays remain")
                     return
                 }
                 guard scenePhase == .active,
@@ -5494,37 +6063,71 @@ struct PerformanceView: View {
             // Pre-download all new images BEFORE swapping allMediaURLs.
             // This prevents blank cells: cells keep showing local reveal:// images
             // until the real CDN images are fully cached and ready.
-            let missing = newURLs.filter { cachedImages[$0] == nil }
-            if !missing.isEmpty {
-                print("🔄 [PERF] Silent refresh: pre-downloading \(missing.count) CDN image(s) before swap…")
+            let missingItems = items.filter { item in
+                cachedImages[item.imageURL] == nil &&
+                ProfileCacheService.shared.loadImage(forURL: item.imageURL) == nil &&
+                ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) == nil
+            }
+            if !missingItems.isEmpty {
+                print("🔄 [PERF] Silent refresh: pre-downloading \(missingItems.count) CDN image(s) before swap…")
                 await withTaskGroup(of: Void.self) { group in
-                    for url in missing {
+                    for item in missingItems {
                         group.addTask {
+                            let url = item.imageURL
                             if let image = await self.downloadImage(from: url) {
                                 await MainActor.run {
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         self.cachedImages[url] = image
                                     }
                                     ProfileCacheService.shared.saveImage(image, forURL: url)
+                                    ProfileCacheService.shared.saveImage(image, forMediaId: item.mediaId)
                                 }
                             }
                         }
                     }
                 }
                 print("🔄 [PERF] Silent refresh: all CDN images cached — swapping grid now")
+            } else {
+                await MainActor.run {
+                    for item in items {
+                        if self.cachedImages[item.imageURL] == nil,
+                           let image = ProfileCacheService.shared.loadImage(forURL: item.imageURL)
+                            ?? ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) {
+                            self.cachedImages[item.imageURL] = image
+                            ProfileCacheService.shared.saveImage(image, forMediaId: item.mediaId)
+                        }
+                    }
+                }
             }
 
             if mode == .authoritative {
-                applyAuthoritativeMediaSnapshot(
-                    items: items,
-                    nextCursor: refreshedMaxId,
-                    source: reason,
-                    clearRevealState: true
-                )
-                let newCount = newURLs.filter { !allMediaURLs.contains($0) }.count
-                print("🔄 [PERF] Authoritative silent refresh done — \(items.count) items, \(newCount) newly visible")
-                LogManager.shared.info("Authoritative silent refresh done: \(items.count) items", category: .general)
-                return
+                let pendingRevealIds = Set(allMediaURLs.compactMap { url -> String? in
+                    guard let mediaId = revealMediaId(from: url) else { return nil }
+                    return mediaIdKey(mediaId)
+                })
+                let refreshedIds = Set(items.flatMap { item -> [String] in
+                    guard !item.mediaId.isEmpty else { return [] }
+                    return [item.mediaId, mediaIdKey(item.mediaId)]
+                })
+                let missingRevealIds = pendingRevealIds.subtracting(refreshedIds)
+                let isPostRevealReconciliation = reason.localizedCaseInsensitiveContains("reveal")
+                    || reason.localizedCaseInsensitiveContains("post prediction")
+
+                if isPostRevealReconciliation, !missingRevealIds.isEmpty {
+                    print("🔄 [PERF] Authoritative refresh not ready — keeping \(missingRevealIds.count) reveal overlay(s)")
+                    LogManager.shared.info("Post-reveal refresh kept local overlays; Instagram missing \(missingRevealIds.count) mediaId(s)", category: .general)
+                } else {
+                    applyAuthoritativeMediaSnapshot(
+                        items: items,
+                        nextCursor: refreshedMaxId,
+                        source: reason,
+                        clearRevealState: true
+                    )
+                    let newCount = newURLs.filter { !allMediaURLs.contains($0) }.count
+                    print("🔄 [PERF] Authoritative silent refresh done — \(items.count) items, \(newCount) newly visible")
+                    LogManager.shared.info("Authoritative silent refresh done: \(items.count) items", category: .general)
+                    return
+                }
             }
 
             // Atomic swap: reveal:// placeholders replaced with real CDN URLs.
@@ -6338,6 +6941,9 @@ struct InstagramProfileView: View {
     // "off" | "api" | "ocr"
     @AppStorage("ppTopInputMode") private var ppTopInputMode: String = "off"
     @AppStorage("combined_pp_cooldown_bypass_until") private var combinedPPCooldownBypassUntil: Double = 0
+    @AppStorage("local_combo_earliest_pp_reveal_at") private var localComboEarliestRevealAt: Double = 0
+    @AppStorage("local_combo_bio_pending_until") private var localComboBioPendingUntil: Double = 0
+    private let localComboPostPredictionDelay: TimeInterval = 5
 
     // Error alert for when reveal fails (e.g. set not uploaded)
     @State private var revealErrorTitle: String = ""
@@ -6518,6 +7124,77 @@ struct InstagramProfileView: View {
         isDigitGridInputActive
             || followingMagic.isEnabled
             || isForceReelGridInputActive
+    }
+
+    private func waitForLocalBioPostPredictionComboIfNeeded() async -> Bool {
+        guard !PostPredictionTestMode.shared.isActive else { return true }
+
+        var now = Date().timeIntervalSince1970
+        let defaults = UserDefaults.standard
+        let pendingKey = "local_combo_bio_pending_until"
+        let earliestKey = "local_combo_earliest_pp_reveal_at"
+        var pendingUntil = defaults.double(forKey: pendingKey)
+        let waitedForBioConfirmation = pendingUntil > now
+        if pendingUntil > now {
+            print("🔗 [LOCAL COMBO] Waiting for bio confirmation before Post Prediction")
+            LogManager.shared.info("Local Bio + PP waiting for biography confirmation", category: .general)
+        }
+        while pendingUntil > now {
+            let waitSeconds = min(0.25, max(0, pendingUntil - now))
+            try? await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+            now = Date().timeIntervalSince1970
+            pendingUntil = defaults.double(forKey: pendingKey)
+        }
+
+        now = Date().timeIntervalSince1970
+        let earliestRevealAt = defaults.double(forKey: earliestKey)
+        guard earliestRevealAt > now else {
+            if earliestRevealAt > 0, now > earliestRevealAt + 90 {
+                await MainActor.run { localComboEarliestRevealAt = 0 }
+            }
+            if waitedForBioConfirmation {
+                print("🔗 [LOCAL COMBO] Bio did not confirm — cancelling Post Prediction reveal")
+                LogManager.shared.warning("Local Bio + PP reveal cancelled because biography did not confirm", category: .general)
+                return false
+            }
+            return true
+        }
+
+        let waitSeconds = earliestRevealAt - now
+        print("🔗 [LOCAL COMBO] Waiting \(String(format: "%.1f", waitSeconds))s before Post Prediction")
+        LogManager.shared.info("Local Bio + PP waiting \(Int(ceil(waitSeconds)))s before reveal", category: .general)
+        try? await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+        return true
+    }
+
+    private func preArmLocalBioPostPredictionDelayIfNeeded(kinds: Set<InterfaceKind>) {
+        guard !PostPredictionTestMode.shared.isActive,
+              ActiveSetSettings.shared.isPostPredictionEnabled,
+              ActiveSetSettings.shared.activeSetId != nil else { return }
+
+        let bioEnabled = UserDefaults.standard.object(forKey: "bio_feature_enabled") == nil
+            || UserDefaults.standard.bool(forKey: "bio_feature_enabled")
+        guard bioEnabled else { return }
+
+        let sources = [
+            IntegrationsSettings.shared.bioText1Source,
+            IntegrationsSettings.shared.bioText2Source,
+            IntegrationsSettings.shared.bioText3Source,
+            IntegrationsSettings.shared.bioText4Source,
+            IntegrationsSettings.shared.bioText5Source
+        ]
+        let bioUsesThisInterface = sources.contains { source in
+            guard let kind = source.interfaceKind else { return false }
+            return kinds.contains(kind)
+        }
+        guard bioUsesThisInterface else { return }
+
+        let earliest = Date().timeIntervalSince1970 + localComboPostPredictionDelay
+        if localComboEarliestRevealAt < earliest {
+            localComboEarliestRevealAt = earliest
+            print("🔗 [LOCAL COMBO] Pre-armed \(Int(localComboPostPredictionDelay))s delay for shared Bio input")
+            LogManager.shared.info("Local Bio + PP pre-armed by shared interface input", category: .general)
+        }
     }
 
     @MainActor
@@ -6948,7 +7625,10 @@ struct InstagramProfileView: View {
                 return
             }
             showOCRPeek(label: "#\(slot)")
-            Task { await revealByCustomSlot(slot, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByCustomSlot(slot, fromSet: activeSet)
+            }
         }
         // ── List Set private selector reveal ────────────────────────────────────
         .onChange(of: pendingListReveal) { slot in
@@ -6963,7 +7643,10 @@ struct InstagramProfileView: View {
                 ? activeSet.listDisplayLabels[slot - 1]
                 : "#\(slot)"
             showOCRPeek(label: label)
-            Task { await revealByCustomSlot(slot, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByCustomSlot(slot, fromSet: activeSet)
+            }
         }
         // ── URL-scheme: Playing Card reveal ─────────────────────────────────────
         .onChange(of: pendingCardReveal) { symbol in
@@ -6977,6 +7660,7 @@ struct InstagramProfileView: View {
             // Feed the localized card name into any bio/note slot configured for a card
             // interface (Card Clock, Numpad Card, Card Lockscreen, or URL scheme).
             if let comp = cardComponents(fromSymbol: symbol) {
+                preArmLocalBioPostPredictionDelayIfNeeded(kinds: [.cardClock, .cardNumpad, .cardLockscreen])
                 onInterfaceCapture?(localizedCardName(value: comp.value, suit: comp.suit),
                                     [.cardClock, .cardNumpad, .cardLockscreen])
             }
@@ -6987,7 +7671,10 @@ struct InstagramProfileView: View {
                 return
             }
             showOCRPeek(label: symbol)
-            Task { await revealByCardSlot(symbol: symbol, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByCardSlot(symbol: symbol, fromSet: activeSet)
+            }
         }
         // ── Fake lockscreen: Number / Custom / Playing Card reveal ──────────────
         .onChange(of: pendingLockscreenDigits) { digits in
@@ -7093,7 +7780,10 @@ struct InstagramProfileView: View {
         print("📷 [OCR-PP] Numeric '\(cleaned)' → revealByDigits \(digits)")
         LogManager.shared.info("OCR Post Prediction (numeric): \(cleaned)", category: .general)
         showOCRPeek(number: cleaned)
-        Task { await revealByDigits(digits, fromSet: set) }
+        Task {
+            guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+            await revealByDigits(digits, fromSet: set)
+        }
     }
 
     private func handleWordOCRPostPrediction(_ cleaned: String) {
@@ -7115,7 +7805,10 @@ struct InstagramProfileView: View {
         print("📷 [OCR-PP] Word '\(cleaned)' → revealByLetters")
         LogManager.shared.info("OCR Post Prediction (word): \(cleaned)", category: .general)
         showOCRPeek(label: cleaned)
-        Task { await revealByLetters(cleaned, fromSet: set) }
+        Task {
+            guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+            await revealByLetters(cleaned, fromSet: set)
+        }
     }
 
     // MARK: - Lockscreen Reveal Routing
@@ -7138,6 +7831,7 @@ struct InstagramProfileView: View {
         // bio/note slot set to Card Lockscreen, and unarchive the active card set's slot.
         if activeKinds.contains(.cardLockscreen), let (value, suit) = decodeCardInput(digits) {
             let symbol = cardSymbol(value: value, suit: suit)
+            preArmLocalBioPostPredictionDelayIfNeeded(kinds: [.cardLockscreen])
             onInterfaceCapture?(localizedCardName(value: value, suit: suit), [.cardLockscreen])
             guard PostPredictionTestMode.shared.isActive || !UploadManager.shared.isActive else {
                 print("⚠️ [LOCKSCREEN] Card reveal blocked: upload is active; bio/note capture already routed")
@@ -7149,7 +7843,10 @@ struct InstagramProfileView: View {
             if let activeId = ActiveSetSettings.shared.activeCardSetId,
                let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {
                 showOCRPeek(label: symbol)
-                Task { await revealByCardSlot(symbol: symbol, fromSet: activeSet) }
+                Task {
+                    guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                    await revealByCardSlot(symbol: symbol, fromSet: activeSet)
+                }
             }
             return
         }
@@ -7159,6 +7856,7 @@ struct InstagramProfileView: View {
         // Lockscreen or Number Clock (both fullscreen digit interfaces funnel through
         // here). Runs independently of the set reveal, so bio/note injection works even
         // with no active set.
+        preArmLocalBioPostPredictionDelayIfNeeded(kinds: [.numberLockscreen, .numberClock])
         onInterfaceCapture?(input, [.numberLockscreen, .numberClock])
 
         guard PostPredictionTestMode.shared.isActive || !UploadManager.shared.isActive else {
@@ -7173,14 +7871,20 @@ struct InstagramProfileView: View {
            let activeId = ActiveSetSettings.shared.activeCustomSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
             showOCRPeek(label: "#\(slot)")
-            Task { await revealByCustomSlot(slot, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByCustomSlot(slot, fromSet: activeSet)
+            }
             return
         }
 
         if let activeId = ActiveSetSettings.shared.activeNumberSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
             showOCRPeek(number: input)
-            Task { await revealByDigits(digits, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByDigits(digits, fromSet: activeSet)
+            }
             return
         }
 
@@ -7703,10 +8407,14 @@ struct InstagramProfileView: View {
             followingOverride = nil; followerOverride = nil
             // Feed the captured card into any bio/note {textN} configured for Card Clock.
             if let comp = cardComponents(fromSymbol: cardSym) {
+                preArmLocalBioPostPredictionDelayIfNeeded(kinds: [.cardClock])
                 onInterfaceCapture?(localizedCardName(value: comp.value, suit: comp.suit), [.cardClock])
             }
             showOCRPeek(label: cardSym)
-            Task { await revealByCardSlot(symbol: cardSym, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByCardSlot(symbol: cardSym, fromSet: activeSet)
+            }
             selectedTab = 0
             return
         }
@@ -7726,7 +8434,10 @@ struct InstagramProfileView: View {
                 onUploadConflict?(); return
             }
             showOCRPeek(number: digitLabel)
-            Task { await revealByDigits(digits, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByDigits(digits, fromSet: activeSet)
+            }
 
         } else if let activeSet = activeDigitGridSet, activeSet.type == .custom {
             let slot = secretManager.digitBuffer.reduce(0) { $0 * 10 + $1 }
@@ -7739,7 +8450,10 @@ struct InstagramProfileView: View {
             }
             guard slot >= 1 else { return }
             showOCRPeek(label: "#\(slot)")
-            Task { await revealByCustomSlot(slot, fromSet: activeSet) }
+            Task {
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                await revealByCustomSlot(slot, fromSet: activeSet)
+            }
 
         } else {
             secretManager.reset()

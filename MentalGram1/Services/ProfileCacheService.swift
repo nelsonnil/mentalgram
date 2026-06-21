@@ -26,10 +26,9 @@ class ProfileCacheService: ObservableObject {
     /// and shows an empty header in the Performance view for several minutes.
     private let profileDirectory: URL
 
-    /// Where the `.jpg` thumbnails live. We keep these in `Caches/` because
-    /// iOS may purge them — and that is fine: thumbnails are cheap to re-download
-    /// from the CDN URLs that live inside `profile.json`, no Instagram API call
-    /// is needed.
+    /// Legacy Caches location kept only for one-shot migration/cleanup.
+    /// Current thumbnails live under `profileDirectory/<userId>/images` in
+    /// Application Support so Performance visuals survive iOS cache purges.
     private let imageDirectory: URL
 
     private init() {
@@ -207,8 +206,9 @@ class ProfileCacheService: ObservableObject {
         let mergedReelURLs      = incoming.cachedReelURLs.isEmpty   ? existing.cachedReelURLs   : incoming.cachedReelURLs
         let mergedReelItems     = incoming.cachedReelItems.isEmpty  ? existing.cachedReelItems  : incoming.cachedReelItems
         let mergedTaggedURLs    = incoming.cachedTaggedURLs.isEmpty ? existing.cachedTaggedURLs : incoming.cachedTaggedURLs
-        let mergedMediaURLs     = incoming.cachedMediaURLs.isEmpty  ? existing.cachedMediaURLs  : incoming.cachedMediaURLs
-        let mergedMediaItems    = incoming.cachedMediaItems.isEmpty ? existing.cachedMediaItems : incoming.cachedMediaItems
+        let mergedTaggedItems   = incoming.cachedTaggedItems.isEmpty ? existing.cachedTaggedItems : incoming.cachedTaggedItems
+        let mergedMediaItems    = mergedMediaItemsPreservingTail(incoming: incoming.cachedMediaItems, existing: existing.cachedMediaItems)
+        let mergedMediaURLs     = mergedMediaURLsPreservingTail(incomingURLs: incoming.cachedMediaURLs, mergedItems: mergedMediaItems, existingURLs: existing.cachedMediaURLs)
 
         return InstagramProfile(
             userId: incoming.userId,
@@ -232,6 +232,7 @@ class ProfileCacheService: ObservableObject {
             cachedHighlights: mergedHighlights,
             cachedMediaItems: mergedMediaItems,
             cachedReelItems: mergedReelItems,
+            cachedTaggedItems: mergedTaggedItems,
             cachedNextMaxId: incoming.cachedNextMaxId ?? existing.cachedNextMaxId
         )
     }
@@ -241,6 +242,55 @@ class ProfileCacheService: ObservableObject {
         let remoteURLs = profile.cachedMediaURLs.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
         let filteredURLs = deduplicatedURLs(remoteURLs, items: remoteItems)
         return rebuildProfile(profile, mediaURLs: filteredURLs, mediaItems: remoteItems)
+    }
+
+    private func mergedMediaItemsPreservingTail(incoming: [InstagramMediaItem], existing: [InstagramMediaItem]) -> [InstagramMediaItem] {
+        guard !incoming.isEmpty else { return existing }
+        guard existing.count > incoming.count else { return deduplicatedMediaItems(incoming) }
+
+        var seen = Set<String>()
+        var merged: [InstagramMediaItem] = []
+        for item in incoming + existing {
+            let key = item.mediaId.isEmpty ? item.imageURL : mediaIdKey(item.mediaId)
+            guard seen.insert(key).inserted else { continue }
+            merged.append(item)
+        }
+        if merged.count > incoming.count {
+            print("📦 [CACHE] Preserved media tail during partial refresh: \(incoming.count) fresh + \(merged.count - incoming.count) cached")
+        }
+        return merged
+    }
+
+    private func mergedMediaURLsPreservingTail(incomingURLs: [String], mergedItems: [InstagramMediaItem], existingURLs: [String]) -> [String] {
+        guard !incomingURLs.isEmpty else { return existingURLs }
+        let byMediaId = Dictionary(grouping: mergedItems, by: { mediaIdKey($0.mediaId) })
+        var urls = incomingURLs
+        var seenKeys = Set<String>()
+
+        for url in incomingURLs {
+            if let item = mergedItems.first(where: { $0.imageURL == url }), !item.mediaId.isEmpty {
+                seenKeys.insert(mediaIdKey(item.mediaId))
+            } else {
+                seenKeys.insert(url)
+            }
+        }
+
+        for item in mergedItems where !item.imageURL.isEmpty {
+            let key = item.mediaId.isEmpty ? item.imageURL : mediaIdKey(item.mediaId)
+            guard !seenKeys.contains(key) else { continue }
+            urls.append(item.imageURL)
+            seenKeys.insert(key)
+        }
+
+        for url in existingURLs where !urls.contains(url) {
+            guard let item = mergedItems.first(where: { $0.imageURL == url }) else { continue }
+            let key = item.mediaId.isEmpty ? url : mediaIdKey(item.mediaId)
+            guard !seenKeys.contains(key), byMediaId[key] != nil else { continue }
+            urls.append(url)
+            seenKeys.insert(key)
+        }
+
+        return urls
     }
 
     private func isCacheable(_ profile: InstagramProfile) -> Bool {
@@ -309,8 +359,9 @@ class ProfileCacheService: ObservableObject {
     func updateMediaURLsAndItems(_ urls: [String], items: [InstagramMediaItem]) {
         guard let p = cachedProfile else { return }
         let remoteURLs = urls.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
-        let remoteItems = deduplicatedMediaItems(items)
-        let filteredURLs = deduplicatedURLs(remoteURLs, items: remoteItems)
+        let remoteItems = mergedMediaItemsPreservingTail(incoming: items, existing: p.cachedMediaItems)
+        let mergedURLs = mergedMediaURLsPreservingTail(incomingURLs: remoteURLs, mergedItems: remoteItems, existingURLs: p.cachedMediaURLs)
+        let filteredURLs = deduplicatedURLs(mergedURLs, items: remoteItems)
         let updated = rebuildProfile(p, mediaURLs: filteredURLs, mediaItems: remoteItems)
         saveProfile(updated)
         print("🗂️ [CACHE] updateMediaURLsAndItems: \(filteredURLs.count) URLs, \(remoteItems.count) items saved")
@@ -433,6 +484,7 @@ class ProfileCacheService: ObservableObject {
             cachedHighlights: p.cachedHighlights,
             cachedMediaItems: mediaItems ?? p.cachedMediaItems,
             cachedReelItems: p.cachedReelItems,
+            cachedTaggedItems: p.cachedTaggedItems,
             cachedNextMaxId: p.cachedNextMaxId
         )
     }

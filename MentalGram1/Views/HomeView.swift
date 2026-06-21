@@ -96,7 +96,7 @@ struct HomeView: View {
             
             // Sets Tab - dark theme
             NavigationView {
-                SetsListView()
+                SetsListView(onContinuePreload: continuePerformancePreload)
             }
             .tabItem {
                 Label("Sets", systemImage: "square.grid.2x2.fill")
@@ -105,7 +105,7 @@ struct HomeView: View {
             
             // Settings Tab - dark theme
             NavigationView {
-                SettingsView()
+                SettingsView(onContinuePreload: continuePerformancePreload)
             }
             .tabItem {
                 Label("Settings", systemImage: "gearshape.fill")
@@ -411,6 +411,14 @@ struct HomeView: View {
         updateTabBarAppearance(forTab: 0)
     }
 
+    private func continuePerformancePreload() {
+        selectedTab = 0
+        updateTabBarAppearance(forTab: 0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            NotificationCenter.default.post(name: .performanceContinuePreload, object: nil)
+        }
+    }
+
     private func openInstagram() {
         guard let appURL = URL(string: "instagram://app") else { return }
         UIApplication.shared.open(appURL) { success in
@@ -422,6 +430,10 @@ struct HomeView: View {
 
     @MainActor
     private func archiveVisiblePhotosAndEnter() async {
+        if UploadManager.shared.activeTask != nil || UploadManager.shared.isUploading || UploadManager.shared.isActive {
+            UploadManager.shared.resetAllState()
+            LogManager.shared.warning("Upload cancelled before pre-Performance archive", category: .upload)
+        }
         let photos = visiblePhotosToArchive
         archiveProgress = (0, photos.count)
         isArchivingBeforePerformance = true
@@ -690,6 +702,7 @@ private struct PerformanceGateSheet: View {
 struct SetsListView: View {
     @ObservedObject var dataManager = DataManager.shared
     @ObservedObject var instagram = InstagramService.shared
+    var onContinuePreload: () -> Void = {}
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
     @State private var showingCreateSet = false
@@ -739,6 +752,7 @@ struct SetsListView: View {
                             .padding(.horizontal, VaultTheme.Spacing.lg)
                             .padding(.bottom, 10)
                         CooldownWarningBanner()
+                        ProfileCacheIncompleteBanner(onContinue: onContinuePreload)
                         PostRevealArchiveBanner()
 
                         // Visible 1pt bottom separator — clean hard edge
@@ -1322,12 +1336,14 @@ struct ActivityLogView: View {
 /// (new post, bio edit, new highlight, etc.).
 struct InstagramSyncCard: View {
     @ObservedObject private var instagram = InstagramService.shared
+    @ObservedObject private var uploadManager = UploadManager.shared
 
     // Last refresh timestamp — shared with PerformanceView via AppStorage.
     @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
 
     @State private var isRefreshing = false
-    @State private var showCopied  = false
+    @State private var showSyncComplete = false
+    @State private var syncFailed = false
 
     private var lastSyncText: String {
         guard lastRefreshTimestamp > 0 else {
@@ -1370,15 +1386,28 @@ struct InstagramSyncCard: View {
             // ── Refresh button ────────────────────────────────────────────
             Button {
                 guard !isRefreshing else { return }
+                showSyncComplete = false
+                syncFailed = false
+                if uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive {
+                    uploadManager.resetAllState()
+                    LogManager.shared.warning("Upload cancelled before manual Instagram refresh", category: .upload)
+                }
                 isRefreshing = true
                 NotificationCenter.default.post(name: .performanceManualRefresh, object: nil)
                 // Re-enable after 3 s — the actual callback lives in PerformanceView
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    isRefreshing = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+                    if isRefreshing {
+                        isRefreshing = false
+                        syncFailed = true
+                        showSyncComplete = true
+                    }
                 }
             } label: {
                 HStack(spacing: 6) {
-                    if isRefreshing {
+                    if showSyncComplete {
+                        Image(systemName: syncFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                    } else if isRefreshing {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(0.75)
@@ -1386,9 +1415,11 @@ struct InstagramSyncCard: View {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    Text(isRefreshing
-                         ? String(localized: "sync.refreshing")
-                         : String(localized: "sync.refresh_button"))
+                    Text(showSyncComplete
+                         ? (syncFailed ? "Sync failed" : "Synced")
+                         : (isRefreshing
+                            ? String(localized: "sync.refreshing")
+                            : String(localized: "sync.refresh_button")))
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)
@@ -1396,11 +1427,18 @@ struct InstagramSyncCard: View {
                 .background(
                     isRefreshing
                     ? Color.white.opacity(0.08)
-                    : VaultTheme.Colors.primary.opacity(0.18)
+                    : (showSyncComplete
+                       ? (syncFailed ? VaultTheme.Colors.error.opacity(0.18) : VaultTheme.Colors.success.opacity(0.18))
+                       : VaultTheme.Colors.primary.opacity(0.18))
                 )
-                .foregroundColor(isRefreshing ? VaultTheme.Colors.textTertiary : VaultTheme.Colors.primary)
+                .foregroundColor(isRefreshing
+                                 ? VaultTheme.Colors.textTertiary
+                                 : (showSyncComplete
+                                    ? (syncFailed ? VaultTheme.Colors.error : VaultTheme.Colors.success)
+                                    : VaultTheme.Colors.primary))
                 .cornerRadius(8)
                 .animation(.easeInOut(duration: 0.2), value: isRefreshing)
+                .animation(.easeInOut(duration: 0.2), value: showSyncComplete)
             }
             .disabled(isRefreshing || !instagram.isLoggedIn)
         }
@@ -1408,9 +1446,16 @@ struct InstagramSyncCard: View {
         .background(Color.white.opacity(0.04))
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(VaultTheme.Colors.primary.opacity(0.18), lineWidth: 1))
-        // Re-read the timestamp when the app comes to foreground or after a refresh
-        .onChange(of: lastRefreshTimestamp) { _ in
-            if isRefreshing { isRefreshing = false }
+        .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefreshResult)) { notification in
+            guard isRefreshing else { return }
+            let success = (notification.userInfo?["success"] as? Bool) ?? false
+            isRefreshing = false
+            syncFailed = !success
+            showSyncComplete = true
+            UINotificationFeedbackGenerator().notificationOccurred(success ? .success : .error)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                withAnimation { showSyncComplete = false }
+            }
         }
     }
 }
@@ -1702,6 +1747,120 @@ struct CooldownWarningBanner: View {
     }
 }
 
+// MARK: - Profile Cache Incomplete Banner
+
+/// Fixed pre-performance warning shown when the first-time Performance cache was
+/// interrupted before posts/extras were fully warmed.
+struct ProfileCacheIncompleteBanner: View {
+    @ObservedObject private var instagram = InstagramService.shared
+    @ObservedObject private var profileCache = ProfileCacheService.shared
+    @Environment(\.scenePhase) private var scenePhase
+
+    var onContinue: () -> Void
+
+    @State private var tick = 0
+    private let targetPosts = 45
+
+    private var currentUserId: String {
+        KeychainService.shared.loadSession()?.userId ?? profileCache.cachedProfile?.userId ?? ""
+    }
+
+    private var cachedProfile: InstagramProfile? {
+        if let cached = profileCache.cachedProfile, cached.userId == currentUserId {
+            return cached
+        }
+        return ProfileCacheService.shared.loadProfile()
+    }
+
+    private var status: (cached: Int, required: Int, optionalDone: Bool)? {
+        _ = tick
+        guard instagram.isLoggedIn,
+              !currentUserId.isEmpty,
+              let cached = cachedProfile,
+              cached.userId == currentUserId,
+              !cached.cachedMediaURLs.isEmpty else { return nil }
+
+        let noMoreKey = "perf_no_more_pages_\(currentUserId)"
+        let fullKey = "perf_fully_preloaded_\(currentUserId)"
+        let optionalKey = "perf_optional_preloaded_\(currentUserId)"
+        let noMore = UserDefaults.standard.bool(forKey: noMoreKey) && cached.cachedNextMaxId == nil
+        let required = min(targetPosts, cached.mediaCount > 0 ? cached.mediaCount : targetPosts)
+        let postsComplete = noMore || (cached.cachedMediaURLs.count >= required && cached.cachedMediaItems.count >= required)
+        let optionalWasTracked = UserDefaults.standard.object(forKey: optionalKey) != nil
+        let optionalDone = !optionalWasTracked || UserDefaults.standard.bool(forKey: optionalKey)
+        let optionalIncomplete = optionalWasTracked && !optionalDone
+
+        guard !UserDefaults.standard.bool(forKey: fullKey) || !postsComplete || optionalIncomplete else { return nil }
+        guard !postsComplete || optionalIncomplete else { return nil }
+        return (cached.cachedMediaURLs.count, required, !optionalIncomplete)
+    }
+
+    private var reasonText: String {
+        let rate = instagram.checkRateLimit()
+        if instagram.shouldUseCacheOnlyForOptionalCalls || rate.remaining <= 12 {
+            return "Reason: API budget is low (\(rate.actionsUsed)/55 used). Continue later to avoid Instagram safety limits."
+        }
+        let decision = InstagramSafetyGate.shared.decision(for: .entryRefresh)
+        if !decision.allowed {
+            return "Reason: Instagram safety cooldown is active. Wait \(decision.waitSeconds)s, then continue."
+        }
+        return "Reason: loading may have paused because the app went background, API cooldown was active, or optional tabs were deferred."
+    }
+
+    var body: some View {
+        if let status {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundColor(Color.red.opacity(0.45))
+                    .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Profile cache incomplete")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundColor(Color.red.opacity(0.55))
+
+                    Text("Cached \(status.cached)/\(status.required) posts. Highlights, Reels or Tagged may still be missing.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Color.red.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(reasonText)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color.red.opacity(0.68))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button(action: onContinue) {
+                        Label("Continue loading", systemImage: "arrow.down.circle.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.75)))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.red.opacity(0.08))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3), lineWidth: 1))
+            )
+            .padding(.horizontal, VaultTheme.Spacing.lg)
+            .padding(.bottom, 8)
+            .onAppear { tick += 1 }
+            .onChange(of: scenePhase) { phase in
+                if phase == .active { tick += 1 }
+            }
+            .onReceive(profileCache.$cachedProfile) { _ in tick += 1 }
+        }
+    }
+}
+
 // MARK: - Post-Reveal Re-Archive Banner
 
 /// Fixed red pre-performance warning shown while Instagram-facing state still needs cleanup.
@@ -1724,11 +1883,14 @@ struct PostRevealArchiveBanner: View {
     @State private var blink: Bool          = false
     @State private var refreshTick: Int     = 0
 
-    // Photos that are currently visible on Instagram and should be re-archived before performance.
+    // Photos that are locally known as visible on Instagram and should be
+    // re-archived before performance. Do not require `.completed`: interrupted
+    // uploads can leave a visible mediaId with `.uploaded`, `.archiving`, or
+    // `.error`, and the warning must still be shown.
     private var revealedPhotos: [(setId: UUID, photo: SetPhoto)] {
         dataManager.sets.flatMap { set in
             set.photos
-                .filter { !$0.isArchived && $0.mediaId != nil && $0.uploadStatus == .completed }
+                .filter { !$0.isArchived && $0.mediaId != nil }
                 .map { (set.id, $0) }
         }
     }
@@ -1771,29 +1933,29 @@ struct PostRevealArchiveBanner: View {
                 Text(isArchiving
                      ? String(format: String(localized: "post_reveal_archive.archiving"), doneSoFar, totalToArchive)
                      : bannerTitle)
-                    .font(.system(size: 13, weight: .black))
+                    .font(.system(size: 15, weight: .black))
                     .foregroundColor(blink ? .red : Color.red.opacity(0.45))
                     .scaleEffect(blink ? 1.03 : 1.0, anchor: .leading)
                     .animation(.easeInOut(duration: 0.5), value: blink)
 
                 if let err = archiveError {
                     Text(String(format: String(localized: "post_reveal_archive.error"), err))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if postRevealLeft > 0 {
                     Text(String(format: String(localized: "post_reveal_archive.cooldown"), formatSeconds(postRevealLeft)))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(blink ? .red : Color.red.opacity(0.8))
                         .animation(.easeInOut(duration: 0.5), value: blink)
-                } else if isUploadActive {
-                    Text(String(localized: "post_reveal_archive.upload_active"))
-                        .font(.system(size: 11, weight: .semibold))
+                } else if isUploadSetActive {
+                    Text("Active upload will be stopped before archiving.")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Color.red.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
                 } else if !isArchiving {
                     Text(bannerDescription)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Color.red.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1835,18 +1997,18 @@ struct PostRevealArchiveBanner: View {
 
     private var bannerTitle: String {
         if count > 0 {
-            return "Visible photos before performance (\(count))"
+            return String(format: String(localized: "home.preperformance.visible_photos.title"), count)
         }
-        return "Amnesia Carousel needs reset"
+        return String(localized: "home.preperformance.amnesia_reset.title")
     }
 
     private var bannerDescription: String {
         var parts: [String] = []
         if count > 0 {
-            parts.append("Archive visible photos before entering Performance so they do not appear publicly on Instagram.")
+            parts.append(String(localized: "home.preperformance.visible_photos.description"))
         }
         if hasAmnesiaPendingReset {
-            parts.append("Amnesia Carousel is revealed — reset it before the next show.")
+            parts.append(String(localized: "home.preperformance.amnesia_reset.description"))
         }
         return parts.joined(separator: " ")
     }
@@ -1854,14 +2016,14 @@ struct PostRevealArchiveBanner: View {
     private var archiveButtonEnabled: Bool {
         !isArchiving
         && postRevealLeft == 0
-        && !isUploadActive
+        && !uploadManager.isSyncArchiveActive
         && !instagram.isLocked
         && !instagram.isSessionChallenged
         && !instagram.isSessionExpired
     }
 
-    private var isUploadActive: Bool {
-        uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isSyncArchiveActive
+    private var isUploadSetActive: Bool {
+        uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive
     }
 
     // MARK: - Archive action
@@ -1869,11 +2031,12 @@ struct PostRevealArchiveBanner: View {
     private func runArchive() async {
         let photos = revealedPhotos
         guard !photos.isEmpty else { return }
-        guard !isUploadActive else {
+        if isUploadSetActive {
             await MainActor.run {
-                archiveError = String(localized: "post_reveal_archive.upload_active")
+                uploadManager.resetAllState()
+                LogManager.shared.warning("Upload cancelled before visible-photo archive", category: .upload)
             }
-            return
+            try? await Task.sleep(nanoseconds: 300_000_000)
         }
 
         await MainActor.run {
@@ -1904,7 +2067,7 @@ struct PostRevealArchiveBanner: View {
                 let success = try await instagram.archivePhoto(mediaId: mediaId, skipPreCheck: true)
                 if success {
                     await MainActor.run {
-                        dataManager.updatePhoto(photoId: photo.id, isArchived: true)
+                        dataManager.updatePhoto(photoId: photo.id, isArchived: true, uploadStatus: .completed, errorMessage: nil)
                         ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                         doneSoFar += 1
                     }
@@ -2170,6 +2333,7 @@ struct SettingsView: View {
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @ObservedObject private var profileCache = ProfileCacheService.shared
     @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
+    var onContinuePreload: () -> Void = {}
     @State private var settingsProfilePic: UIImage? = nil
     @State private var showingLogoutAlert = false
     @State private var showingFollowerData = false
@@ -2265,33 +2429,7 @@ struct SettingsView: View {
         ZStack(alignment: .top) {
             Color(hex: "0F0F0F").ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // ── Fixed status console (does not scroll) ───────────────────
-                if instagram.isLoggedIn {
-                    VStack(spacing: 0) {
-                        APIBudgetWidget()
-                            .padding(.horizontal, VaultTheme.Spacing.lg)
-                            .padding(.top, 10)
-                            .padding(.bottom, 6)
-                        InstagramSyncCard()
-                            .padding(.horizontal, VaultTheme.Spacing.lg)
-                            .padding(.bottom, 10)
-                        CooldownWarningBanner()
-                        PostRevealArchiveBanner()
-
-                        // Visible 1pt bottom separator
-                        Color.white.opacity(0.18).frame(height: 1)
-                    }
-                    .background(
-                        Color(hex: "222222")
-                            .ignoresSafeArea(edges: .top)
-                    )
-                    .shadow(color: .black.opacity(0.55), radius: 10, x: 0, y: 5)
-                }
-
-                // ── Scrollable content ────────────────────────────────────────
-                mainScrollView
-            }
+            mainScrollView
         }
         .navigationBarHidden(true)
         // Use environment (not preferredColorScheme) so the dark theme stays local to
@@ -2412,12 +2550,12 @@ struct SettingsView: View {
                                 .foregroundColor(VaultTheme.Colors.textPrimary)
                 }
                 Text("Detected \(visibleSetPhotosCount) visible photo(s) in \(setsWithVisiblePhotosCount) set(s). Re-verify and archive in Sets before opening Performance.")
-                                        .font(VaultTheme.Typography.caption())
+                                        .font(VaultTheme.Typography.body())
                                         .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if hasAmnesiaPendingReset {
                     Text("Amnesia Carousel is revealed. Open Amnesia Carousel and press Reset before the next show.")
-                                        .font(VaultTheme.Typography.caption())
+                                        .font(VaultTheme.Typography.body())
                         .foregroundColor(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -7229,6 +7367,7 @@ private struct InitialProfileLoadView: View {
         }) {
             taggedLoaded = taggedItems.count
             var updated = profile
+            updated.cachedTaggedItems = taggedItems
             updated.cachedTaggedURLs = taggedItems.map { $0.imageURL }
             updated.cachedAt         = Date()
             profile = updated

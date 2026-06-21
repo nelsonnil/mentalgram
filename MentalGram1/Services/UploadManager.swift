@@ -55,10 +55,12 @@ class UploadManager: ObservableObject {
     @Published var reverifyTotal: Int = 0
     @Published var reverifyDesynced: Int = 0
     @Published var reverifyError: String? = nil   // shown in UI when fetch fails
+    @Published var reverifyStatusMessage: String? = nil
     var reverifyTask: Task<Void, Never>? = nil
     
     // MARK: - Active Upload Task (to detect orphaned states)
     var activeTask: Task<Void, Never>? = nil
+    var cancellationGeneration: Int = 0
     
     // MARK: - Background / Foreground persistence
     /// Absolute timestamp when the current wait/cooldown ends (persisted to UserDefaults).
@@ -163,6 +165,7 @@ class UploadManager: ObservableObject {
     
     // MARK: - Reset All State (when upload completes or is cancelled)
     func resetAllState() {
+        cancellationGeneration += 1
         resetErrorState()
         activeSetId = nil
         uploadPhase = .idle

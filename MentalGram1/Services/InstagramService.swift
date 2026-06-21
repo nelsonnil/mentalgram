@@ -3520,6 +3520,7 @@ class InstagramService: ObservableObject {
                     cachedTaggedURLs: existing?.cachedTaggedURLs ?? [],
                     cachedHighlights: existing?.cachedHighlights ?? [],
                     cachedReelItems: existing?.cachedReelItems ?? [],
+                    cachedTaggedItems: existing?.cachedTaggedItems ?? [],
                     cachedNextMaxId: existing?.cachedNextMaxId
                 )
                 var snapshotWithItems = snapshot
@@ -5293,6 +5294,7 @@ class InstagramService: ObservableObject {
             cachedHighlights: profile.cachedHighlights,
             cachedMediaItems: profile.cachedMediaItems,
             cachedReelItems: profile.cachedReelItems,
+            cachedTaggedItems: profile.cachedTaggedItems,
             cachedNextMaxId: profile.cachedNextMaxId
         )
 
@@ -6307,6 +6309,7 @@ class InstagramService: ObservableObject {
                         cachedReelURLs: cached.cachedReelURLs, cachedTaggedURLs: cached.cachedTaggedURLs,
                         cachedHighlights: cached.cachedHighlights,
                         cachedReelItems: cached.cachedReelItems,
+                        cachedTaggedItems: cached.cachedTaggedItems,
                         cachedNextMaxId: cached.cachedNextMaxId
                     )
                     ProfileCacheService.shared.saveProfile(updated)
@@ -8129,16 +8132,17 @@ final class InstagramSafetyGate {
     /// HTTP 403 in the May 15 bot detection log.
     private let setSyncMinGap: TimeInterval = 300 // 5 minutes
 
-    func canSyncSet(setId: String) -> Decision {
+    func canSyncSet(setId: String, minGap: TimeInterval? = nil) -> Decision {
         lock.lock()
         defer { lock.unlock() }
+        let requiredGap = minGap ?? setSyncMinGap
         let now = Date().timeIntervalSince1970
         let key = self.key("set_sync_at_\(setId)")
         let last = defaults.double(forKey: key)
         guard last > 0 else { return .allowed }
         let elapsed = now - last
-        guard elapsed < setSyncMinGap else { return .allowed }
-        let wait = max(1, Int(setSyncMinGap - elapsed))
+        guard elapsed < requiredGap else { return .allowed }
+        let wait = max(1, Int(requiredGap - elapsed))
         return Decision(allowed: false, waitSeconds: wait, reason: "same set synced recently")
     }
 
