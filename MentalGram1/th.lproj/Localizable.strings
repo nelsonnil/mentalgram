@@ -26,7 +26,7 @@
 "backup.just_now" = "เมื่อกี้";
 "backup.min_ago" = "%d นาทีที่แล้ว";
 "backup.h_ago" = "%d ชั่วโมงที่แล้ว";
-"backup.info.auto" = "การสำรองข้อมูลจะทำงานเฉพาะเมื่อแตะ \"สำรองข้อมูลทันที\" เท่านั้น และจะไม่เขียนทับ iCloud โดยอัตโนมัติ";
+"backup.info.auto" = "การสำรองข้อมูลทำงานโดยอัตโนมัติและปลอดภัย — จะไม่เขียนทับข้อมูลสำรอง iCloud ที่ดีอยู่แล้วหรือข้อมูลของบัญชีอื่น คุณยังสั่งทำเองได้ด้วย \"สำรองข้อมูลทันที\"";
 "backup.info.what" = "สิ่งที่สำรอง: การตั้งค่าทั้งหมด, Date Force, Force Reel, เซตที่ใช้งานอยู่ และข้อมูลเมตาของเซต";
 "backup.info.photos" = "ภาพถ่ายของเซตจะซิงค์กับ iCloud Drive ดูได้ในแอป ไฟล์ → iCloud Drive → Vault → Photos";
 "backup.info.excluded" = "ไม่สำรอง: เซสชัน Instagram, ID อุปกรณ์ และตัวจับเวลา cooldown (เฉพาะอุปกรณ์)";
@@ -156,6 +156,8 @@
 "settings.restore_settings" = "คืนค่าการตั้งค่าแล้ว";
 "settings.latest_follower" = "ผู้ติดตามล่าสุด";
 "settings.icloud_applied" = "นำสำรองข้อมูล iCloud มาใช้สำเร็จ";
+"restore.progress.title" = "กำลังกู้คืนข้อมูลของคุณ…";
+"restore.progress.subtitle" = "อาจใช้เวลาสองสามวินาที โปรดเปิดแอปค้างไว้";
 "integrations.title" = "Inject และ API กำหนดเอง";
 "integrations.open_service" = "เปิด**แอปทางการ**ของบริการที่เชื่อมต่อ";
 "integrations.login" = "เข้าสู่ระบบบัญชีของคุณ";
@@ -1063,6 +1065,7 @@
 "initial_load.estimated_time" = "อาจใช้เวลาหลายนาที";
 "initial_load.one_time_promise" = "ครั้งนี้ครั้งเดียว — ครั้งหน้าคุณจะเข้าได้ทันที";
 "initial_load.footer" = "หากคุณอัปโหลดรูปใหม่ลง Instagram ในภายหลัง ให้รีเฟรช Performance ด้วยตนเองเพื่ออัปเดตแคช";
+"initial_load.exit" = "ออก";
 "initial_load.error.session" = "เซสชันหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่เพื่อดำเนินการต่อ";
 "initial_load.error.load_failed" = "ไม่สามารถโหลดโปรไฟล์ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง";
 "guide.amnesia.script.climax.text" = "'เปิด Instagram อีกครั้ง หาโพสต์เดิม'\n\n[ผู้ชมเห็น 5 รูป]\n\n'เห็นกี่รูป?' — ห้ารูป\n\n'ดูวันที่ เหมือนกับก่อนหน้าไหม?' — ใช่\n\n'Instagram ไม่โกหก มันไม่สามารถแก้ไขวันที่ได้ มันถูกอัพโหลดแบบนี้'\n\n[หยุด]\n\n'สิ่งที่เกิดขึ้นไม่ใช่คุณลืมรูป จิตใจของคุณถูกนำทางให้ไม่มองเห็นมัน และตอนนี้คุณรู้แล้วว่าสิ่งนั้นเป็นไปได้'";
@@ -1402,3 +1405,4 @@ Chai interface dai khrae nueng prapet tho khriang samrap Sets, Bio lae Notes. Da
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "เมื่อเปิด Performance แอปจะอ่านค่าปัจจุบันจาก API เพื่อใช้เป็นค่าอ้างอิงเท่านั้น และจะไม่ใช้คำเก่านั้น แอปจะ polling ประมาณทุก 2 วินาที และทำงานเฉพาะเมื่อมีค่าใหม่เข้ามา หาก API นี้ใช้ร่วมกับ input อื่น แอปจะรอให้ได้ค่าครบทั้งสองค่าก่อนส่ง";

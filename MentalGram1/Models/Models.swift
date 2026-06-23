@@ -224,6 +224,7 @@ enum AlphabetType: String, Codable, CaseIterable {
     case korean     = "korean"
     // Southeast Asia
     case thai       = "thai"
+    case vietnamese = "vietnamese"
     case burmese    = "burmese"
     case khmer      = "khmer"
     case lao        = "lao"
@@ -260,6 +261,7 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .chinese:    return "Chinese (一-了)"
         case .korean:     return "Korean (가-코)"
         case .thai:       return "Thai (ก-ฮ)"
+        case .vietnamese: return "Vietnamese (A-Y+diacritics)"
         case .burmese:    return "Burmese (က-အ)"
         case .khmer:      return "Khmer (ក-អ)"
         case .lao:        return "Lao (ກ-ຮ)"
@@ -297,6 +299,7 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .chinese:    return "🇨🇳"
         case .korean:     return "🇰🇷"
         case .thai:       return "🇹🇭"
+        case .vietnamese: return "🇻🇳"
         case .burmese:    return "🇲🇲"
         case .khmer:      return "🇰🇭"
         case .lao:        return "🇱🇦"
@@ -360,6 +363,8 @@ enum AlphabetType: String, Codable, CaseIterable {
             return ["가","나","다","라","마","바","사","아","자","차","카","타","파","하","개","내","대","래","매","배","새","애","재","채","캐","태","패","해","고","노","도","로","모","보","소","오","조","초","코"]
         case .thai:
             return ["ก","ข","ค","ง","จ","ฉ","ช","ซ","ญ","ด","ต","ถ","ท","น","บ","ป","ผ","ฝ","พ","ฟ","ภ","ม","ย","ร","ล","ว","ศ","ส","ห","อ","ฮ"]
+        case .vietnamese:
+            return ["A","Ă","Â","B","C","D","Đ","E","Ê","G","H","I","K","L","M","N","O","Ô","Ơ","P","Q","R","S","T","U","Ư","V","X","Y"]
         case .burmese:
             return ["က","ခ","ဂ","ဃ","င","စ","ဆ","ဇ","ဈ","ဉ","ည","ဋ","ဌ","ဍ","ဎ","ဏ","တ","ထ","ဒ","ဓ","န","ပ","ဖ","ဗ","ဘ","မ","ယ","ရ","လ","ဝ","သ","ဟ","ဠ","အ"]
         case .khmer:

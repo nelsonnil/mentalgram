@@ -26,7 +26,7 @@
 "backup.just_now" = "अभी-अभी";
 "backup.min_ago" = "%d मिनट पहले";
 "backup.h_ago" = "%d घंटे पहले";
-"backup.info.auto" = "बैकअप केवल \"अभी बैकअप करें\" दबाने पर चलता है। यह iCloud को अपने आप कभी ओवरराइट नहीं करता।";
+"backup.info.auto" = "बैकअप अपने आप और सुरक्षित रूप से चलता है — यह कभी भी अच्छे iCloud बैकअप या किसी अन्य खाते के डेटा को ओवरराइट नहीं करता। आप \"अभी बैकअप करें\" से इसे मैन्युअल रूप से भी चला सकते हैं।";
 "backup.info.what" = "क्या सेव होता है: सभी सेटिंग्स, Date Force, Force Reel, सक्रिय सेट और सेट मेटाडेटा।";
 "backup.info.photos" = "सेट की फ़ोटो iCloud Drive से सिंक होती हैं। फ़ाइलें ऐप → iCloud Drive → Vault → Photos में देखें।";
 "backup.info.excluded" = "सेव नहीं होता: Instagram सेशन, डिवाइस ID और कूलडाउन टाइमर (डिवाइस-विशिष्ट).";
@@ -156,6 +156,8 @@
 "settings.restore_settings" = "सेटिंग्स पुनर्स्थापित हुईं";
 "settings.latest_follower" = "नवीनतम फ़ॉलोअर";
 "settings.icloud_applied" = "iCloud बैकअप सफलतापूर्वक लागू हुआ";
+"restore.progress.title" = "आपका डेटा पुनर्स्थापित किया जा रहा है…";
+"restore.progress.subtitle" = "इसमें कुछ सेकंड लग सकते हैं। कृपया ऐप खुला रखें।";
 "integrations.title" = "Inject और कस्टम API";
 "integrations.open_service" = "जुड़ी सेवा का **आधिकारिक ऐप** खोलें";
 "integrations.login" = "अपने खाते में लॉगिन करें";
@@ -1063,6 +1065,7 @@
 "initial_load.estimated_time" = "इसमें कई मिनट लग सकते हैं";
 "initial_load.one_time_promise" = "केवल इस बार — अगली बार आप तुरंत प्रवेश करेंगे।";
 "initial_load.footer" = "यदि आप बाद में Instagram पर नई तस्वीरें अपलोड करते हैं, तो कैश अपडेट करने के लिए Performance को मैन्युअल रूप से रीफ्रेश करें।";
+"initial_load.exit" = "बाहर निकलें";
 "initial_load.error.session" = "सत्र समाप्त हो गया। जारी रखने के लिए पुनः लॉग इन करें।";
 "initial_load.error.load_failed" = "प्रोफ़ाइल लोड नहीं हो सकी। कनेक्शन जांचें और पुनः प्रयास करें।";
 "guide.amnesia.script.climax.text" = "'Instagram फिर खोलिए। वही पोस्ट ढूंढिए।'\n\n[दर्शक 5 छवियां देखता है]\n\n'कितनी दिख रही हैं?' — पांच।\n\n'तिथि देखिए। वही है जो पहले देखी थी?' — हां।\n\n'Instagram झूठ नहीं बोलता। यह तिथियां नहीं बदल सकता।'\n\n[रुकें]\n\n'जो हुआ वह यह नहीं है कि आप एक छवि भूल गए। आपका मन इसे न देखने के लिए निर्देशित था। और अब आप जानते हैं कि यह संभव है।'";
@@ -1402,3 +1405,4 @@ Sets, Bio aur Notes mein ek samay par keval ek interface prakar sakriy ho sakta 
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Performance खोलते समय ऐप API की मौजूदा वैल्यू को केवल baseline के रूप में पढ़ता है। वह पुराना शब्द इस्तेमाल नहीं होता। ऐप लगभग हर 2 सेकंड में polling करता है और केवल नया value आने पर trigger करता है। अगर यह API किसी दूसरे input के साथ जुड़ी है, तो भेजने से पहले दोनों values का इंतज़ार करता है।";

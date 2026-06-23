@@ -183,6 +183,33 @@ class ProfileCacheService: ObservableObject {
         DispatchQueue.main.async { self.cachedProfile = merged }
     }
 
+    /// Saves a profile directly to disk and memory WITHOUT calling mergeWithCachedIfNeeded.
+    /// Use this for explicit item removals and authoritative replacements where the incoming
+    /// profile already represents the definitive state — merging would re-add removed items.
+    private func saveProfileStrict(_ profile: InstagramProfile) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(profile) {
+            let directory = userProfileDirectory(for: profile.userId)
+            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try? data.write(to: directory.appendingPathComponent("profile.json"))
+            print("✅ Profile strictly saved (no merge) for userId=\(profile.userId)")
+        }
+        DispatchQueue.main.async { self.cachedProfile = profile }
+    }
+
+    /// Public strict save for full authoritative refreshes. Unlike `saveProfile`, this does
+    /// not preserve the old media tail, so posts deleted on Instagram disappear locally too.
+    func saveProfileAuthoritative(_ profile: InstagramProfile) {
+        let sanitized = sanitizeProfileSnapshot(profile)
+        guard isCacheable(sanitized) else {
+            print("🛡️ [CACHE] Refusing to strictly cache invalid authoritative profile userId=\(sanitized.userId)")
+            LogManager.shared.warning("Authoritative profile cache rejected invalid profile userId=\(sanitized.userId)", category: .profile)
+            return
+        }
+        saveProfileStrict(sanitized)
+    }
+
     /// Returns the incoming profile after copying any non-empty header / counts
     /// fields from `cachedProfile` when the incoming one has them blank or zero.
     /// Media arrays are also preserved when the incoming side is empty — this
@@ -312,6 +339,97 @@ class ProfileCacheService: ObservableObject {
         return hasStats
     }
 
+    /// A Performance entry may show secret fullscreen input only when this is true.
+    /// After the input closes, the fake Instagram profile must paint immediately from
+    /// disk, without depending on a live Instagram request.
+    func isUsableForPerformance(_ profile: InstagramProfile, userId: String? = nil) -> Bool {
+        let expectedUserId = (userId ?? activeUserId() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard expectedUserId.isEmpty || profile.userId == expectedUserId else { return false }
+        guard isCacheable(profile) else { return false }
+        guard !profile.cachedMediaURLs.isEmpty, !profile.cachedMediaItems.isEmpty else { return false }
+        return true
+    }
+
+    func hasUsablePerformanceCache(userId: String? = nil) -> Bool {
+        guard let profile = loadProfile() else { return false }
+        return isUsableForPerformance(profile, userId: userId)
+    }
+
+    func requiredPerformancePreloadPosts(
+        for profile: InstagramProfile,
+        targetPosts: Int = 45,
+        maxPosts: Int = 100
+    ) -> Int {
+        let expected = profile.mediaCount > 0 ? profile.mediaCount : targetPosts
+        return min(targetPosts, expected, maxPosts)
+    }
+
+    /// "Usable" means the fake profile can paint from disk. "Complete" means the
+    /// first-install Performance cache has enough posts to avoid the 12/45 or 23/45
+    /// partial-grid state. Keep these separate so a partial cache can render while the
+    /// blocking/continue loader finishes the remaining pages.
+    func hasCompletePerformancePreloadCache(
+        _ profile: InstagramProfile,
+        userId: String? = nil,
+        targetPosts: Int = 45,
+        maxPosts: Int = 100
+    ) -> Bool {
+        let expectedUserId = (userId ?? activeUserId() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard expectedUserId.isEmpty || profile.userId == expectedUserId else { return false }
+        guard isUsableForPerformance(profile, userId: expectedUserId) else { return false }
+
+        let noMoreKey = "perf_no_more_pages_\(profile.userId)"
+        if UserDefaults.standard.bool(forKey: noMoreKey), profile.cachedNextMaxId == nil {
+            return true
+        }
+
+        let required = requiredPerformancePreloadPosts(for: profile, targetPosts: targetPosts, maxPosts: maxPosts)
+        return profile.cachedMediaURLs.count >= required && profile.cachedMediaItems.count >= required
+    }
+
+    func hasCompletePerformancePreloadCache(
+        userId: String? = nil,
+        targetPosts: Int = 45,
+        maxPosts: Int = 100
+    ) -> Bool {
+        guard let profile = loadProfile() else { return false }
+        return hasCompletePerformancePreloadCache(profile, userId: userId, targetPosts: targetPosts, maxPosts: maxPosts)
+    }
+
+    func performancePreloadSnapshot(userId: String? = nil) -> String {
+        let expectedUserId = (userId ?? activeUserId() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let profile = loadProfile() else {
+            return "userId=\(expectedUserId.isEmpty ? "unknown" : expectedUserId) cache=nil"
+        }
+        let required = requiredPerformancePreloadPosts(for: profile)
+        let fullKey = "perf_fully_preloaded_\(profile.userId)"
+        let optionalKey = "perf_optional_preloaded_\(profile.userId)"
+        let noMoreKey = "perf_no_more_pages_\(profile.userId)"
+        let reasonKey = "perf_last_preload_exit_reason_\(profile.userId)"
+        let usable = isUsableForPerformance(profile, userId: expectedUserId)
+        let complete = hasCompletePerformancePreloadCache(profile, userId: expectedUserId)
+        let optionalValue = UserDefaults.standard.object(forKey: optionalKey).map { "\($0)" } ?? "nil"
+        let lastReason = UserDefaults.standard.string(forKey: reasonKey) ?? "nil"
+        return "userId=\(profile.userId) urls=\(profile.cachedMediaURLs.count) items=\(profile.cachedMediaItems.count) mediaCount=\(profile.mediaCount) required=\(required) cursor=\(profile.cachedNextMaxId == nil ? "nil" : "saved") usable=\(usable) complete=\(complete) fullFlag=\(UserDefaults.standard.bool(forKey: fullKey)) noMoreFlag=\(UserDefaults.standard.bool(forKey: noMoreKey)) optionalFlag=\(optionalValue) lastReason=\(lastReason)"
+    }
+
+    func recordPerformancePreloadExit(
+        reason: String,
+        userId: String,
+        cachedCount: Int,
+        requiredCount: Int,
+        retrySeconds: Int? = nil,
+        context: String = ""
+    ) {
+        guard !userId.isEmpty else { return }
+        var value = "\(reason)|cached=\(cachedCount)/\(requiredCount)"
+        if let retrySeconds { value += "|retry=\(retrySeconds)s" }
+        if !context.isEmpty { value += "|\(context)" }
+        UserDefaults.standard.set(value, forKey: "perf_last_preload_exit_reason_\(userId)")
+        print("📦 [PRELOAD-STATE] \(value)")
+        LogManager.shared.info("Performance preload exit: \(value)", category: .general)
+    }
+
     /// Returns true when the profile currently in memory is missing the visible
     /// identity fields (header username + pic) needed to render the fake IG view.
     /// PerformanceView reads this on entry and triggers a background rebuild.
@@ -367,6 +485,21 @@ class ProfileCacheService: ObservableObject {
         print("🗂️ [CACHE] updateMediaURLsAndItems: \(filteredURLs.count) URLs, \(remoteItems.count) items saved")
     }
 
+    /// Authoritative replacement: saves exactly what Instagram returned, no tail preservation.
+    /// Use this for full-grid refreshes and archive-sync so removed/archived posts do not
+    /// linger in the local cache. `updateMediaURLsAndItems` (tail-preserving) is for
+    /// background partial refreshes where pagination has not returned all pages yet.
+    func replaceMediaURLsAndItems(_ urls: [String], items: [InstagramMediaItem]) {
+        guard let p = cachedProfile else { return }
+        let strictURLs = urls.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
+        let strictItems = deduplicatedMediaItems(items)
+        let filteredURLs = deduplicatedURLs(strictURLs, items: strictItems)
+        let updated = rebuildProfile(p, mediaURLs: filteredURLs, mediaItems: strictItems)
+        // Use strict save: no merge so archived posts are not re-added from the old cache tail.
+        saveProfileStrict(updated)
+        print("🗂️ [CACHE] replaceMediaURLsAndItems (authoritative): \(filteredURLs.count) URLs, \(strictItems.count) items saved")
+    }
+
     /// Removes a photo by mediaId from both the URL list and the full items list.
     /// Call after successfully archiving a photo — PerformanceView reacts instantly via onChange.
     func removeMediaItem(byMediaId mediaId: String) {
@@ -397,7 +530,10 @@ class ProfileCacheService: ObservableObject {
         items.removeAll { targetKeys.contains(mediaIdKey($0.mediaId)) }
 
         p = rebuildProfile(p, mediaURLs: urls, mediaItems: items)
-        saveProfile(p)
+        // Use strict save to prevent mergeWithCachedIfNeeded re-adding the removed item.
+        // The standard saveProfile merge would see existing.count > incoming.count and
+        // append the just-removed item back as "tail", defeating the removal entirely.
+        saveProfileStrict(p)
         let removedURLs = beforeURLCount - urls.count
         let removedItems = beforeItemCount - items.count
         if removedURLs == 0 && removedItems == 0 {

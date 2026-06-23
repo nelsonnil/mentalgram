@@ -50,6 +50,23 @@ class ActiveSetSettings: ObservableObject {
         migrateFromPerTypeKeysIfNeeded()
     }
 
+    func reloadFromUserDefaults() {
+        activeSetId = ActiveSetSettings.loadId(key: "activeSetId")
+        if let raw = UserDefaults.standard.string(forKey: "activeSetType") {
+            activeSetType = SetType(rawValue: raw)
+        } else {
+            activeSetType = nil
+        }
+
+        if UserDefaults.standard.object(forKey: "postPredictionEnabled") == nil {
+            isPostPredictionEnabled = activeSetId != nil
+        } else {
+            isPostPredictionEnabled = UserDefaults.standard.bool(forKey: "postPredictionEnabled")
+        }
+        migrateFromPerTypeKeysIfNeeded()
+        print("⭐ [ACTIVE SET] Reloaded settings from UserDefaults after restore")
+    }
+
     // MARK: - Backward-compatible per-type accessors (derived)
 
     var activeWordSetId: UUID?   { activeSetType == .word   ? activeSetId : nil }
@@ -202,6 +219,14 @@ final class PostPredictionTestMode: ObservableObject {
 
     private init() {
         isEnabled = UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    func reloadFromUserDefaults() {
+        isEnabled = UserDefaults.standard.bool(forKey: enabledKey)
+        insertedPseudoURLs.removeAll()
+        letterTemplate = nil
+        numberTemplate = nil
+        print("🧪 [TEST MODE] Reloaded settings from UserDefaults after restore")
     }
 
     func isTesting(_ set: PhotoSet) -> Bool {

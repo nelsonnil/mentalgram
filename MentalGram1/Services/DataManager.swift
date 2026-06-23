@@ -43,6 +43,10 @@ class DataManager: ObservableObject {
                 self.migrateImageDataToFilesystem()
                 self.migrateLegacySetsIfNeeded()
                 self.loadSets()
+                // Clear account-bound Instagram state that would be nonsense on a different
+                // account (the Amnesia Carousel posts live on the previous account). Guarded
+                // so it never wipes a same-account re-login/restore.
+                AmnesiaCarouselSettings.shared.resetForAccountChange(to: newUserId)
             }
             .store(in: &cancellables)
     }
@@ -225,7 +229,9 @@ class DataManager: ObservableObject {
         saveSets()
         addLog(action: "set_created", details: "Created set \(name) with \(setPhotos.count) photos")
 
-        // Backup is manual-only: do not upload new set images automatically.
+        // Sync new set's photos to iCloud Drive so they survive a reinstall.
+        let newSetId = newSet.id
+        iCloudDriveSync.shared.syncSetPhotos(setId: newSetId)
 
         return newSet
     }
@@ -278,6 +284,7 @@ class DataManager: ObservableObject {
         
         saveSets()
         objectWillChange.send()
+        iCloudDriveSync.shared.syncSetPhotos(setId: setId)
         print("✅ [INSERT] Photo inserted at position \(position) with symbol '\(symbol)'")
     }
     
@@ -303,6 +310,7 @@ class DataManager: ObservableObject {
         }
         
         saveSets()
+        iCloudDriveSync.shared.syncSetPhotos(setId: setId)
         objectWillChange.send()
         print("✅ [REPLACE] Photo replaced for symbol '\(symbol)'")
     }
@@ -326,6 +334,7 @@ class DataManager: ObservableObject {
                 sets[setIndex].photos[photoIndex].videoURL = nil
                 sets[setIndex].photos[photoIndex].videoAspectRatio = nil
                 saveSets()
+                iCloudDriveSync.shared.syncSetPhotos(setId: setId)
                 objectWillChange.send()
                 print("✅ [REPLACE] Photo replaced for id '\(photoId)'")
                 return
@@ -703,7 +712,10 @@ class DataManager: ObservableObject {
         if let data = try? JSONEncoder().encode(sets) {
             UserDefaults.standard.set(data, forKey: setsKey)
         }
-        // Backup is manual-only. Saving local sets must never overwrite cloud backup.
+        // Schedule a debounced, *safe* auto-backup so users don't lose set metadata by
+        // forgetting to press "Back up now". The safe path never clobbers another
+        // account's backup or overwrites real data with an empty local state.
+        CloudBackupService.shared.scheduleDebouncedSync()
     }
 
     /// Forces an immediate iCloud backup. Keep for explicit user actions only.
@@ -817,7 +829,33 @@ class DataManager: ObservableObject {
             let postScopedData = UserDefaults.standard.data(forKey: scopedKey)
             print("☁️ [BACKUP] ✅ Restore complete: \(self.sets.count) sets loaded (scoped key now \(postScopedData != nil ? "\(postScopedData!.count / 1024) KB" : "EMPTY"))")
             LogManager.shared.success("iCloud restore: \(self.sets.count) sets reloaded into DataManager", category: .general)
+
+            // Reload IntegrationsSettings from the freshly-restored UserDefaults values
+            // so the in-memory singleton reflects the recovered custom APIs.
+            IntegrationsSettings.shared.reloadFromUserDefaults()
+
+            // Reload LockscreenInputSettings (enabled flag; wallpaper image is fetched from iCloud Drive separately)
+            LockscreenInputSettings.shared.reloadFromUserDefaults()
+
+            // Reload all trick/settings singletons that are already alive in memory.
+            // Without this, UserDefaults is restored but SwiftUI cards can keep showing
+            // pre-restore toggles until the next app launch.
+            ActiveSetSettings.shared.reloadFromUserDefaults()
+            PostPredictionTestMode.shared.reloadFromUserDefaults()
+            ForceReelSettings.shared.reloadFromUserDefaults()
+            ForcePostSettings.shared.reloadFromUserDefaults()
+            ForceNumberRevealSettings.shared.reloadFromUserDefaults()
+            FollowingMagicSettings.shared.reloadFromUserDefaults()
+            DateForceSettings.shared.reloadFromUserDefaults()
+            AmnesiaCarouselSettings.shared.reloadFromUserDefaults()
         }
+    }
+
+    /// Forces SwiftUI views bound to `sets` to re-render. Used after iCloud Drive photo
+    /// files finish downloading on restore so set thumbnails appear without a relaunch
+    /// (SetPhoto.imageData reads lazily from disk, so the model itself doesn't change).
+    func notifyPhotosChanged() {
+        DispatchQueue.main.async { self.objectWillChange.send() }
     }
 
     private func resetPerformanceCacheAfterRestore() {
@@ -828,25 +866,46 @@ class DataManager: ObservableObject {
         }
 
         let defaults = UserDefaults.standard
-        let exactKeys = [
-            "perf_fully_preloaded_\(userId)",
-            "perf_optional_preloaded_\(userId)",
-            "perf_no_more_pages_\(userId)",
-            "reels_paginated_\(userId)",
-            "tagged_paginated_\(userId)",
-            "highlights_checked_at_\(userId)",
-            "reels_checked_at_\(userId)",
-            "tagged_checked_at_\(userId)"
-        ]
-        for key in exactKeys { defaults.removeObject(forKey: key) }
+        let cacheIsUsable = ProfileCacheService.shared.hasUsablePerformanceCache(userId: userId)
+        if cacheIsUsable {
+            if let cached = ProfileCacheService.shared.loadProfile(),
+               !ProfileCacheService.shared.hasCompletePerformancePreloadCache(cached, userId: userId) {
+                defaults.set(false, forKey: "perf_fully_preloaded_\(userId)")
+                defaults.set(false, forKey: "perf_optional_preloaded_\(userId)")
+                ProfileCacheService.shared.recordPerformancePreloadExit(
+                    reason: "restore_partial_cache",
+                    userId: userId,
+                    cachedCount: cached.cachedMediaURLs.count,
+                    requiredCount: ProfileCacheService.shared.requiredPerformancePreloadPosts(for: cached),
+                    context: "restore"
+                )
+                print("☁️ [BACKUP] Preserved partial Performance cache for userId=\(userId) — will continue preload")
+                LogManager.shared.warning("Restore preserved partial Performance cache for userId=\(userId); preload required", category: .general)
+            } else {
+                print("☁️ [BACKUP] Preserved complete Performance profile cache for userId=\(userId)")
+                LogManager.shared.info("Restore preserved complete Performance cache for userId=\(userId)", category: .general)
+            }
+        } else {
+            let exactKeys = [
+                "perf_fully_preloaded_\(userId)",
+                "perf_optional_preloaded_\(userId)",
+                "perf_no_more_pages_\(userId)",
+                "reels_paginated_\(userId)",
+                "tagged_paginated_\(userId)",
+                "highlights_checked_at_\(userId)",
+                "reels_checked_at_\(userId)",
+                "tagged_checked_at_\(userId)"
+            ]
+            for key in exactKeys { defaults.removeObject(forKey: key) }
 
-        // Profile cache is device-local and should be rebuilt after a restore so
-        // restored sets/mediaIds cannot be mixed with stale first-install profile state.
-        ProfileCacheService.shared.clearProfile()
+            // Only clear unusable/corrupt cache. A valid same-user cache is what lets
+            // Performance paint instantly after the secret input closes.
+            ProfileCacheService.shared.clearProfile()
+        }
         ProfileCacheService.shared.clearRevealState(userId: userId)
         defaults.synchronize()
-        print("☁️ [BACKUP] Performance cache/preload state reset after restore for userId=\(userId). Sets and photo files were preserved.")
-        LogManager.shared.info("Restore reset Performance cache state; sets preserved", category: .general)
+        print("☁️ [BACKUP] Performance restore state checked for userId=\(userId). Sets and photo files were preserved.")
+        LogManager.shared.info("Restore checked Performance cache state; sets preserved", category: .general)
     }
     
     // MARK: - Migration: Move imageData from UserDefaults to Filesystem

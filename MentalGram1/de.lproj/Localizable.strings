@@ -289,7 +289,7 @@
 "backup.just_now" = "Gerade eben";
 "backup.min_ago" = "Vor %d min";
 "backup.h_ago" = "Vor %d h";
-"backup.info.auto" = "Das Backup läuft nur, wenn du „Jetzt sichern\" tippst. iCloud wird nie automatisch überschrieben.";
+"backup.info.auto" = "Das Backup läuft automatisch und sicher — es überschreibt nie ein gutes iCloud-Backup oder die Daten eines anderen Kontos. Du kannst es auch mit „Jetzt sichern\" erzwingen.";
 "backup.info.what" = "Was gesichert wird: alle Einstellungen, Date Force, Force Reel, aktive Sets und Set-Metadaten.";
 "backup.info.photos" = "Set-Fotos werden mit iCloud Drive synchronisiert. Du kannst sie in der Dateien-App → iCloud Drive → Vault → Photos ansehen.";
 "backup.info.excluded" = "Nicht gesichert: Instagram-Sitzung, Geräte-ID und Cooldown-Timer (gerätespezifisch).";
@@ -298,6 +298,8 @@
 "explore.load_error" = "Inhalt konnte nicht geladen werden";
 "action.retry" = "Erneut versuchen";
 "settings.icloud_applied" = "iCloud-Backup erfolgreich angewendet";
+"restore.progress.title" = "Deine Daten werden wiederhergestellt…";
+"restore.progress.subtitle" = "Das kann ein paar Sekunden dauern. Bitte lass die App geöffnet.";
 "Add minutes to time" = "Minuten zur Zeit hinzufügen";
 "Another set is currently uploading" = "Ein anderes Set wird gerade hochgeladen";
 "Base64 from external app" = "Base64 aus externer App";
@@ -1596,6 +1598,7 @@
 "initial_load.estimated_time" = "Dies kann mehrere Minuten dauern";
 "initial_load.one_time_promise" = "Nur dieses eine Mal — beim nächsten Mal wirst du sofort eintreten.";
 "initial_load.footer" = "Wenn du später neue Fotos auf Instagram hochlädst, aktualisiere Performance manuell, um den Cache zu erneuern.";
+"initial_load.exit" = "Beenden";
 "initial_load.error.session" = "Sitzung abgelaufen. Bitte melde dich erneut an, um fortzufahren.";
 "initial_load.error.load_failed" = "Profil konnte nicht geladen werden. Überprüfe die Verbindung und versuche es erneut.";
 "guide.amnesia.script.climax.text" = "„Öffne Instagram erneut. Suche denselben Post.\"\n\n[Zuschauer sieht 5 Bilder]\n\n„Wie viele siehst du?\" — Fünf.\n\n„Schau auf das Datum. Ist es dasselbe wie zuvor?\" — Ja.\n\n„Instagram lügt nicht. Es kann keine Daten ändern. So wurde es hochgeladen.\"\n\n[Pause]\n\n„Was passiert ist, ist nicht, dass du ein Bild vergessen hast. Dein Geist wurde geführt, es nicht zu sehen. Und jetzt weißt du, dass das möglich ist.\"";
@@ -1935,3 +1938,4 @@ Nur ein Schnittstellentyp kann gleichzeitig fuer Sets, Bio und Notizen aktiv sei
 "upload.bank.needs_attention" = "Bank %d benoetigt Aufmerksamkeit";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Wenn du Performance öffnest, liest die App den aktuellen API-Wert nur als Referenz. Dieses alte Wort wird nicht verwendet. Die App fragt etwa alle 2 Sekunden ab und löst erst aus, wenn ein neuer Wert eintrifft. Wenn diese API mit einer weiteren Eingabe kombiniert wird, wartet sie vor dem Senden auf beide Werte.";

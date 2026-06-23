@@ -25,7 +25,7 @@
 "backup.just_now" = "방금 전";
 "backup.min_ago" = "%d분 전";
 "backup.h_ago" = "%d시간 전";
-"backup.info.auto" = "\"지금 백업\"을 탭할 때만 백업이 실행됩니다. iCloud를 자동으로 덮어쓰지 않습니다.";
+"backup.info.auto" = "백업은 자동으로 안전하게 실행됩니다 — 정상적인 iCloud 백업이나 다른 계정의 데이터를 절대 덮어쓰지 않습니다. \"지금 백업\"으로 직접 실행할 수도 있습니다.";
 "backup.info.what" = "백업 항목: 모든 설정, Date Force, Force Reel, 활성 세트 및 세트 메타데이터.";
 "backup.info.photos" = "세트 사진은 iCloud Drive에 동기화됩니다. 파일 앱 → iCloud Drive → Vault → Photos에서 확인할 수 있습니다.";
 "backup.info.excluded" = "백업 제외: Instagram 세션, 기기 ID 및 쿨다운 타이머 (기기 고유 항목).";
@@ -152,6 +152,8 @@
 "settings.restore_settings" = "설정이 복원되었습니다";
 "settings.latest_follower" = "최신 팔로워";
 "settings.icloud_applied" = "iCloud 백업이 성공적으로 적용되었습니다";
+"restore.progress.title" = "데이터를 복원하는 중…";
+"restore.progress.subtitle" = "몇 초 정도 걸릴 수 있습니다. 앱을 계속 열어 두세요.";
 "integrations.title" = "Inject 및 커스텀 API";
 "integrations.open_service" = "연결된 서비스의 **공식 앱**을 여세요";
 "integrations.login" = "계정에 로그인하세요";
@@ -1418,6 +1420,7 @@
 "initial_load.estimated_time" = "몇 분 정도 걸릴 수 있습니다";
 "initial_load.one_time_promise" = "이번 한 번만 — 다음에는 바로 입장됩니다.";
 "initial_load.footer" = "나중에 Instagram에 새 사진을 업로드하면 캐시를 업데이트하기 위해 Performance를 수동으로 새로 고침하세요.";
+"initial_load.exit" = "종료";
 "initial_load.error.session" = "세션이 만료되었습니다. 계속하려면 다시 로그인하세요.";
 "initial_load.error.load_failed" = "프로필을 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요.";
 "guide.amnesia.script.climax.text" = "'Instagram을 다시 여세요. 같은 게시물을 찾으세요.'\n\n[관객이 5장을 봄]\n\n'몇 장이 보이나요?' — 5장.\n\n'날짜를 확인하세요. 아까와 같나요?' — 네.\n\n'Instagram은 거짓말하지 않습니다. 날짜를 수정할 수 없습니다. 이렇게 업로드되었습니다.'\n\n[잠시 멈춤]\n\n'일어난 일은 이미지를 잊은 것이 아닙니다. 당신의 마음이 보지 못하도록 안내되었습니다. 이제 그것이 가능하다는 것을 알게 되었습니다.'";
@@ -1757,3 +1760,4 @@ Set, soGae, noteeseo han beon e hana ui in teopeoiseu yuhyeong man hwalseonghwa 
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Performance를 열면 앱은 현재 API 값을 기준값으로만 읽습니다. 이전 단어는 사용하지 않습니다. 앱은 약 2초마다 폴링하며 새 값이 들어올 때만 실행합니다. 이 API를 다른 입력과 함께 사용하면 전송하기 전에 두 값이 모두 도착할 때까지 기다립니다.";

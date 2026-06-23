@@ -43,6 +43,9 @@ struct MentalGram1App: App {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showRestoreBanner = false
+    /// True while a fresh-install restore is actively pulling data from iCloud, so the user
+    /// sees an intentional "Restoring…" overlay instead of an apparent freeze.
+    @State private var restoreInProgress = false
     /// Timestamp when the app last entered background. Used to decide whether
     /// to open a warm-resume lockdown window on the next .active transition.
     @State private var lastBackgroundedAt: Date? = nil
@@ -83,6 +86,14 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.spring(response: 0.4), value: showRestoreBanner)
+                // Fresh-install restore overlay — intentional progress UI while iCloud pulls data.
+                .overlay {
+                    if restoreInProgress {
+                        RestoreProgressOverlay()
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: restoreInProgress)
                 .onOpenURL { url in
                     URLActionManager.shared.handleURL(url)
                 }
@@ -91,6 +102,14 @@ struct MentalGram1App: App {
                     handleFirstLaunch()
                     // Backups are manual-only. Do not upload local state/photos on launch,
                     // because a bad local state could overwrite the user's good backup.
+                    // Exception: one-time background sync of existing set photo *files* to
+                    // iCloud Drive so they survive a reinstall. This does not touch the KV
+                    // backup and only runs once per install.
+                    ensurePhotosInCloudDrive()
+                    // Self-heal: if any set references a photo file that is missing on disk
+                    // (e.g. iCloud Drive was slow during the first post-reinstall launch),
+                    // pull the photos again. Idempotent — skips files already present.
+                    ensurePhotosRestoredIfMissing()
                 }
         }
         .onChange(of: scenePhase) { phase in
@@ -101,7 +120,10 @@ struct MentalGram1App: App {
                 UIApplication.shared.isIdleTimerDisabled = false
                 um.beginBackgroundWork()
                 lastBackgroundedAt = Date()
-                // Backups are manual-only. Never overwrite cloud backup on background.
+                // Safe auto-backup at the natural end-of-session checkpoint. Captures the
+                // latest settings + sets in one shot. Guarded so it never regresses a good
+                // cloud backup (empty local state or a different account are skipped).
+                CloudBackupService.shared.performSafeAutoBackup()
             case .active:
                 CrashLoggerService.shared.recordLifecycle("active")
                 UIApplication.shared.isIdleTimerDisabled = true
@@ -133,6 +155,109 @@ struct MentalGram1App: App {
         }
     }
 
+    // MARK: - One-time iCloud Drive photo migration
+
+    /// Runs once per install in the background. Uploads any set photo files that
+    /// are on disk but have not yet been synced to iCloud Drive. This makes
+    /// existing users' photos recoverable after a reinstall going forward.
+    private func ensurePhotosInCloudDrive() {
+        let key = "com.vault.drivePhotosInitialSyncDone.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+
+        let drive = iCloudDriveSync.shared
+        let fm = FileManager.default
+        let localRoot = drive.localPhotosRoot
+        guard fm.fileExists(atPath: localRoot.path) else { return }
+        guard let subfolders = try? fm.contentsOfDirectory(at: localRoot, includingPropertiesForKeys: nil),
+              subfolders.contains(where: { $0.hasDirectoryPath }) else { return }
+
+        print("☁️ [DRIVE] One-time initial sync: uploading existing set photos to iCloud Drive…")
+        drive.syncAllPhotosToCloud { uploaded, skipped, _ in
+            print("☁️ [DRIVE] One-time initial sync complete — \(uploaded) uploaded, \(skipped) already present")
+        }
+        // Also upload the cover screenshot and lockscreen wallpaper if they exist locally
+        let docsRoot = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        if FileManager.default.fileExists(atPath: docsRoot.appendingPathComponent("fake_homescreen.jpg").path) {
+            HomeScreenIllusionService.shared.uploadToCloud()
+        }
+        if LockscreenInputSettings.shared.hasWallpaper {
+            LockscreenInputSettings.shared.uploadWallpaperToCloud()
+        }
+        if AmnesiaCarouselSettings.shared.filledCount > 0 {
+            AmnesiaCarouselSettings.shared.uploadImagesToCloud()
+        }
+    }
+
+    // MARK: - Self-healing photo restore
+
+    /// Set when a fresh-install restore runs this launch — the restore already pulls every
+    /// photo, so the self-heal must not duplicate that work.
+    private static var didRestoreThisLaunch = false
+    /// Guards the self-heal to one attempt per app process (onAppear can fire repeatedly).
+    private static var selfHealRanThisProcess = false
+
+    /// Safety net: if any set references a local photo file that is missing — but iCloud is
+    /// available with a backup — re-pull the photos from iCloud Drive. This covers the case
+    /// where the container wasn't ready during the first post-reinstall launch.
+    ///
+    /// IMPORTANT: this used to run on EVERY cold start with no limit, so a file that simply
+    /// can't materialize (never uploaded, iCloud slow/offline) made the app re-attempt — and
+    /// time out — on every launch, which the user perceived as a "pause". It is now:
+    ///   • run at most once per process,
+    ///   • skipped while a fresh-install restore is already pulling everything,
+    ///   • backed off across launches (1h → 6h → 24h) when it keeps failing,
+    ///   • fully off the main thread.
+    private func ensurePhotosRestoredIfMissing() {
+        guard CloudBackupService.shared.iCloudAvailable else { return }
+        guard !Self.selfHealRanThisProcess else { return }
+        guard !Self.didRestoreThisLaunch else { return }
+
+        let ud = UserDefaults.standard
+        let lastAttempt = ud.double(forKey: "selfHeal_lastAttempt")
+        let failStreak  = ud.integer(forKey: "selfHeal_failStreak")
+        let now = Date().timeIntervalSince1970
+        let minInterval: TimeInterval
+        switch failStreak {
+        case 0:  minInterval = 0
+        case 1:  minInterval = 3600          // 1h
+        case 2:  minInterval = 6 * 3600      // 6h
+        default: minInterval = 24 * 3600     // 24h cap
+        }
+        if lastAttempt > 0, now - lastAttempt < minInterval { return }
+        Self.selfHealRanThisProcess = true
+
+        // Scan for missing files OFF the main thread, then pull in the background.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5) {
+            let docsRoot = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let hasMissing = DataManager.shared.sets
+                .flatMap { $0.photos }
+                .contains { photo in
+                    guard let path = photo.imagePath, !path.isEmpty else { return false }
+                    return !FileManager.default.fileExists(
+                        atPath: docsRoot.appendingPathComponent(path).path)
+                }
+            guard hasMissing else {
+                // Everything present — clear any back-off so a future genuine miss runs promptly.
+                ud.set(now, forKey: "selfHeal_lastAttempt")
+                ud.set(0, forKey: "selfHeal_failStreak")
+                return
+            }
+
+            print("☁️ [DRIVE] Missing local set photo(s) detected — pulling from iCloud Drive")
+            LogManager.shared.info("Self-heal: pulling missing set photos from iCloud Drive", category: .general)
+            ud.set(now, forKey: "selfHeal_lastAttempt")
+            iCloudDriveSync.shared.downloadAllPhotosFromCloud { count in
+                if count > 0 {
+                    ud.set(0, forKey: "selfHeal_failStreak")   // success → reset back-off
+                    DispatchQueue.main.async { DataManager.shared.notifyPhotosChanged() }
+                } else {
+                    ud.set(failStreak + 1, forKey: "selfHeal_failStreak")  // failed → back off
+                }
+            }
+        }
+    }
+
     // MARK: - First-launch restore
 
     private func handleFirstLaunch() {
@@ -144,17 +269,49 @@ struct MentalGram1App: App {
         backup.markInstallComplete()
 
         if restored {
+            // The restore pulls every photo itself — block the per-launch self-heal so the
+            // two don't run at once.
+            Self.didRestoreThisLaunch = true
             // Reload DataManager so the restored sets JSON is picked up
             DataManager.shared.reloadAfterRestore()
-            // Download set images from iCloud Drive in background
+
+            // Show an intentional "Restoring…" overlay while iCloud Drive downloads run, so
+            // the wait reads as progress instead of a freeze.
+            withAnimation { restoreInProgress = true }
+
+            // Download set images from iCloud Drive — this is the long pole, so it gates the
+            // overlay. The cover screenshot / wallpaper / carousel are small and optional.
             iCloudDriveSync.shared.downloadAllPhotosFromCloud { count in
                 print("☁️ [BACKUP] Restore complete: \(count) photo files downloaded")
+                DispatchQueue.main.async {
+                    if count > 0 { DataManager.shared.notifyPhotosChanged() }
+                    finishRestoreOverlay()
+                }
             }
-            withAnimation { showRestoreBanner = true }
-            // Auto-hide after 4 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                withAnimation { showRestoreBanner = false }
+            HomeScreenIllusionService.shared.downloadFromCloud { found in
+                print("☁️ [BACKUP] Cover screenshot restore: \(found ? "✅ restored" : "not found in cloud")")
             }
+            LockscreenInputSettings.shared.downloadWallpaperFromCloud { found in
+                print("☁️ [BACKUP] Lockscreen wallpaper restore: \(found ? "✅ restored" : "not found in cloud")")
+            }
+            AmnesiaCarouselSettings.shared.downloadImagesFromCloud { count in
+                print("☁️ [BACKUP] Carousel slot images restore: \(count) image(s)")
+            }
+
+            // Safety net: never let the overlay stick if a download hangs.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 90) {
+                if restoreInProgress { finishRestoreOverlay() }
+            }
+        }
+    }
+
+    /// Dismisses the restore overlay and shows the brief "restored" confirmation banner.
+    private func finishRestoreOverlay() {
+        guard restoreInProgress else { return }
+        withAnimation { restoreInProgress = false }
+        withAnimation { showRestoreBanner = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            withAnimation { showRestoreBanner = false }
         }
     }
     
@@ -284,7 +441,7 @@ struct LockdownView: View {
                 }
             }
         }
-        .preferredColorScheme(.light)
+        .environment(\.colorScheme, .light)
         .sheet(isPresented: $showDetails) {
             LockdownDetailsSheet()
         }

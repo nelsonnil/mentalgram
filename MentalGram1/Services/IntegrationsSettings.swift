@@ -229,6 +229,40 @@ final class IntegrationsSettings: ObservableObject {
         bioText5Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText5Source"))  ?? .none
     }
 
+    // MARK: - Reload (call after iCloud restore)
+
+    /// Re-reads all persisted values from UserDefaults.
+    /// Must be called on the main thread after CloudBackupService.restoreFromCloud().
+    func reloadFromUserDefaults() {
+        let ud = UserDefaults.standard
+        injectID        = ud.string(forKey: "integ_injectID")       ?? ""
+        customApi1Name  = ud.string(forKey: "integ_custom1Name")    ?? ""
+        customApi2Name  = ud.string(forKey: "integ_custom2Name")    ?? ""
+        customApi3Name  = ud.string(forKey: "integ_custom3Name")    ?? ""
+        customApi1Url   = ud.string(forKey: "integ_custom1Url")     ?? ""
+        customApi1Field = ud.string(forKey: "integ_custom1Field")   ?? ""
+        customApi2Url   = ud.string(forKey: "integ_custom2Url")     ?? ""
+        customApi2Field = ud.string(forKey: "integ_custom2Field")   ?? ""
+        customApi3Url   = ud.string(forKey: "integ_custom3Url")     ?? ""
+        customApi3Field = ud.string(forKey: "integ_custom3Field")   ?? ""
+        bioApiSource    = ApiSource(rawValue: ud.integer(forKey: "integ_bioApiSource"))  ?? .none
+        noteApiSource   = ApiSource(rawValue: ud.integer(forKey: "integ_noteApiSource")) ?? .none
+        ppApiSource     = ApiSource(rawValue: ud.integer(forKey: "integ_ppApiSource"))   ?? .none
+        let legacyNote  = ApiSource(rawValue: ud.integer(forKey: "integ_noteApiSource")) ?? .none
+        let legacyBio   = ApiSource(rawValue: ud.integer(forKey: "integ_bioApiSource"))  ?? .none
+        noteText1Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText1Source")) ?? legacyNote
+        noteText2Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText2Source")) ?? .none
+        noteText3Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText3Source")) ?? .none
+        noteText4Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText4Source")) ?? .none
+        noteText5Source = ApiSource(rawValue: ud.integer(forKey: "integ_noteText5Source")) ?? .none
+        bioText1Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText1Source"))  ?? legacyBio
+        bioText2Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText2Source"))  ?? .none
+        bioText3Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText3Source"))  ?? .none
+        bioText4Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText4Source"))  ?? .none
+        bioText5Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText5Source"))  ?? .none
+        print("🔗 [INTEG] Reloaded integrations from UserDefaults after restore")
+    }
+
     // MARK: - Fetch
 
     /// Returns the text fetched from the currently configured source for a given target.

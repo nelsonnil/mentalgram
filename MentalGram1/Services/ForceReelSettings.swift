@@ -118,6 +118,44 @@ class ForceReelSettings: ObservableObject {
         }
     }
 
+    func reloadFromUserDefaults() {
+        isEnabled = UserDefaults.standard.bool(forKey: "forceReel_enabled")
+        slots = Self.loadSlots()
+        if slots.isEmpty {
+            migrateFromLegacy()
+        }
+        thumbnailImages = [:]
+        videoReady = [:]
+        downloadingVideo = [:]
+        for slot in slots where slot.hasReel {
+            if let img = Self.loadLocalThumbnail(for: slot.id) {
+                thumbnailImages[slot.id] = img
+            }
+            if let videoURL = ForceReelSlot.localVideoFileURL(for: slot.id),
+               FileManager.default.fileExists(atPath: videoURL.path) {
+                videoReady[slot.id] = true
+            }
+        }
+        let slotsNeedingAssets = slots.compactMap { slot -> (slot: ForceReelSlot, needsThumbnail: Bool, needsVideo: Bool)? in
+            guard slot.hasReel else { return nil }
+            let needsThumbnail = thumbnailImages[slot.id] == nil
+            let needsVideo = videoReady[slot.id] != true
+            return needsThumbnail || needsVideo ? (slot, needsThumbnail, needsVideo) : nil
+        }
+        Task {
+            await ensureAppSupportDir()
+            for pending in slotsNeedingAssets {
+                if pending.needsThumbnail {
+                    await downloadAndSaveThumbnail(from: pending.slot.thumbnailURL, slotIndex: pending.slot.id)
+                }
+                if pending.needsVideo {
+                    await downloadAndSaveVideo(from: pending.slot.videoURL, slotIndex: pending.slot.id)
+                }
+            }
+        }
+        print("🎭 [FORCE] Reloaded reel settings from UserDefaults after restore")
+    }
+
     // MARK: - Slot management
 
     func selectReel(slotIndex: Int, thumbnailURL: String, videoURL: String, mediaId: String,

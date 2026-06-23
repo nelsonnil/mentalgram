@@ -26,7 +26,7 @@
 "backup.just_now" = "Только что";
 "backup.min_ago" = "%d мин назад";
 "backup.h_ago" = "%d ч назад";
-"backup.info.auto" = "Резервное копирование выполняется только при нажатии «Создать резервную копию». iCloud никогда не перезаписывается автоматически.";
+"backup.info.auto" = "Резервное копирование выполняется автоматически и безопасно — оно никогда не перезаписывает хорошую копию iCloud или данные другого аккаунта. Можно также запустить его кнопкой «Создать резервную копию».";
 "backup.info.what" = "Что сохраняется: все настройки, Date Force, Force Reel, активные сеты и их метаданные.";
 "backup.info.photos" = "Фотографии сетов синхронизируются с iCloud Drive. Просмотреть их можно в приложении Файлы → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Не сохраняется: сессия Instagram, ID устройства и таймеры задержки (привязаны к устройству).";
@@ -156,6 +156,8 @@
 "settings.restore_settings" = "Настройки восстановлены";
 "settings.latest_follower" = "Последний подписчик";
 "settings.icloud_applied" = "Резервная копия iCloud применена успешно";
+"restore.progress.title" = "Восстановление ваших данных…";
+"restore.progress.subtitle" = "Это может занять несколько секунд. Не закрывайте приложение.";
 "integrations.title" = "Inject и пользовательские API";
 "integrations.open_service" = "Откройте **официальное приложение** подключённого сервиса";
 "integrations.login" = "Войдите в свой аккаунт";
@@ -1072,6 +1074,7 @@
 "initial_load.estimated_time" = "Это может занять несколько минут";
 "initial_load.one_time_promise" = "Только один раз — в следующий раз вы войдёте мгновенно.";
 "initial_load.footer" = "Если вы загрузите новые фото в Instagram позже, обновите Performance вручную, чтобы обновить кэш.";
+"initial_load.exit" = "Выйти";
 "initial_load.error.session" = "Сессия истекла. Войдите снова, чтобы продолжить.";
 "initial_load.error.load_failed" = "Не удалось загрузить профиль. Проверьте соединение и попробуйте снова.";
 "guide.amnesia.script.climax.text" = "«Снова откройте Instagram. Найдите тот же пост.»\n\n[Зритель видит 5 изображений]\n\n«Сколько вы видите?» — Пять.\n\n«Посмотрите на дату. Она та же, что раньше?» — Да.\n\n«Instagram не лжёт. Он не может изменять даты. Это было загружено именно так.»\n\n[Пауза]\n\n«То, что произошло — это не то, что вы забыли одно изображение. Ваш разум был направлен так, чтобы не видеть его. И теперь вы знаете, что это возможно.»";
@@ -1411,3 +1414,4 @@ Odnovremenno mozhet byt' aktiven tolko odin tip interfeisa dlya naborov, opisani
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "При открытии Performance приложение считывает текущее значение API только как базовое. Старое слово не используется. Приложение опрашивает API примерно каждые 2 секунды и срабатывает только при появлении нового значения. Если эта API объединена с другим вводом, перед отправкой приложение ждёт оба значения.";

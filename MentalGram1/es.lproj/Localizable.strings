@@ -289,8 +289,8 @@
 "backup.just_now" = "Ahora mismo";
 "backup.min_ago" = "Hace %d min";
 "backup.h_ago" = "Hace %d h";
-"backup.info.auto" = "El backup solo se ejecuta al tocar \"Hacer backup ahora\". Nunca sobrescribe iCloud automáticamente.";
-"backup.info.what" = "Qué se guarda: todos los ajustes, Date Force, Force Reel, sets activos y metadatos de sets.";
+"backup.info.auto" = "El backup se ejecuta de forma automática y segura: nunca sobrescribe un backup bueno de iCloud ni los datos de otra cuenta. También puedes forzarlo con \"Hacer backup ahora\".";
+"backup.info.what" = "Qué se guarda: todos los ajustes, Date Force, Force Reel, Carrusel Amnesia, sets activos y metadatos de sets.";
 "backup.info.photos" = "Las fotos de los sets se sincronizan con iCloud Drive. Puedes verlas en la app Archivos → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "No se guarda: sesión de Instagram, ID de dispositivo y timers de cooldown (son específicos del dispositivo).";
 "Never" = "Nunca";
@@ -298,6 +298,8 @@
 "explore.load_error" = "No se pudo cargar el contenido";
 "action.retry" = "Reintentar";
 "settings.icloud_applied" = "Copia de seguridad de iCloud aplicada correctamente";
+"restore.progress.title" = "Restaurando tus datos…";
+"restore.progress.subtitle" = "Esto puede tardar unos segundos. Mantén la app abierta.";
 "Add minutes to time" = "Añadir minutos a la hora";
 "Another set is currently uploading" = "Otro set se está subiendo";
 "Base64 from external app" = "Base64 desde app externa";
@@ -1688,8 +1690,11 @@
 "initial_load.estimated_time" = "Puede tardar varios minutos";
 "initial_load.one_time_promise" = "Solo ocurre esta vez — la próxima vez entrarás directamente.";
 "initial_load.footer" = "Si subes nuevas fotos a Instagram más adelante, actualiza el Pase manualmente para refrescar la caché.";
+"initial_load.exit" = "Salir";
 "initial_load.error.session" = "Sesión expirada. Inicia sesión de nuevo para continuar.";
 "initial_load.error.load_failed" = "No se pudo cargar tu perfil. Comprueba la conexión e inténtalo de nuevo.";
+"initial_load.network.note" = "Problema de conexión. Tu progreso está guardado — pulsa Salir y reanuda más tarde desde Performance cuando tengas señal estable.";
+"initial_load.budget.note" = "Instagram alcanzó su límite de lecturas de seguridad. Tu progreso está guardado — pulsa Salir y reanuda desde Performance en unos %d min.";
 
 "fullload.warming_up" = "Preparando… %d s";
 "fullload.grid" = "Cargando publicaciones — %d cargadas";
@@ -1990,3 +1995,4 @@ Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Not
 "upload.bank.needs_attention" = "Bank %d necesita atencion";
 "upload.escalation.cooldown_before_retry" = "Multiples errores - enfriando antes de reintentar";
 "upload.escalation.retrying_after_cooldown" = "Reintentando tras el enfriamiento...";
+"api.polling.info" = "Al abrir Performance, la app solo lee el valor actual de la API como referencia. No usa esa palabra antigua. Hace polling cada 2 segundos aprox. y solo dispara cuando llega un valor nuevo. Si esta API se combina con otro input, espera a tener ambos valores antes de enviar.";

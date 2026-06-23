@@ -29,6 +29,8 @@ struct HomeView: View {
     @State private var performanceGate: PerformanceGate?
     @State private var showPerformanceRelogin = false
     @State private var showInitialProfileLoad = false
+    @State private var initialProfileLoadAttempted = false
+    @State private var allowPartialPerformanceEntryAfterInitialLoad = false
     @State private var showBudgetWarning = false
     @State private var budgetWarningUsed: Int = 0
     @State private var budgetWarningRemaining: Int = 55
@@ -76,13 +78,11 @@ struct HomeView: View {
     
     var body: some View {
         TabView(selection: tabBinding) {
-            // Performance Tab — fake Instagram replica.
-            // Follows the device appearance (light/dark) like the real Instagram app:
-            // the adaptive UIColor.* values inside paint white in light mode and black
-            // in dark mode automatically. No scheme is forced here.
+            // Performance Tab — fake Instagram replica. It should follow the
+            // device appearance; dark Vault tabs pin their own scheme locally.
             Group {
                 if instagram.isLoggedIn {
-                    PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore)
+                    PerformanceView(selectedTab: $selectedTab, showingExplore: $showingExplore, limitsGateShowing: $showLimitsGate)
                 } else {
                     // Blank dark view when not logged in
                     VaultTheme.Colors.background
@@ -132,9 +132,8 @@ struct HomeView: View {
             }
             .tag(3)
         }
-        // No global color-scheme forcing: Performance follows the device appearance
-        // (like the real Instagram), while the dark-themed tabs (Sets, Settings) force
-        // .dark locally inside their own views.
+        // No global color-scheme forcing: Performance follows the device appearance,
+        // while the dark-themed tabs (Sets, Settings, Guide) force .dark locally.
         .accentColor(selectedTab == 0 ? .primary : VaultTheme.Colors.primary)
         .onChange(of: selectedTab) { newTab in
             updateTabBarAppearance(forTab: newTab)
@@ -155,7 +154,7 @@ struct HomeView: View {
             // Auto-unlock the Limits gate for users who already have a cached profile
             // (i.e. experienced users who had the app before this feature was added).
             if !limitsGuideRead && instagram.isLoggedIn
-                && ProfileCacheService.shared.loadProfile() != nil {
+                && ProfileCacheService.shared.hasUsablePerformanceCache() {
                 limitsGuideRead = true
             }
 
@@ -170,22 +169,17 @@ struct HomeView: View {
                 onContinue: {
                     limitsGuideRead = true
                     showLimitsGate = false
-                    // After acknowledging, proceed to Performance (checking visible photos first)
+                    // After acknowledging, run the normal preflight from Home. Do not
+                    // enter Performance until the local replica cache is ready.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        let visible = visiblePhotosInActiveSets()
-                        if !visible.isEmpty {
-                            visiblePhotosToArchive = visible
-                            showVisiblePhotosAlert = true
-                        } else {
-                            enterPerformanceDirectly()
-                        }
+                        requestPerformanceEntry()
                     }
                 }
             )
         }
         .alert("Visible Photos Detected", isPresented: $showVisiblePhotosAlert) {
             Button("Continue Anyway") {
-                enterPerformanceDirectly()
+                requestPerformanceEntry(skipVisiblePhotos: true)
             }
             // Disable "Verify & Archive" while post-reveal protection is active —
             // the photos were just revealed for a trick and archiving them now
@@ -254,8 +248,19 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showInitialProfileLoad) {
             InitialProfileLoadView {
                 showInitialProfileLoad = false
-                // Re-run the check so visible-photos gate etc. can still fire
-                requestPerformanceEntry()
+                initialProfileLoadAttempted = false
+                // Re-run the check only if the loader produced a real local replica.
+                // Otherwise stay off Performance; entering would show an empty fake IG.
+                if ProfileCacheService.shared.hasUsablePerformanceCache() {
+                    let userId = KeychainService.shared.loadSession()?.userId ?? ""
+                    let complete = ProfileCacheService.shared.hasCompletePerformancePreloadCache(userId: userId)
+                    allowPartialPerformanceEntryAfterInitialLoad = !complete
+                    requestPerformanceEntry()
+                } else {
+                    selectedTab = 1
+                    updateTabBarAppearance(forTab: 1)
+                    LogManager.shared.warning("Initial Performance replica load ended without usable cache; Performance entry cancelled", category: .general)
+                }
             }
         }
         .fullScreenCover(isPresented: $showingExplore, onDismiss: {
@@ -343,7 +348,7 @@ struct HomeView: View {
         }
     }
 
-    private func requestPerformanceEntry() {
+    private func requestPerformanceEntry(skipVisiblePhotos: Bool = false) {
         guard !performanceEntryRequestInFlight else {
             print("🎩 [PERF] Entry request ignored — already processing")
             LogManager.shared.info("Performance entry request deduplicated", category: .general)
@@ -369,7 +374,7 @@ struct HomeView: View {
             return
         }
 
-        // Gate: require Limits & Safety to be read before first Performance entry
+        // Gate: require Limits & Safety to be read before first Performance entry.
         guard limitsGuideRead else {
             showLimitsGate = true
             return
@@ -380,9 +385,8 @@ struct HomeView: View {
             return
         }
 
-        // Performance loads its own profile from cache + one getProfileInfo() refresh
-        // when entering (same pattern as Explore → UserProfileView). No background
-        // full-loader is started here.
+        // Performance is allowed to mount only after the local replica cache is ready.
+        // The secret input must never compete with a live profile fetch.
 
         let decision = InstagramSafetyGate.shared.peekPerformanceEntry()
         if !decision.allowRemoteCalls {
@@ -396,14 +400,59 @@ struct HomeView: View {
             }
         }
 
-        let visible = visiblePhotosInActiveSets()
-        if !visible.isEmpty {
-            visiblePhotosToArchive = visible
-            showVisiblePhotosAlert = true
-            return
+        if !skipVisiblePhotos {
+            let visible = visiblePhotosInActiveSets()
+            if !visible.isEmpty {
+                visiblePhotosToArchive = visible
+                showVisiblePhotosAlert = true
+                return
+            }
         }
 
+        guard ensurePerformanceReplicaReadyBeforeEntry() else { return }
         enterPerformanceDirectly()
+    }
+
+    private func ensurePerformanceReplicaReadyBeforeEntry() -> Bool {
+        let userId = KeychainService.shared.loadSession()?.userId ?? ""
+        let snapshot = ProfileCacheService.shared.performancePreloadSnapshot(userId: userId)
+        print("📦 [PRELOAD DECISION] Performance entry — \(snapshot)")
+        LogManager.shared.info("Performance preload decision: \(snapshot)", category: .general)
+
+        let usable = ProfileCacheService.shared.hasUsablePerformanceCache(userId: userId)
+        let complete = ProfileCacheService.shared.hasCompletePerformancePreloadCache(userId: userId)
+        if complete {
+            initialProfileLoadAttempted = false
+            allowPartialPerformanceEntryAfterInitialLoad = false
+            print("🎩 [PERF] Replica cache complete — entering Performance")
+            return true
+        }
+
+        if usable, allowPartialPerformanceEntryAfterInitialLoad {
+            // The blocking loader already tried and saved progress, but Instagram budget /
+            // signal/background prevented 45/45. Let Performance paint from disk and keep
+            // the red Continue Loading banner as the recovery path.
+            allowPartialPerformanceEntryAfterInitialLoad = false
+            print("🎩 [PERF] Replica cache partial after loader attempt — entering with recovery banner")
+            LogManager.shared.warning("Performance entered with partial cache after loader attempt: \(snapshot)", category: .general)
+            return true
+        }
+
+        if usable {
+            print("🎩 [PERF] Replica cache partial — holding entry for first-time completion")
+            LogManager.shared.warning("Performance entry held for partial cache completion: \(snapshot)", category: .general)
+        }
+
+        guard !initialProfileLoadAttempted else {
+            LogManager.shared.warning("Performance replica preflight skipped duplicate load attempt", category: .general)
+            return false
+        }
+
+        initialProfileLoadAttempted = true
+        showInitialProfileLoad = true
+        print("🎩 [PERF] Entry held — building local replica before secret input")
+        LogManager.shared.info("Performance entry held until local replica cache is ready", category: .general)
+        return false
     }
 
     private func enterPerformanceDirectly() {
@@ -412,6 +461,10 @@ struct HomeView: View {
     }
 
     private func continuePerformancePreload() {
+        // Suppress the lockscreen/secret-input for this single entry: the user is only
+        // resuming a background download, not starting a trick. Must be set BEFORE the tab
+        // switch because selectedTab = 0 fires PerformanceView.onAppear synchronously.
+        PerformanceView.suppressSecretInputOnceForPreload = true
         selectedTab = 0
         updateTabBarAppearance(forTab: 0)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -477,8 +530,9 @@ struct HomeView: View {
         isArchivingBeforePerformance = false
         showArchiveProgressSheet = false
         visiblePhotosToArchive = []
-        selectedTab = 0
-        updateTabBarAppearance(forTab: 0)
+        if ensurePerformanceReplicaReadyBeforeEntry() {
+            enterPerformanceDirectly()
+        }
     }
 
     private var archiveProgressView: some View {
@@ -518,22 +572,22 @@ struct HomeView: View {
         .interactiveDismissDisabled(isArchivingBeforePerformance)
     }
     
-    /// Update tab bar appearance based on which tab is active
-    /// Performance tab = Instagram-style (light), Sets/Settings = Vault dark theme
+    /// Update tab bar appearance based on which tab is active.
+    /// Performance uses dynamic Instagram-style system colors; Vault tabs stay dark.
     private func updateTabBarAppearance(forTab tab: Int) {
         let appearance = UITabBarAppearance()
         appearance.configureWithOpaqueBackground()
         
         if tab == 0 {
-            // Performance: Instagram-style white tab bar
-            appearance.backgroundColor = .white
-            appearance.stackedLayoutAppearance.selected.iconColor = .black
+            // Performance: Instagram-style tab bar that follows iOS light/dark mode.
+            appearance.backgroundColor = .systemBackground
+            appearance.stackedLayoutAppearance.selected.iconColor = .label
             appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
-                .foregroundColor: UIColor.black
+                .foregroundColor: UIColor.label
             ]
-            appearance.stackedLayoutAppearance.normal.iconColor = .gray
+            appearance.stackedLayoutAppearance.normal.iconColor = .secondaryLabel
             appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
-                .foregroundColor: UIColor.gray
+                .foregroundColor: UIColor.secondaryLabel
             ]
         } else {
             // Sets/Settings: Vault dark theme
@@ -1344,6 +1398,16 @@ struct InstagramSyncCard: View {
     @State private var isRefreshing = false
     @State private var showSyncComplete = false
     @State private var syncFailed = false
+    @State private var syncStatusMessage: String? = nil
+    /// True between posting `.performanceManualRefresh` and receiving the live ACK.
+    /// If it stays true past the ACK window, the Performance tab isn't listening and
+    /// we run a headless refresh instead.
+    @State private var awaitingListenerAck = false
+    /// Monotonic token so stale timeouts/fallbacks from a previous tap are ignored.
+    @State private var refreshGeneration = 0
+    /// Post-success "ready" countdown — gives Instagram propagation and the grid a
+    /// few seconds to settle before the magician relies on the sync.
+    @State private var readyCountdown = 0
 
     private var lastSyncText: String {
         guard lastRefreshTimestamp > 0 else {
@@ -1388,25 +1452,50 @@ struct InstagramSyncCard: View {
                 guard !isRefreshing else { return }
                 showSyncComplete = false
                 syncFailed = false
+                syncStatusMessage = nil
+                readyCountdown = 0
                 if uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive {
                     uploadManager.resetAllState()
                     LogManager.shared.warning("Upload cancelled before manual Instagram refresh", category: .upload)
                 }
+                refreshGeneration += 1
+                let gen = refreshGeneration
                 isRefreshing = true
+                awaitingListenerAck = true
+                // Ask the live PerformanceView (if mounted) to run its rich, reveal-aware
+                // refresh. It ACKs immediately so we know a listener exists.
                 NotificationCenter.default.post(name: .performanceManualRefresh, object: nil)
-                // Re-enable after 3 s — the actual callback lives in PerformanceView
-                DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
-                    if isRefreshing {
-                        isRefreshing = false
-                        syncFailed = true
-                        showSyncComplete = true
+
+                // No ACK within the window → Performance tab isn't mounted/subscribed.
+                // Run a headless refresh so the button is never a silent no-op.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+                    guard gen == refreshGeneration, awaitingListenerAck, isRefreshing else { return }
+                    awaitingListenerAck = false
+                    LogManager.shared.info("Manual refresh: no live listener — running headless refresh", category: .general)
+                    Task { @MainActor in
+                        let result = await ManualInstagramRefresh.run()
+                        guard gen == refreshGeneration else { return }
+                        applyRefreshResult(success: result.success, message: result.message, retrySeconds: result.retrySeconds)
                     }
+                }
+
+                // Safety timeout — only fires if a listener ACKed but never returned a
+                // result (e.g. a long anti-bot wait). Headless path applies its own result.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 40) {
+                    guard gen == refreshGeneration, isRefreshing, !awaitingListenerAck else { return }
+                    LogManager.shared.warning("Instagram sync timed out waiting for result", category: .general)
+                    applyRefreshResult(success: false, message: "Taking too long — open Performance once and retry", retrySeconds: nil)
                 }
             } label: {
                 HStack(spacing: 6) {
                     if showSyncComplete {
-                        Image(systemName: syncFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
-                            .font(.system(size: 12, weight: .semibold))
+                        if !syncFailed && readyCountdown > 0 {
+                            Image(systemName: "hourglass")
+                                .font(.system(size: 12, weight: .semibold))
+                        } else {
+                            Image(systemName: syncFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
                     } else if isRefreshing {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
@@ -1415,11 +1504,7 @@ struct InstagramSyncCard: View {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    Text(showSyncComplete
-                         ? (syncFailed ? "Sync failed" : "Synced")
-                         : (isRefreshing
-                            ? String(localized: "sync.refreshing")
-                            : String(localized: "sync.refresh_button")))
+                    Text(syncButtonText)
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)
@@ -1446,17 +1531,82 @@ struct InstagramSyncCard: View {
         .background(Color.white.opacity(0.04))
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(VaultTheme.Colors.primary.opacity(0.18), lineWidth: 1))
+        // Live PerformanceView listener acknowledged — it will deliver the result.
+        // Cancel the headless fallback.
+        .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefreshAck)) { _ in
+            guard isRefreshing else { return }
+            awaitingListenerAck = false
+        }
         .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefreshResult)) { notification in
             guard isRefreshing else { return }
+            awaitingListenerAck = false
             let success = (notification.userInfo?["success"] as? Bool) ?? false
-            isRefreshing = false
-            syncFailed = !success
-            showSyncComplete = true
-            UINotificationFeedbackGenerator().notificationOccurred(success ? .success : .error)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            let retrySeconds = notification.userInfo?["retrySeconds"] as? Int
+            let message = notification.userInfo?["message"] as? String
+            applyRefreshResult(success: success, message: message, retrySeconds: retrySeconds)
+        }
+    }
+
+    /// Text shown on the sync button across its states.
+    private var syncButtonText: String {
+        if showSyncComplete {
+            if syncFailed { return syncStatusMessage ?? "Sync failed" }
+            if readyCountdown > 0 { return "Ready in \(readyCountdown)s" }
+            return "Synced"
+        }
+        return isRefreshing
+            ? String(localized: "sync.refreshing")
+            : String(localized: "sync.refresh_button")
+    }
+
+    /// Applies a refresh outcome (from the live listener or the headless fallback) to
+    /// the button UI, with clear failure reasons and a short post-success "ready"
+    /// settle countdown.
+    private func applyRefreshResult(success: Bool, message: String?, retrySeconds: Int?) {
+        guard isRefreshing else { return }
+        isRefreshing = false
+        awaitingListenerAck = false
+        syncFailed = !success
+        if success {
+            syncStatusMessage = nil
+        } else if let retrySeconds {
+            syncStatusMessage = "Cooldown \(retrySeconds)s"
+        } else {
+            syncStatusMessage = message ?? "Sync failed"
+        }
+        showSyncComplete = true
+        UINotificationFeedbackGenerator().notificationOccurred(success ? .success : .error)
+        if success {
+            lastRefreshTimestamp = Date().timeIntervalSince1970
+            startReadyCountdown(from: 3)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 withAnimation { showSyncComplete = false }
             }
         }
+    }
+
+    /// Counts down a brief "ready" buffer after a successful sync, then clears the
+    /// success badge. Lets Instagram propagation and the live grid settle.
+    private func startReadyCountdown(from seconds: Int) {
+        readyCountdown = seconds
+        func tick() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                guard readyCountdown > 0 else {
+                    withAnimation { showSyncComplete = false }
+                    return
+                }
+                readyCountdown -= 1
+                if readyCountdown == 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        withAnimation { showSyncComplete = false }
+                    }
+                } else {
+                    tick()
+                }
+            }
+        }
+        tick()
     }
 }
 
@@ -1796,6 +1946,10 @@ struct ProfileCacheIncompleteBanner: View {
     }
 
     private var reasonText: String {
+        if let lastReason = UserDefaults.standard.string(forKey: "perf_last_preload_exit_reason_\(currentUserId)"),
+           !lastReason.isEmpty {
+            return "Reason: \(lastReason)"
+        }
         let rate = instagram.checkRateLimit()
         if instagram.shouldUseCacheOnlyForOptionalCalls || rate.remaining <= 12 {
             return "Reason: API budget is low (\(rate.actionsUsed)/55 used). Continue later to avoid Instagram safety limits."
@@ -4101,6 +4255,20 @@ private struct InlineSourcePickerView: View {
         integrations.ocrSlot(for: target) != nil
     }
 
+    private var hasPolledAPISlot: Bool {
+        visibleTokens.contains { sourceValue(for: $0).isPolled }
+    }
+
+    private func sourceValue(for token: String) -> ApiSource {
+        switch token {
+        case "{text2}": return target == "note" ? integrations.noteText2Source : integrations.bioText2Source
+        case "{text3}": return target == "note" ? integrations.noteText3Source : integrations.bioText3Source
+        case "{text4}": return target == "note" ? integrations.noteText4Source : integrations.bioText4Source
+        case "{text5}": return target == "note" ? integrations.noteText5Source : integrations.bioText5Source
+        default:        return target == "note" ? integrations.noteText1Source : integrations.bioText1Source
+        }
+    }
+
     private func sourceBinding(for token: String) -> Binding<ApiSource> {
         switch token {
         case "{text2}": return target == "note" ? $integrations.noteText2Source : $integrations.bioText2Source
@@ -4225,6 +4393,11 @@ private struct InlineSourcePickerView: View {
                 let usedKinds = integrations.interfaceKindsInUse()
 
                 // OCR: remind user how to trigger
+                if hasPolledAPISlot {
+                    inputHintBanner(icon: "bolt.fill", color: Color(hex: "FACC15"),
+                                    text: String(localized: "api.polling.info"))
+                }
+
                 if usedKinds.contains(.ocr) {
                     inputHintBanner(icon: "camera.viewfinder", color: Color(hex: "A78BFA"),
                                     text: "OCR is active. Press the Volume Up button in Performance to start the camera. The recognised text will be sent automatically.")
@@ -4999,7 +5172,7 @@ private struct PostPredictionInputModeView: View {
                         .font(VaultTheme.Typography.captionSmall())
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                         .textCase(.uppercase)
-                    Text("Polls every 2 s while Performance is active. Reveals automatically when a new word arrives.")
+                    Text("api.polling.info")
                         .font(VaultTheme.Typography.caption())
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                     HStack(spacing: 6) {
@@ -5924,46 +6097,6 @@ private struct BackupCard: View {
                     infoRow(icon: "icloud.slash",
                             text: String(localized: "backup.info.excluded"))
                 }
-
-                HStack(spacing: 8) {
-                    Button(action: {
-                        let report = backup.backupDiagnostics()
-                        print(report)
-                        LogManager.shared.info(report, category: .general)
-                    }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "stethoscope")
-                            Text("KV Diag")
-                                .font(VaultTheme.Typography.caption().weight(.medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(Color.gray.opacity(0.08))
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
-                        .cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
-                    }
-
-                    Button(action: {
-                        // Use DispatchQueue (not Task.detached) to avoid Swift concurrency
-                        // issues with the blocking url(forUbiquityContainerIdentifier:) call
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            iCloudDriveSync.shared.runDiagnostics()
-                        }
-                    }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "folder.badge.questionmark")
-                            Text("Drive Diag")
-                                .font(VaultTheme.Typography.caption().weight(.medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(Color.gray.opacity(0.08))
-                        .foregroundColor(VaultTheme.Colors.textSecondary)
-                        .cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2), lineWidth: 1))
-                    }
-                }
             }
         }
         .alert("Restore from iCloud?", isPresented: $showRestoreConfirm) {
@@ -6033,7 +6166,11 @@ private struct BackupCard: View {
                     DataManager.shared.reloadAfterRestore()
                     iCloudDriveSync.shared.downloadAllPhotosFromCloud { count in
                         print("☁️ [BACKUP] Manual restore: \(count) photo files downloaded")
+                        if count > 0 { DataManager.shared.notifyPhotosChanged() }
                     }
+                    HomeScreenIllusionService.shared.downloadFromCloud()
+                    LockscreenInputSettings.shared.downloadWallpaperFromCloud()
+                    AmnesiaCarouselSettings.shared.downloadImagesFromCloud()
                 }
                 isRestoring = false
                 showRestoredAlert = success
@@ -7118,13 +7255,51 @@ private struct InitialProfileLoadView: View {
         case failed(String)
     }
     @State private var phase: Phase = .validating
+    /// Unique id for this view instance's load run — included in every log line so two
+    /// concurrent presentations (which race /feed/user/ and cancel each other) are
+    /// trivially distinguishable in the console.
+    @State private var runId = Int.random(in: 1000...9999)
+    /// Monotonic generation counter shared across all InitialProfileLoadView load runs.
+    /// SwiftUI's fullScreenCover churns onAppear→onDisappear→onAppear, starting `.task`
+    /// (hence runLoad) more than once. Each run grabs the next generation; only the run
+    /// holding the LATEST generation is the owner. Older/cancelled runs detect they've
+    /// been superseded and bail silently. The highest generation always belongs to the
+    /// last onAppear — whose task is alive — so there's always exactly one survivor.
+    @MainActor private static var loadGeneration: Int = 0
     @State private var photosLoaded: Int = 0
     @State private var reelsLoaded: Int = 0
     @State private var taggedLoaded: Int = 0
+    /// Set when the user taps "Exit" so the pagination loop stops cleanly.
+    @State private var cancelled = false
+    /// Guards against onComplete() firing twice (exit button + natural finish).
+    @State private var didComplete = false
+    /// Seconds the loader is currently waiting for the next feed-read slot. Surfaced in the
+    /// status line so a long anti-bot pause looks like deliberate progress, not a freeze.
+    @State private var pacingWaitSeconds: Int = 0
+    /// Set when a genuine network/signal error stops pagination. Surfaces a reassuring note
+    /// (progress saved, resume later) instead of leaving the user wondering.
+    @State private var networkStalled = false
+    /// Set only when Instagram's per-window feed-read budget (6 reads / 10 min) still has not
+    /// recovered before the first-load deadline. During first install we wait out long gates
+    /// because the desired UX is "finish everything now" whenever Instagram allows it.
+    @State private var budgetExhausted = false
+    @State private var budgetRetrySeconds = 0
+    /// Long feed gate waits update the visible countdown. They no longer stop the initial
+    /// loader immediately; they are only diagnostic unless the absolute deadline is reached.
+    private let longFeedGateSeconds = 90
+    /// True while the app is not in the foreground. Pagination pauses so we never fire an
+    /// API call during a background→foreground transition (more likely to fail + worse
+    /// anti-bot signal). Whatever loaded is already on disk, so backgrounding is always safe.
+    @State private var isBackgrounded = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private let maxPhotos = 100
-    /// Page limit: safety cap (100 posts / ~18 per page ≈ 6 pages)
-    private let maxPages = 8
+    /// Page limit: first page + up to 5 paginated reads is enough for the 45-post target
+    /// while keeping the first-install API window tighter for testers.
+    private let maxPages = 5
+    /// First-time target so the fake grid mirrors Instagram from the start, not just
+    /// the first 12. Matches PerformanceView.preloadTargetPosts.
+    private let firstTimeTargetPosts = 45
 
     var body: some View {
         ZStack {
@@ -7171,32 +7346,85 @@ private struct InitialProfileLoadView: View {
                     }
                 }
 
-                // Reassurance block: estimated time + one-time promise.
-                // Pinned right below the progress so the user reads it without scrolling
-                // and stops worrying that the app is stuck.
-                VStack(spacing: 10) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "clock")
+                if budgetExhausted {
+                    // Instagram's feed-read window is spent: explain it's a temporary safety
+                    // limit, the progress is saved, and roughly when to resume.
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "hourglass")
                             .font(.footnote)
-                            .foregroundColor(.white.opacity(0.55))
-                        Text(String(localized: "initial_load.estimated_time"))
-                            .font(.footnote)
-                            .foregroundColor(.white.opacity(0.75))
-                    }
-
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.footnote)
-                            .foregroundColor(Color.green.opacity(0.85))
-                        Text(String(localized: "initial_load.one_time_promise"))
+                            .foregroundColor(Color.orange.opacity(0.9))
+                        Text(String(format: String(localized: "initial_load.budget.note"),
+                                    max(1, Int(ceil(Double(budgetRetrySeconds) / 60.0)))))
                             .font(.footnote)
                             .foregroundColor(.white.opacity(0.85))
-                            .multilineTextAlignment(.center)
+                            .multilineTextAlignment(.leading)
                     }
+                    .padding(.horizontal, 24)
+                    .transition(.opacity)
+                } else if networkStalled {
+                    // Network/signal failure: tell the user their progress is safe and how
+                    // to resume, instead of silently entering with a partial grid.
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.footnote)
+                            .foregroundColor(Color.orange.opacity(0.9))
+                        Text(String(localized: "initial_load.network.note"))
+                            .font(.footnote)
+                            .foregroundColor(.white.opacity(0.85))
+                            .multilineTextAlignment(.leading)
+                    }
+                    .padding(.horizontal, 24)
+                    .transition(.opacity)
+                } else {
+                    // Reassurance block: estimated time + one-time promise.
+                    // Pinned right below the progress so the user reads it without scrolling
+                    // and stops worrying that the app is stuck.
+                    VStack(spacing: 10) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "clock")
+                                .font(.footnote)
+                                .foregroundColor(.white.opacity(0.55))
+                            Text(String(localized: "initial_load.estimated_time"))
+                                .font(.footnote)
+                                .foregroundColor(.white.opacity(0.75))
+                        }
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.footnote)
+                                .foregroundColor(Color.green.opacity(0.85))
+                            Text(String(localized: "initial_load.one_time_promise"))
+                                .font(.footnote)
+                                .foregroundColor(.white.opacity(0.85))
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.horizontal, 24)
 
                 Spacer()
+
+                // Exit escape hatch: if the signal drops or the load stalls, the user is
+                // never trapped. Whatever loaded so far is saved; Performance can continue
+                // later from the red banner when the connection recovers.
+                if case .failed = phase {
+                    EmptyView()
+                } else {
+                    Button {
+                        cancelled = true
+                        finish()
+                    } label: {
+                        Text(String(localized: "initial_load.exit"))
+                            .font(.footnote.weight(.semibold))
+                            .foregroundColor(.white.opacity(0.7))
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule().stroke(Color.white.opacity(0.25), lineWidth: 1)
+                            )
+                    }
+                    .padding(.bottom, 14)
+                }
 
                 Text(String(localized: "initial_load.footer"))
                     .font(.caption)
@@ -7209,7 +7437,25 @@ private struct InitialProfileLoadView: View {
         }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled()
+        .onAppear {
+            print("📦 [INITIAL] View onAppear — run=\(runId) (loadGen=\(Self.loadGeneration))")
+        }
+        .onDisappear {
+            print("📦 [INITIAL] View onDisappear — run=\(runId)")
+        }
+        .onChange(of: scenePhase) { newPhase in
+            isBackgrounded = (newPhase != .active)
+        }
         .task { await runLoad() }
+    }
+
+    /// Blocks while the app is backgrounded so no API call fires mid-transition. Bounded by
+    /// the load deadline and the Exit button; progress is already persisted on disk.
+    @MainActor
+    private func waitWhileBackgrounded(deadline: Date) async {
+        while isBackgrounded, !cancelled, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
     }
 
     /// Fraction in 0…1 for the linear progress bar.
@@ -7234,7 +7480,13 @@ private struct InitialProfileLoadView: View {
         if taggedLoaded > 0 {
             parts.append(String(format: String(localized: "initial_load.tagged_count"), taggedLoaded))
         }
-        return parts.joined(separator: "  ·  ")
+        var line = parts.joined(separator: "  ·  ")
+        // Surface the anti-bot pacing countdown so a deliberate wait never reads as a freeze.
+        if pacingWaitSeconds > 0 {
+            let pacing = "⏳ \(pacingWaitSeconds)s"
+            line = line.isEmpty ? pacing : line + "  ·  " + pacing
+        }
+        return line
     }
 
     private var iconName: String {
@@ -7261,14 +7513,52 @@ private struct InitialProfileLoadView: View {
 
     @MainActor
     private func runLoad() async {
-        // 1 ── Validate session
+        // ── Newest-owner guard ──────────────────────────────────────────────────
+        // SwiftUI's fullScreenCover churns onAppear→onDisappear→onAppear at present
+        // time, so `.task` (hence runLoad) can start TWICE on the SAME view instance.
+        // The first task gets cancelled by the disappear but keeps running (Task.sleep
+        // just returns early on a cancelled task), so without a guard BOTH paginate and
+        // cancel each other's /feed reads — and the cancelled one would even finish()
+        // into Performance with only the first 12 posts.
+        //
+        // Fix: a monotonic generation token. A task that starts already-cancelled never
+        // claims (so it can't orphan the live one). The newest generation owns the load;
+        // any older/cancelled run bails SILENTLY (without finishing). Only the surviving
+        // owner completes the load and enters Performance.
+        if Task.isCancelled {
+            print("📦 [INITIAL] runLoad started already-cancelled — bail before claiming (run=\(runId))")
+            return
+        }
+        Self.loadGeneration += 1
+        let myGen = Self.loadGeneration
+        print("📦 [INITIAL] runLoad START — run=\(runId) gen=\(myGen)")
+
+        // True the moment a newer runLoad takes over (higher generation) OR SwiftUI
+        // cancels our task. Such a run must stop WITHOUT calling finish() — the surviving
+        // run owns completion. (Distinct from `cancelled`, the Exit button, which DOES
+        // finish to dismiss the cover.)
+        func superseded() -> Bool { Self.loadGeneration != myGen || Task.isCancelled }
+
+        // 1 ── Validate session. If this is a fresh launch/restore, wait for the
+        // cold-start window before spending the first Instagram call. Bounded + cancellable
+        // so a stuck gate can never freeze this screen (Exit also breaks out instantly).
         phase = .validating
+        var coldWaited = 0
+        while InstagramSafetyGate.shared.isInColdStartWindow, !cancelled, !superseded(), coldWaited < 60 {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            coldWaited += 1
+        }
+        if superseded() { print("📦 [INITIAL] Superseded during cold-start — bail (run=\(runId) gen=\(myGen))"); return }
+        if cancelled { finish(); return }
+
         let status = await instagram.validateSession()
+        if superseded() { print("📦 [INITIAL] Superseded during validation — bail (run=\(runId) gen=\(myGen))"); return }
+        if cancelled { finish(); return }
         if status == .expired {
             // Can't load without a valid session; bounce back gracefully
             phase = .failed(String(localized: "initial_load.error.session"))
             try? await Task.sleep(nanoseconds: 2_200_000_000)
-            onComplete()
+            finish()
             return
         }
 
@@ -7277,109 +7567,425 @@ private struct InitialProfileLoadView: View {
         guard var profile = try? await instagram.getProfileInfo() else {
             phase = .failed(String(localized: "initial_load.error.load_failed"))
             try? await Task.sleep(nanoseconds: 2_500_000_000)
-            onComplete()
+            finish()
             return
         }
-        photosLoaded = profile.cachedMediaURLs.count
+        if superseded() { print("📦 [INITIAL] Superseded after profile load — bail (run=\(runId) gen=\(myGen))"); return }
+        // If a previous attempt already saved a partial cache, resume from that
+        // cursor/tail instead of collapsing back to getProfileInfo's first page.
+        if let cached = ProfileCacheService.shared.loadProfile(),
+           cached.userId == profile.userId,
+           !ProfileCacheService.shared.hasCompletePerformancePreloadCache(cached, userId: profile.userId),
+           cached.cachedMediaItems.count > profile.cachedMediaItems.count {
+            profile.cachedMediaItems = cached.cachedMediaItems
+            profile.cachedMediaURLs = cached.cachedMediaURLs
+            profile.cachedNextMaxId = cached.cachedNextMaxId ?? profile.cachedNextMaxId
+            print("📦 [INITIAL] Resuming from partial disk cache — \(cached.cachedMediaItems.count) post(s), cursor=\(profile.cachedNextMaxId == nil ? "nil" : "saved")")
+            LogManager.shared.info("[INITIAL] Resuming from partial cache: \(cached.cachedMediaItems.count) posts", category: .general)
+        }
+
+        photosLoaded = profile.cachedMediaItems.count
         ProfileCacheService.shared.saveProfile(profile)
 
-        // 3 ── Paginate with safety-gate-friendly delays until 100 posts or no more pages
-        var cursor     = profile.cachedNextMaxId
-        var allURLs    = profile.cachedMediaURLs
-        var allItems   = profile.cachedMediaItems
-        var page       = 1
+        // 3 ── Paginate up to the first-time target so the fake grid mirrors Instagram
+        // from the start (not just the first 12). Human-paced + SafetyGate-aware. If the
+        // signal drops or a page fails, we keep whatever loaded and let the user enter
+        // (the red banner inside Performance can continue later) or tap Exit.
+        let userId = profile.userId
+        let target = min(
+            firstTimeTargetPosts,
+            profile.mediaCount > 0 ? profile.mediaCount : firstTimeTargetPosts,
+            maxPhotos
+        )
+        var items = profile.cachedMediaItems
+        var cursor = profile.cachedNextMaxId
+        var calls = 0
+        var netRetry = 0
+        var cancelStreak = 0
+        var exitReason = "unknown"
 
-        while let currentCursor = cursor,
-              allURLs.count < maxPhotos,
-              page <= maxPages {
+        // Absolute wall-clock safety net so a pathological gate can never trap this screen
+        // forever. With a fresh first-time budget the real load is ~40-60s, far under this;
+        // the cap only matters in degenerate cases (and Exit is always available anyway).
+        let loadDeadline = Date().addingTimeInterval(12 * 60)
 
-            phase = .paginating(page)
+        // Patient, single-owner pagination. This view is the ONLY thing reading /feed/user/
+        // while it's up (Performance won't start its own preload until perf_fully_preloaded
+        // is set below), so we can afford to wait out every gate gap instead of giving up.
+        // The gate's own min-gap IS the human pacing — by waiting exactly until it allows
+        // the next call we never land inside a blocked window and never waste an attempt.
+        while items.count < target, calls < maxPages, !cancelled, !superseded(), Date() < loadDeadline {
+            phase = .paginating(calls + 1)
 
-            if instagram.shouldUseCacheOnlyForOptionalCalls {
-                print("🛡️ [INITIAL LOAD] Pagination stopped near rate budget")
+            // 1) Wait out the cold-start lockdown if it's active.
+            while InstagramSafetyGate.shared.isInColdStartWindow, !cancelled, !superseded(), Date() < loadDeadline {
+                pacingWaitSeconds = max(pacingWaitSeconds, 1)
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                pacingWaitSeconds = max(0, pacingWaitSeconds - 1)
+            }
+            if cancelled || superseded() || Date() >= loadDeadline { break }
+
+            // 2) Wait precisely until the feed-read gate allows the next page. This covers
+            // both the normal 10s min-gap and a rare per-window budget exhaustion (option A:
+            // we wait it out rather than bail, surfacing the countdown so it never looks
+            // frozen). The first-time full budget means this almost always resolves in ~10s.
+            var gate = InstagramSafetyGate.shared.decision(for: .feedUserRead)
+            while !gate.allowed, !cancelled, !superseded(), Date() < loadDeadline {
+                if gate.waitSeconds > longFeedGateSeconds {
+                    budgetRetrySeconds = gate.waitSeconds
+                    print("📦 [INITIAL] feedUserRead long wait (\(gate.waitSeconds)s) — waiting to complete first load (\(items.count)/\(target))")
+                }
+                pacingWaitSeconds = max(1, gate.waitSeconds)
+                let chunk = UInt64(min(max(1, gate.waitSeconds), 2))
+                try? await Task.sleep(nanoseconds: chunk * 1_000_000_000)
+                gate = InstagramSafetyGate.shared.decision(for: .feedUserRead)
+            }
+            pacingWaitSeconds = 0
+            if Date() >= loadDeadline, !gate.allowed {
+                budgetExhausted = true
+                budgetRetrySeconds = max(budgetRetrySeconds, gate.waitSeconds)
+                exitReason = "budget_deadline"
+                print("📦 [INITIAL] feedUserRead still blocked at deadline (\(gate.waitSeconds)s) — saving \(items.count) post(s)")
                 break
             }
+            if cancelled || superseded() || Date() >= loadDeadline { break }
 
-            // Human-paced delay between requests (5–8 s)
-            let delayNs = UInt64.random(in: 5_000_000_000...8_000_000_000)
-            try? await Task.sleep(nanoseconds: delayNs)
+            // 3) Light human jitter on top of the gate gap.
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_500_000_000))
+            if cancelled || superseded() { break }
 
-            guard let (newItems, newCursor) = try? await instagram.getUserMediaItems(
-                userId: nil, amount: 21, maxId: currentCursor
-            ) else { break }  // network / API error → stop, use what we have
+            // Never fire a page request while the app is backgrounded — wait until it
+            // returns to the foreground (progress so far is already saved on disk).
+            await waitWhileBackgrounded(deadline: loadDeadline)
+            if cancelled || superseded() || Date() >= loadDeadline { break }
 
-            let existingIds = Set(allItems.map(\.mediaId))
-            let fresh = newItems.filter { !existingIds.contains($0.mediaId) }
-            let freshURLs = fresh.map { $0.imageURL }
+            // Some profile headers include the first page but omit the cursor. Re-reading
+            // page 1 (maxId:nil) recovers the real next cursor so we don't stop at 12.
+            let requestedMaxId = cursor
 
-            allItems += fresh
-            allURLs  += freshURLs
+            // 4) Fetch the page ONCE. Critically, never re-fire the request in a tight loop
+            // while the gate is blocked (that spams /feed/user/ every couple seconds). On a
+            // gate block we just fall back to the outer loop, where step 2 waits the gap
+            // WITHOUT firing any request. Network errors get a bounded retry; an exhausted
+            // budget bails cleanly.
+            do {
+                let (page, next) = try await instagram.getUserMediaItems(
+                    userId: userId, amount: 21, maxId: requestedMaxId
+                )
+                calls += 1
+                netRetry = 0
+                cancelStreak = 0
 
-            // Guard against duplicate/looping cursor
-            let nextCursor = (newCursor != currentCursor) ? newCursor : nil
-            cursor = nextCursor
+                let existingIds = Set(items.map { $0.mediaId })
+                let fresh = page.filter { !$0.mediaId.isEmpty && !existingIds.contains($0.mediaId) }
+                items += fresh
+                cursor = next
+                photosLoaded = items.count
 
-            // Cap at limit
-            allURLs  = Array(allURLs.prefix(maxPhotos))
-            allItems = Array(allItems.prefix(maxPhotos))
+                profile.cachedMediaItems = items
+                profile.cachedMediaURLs = items.map { $0.imageURL }
+                profile.cachedNextMaxId = cursor
+                ProfileCacheService.shared.saveProfile(profile)
 
-            photosLoaded = allURLs.count
-            page += 1
+                print("📦 [INITIAL] Page \(calls) cached \(fresh.count) fresh post(s), total \(items.count)/\(target)")
+                if cursor == nil { break }
+            } catch {
+                // A CANCELLED request is fundamentally different from a network error
+                // or a gate block: the call was aborted before reaching Instagram (and,
+                // thanks to the budget rollback in apiRequest, it no longer burns a feed
+                // slot). Spinning on it would re-fire forever, so we diagnose the source
+                // and stop cleanly rather than looping.
+                let desc = error.localizedDescription
+                let isCancel = (error is CancellationError)
+                    || desc.localizedCaseInsensitiveContains("cancel")
+                if isCancel {
+                    cancelStreak += 1
+                    print("📦 [INITIAL] Page fetch CANCELLED (streak \(cancelStreak)) — taskCancelled=\(Task.isCancelled) viewCancelled=\(cancelled) items=\(items.count) run=\(runId)")
+                    LogManager.shared.warning("[INITIAL] feed page cancelled — streak:\(cancelStreak) taskCancelled:\(Task.isCancelled) viewCancelled:\(cancelled) items:\(items.count) run:\(runId)", category: .general)
 
-            // Persist incrementally so a mid-load app kill still saves partial data
-            var updated = profile
-            updated.cachedMediaURLs  = allURLs
-            updated.cachedMediaItems = allItems
-            updated.cachedNextMaxId  = cursor    // next-page cursor for PerformanceView
-            updated.cachedAt         = Date()
-            profile = updated
-            ProfileCacheService.shared.saveProfile(updated)
-
-            if cursor == nil || allURLs.count >= maxPhotos { break }
+                    // Our own SwiftUI task is being torn down (cover churn) or a newer run
+                    // took over — stop silently; the surviving owner will finish the load.
+                    if cancelled || superseded() {
+                        print("📦 [INITIAL] Superseded/cancelled mid-fetch — stopping this run cleanly (run=\(runId) gen=\(myGen))")
+                        break
+                    }
+                    // External cancellation while our task is alive. Budget was rolled
+                    // back, so a short backoff + bounded retry is cheap. If it keeps
+                    // happening something else is racing /feed/user/ — stop and let
+                    // Performance's background loader finish later.
+                    if cancelStreak >= 4 {
+                        print("📦 [INITIAL] Repeated external cancellations — stopping at \(items.count) post(s) (run=\(runId))")
+                        networkStalled = true
+                        exitReason = "cancel_streak"
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                } else {
+                    let g = InstagramSafetyGate.shared.decision(for: .feedUserRead)
+                    if g.allowed {
+                        // Gate is open but the call failed → genuine network/signal error.
+                        netRetry += 1
+                        if netRetry > 3 {
+                            print("📦 [INITIAL] Pagination stopped (signal/error) — keeping \(items.count) post(s)")
+                            networkStalled = true
+                            exitReason = "network_stalled"
+                            break
+                        }
+                        print("📦 [INITIAL] Network error fetching page — retry \(netRetry)/3 in 3s (\(desc))")
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    } else if g.waitSeconds > longFeedGateSeconds {
+                        budgetRetrySeconds = g.waitSeconds
+                        print("📦 [INITIAL] feedUserRead blocked after fetch error (\(g.waitSeconds)s) — waiting in outer loop")
+                    }
+                    // else: short-gap race — do nothing here. The outer loop's step 2 will wait
+                    // out the gap (re-checking the decision only, no request fired).
+                }
+            }
         }
+        pacingWaitSeconds = 0
 
-        // 4 ── Load reels (up to 2 pages, handled internally by getUserReels)
-        guard !instagram.shouldUseCacheOnlyForOptionalCalls else {
-            print("🛡️ [INITIAL LOAD] Optional reels/tagged skipped near rate budget")
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            onComplete()
+        // If a newer run took over (cover churn) or our task was cancelled while we
+        // paginated, bail NOW — do not write the partial "preloaded" flag and do not
+        // finish()/enter Performance. The surviving run owns completion.
+        if superseded() {
+            print("📦 [INITIAL] Superseded after pagination — bail without finishing (run=\(runId) gen=\(myGen), items=\(items.count))")
             return
         }
-        phase = .loadingReels
-        try? await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...7_000_000_000))
-        if let reelItems = try? await withTimeout(seconds: 35, operation: {
-            try await instagram.getUserReels(userId: nil, amount: 50)
-        }) {
-            reelsLoaded = reelItems.count
-            var updated = profile
-            updated.cachedReelURLs  = reelItems.map { $0.imageURL }
-            updated.cachedReelItems = reelItems
-            updated.cachedAt        = Date()
-            profile = updated
-            ProfileCacheService.shared.saveProfile(updated)
-            // Mark as paginated so fetchReelsIfNeeded never re-fetches the old 10-item cache
-            UserDefaults.standard.set(true, forKey: "reels_paginated_\(profile.userId)")
+
+        // Mark fully-preloaded so PerformanceView doesn't show the red "incomplete" banner
+        // and later refreshes don't collapse the grid back to 12.
+        if !userId.isEmpty {
+            let complete = cursor == nil || items.count >= target
+            UserDefaults.standard.set(complete, forKey: "perf_fully_preloaded_\(userId)")
+            if cursor == nil {
+                UserDefaults.standard.set(true, forKey: "perf_no_more_pages_\(userId)")
+            }
+            if complete {
+                exitReason = cursor == nil ? "complete_no_more_pages" : "complete_target"
+            } else if cancelled {
+                exitReason = "user_exit"
+            } else if budgetExhausted {
+                exitReason = exitReason == "unknown" ? "budget_deadline" : exitReason
+            } else if networkStalled {
+                exitReason = exitReason == "unknown" ? "network_stalled" : exitReason
+            } else if Date() >= loadDeadline {
+                exitReason = "deadline"
+            } else if calls >= maxPages {
+                exitReason = "max_pages"
+            } else if cursor == nil {
+                exitReason = "cursor_nil_partial"
+            } else {
+                exitReason = "partial_unknown"
+            }
+            ProfileCacheService.shared.recordPerformancePreloadExit(
+                reason: exitReason,
+                userId: userId,
+                cachedCount: items.count,
+                requiredCount: target,
+                retrySeconds: budgetRetrySeconds > 0 ? budgetRetrySeconds : nil,
+                context: "initial run=\(runId) calls=\(calls) cancelStreak=\(cancelStreak) netRetry=\(netRetry)"
+            )
+            print("📦 [INITIAL] First-time load \(complete ? "complete" : "partial") reason=\(exitReason) — \(items.count)/\(target) posts (run=\(runId), calls=\(calls), cancelStreak=\(cancelStreak), netRetry=\(netRetry))")
         }
 
-        // 5 ── Load tagged (up to 2 pages, handled internally by getUserTagged)
-        phase = .loadingTagged
-        try? await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...7_000_000_000))
-        if let taggedItems = try? await withTimeout(seconds: 35, operation: {
-            try await instagram.getUserTagged(userId: nil, amount: 50)
-        }) {
-            taggedLoaded = taggedItems.count
-            var updated = profile
-            updated.cachedTaggedItems = taggedItems
-            updated.cachedTaggedURLs = taggedItems.map { $0.imageURL }
-            updated.cachedAt         = Date()
-            profile = updated
-            ProfileCacheService.shared.saveProfile(updated)
-            UserDefaults.standard.set(true, forKey: "tagged_paginated_\(profile.userId)")
+        // 4 ── Cache primary post thumbnails before the fake interface is visible.
+        // Covers for video posts can arrive a beat later than photo JPGs; retry them
+        // here so first install/restore does not open Performance with gray cells that
+        // only fix themselves after reopening.
+        var warmupURLs = Array(items.prefix(firstTimeTargetPosts).map(\.imageURL))
+        if !profile.profilePicURL.isEmpty {
+            warmupURLs.insert(profile.profilePicURL, at: 0)
+        }
+        for url in warmupURLs {
+            if cancelled { break }
+            let mediaId = items.first(where: { $0.imageURL == url })?.mediaId
+            if let image = await loadOrDownloadImageForInitialEntry(url: url, mediaId: mediaId) {
+                ProfileCacheService.shared.saveImage(image, forURL: url)
+                if let mediaId, !mediaId.isEmpty {
+                    ProfileCacheService.shared.saveImage(image, forMediaId: mediaId)
+                }
+            } else if url != profile.profilePicURL {
+                print("⚠️ [INITIAL] Thumbnail still missing after retries: mediaId=\(mediaId ?? "unknown")")
+                LogManager.shared.warning("[INITIAL] thumbnail missing after retries mediaId=\(mediaId ?? "unknown")", category: .cache)
+            }
         }
 
-        // Brief completion moment so the user sees the final count
-        try? await Task.sleep(nanoseconds: 900_000_000)
+        // 5 ── Optional content: reels, tagged and highlights. These use SEPARATE endpoints
+        // and budgets from posts (/clips/, /usertags/, highlights), so they never competed
+        // with the grid pagination above. We block on them here too so the whole profile is
+        // ready before entering — no "incomplete" banner for the secondary tabs later.
+        // Skipped when the network stalled or the budget is spent (the calls would only fail).
+        if !cancelled, !superseded(), !networkStalled, !budgetExhausted, !userId.isEmpty {
+            profile = await loadOptionalContent(userId: userId, profile: profile, deadline: loadDeadline)
+        }
+
+        // Final ownership check: a run superseded during optional content must not enter.
+        if superseded() {
+            print("📦 [INITIAL] Superseded before finish — bail (run=\(runId) gen=\(myGen))")
+            return
+        }
+
+        // If the signal dropped or the budget is spent, hold briefly on the note so the user
+        // can read it and choose to Exit. Progress is already saved; re-entering Performance
+        // later resumes from the red banner. Auto-finish after the pause (never trapped).
+        if (networkStalled || budgetExhausted), !cancelled {
+            var held = 0
+            while held < 5, !cancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                held += 1
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        finish()
+    }
+
+    /// Loads reels, tagged and highlights into the same on-disk cache as posts so the
+    /// secondary tabs are instant on entry. Bounded by `deadline` and the Exit button so a
+    /// blocked endpoint can never trap this screen; failures are non-fatal (Performance's
+    /// background loader still picks them up later). Sets `perf_optional_preloaded` only
+    /// when all three stages succeed.
+    @MainActor
+    private func loadOptionalContent(userId: String, profile input: InstagramProfile, deadline: Date) async -> InstagramProfile {
+        var profile = input
+        guard instagram.isLoggedIn, !instagram.isLocked, !instagram.isSessionChallenged else { return profile }
+
+        var reelsOK = false
+        var taggedOK = false
+        var highlightsOK = false
+
+        // Reels (/clips/)
+        if !cancelled, Date() < deadline {
+            phase = .loadingReels
+            if let reels = await fetchOptional(deadline: deadline, { try await self.instagram.getUserReels(userId: userId, amount: 50) }) {
+                profile.cachedReelURLs = reels.map { $0.imageURL }
+                profile.cachedReelItems = reels
+                reelsLoaded = reels.count
+                ProfileCacheService.shared.saveProfile(profile)
+                reelsOK = true
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 1_500_000_000...2_500_000_000))
+
+        // Tagged (/usertags/)
+        if !cancelled, Date() < deadline {
+            phase = .loadingTagged
+            if let tagged = await fetchOptional(deadline: deadline, { try await self.instagram.getUserTagged(userId: userId, amount: 50) }) {
+                profile.cachedTaggedURLs = tagged.map { $0.imageURL }
+                profile.cachedTaggedItems = tagged
+                taggedLoaded = tagged.count
+                ProfileCacheService.shared.saveProfile(profile)
+                taggedOK = true
+            }
+        }
+
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 1_500_000_000...2_500_000_000))
+
+        // Highlights — an account may legitimately have none, so an empty result still counts
+        // as "done" (we won't keep blocking on it).
+        if !cancelled, Date() < deadline {
+            if let highlights = await fetchOptional(deadline: deadline, { try await self.instagram.getUserHighlights(userId: userId) }) {
+                profile.cachedHighlights = highlights
+                ProfileCacheService.shared.saveProfile(profile)
+            }
+            highlightsOK = true
+        }
+
+        // Cache reel/tagged thumbnails and highlight covers so the tabs paint instantly.
+        for item in profile.cachedReelItems + profile.cachedTaggedItems {
+            if cancelled || Date() >= deadline { break }
+            let url = item.imageURL
+            if ProfileCacheService.shared.loadImage(forURL: url) != nil { continue }
+            if let img = await downloadImage(from: url) {
+                ProfileCacheService.shared.saveImage(img, forURL: url)
+                if !item.mediaId.isEmpty { ProfileCacheService.shared.saveImage(img, forMediaId: item.mediaId) }
+            }
+        }
+        for highlight in profile.cachedHighlights {
+            if cancelled || Date() >= deadline { break }
+            let url = highlight.coverImageURL
+            if ProfileCacheService.shared.loadImage(forURL: url) != nil { continue }
+            if let img = await downloadImage(from: url) {
+                ProfileCacheService.shared.saveImage(img, forURL: url)
+            }
+        }
+
+        if reelsOK, taggedOK, highlightsOK {
+            UserDefaults.standard.set(true, forKey: "perf_optional_preloaded_\(userId)")
+            print("📦 [INITIAL] Optional content fully loaded — reels:\(profile.cachedReelItems.count) tagged:\(profile.cachedTaggedItems.count) highlights:\(profile.cachedHighlights.count)")
+        } else {
+            print("📦 [INITIAL] Optional content partial — reels:\(reelsOK) tagged:\(taggedOK) highlights:\(highlightsOK) (background loader will finish later)")
+        }
+        return profile
+    }
+
+    /// Runs an optional fetch with bounded retries. A "Safety pause" throw means the gate
+    /// wants a longer gap (separate per-endpoint budget), so we back off and retry; any other
+    /// error gets a short backoff. Returns nil after 3 attempts so the caller proceeds.
+    @MainActor
+    private func fetchOptional<T>(deadline: Date, _ op: () async throws -> T) async -> T? {
+        var attempt = 0
+        while attempt < 3, !cancelled, !Task.isCancelled, Date() < deadline {
+            await waitWhileBackgrounded(deadline: deadline)
+            if cancelled || Task.isCancelled || Date() >= deadline { break }
+            do {
+                return try await op()
+            } catch {
+                // A cancelled task must not keep retrying (the op would only re-cancel).
+                if Task.isCancelled { break }
+                attempt += 1
+                let msg = error.localizedDescription
+                let isSafetyPause = msg.localizedCaseInsensitiveContains("Safety pause")
+                let backoff = isSafetyPause ? 12 : 4
+                print("📦 [INITIAL] Optional fetch failed (attempt \(attempt)/3): \(msg) — retrying in \(backoff)s")
+                var slept = 0
+                while slept < backoff, !cancelled, Date() < deadline {
+                    pacingWaitSeconds = max(1, backoff - slept)
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    slept += 1
+                }
+                pacingWaitSeconds = 0
+            }
+        }
+        return nil
+    }
+
+    /// Calls onComplete exactly once (exit button and natural finish can race).
+    @MainActor
+    private func finish() {
+        guard !didComplete else { return }
+        didComplete = true
         onComplete()
+    }
+
+    private func downloadImage(from urlString: String) async -> UIImage? {
+        guard let url = URL(string: urlString) else { return nil }
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    private func loadOrDownloadImageForInitialEntry(url: String, mediaId: String?) async -> UIImage? {
+        if let image = ProfileCacheService.shared.loadImage(forURL: url) {
+            return image
+        }
+        if let mediaId, !mediaId.isEmpty,
+           let image = ProfileCacheService.shared.loadImage(forMediaId: mediaId) {
+            ProfileCacheService.shared.saveImage(image, forURL: url)
+            return image
+        }
+
+        for attempt in 1...3 {
+            if let image = await downloadImage(from: url) {
+                if attempt > 1 {
+                    print("✅ [INITIAL] Thumbnail recovered on retry \(attempt) mediaId=\(mediaId ?? "unknown")")
+                }
+                return image
+            }
+            guard attempt < 3 else { break }
+            try? await Task.sleep(nanoseconds: UInt64(attempt) * 700_000_000)
+        }
+        return nil
     }
 
     /// Secondary profile tabs should never block Performance entry forever.

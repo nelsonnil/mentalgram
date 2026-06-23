@@ -36,6 +36,13 @@ class iCloudDriveSync: ObservableObject {
     let containerID = "iCloud.com.nelsonnil.vault"
     private let fm = FileManager.default
 
+    /// Guards against two concurrent full-photo downloads racing each other (e.g. the
+    /// first-launch restore AND the self-heal pass firing on the same onAppear). Without
+    /// this they materialize/copy the same files in parallel, spamming "already exists"
+    /// copy errors and stalling the app with redundant I/O.
+    private let downloadLock = NSLock()
+    private var isDownloadingAllPhotos = false
+
     // MARK: - Local root
 
     var localPhotosRoot: URL {
@@ -363,64 +370,241 @@ class iCloudDriveSync: ObservableObject {
     /// Downloads ALL photo files from iCloud to local Documents/photos/.
     /// Checks both the current "Documents/Photos" folder and the legacy "Documents/photos"
     /// folder for backward compatibility with existing user backups.
+    ///
+    /// On a fresh reinstall the cloud files arrive as **non-materialized placeholders**
+    /// (".<name>.jpg.icloud"). We must (1) detect those placeholders, (2) request the real
+    /// download, and (3) WAIT for the file to materialize before copying it locally — the
+    /// old code skipped placeholders and copied immediately, so reinstalls restored 0 images.
     func downloadAllPhotosFromCloud(completion: @escaping (Int) -> Void = { _ in }) {
+        // Coalesce duplicate requests — only one full download may run at a time.
+        downloadLock.lock()
+        if isDownloadingAllPhotos {
+            downloadLock.unlock()
+            print("☁️ [DRIVE] Download already in progress — skipping duplicate request")
+            completion(0)
+            return
+        }
+        isDownloadingAllPhotos = true
+        downloadLock.unlock()
+
         Task.detached(priority: .background) {
-            let localRoot = self.localPhotosRoot
-            try? self.fm.createDirectory(at: localRoot, withIntermediateDirectories: true)
-
-            // Try both possible cloud root paths: new "Photos" and legacy "photos"
-            var cloudRoots: [URL] = []
-            if let base = self.fm.url(forUbiquityContainerIdentifier: self.containerID) {
-                let newPath    = base.appendingPathComponent("Documents/Photos", isDirectory: true)
-                let legacyPath = base.appendingPathComponent("Documents/photos", isDirectory: true)
-                if self.fm.fileExists(atPath: newPath.path)    { cloudRoots.append(newPath) }
-                if self.fm.fileExists(atPath: legacyPath.path) { cloudRoots.append(legacyPath) }
-                print("☁️ [DRIVE] Download: checking \(cloudRoots.count) cloud root(s)")
-            } else {
-                print("☁️ [DRIVE] iCloud container unavailable — cannot download")
-                DispatchQueue.main.async { self.lastError = .containerUnavailable }
-                completion(0)
-                return
+            defer {
+                self.downloadLock.lock()
+                self.isDownloadingAllPhotos = false
+                self.downloadLock.unlock()
             }
+            let count = await self.downloadAllPhotosAsync()
+            completion(count)
+        }
+    }
 
-            guard !cloudRoots.isEmpty else {
-                print("☁️ [DRIVE] No cloud photo folders found (neither Photos nor photos)")
-                completion(0)
-                return
+    /// Non-blocking implementation. Uses `Task.sleep` (not `Thread.sleep`) so the cooperative
+    /// thread pool is never starved — which was causing the UI freezes on fresh restores.
+    private func downloadAllPhotosAsync() async -> Int {
+        let localRoot = self.localPhotosRoot
+        try? self.fm.createDirectory(at: localRoot, withIntermediateDirectories: true)
+
+        // Resolve the container with retries — a fresh reinstall can take a few seconds
+        // to mount the ubiquity container.
+        var base: URL?
+        for attempt in 1...5 {
+            if let b = self.fm.url(forUbiquityContainerIdentifier: self.containerID) {
+                base = b
+                break
             }
+            if attempt < 5 {
+                print("☁️ [DRIVE] Download: container not ready — retry \(attempt)/5")
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+        guard let base else {
+            print("☁️ [DRIVE] iCloud container unavailable — cannot download")
+            await MainActor.run { self.lastError = .containerUnavailable }
+            return 0
+        }
 
-            var downloaded = 0
-            for cloudRoot in cloudRoots {
-                guard let setFolders = try? self.fm.contentsOfDirectory(
-                    at: cloudRoot, includingPropertiesForKeys: nil
+        // Try both possible cloud root paths: new "Photos" and legacy "photos"
+        var cloudRoots: [URL] = []
+        let newPath    = base.appendingPathComponent("Documents/Photos", isDirectory: true)
+        let legacyPath = base.appendingPathComponent("Documents/photos", isDirectory: true)
+        if self.fm.fileExists(atPath: newPath.path)    { cloudRoots.append(newPath) }
+        if self.fm.fileExists(atPath: legacyPath.path) { cloudRoots.append(legacyPath) }
+        print("☁️ [DRIVE] Download: checking \(cloudRoots.count) cloud root(s)")
+
+        guard !cloudRoots.isEmpty else {
+            print("☁️ [DRIVE] No cloud photo folders found (neither Photos nor photos)")
+            return 0
+        }
+
+        var downloaded = 0
+        for cloudRoot in cloudRoots {
+            guard let setFolders = try? self.fm.contentsOfDirectory(
+                at: cloudRoot, includingPropertiesForKeys: [.isDirectoryKey]
+            ) else { continue }
+
+            for setFolder in setFolders where setFolder.hasDirectoryPath {
+                let localSetFolder = localRoot.appendingPathComponent(
+                    setFolder.lastPathComponent, isDirectory: true)
+                try? self.fm.createDirectory(at: localSetFolder, withIntermediateDirectories: true)
+
+                guard let entries = try? self.fm.contentsOfDirectory(
+                    at: setFolder, includingPropertiesForKeys: nil
                 ) else { continue }
 
-                for setFolder in setFolders where setFolder.hasDirectoryPath {
-                    let localSetFolder = localRoot.appendingPathComponent(
-                        setFolder.lastPathComponent, isDirectory: true)
-                    try? self.fm.createDirectory(at: localSetFolder, withIntermediateDirectories: true)
+                // Resolve every entry to its real jpg URL.
+                // Entry can be the real jpg OR an iCloud placeholder ".<name>.icloud".
+                var realURLs: [URL] = []
+                for entry in entries {
+                    let realName = self.realFileName(for: entry)
+                    guard realName.lowercased().hasSuffix(".jpg") else { continue }
+                    realURLs.append(setFolder.appendingPathComponent(realName))
+                }
+                guard !realURLs.isEmpty else { continue }
 
-                    guard let photoFiles = try? self.fm.contentsOfDirectory(
-                        at: setFolder, includingPropertiesForKeys: nil
-                    ) else { continue }
+                // Pass 1: kick off downloads for the whole folder so they run in parallel.
+                for url in realURLs where !self.fm.fileExists(atPath:
+                    localSetFolder.appendingPathComponent(url.lastPathComponent).path) {
+                    try? self.fm.startDownloadingUbiquitousItem(at: url)
+                }
 
-                    for photoFile in photoFiles where photoFile.pathExtension == "jpg" {
-                        try? self.fm.startDownloadingUbiquitousItem(at: photoFile)
-                        let dest = localSetFolder.appendingPathComponent(photoFile.lastPathComponent)
-                        if !self.fm.fileExists(atPath: dest.path) {
-                            do {
-                                try self.fm.copyItem(at: photoFile, to: dest)
-                                downloaded += 1
-                            } catch {
-                                print("☁️ [DRIVE] File not ready yet: \(photoFile.lastPathComponent)")
-                            }
+                // Pass 2: wait for each to materialize, then copy into Documents/photos.
+                for url in realURLs {
+                    let dest = localSetFolder.appendingPathComponent(url.lastPathComponent)
+                    if self.fm.fileExists(atPath: dest.path) { continue }
+
+                    // Fast path: if neither the real file nor the .icloud placeholder
+                    // exists on this device, the file is absent from iCloud Drive (upload
+                    // never completed, etc.). Skip immediately — no wait needed.
+                    let placeholderURL = setFolder
+                        .appendingPathComponent("." + url.lastPathComponent + ".icloud")
+                    let existsInCloud = self.fm.fileExists(atPath: url.path)
+                        || self.fm.fileExists(atPath: placeholderURL.path)
+                    if !existsInCloud {
+                        print("☁️ [DRIVE] Skipping \(url.lastPathComponent) — not present in iCloud Drive")
+                        continue
+                    }
+
+                    if await self.materializeUbiquitousItemAsync(at: url, timeout: 8) {
+                        // Re-check right before copying in case a concurrent path beat us.
+                        if self.fm.fileExists(atPath: dest.path) { continue }
+                        do {
+                            try self.fm.copyItem(at: url, to: dest)
+                            downloaded += 1
+                        } catch CocoaError.fileWriteFileExists {
+                            // Already present — treat as success, not an error.
+                        } catch {
+                            print("☁️ [DRIVE] Copy failed: \(url.lastPathComponent) — \(error.localizedDescription)")
                         }
+                    } else {
+                        print("☁️ [DRIVE] Timed out waiting for \(url.lastPathComponent) to download")
                     }
                 }
             }
-            print("☁️ [DRIVE] ✅ Downloaded \(downloaded) photo files from iCloud Drive")
-            completion(downloaded)
         }
+        print("☁️ [DRIVE] ✅ Downloaded \(downloaded) photo files from iCloud Drive")
+        await MainActor.run { self.lastError = nil }
+        return downloaded
+    }
+
+    /// Strips the iCloud placeholder naming (".<name>.icloud" → "<name>"). Returns the
+    /// input's last path component unchanged when it is not a placeholder.
+    private func realFileName(for url: URL) -> String {
+        var name = url.lastPathComponent
+        guard name.hasSuffix(".icloud") else { return name }
+        name = String(name.dropLast(".icloud".count))
+        if name.hasPrefix(".") { name.removeFirst() }
+        return name
+    }
+
+    // MARK: - Single-file restore (cover screenshot, wallpaper, carousel slots…)
+
+    /// True when a file exists in the container's Documents folder either as a
+    /// materialized file or as a not-yet-downloaded ".<name>.icloud" placeholder.
+    func containerDocumentFileExists(_ fileName: String) -> Bool {
+        guard let base = fm.url(forUbiquityContainerIdentifier: containerID) else { return false }
+        let real = base.appendingPathComponent("Documents/\(fileName)")
+        if fm.fileExists(atPath: real.path) { return true }
+        // The not-yet-downloaded placeholder lives in the SAME directory as the file,
+        // named ".<filename>.icloud" (dot prefixes the filename, not any parent folder).
+        let placeholder = real.deletingLastPathComponent()
+            .appendingPathComponent(".\(real.lastPathComponent).icloud")
+        return fm.fileExists(atPath: placeholder.path)
+    }
+
+    /// Restores one file from the container's Documents folder into `localURL`, MATERIALIZING
+    /// it first so fresh-reinstall placeholders are handled. Runs on a background thread.
+    func restoreContainerFile(named fileName: String,
+                              to localURL: URL,
+                              timeout: TimeInterval = 10,
+                              completion: @escaping (Bool) -> Void) {
+        Task.detached(priority: .background) {
+            var base: URL?
+            for attempt in 1...3 {
+                if let b = self.fm.url(forUbiquityContainerIdentifier: self.containerID) { base = b; break }
+                if attempt < 3 { try? await Task.sleep(nanoseconds: 1_500_000_000) }
+            }
+            guard let base else { completion(false); return }
+
+            let cloudFile = base.appendingPathComponent("Documents/\(fileName)")
+            guard self.containerDocumentFileExists(fileName) else {
+                completion(false); return
+            }
+            guard await self.materializeUbiquitousItemAsync(at: cloudFile, timeout: timeout) else {
+                print("☁️ [DRIVE] \(fileName) did not materialize in time")
+                completion(false); return
+            }
+            do {
+                try self.fm.createDirectory(at: localURL.deletingLastPathComponent(),
+                                            withIntermediateDirectories: true)
+                if self.fm.fileExists(atPath: localURL.path) { try self.fm.removeItem(at: localURL) }
+                try self.fm.copyItem(at: cloudFile, to: localURL)
+                completion(true)
+            } catch {
+                print("☁️ [DRIVE] restoreContainerFile failed for \(fileName): \(error.localizedDescription)")
+                completion(false)
+            }
+        }
+    }
+
+    /// Async version — does NOT block any thread (uses Task.sleep), so the Swift Concurrency
+    /// cooperative thread pool is never starved. Prefer this from async contexts.
+    func materializeUbiquitousItemAsync(at url: URL, timeout: TimeInterval) async -> Bool {
+        func isCurrent() -> Bool {
+            if let v = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]),
+               let status = v.ubiquitousItemDownloadingStatus {
+                return status == .current
+            }
+            return fm.fileExists(atPath: url.path)
+        }
+        if isCurrent() { return true }
+        try? fm.startDownloadingUbiquitousItem(at: url)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            try? await Task.sleep(nanoseconds: 400_000_000)  // 0.4s, non-blocking
+            if isCurrent() { return true }
+        }
+        return isCurrent()
+    }
+
+    /// Synchronous version — blocks the calling thread. Only safe to call from
+    /// a true background thread (not inside a Swift async Task). Kept for legacy
+    /// callers outside the async context.
+    func materializeUbiquitousItem(at url: URL, timeout: TimeInterval) -> Bool {
+        func isCurrent() -> Bool {
+            if let v = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]),
+               let status = v.ubiquitousItemDownloadingStatus {
+                return status == .current
+            }
+            return fm.fileExists(atPath: url.path)
+        }
+        if isCurrent() { return true }
+        try? fm.startDownloadingUbiquitousItem(at: url)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.4)
+            if isCurrent() { return true }
+        }
+        return isCurrent()
     }
 
     /// Removes the iCloud copy of a deleted set.

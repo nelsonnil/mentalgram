@@ -5,7 +5,14 @@ class FollowingMagicSettings: ObservableObject {
     static let shared = FollowingMagicSettings()
 
     @Published var isEnabled: Bool {
-        didSet { UserDefaults.standard.set(isEnabled, forKey: "followingMagicEnabled") }
+        didSet {
+            UserDefaults.standard.set(isEnabled, forKey: "followingMagicEnabled")
+            if !isEnabled {
+                pendingOffset = 0
+                transferOffset = 0
+                isTransferCounting = false
+            }
+        }
     }
 
     /// Duration of the countdown animation in seconds (fixed at 6).
@@ -27,7 +34,14 @@ class FollowingMagicSettings: ObservableObject {
     /// When true, enables the "transfer illusion": deflates the searched profile then
     /// inflates own profile by the same amount when volume is pressed.
     @Published var transferEnabled: Bool {
-        didSet { UserDefaults.standard.set(transferEnabled, forKey: "followingMagicTransferEnabled") }
+        didSet {
+            UserDefaults.standard.set(transferEnabled, forKey: "followingMagicTransferEnabled")
+            if !transferEnabled {
+                pendingOffset = 0
+                transferOffset = 0
+                isTransferCounting = false
+            }
+        }
     }
 
     /// The offset saved after deflating the searched profile, ready to inflate own profile.
@@ -56,6 +70,18 @@ class FollowingMagicSettings: ObservableObject {
         let savedTransfer = UserDefaults.standard.object(forKey: "followingMagicTransferEnabled") as? Bool
         self.transferEnabled = savedTransfer ?? false
         self.transferOffset = UserDefaults.standard.integer(forKey: "followingMagicTransferOffset")
+    }
+
+    func reloadFromUserDefaults() {
+        isEnabled = UserDefaults.standard.bool(forKey: "followingMagicEnabled")
+        let savedDelay = UserDefaults.standard.object(forKey: "followingMagicTriggerDelay") as? Int
+        triggerDelay = savedDelay ?? 0
+        let savedTarget = UserDefaults.standard.object(forKey: "followingMagicTargetFollowers") as? Bool
+        targetFollowers = savedTarget ?? false
+        let savedTransfer = UserDefaults.standard.object(forKey: "followingMagicTransferEnabled") as? Bool
+        transferEnabled = savedTransfer ?? false
+        transferOffset = UserDefaults.standard.integer(forKey: "followingMagicTransferOffset")
+        print("🎩 [MAGIC] Reloaded settings from UserDefaults after restore")
     }
 
     /// Captures a digit sequence as the exact pending offset used by Counter Glitch.

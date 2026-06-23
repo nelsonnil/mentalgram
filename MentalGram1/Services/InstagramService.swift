@@ -1416,6 +1416,19 @@ class InstagramService: ObservableObject {
         }
     }
 
+    /// Undo the most recent `trackAction()` call. Used when a request is cancelled
+    /// before it ever reached Instagram, so a doomed/aborted call doesn't burn one
+    /// of the 55/hour actions (mirrors `InstagramSafetyGate.rollbackLastRequest`).
+    private func untrackAction() {
+        guard !actionTimestamps.isEmpty else { return }
+        actionTimestamps.removeLast()
+        persistRecentActionTimestamps()
+        DispatchQueue.main.async {
+            self.actionsThisHour = self.actionTimestamps.count
+            self.isRateLimited = self.actionTimestamps.count >= self.maxActionsPerHour
+        }
+    }
+
     /// Persist the full rolling hour of `actionTimestamps` to UserDefaults so both
     /// the burst guard and the hard rate-limit check survive app restarts or crashes.
     /// Entries older than 1 hour are dropped here (they'd be filtered on restore anyway).
@@ -1963,7 +1976,15 @@ class InstagramService: ObservableObject {
             let duration = String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - requestStart) * 1000)
             print("🌐 [NETWORK] URLError: \(error.localizedDescription)")
             if error.code == .cancelled {
-                LogManager.shared.info("\(method) \(shortPath) cancelled [\(duration)]", category: .api)
+                // A cancelled request never reached Instagram (task torn down /
+                // superseded / aborted), so roll back the action we optimistically
+                // counted above. Without this, a handful of cancelled feed reads
+                // exhaust the 6-reads/10-min window and strand the grid at page 1.
+                untrackAction()
+                InstagramSafetyGate.shared.rollbackLastRequest(method: method, path: path)
+                let rate = checkRateLimit()
+                print("↩️ [BUDGET] Cancelled \(method) \(shortPath) rolled back — actions now \(rate.actionsUsed)/\(maxActionsPerHour)")
+                LogManager.shared.info("\(method) \(shortPath) cancelled [\(duration)] — budget rolled back (actions:\(rate.actionsUsed))", category: .api)
                 throw InstagramError.networkError("cancelled")
             }
             LogManager.shared.error("\(method) \(shortPath) NETWORK ERROR [\(duration)]: \(error.localizedDescription)", category: .api)
@@ -6153,6 +6174,106 @@ class InstagramService: ObservableObject {
         
         return false
     }
+
+    /// Reads the logged-in user's current Instagram Note.
+    /// Returns nil when Instagram reports no active note for this account.
+    func getCurrentNoteText() async throws -> String? {
+        guard isLoggedIn, !isLocked, !isSessionExpired, !isSessionChallenged else {
+            throw InstagramError.apiError("Session is not ready for note refresh.")
+        }
+
+        if InstagramSafetyGate.shared.isInColdStartWindow {
+            let remaining = InstagramSafetyGate.shared.coldStartSecondsRemaining
+            throw InstagramError.apiError("Cold-start safety window active (\(remaining)s).")
+        }
+
+        try await waitForNetworkStability()
+
+        let data = try await apiRequest(method: "GET", path: "/notes/get_notes/")
+        guard let json = try? JSONSerialization.jsonObject(with: data) else {
+            throw InstagramError.apiError("Could not parse notes response.")
+        }
+
+        if let top = json as? [String: Any],
+           let status = top["status"] as? String,
+           status == "fail" {
+            let message = top["message"] as? String ?? "Notes refresh failed"
+            throw InstagramError.apiError(message)
+        }
+
+        return extractOwnNoteText(from: json)
+    }
+
+    private func extractOwnNoteText(from json: Any) -> String? {
+        let ownUserId = session.userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ownUsername = session.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !ownUserId.isEmpty || !ownUsername.isEmpty else { return nil }
+
+        func stringValue(_ value: Any?) -> String? {
+            if let s = value as? String { return s }
+            if let n = value as? NSNumber { return n.stringValue }
+            return nil
+        }
+
+        func text(in dict: [String: Any]) -> String? {
+            let candidates = [
+                dict["text"],
+                dict["note_text"],
+                dict["caption"],
+                (dict["note"] as? [String: Any])?["text"],
+                (dict["note"] as? [String: Any])?["note_text"]
+            ]
+            return candidates.compactMap(stringValue).first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        func userMatches(_ dict: [String: Any]) -> Bool {
+            if (dict["is_own_note"] as? Bool) == true ||
+                (dict["is_self"] as? Bool) == true ||
+                (dict["is_viewer_note"] as? Bool) == true {
+                return true
+            }
+
+            let idKeys = ["user_id", "owner_id", "pk", "pk_id", "user_pk", "profile_id"]
+            for key in idKeys {
+                if let value = stringValue(dict[key]), !ownUserId.isEmpty, value == ownUserId {
+                    return true
+                }
+            }
+
+            if let username = stringValue(dict["username"])?.lowercased(),
+               !ownUsername.isEmpty,
+               username == ownUsername {
+                return true
+            }
+
+            for nestedKey in ["user", "owner", "profile"] {
+                if let nested = dict[nestedKey] as? [String: Any], userMatches(nested) {
+                    return true
+                }
+            }
+
+            return false
+        }
+
+        func search(_ node: Any) -> String? {
+            if let dict = node as? [String: Any] {
+                if let value = text(in: dict), !value.isEmpty, userMatches(dict) {
+                    return value
+                }
+                for value in dict.values {
+                    if let found = search(value) { return found }
+                }
+            } else if let array = node as? [Any] {
+                for item in array {
+                    if let found = search(item) { return found }
+                }
+            }
+            return nil
+        }
+
+        return search(json)
+    }
     
     // MARK: - Change Biography
 
@@ -7998,6 +8119,23 @@ final class InstagramSafetyGate {
 
     func recordApiRequest(method: String, path: String) {
         record(actionFor(method: method, path: path))
+    }
+
+    /// Removes the most recently recorded timestamp for the action that
+    /// `method`+`path` maps to. Called when a request was optimistically counted
+    /// (via `recordApiRequest`) but then CANCELLED before it ever reached
+    /// Instagram (task torn down / superseded / network abort). A cancelled call
+    /// never hit the server, so it must not consume the per-window budget —
+    /// otherwise a handful of cancelled feed reads would burn the 6-reads/10-min
+    /// window and strand the grid at the first page.
+    func rollbackLastRequest(method: String, path: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        let action = actionFor(method: method, path: path)
+        var values = timestamps(for: action)
+        guard !values.isEmpty else { return }
+        values.removeLast()
+        setTimestamps(values, for: action)
     }
 
     // MARK: - Challenge circuit

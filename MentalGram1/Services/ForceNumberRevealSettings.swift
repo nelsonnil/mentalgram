@@ -78,6 +78,18 @@ class ForceNumberRevealSettings: ObservableObject {
         // restoreIfNeeded is called from scenePhase .active on first launch — no need here
     }
 
+    func reloadFromUserDefaults() {
+        isEnabled            = UserDefaults.standard.bool(forKey: "forceNumberRevealEnabled")
+        gridSwipeEnabled     = UserDefaults.standard.bool(forKey: "forceNumberRevealGridSwipeEnabled")
+        ocrEnabled           = UserDefaults.standard.bool(forKey: "forceNumberRevealOcrEnabled")
+        autoReArchiveEnabled = UserDefaults.standard.bool(forKey: "forceNumberAutoReArchiveEnabled")
+        let savedMinutes     = UserDefaults.standard.integer(forKey: "forceNumberAutoReArchiveMinutes")
+        autoReArchiveMinutes = savedMinutes > 0 ? savedMinutes : 15
+        restoreAlreadyScheduled = false
+        restoreIfNeeded()
+        print("🔢 [FORCE NUMBER] Reloaded settings from UserDefaults after restore")
+    }
+
     // MARK: - Schedule re-archive (call after successful reveal)
 
     /// Call after a successful reveal with the mediaIds that were unarchived.

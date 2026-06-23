@@ -183,13 +183,15 @@
 "backup.just_now" = "Just now";
 "backup.min_ago" = "%d min ago";
 "backup.h_ago" = "%d h ago";
-"backup.info.auto" = "Backup runs only when you tap \"Back up now\". It never overwrites iCloud automatically.";
-"backup.info.what" = "What's backed up: all settings, Date Force, Force Reel, active sets and set metadata.";
+"backup.info.auto" = "Backup runs automatically and safely — it never overwrites a good iCloud backup or another account's data. You can also force one with \"Back up now\".";
+"backup.info.what" = "What's backed up: all settings, Date Force, Force Reel, Amnesia Carousel, active sets and set metadata.";
 "backup.info.photos" = "Set photos are synced to iCloud Drive. View them in the Files app → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Not backed up: Instagram session, device ID and cooldown timers (device-specific).";
 "explore.load_error" = "Could not load content";
 "action.retry" = "Retry";
 "settings.icloud_applied" = "iCloud backup applied successfully";
+"restore.progress.title" = "Restoring your data…";
+"restore.progress.subtitle" = "This may take a few seconds. Please keep the app open.";
 "Image Template" = "Image Template";
 "Upload my own" = "Upload my own";
 "No templates available. You'll upload your own images." = "No templates available. You'll upload your own images.";
@@ -1084,8 +1086,11 @@
 "initial_load.estimated_time" = "This may take several minutes";
 "initial_load.one_time_promise" = "Only this one time — next time you will enter instantly.";
 "initial_load.footer" = "If you upload new photos to Instagram later, refresh Performance manually to update the cache.";
+"initial_load.exit" = "Exit";
 "initial_load.error.session" = "Session expired. Please log in again to continue.";
 "initial_load.error.load_failed" = "Could not load your profile. Check your connection and try again.";
+"initial_load.network.note" = "Connection issue. Your progress is saved — tap Exit and resume later from Performance when you have a stable signal.";
+"initial_load.budget.note" = "Instagram reached its safety read limit. Your progress is saved — tap Exit and resume from Performance in about %d min.";
 
 "fullload.warming_up" = "Getting ready… %d s";
 "fullload.grid" = "Caching posts — %d loaded";
@@ -1400,3 +1405,4 @@
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "When you open Performance, the app only reads the current API value as a baseline. It does not use that old word. It polls about every 2 seconds and triggers only when a new value arrives. If this API is combined with another input, it waits for both values before sending.";

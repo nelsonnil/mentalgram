@@ -131,6 +131,33 @@ class DateForceSettings: ObservableObject {
         self.baselineFollowerIds = Set(savedBaseline)
     }
 
+    func reloadFromUserDefaults() {
+        isEnabled = UserDefaults.standard.bool(forKey: "dateForce_enabled")
+
+        let modeStr = UserDefaults.standard.string(forKey: "dateForce_mode") ?? DateForceMode.auto.rawValue
+        if modeStr == "simple" || modeStr == "mixed" || modeStr == "dual" {
+            mode = .auto
+        } else {
+            mode = DateForceMode(rawValue: modeStr) ?? .auto
+        }
+
+        let fmtStr = UserDefaults.standard.string(forKey: "dateForce_format") ?? DateForceFormat.ddmm.rawValue
+        dateFormat = DateForceFormat(rawValue: fmtStr) ?? .ddmm
+
+        let savedOffset = UserDefaults.standard.object(forKey: "dateForce_timeOffset") as? Int
+        timeOffsetMinutes = savedOffset ?? 0
+
+        let savedCount = UserDefaults.standard.object(forKey: "dateForce_autoCount") as? Int
+                      ?? UserDefaults.standard.object(forKey: "dateForce_autoMax") as? Int
+        autoSpectatorCount = savedCount ?? 4
+
+        selectedFollowerIds = UserDefaults.standard.stringArray(forKey: "dateForce_selectedIds") ?? []
+        let savedBaseline = UserDefaults.standard.stringArray(forKey: "dateForce_baselineIds") ?? []
+        baselineFollowerIds = Set(savedBaseline)
+        resetSpectators()
+        print("🎯 [DATE FORCE] Reloaded settings from UserDefaults after restore")
+    }
+
     // MARK: - Spectator Management (Dual mode — manual registration)
 
     func addSpectator(username: String, userId: String, profilePicURL: String? = nil, followingCount: Int, followerCount: Int) {

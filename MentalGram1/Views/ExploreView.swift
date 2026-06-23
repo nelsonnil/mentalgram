@@ -1305,6 +1305,12 @@ extension Notification.Name {
     /// userInfo["success"] -> Bool
     static let performanceManualRefreshResult = Notification.Name("com.vault.performanceManualRefreshResult")
 
+    /// Posted by PerformanceView the instant it receives `.performanceManualRefresh`,
+    /// to acknowledge that a live listener exists. If `InstagramSyncCard` does not
+    /// receive this ACK quickly, it runs a headless refresh itself so the button works
+    /// even when the Performance tab is not mounted/subscribed.
+    static let performanceManualRefreshAck = Notification.Name("com.vault.performanceManualRefreshAck")
+
     /// Posted by Settings/Sets when the user wants to resume an incomplete
     /// first-time Performance cache preload.
     static let performanceContinuePreload = Notification.Name("com.vault.performanceContinuePreload")

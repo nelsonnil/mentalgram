@@ -21,6 +21,7 @@ struct ForcePostPickerView: View {
     @State private var searchedUsername: String = ""
     @State private var searchedUserId: String = ""
     @State private var lastSearchTime: Date = .distantPast
+    @State private var lastPageLoadTime: Date = .distantPast
     @State private var showingRelogin = false
 
     private let columns = [
@@ -30,6 +31,7 @@ struct ForcePostPickerView: View {
     ]
     private let pageSize = 36
     private let initialPrefetchTarget = 144
+    private let minPageGap: TimeInterval = 3.5
     private let screenBackground = Color.black
     private let panelBackground = Color(red: 0.07, green: 0.07, blue: 0.08)
     private let fieldBackground = Color(red: 0.11, green: 0.11, blue: 0.13)
@@ -346,12 +348,26 @@ struct ForcePostPickerView: View {
     private func loadMorePosts() {
         guard let maxId = nextMaxId, !searchedUserId.isEmpty else { return }
         guard !isLoadingMore else { return }
+        guard !instagram.isLocked else {
+            errorMessage = "Service temporarily unavailable. Try again later."
+            return
+        }
+        if instagram.isSessionExpired {
+            showingRelogin = true
+            return
+        }
+        let elapsed = Date().timeIntervalSince(lastPageLoadTime)
+        let waitBeforeRequest = max(0, minPageGap - elapsed)
         isLoadingMore = true
 
         Task {
             do {
-                let pause = UInt64.random(in: 450_000_000...900_000_000)
+                if waitBeforeRequest > 0 {
+                    try await Task.sleep(nanoseconds: UInt64(waitBeforeRequest * 1_000_000_000))
+                }
+                let pause = UInt64.random(in: 1_200_000_000...2_400_000_000)
                 try await Task.sleep(nanoseconds: pause)
+                await MainActor.run { lastPageLoadTime = Date() }
 
                 let (fetched, nextId) = try await instagram.getUserMediaItems(userId: searchedUserId, amount: pageSize, maxId: maxId)
                 let existingKeys = await MainActor.run {
@@ -370,7 +386,12 @@ struct ForcePostPickerView: View {
                 await downloadThumbnails(for: uniqueFresh)
 
             } catch {
-                await MainActor.run { isLoadingMore = false }
+                await MainActor.run {
+                    isLoadingMore = false
+                    if instagram.isSessionExpired {
+                        showingRelogin = true
+                    }
+                }
                 print("⚠️ [FORCE POST] Pagination error: \(error)")
             }
         }
@@ -382,7 +403,7 @@ struct ForcePostPickerView: View {
         guard let index = posts.firstIndex(where: {
             ($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId) == currentKey
         }) else { return }
-        let threshold = max(1, Int(Double(posts.count) * 0.5))
+        let threshold = max(1, Int(Double(posts.count) * 0.82))
         if index >= threshold {
             loadMorePosts()
         }
@@ -402,6 +423,14 @@ struct ForcePostPickerView: View {
                     await MainActor.run { isLoadingMore = false }
                     return
                 }
+                let elapsed = await MainActor.run { Date().timeIntervalSince(lastPageLoadTime) }
+                let waitBeforeRequest = max(0, minPageGap - elapsed)
+                if waitBeforeRequest > 0 {
+                    try await Task.sleep(nanoseconds: UInt64(waitBeforeRequest * 1_000_000_000))
+                }
+                let pause = UInt64.random(in: 1_200_000_000...2_400_000_000)
+                try await Task.sleep(nanoseconds: pause)
+                await MainActor.run { lastPageLoadTime = Date() }
 
                 let (fetched, nextId) = try await instagram.getUserMediaItems(userId: searchedUserId, amount: pageSize, maxId: cursor)
                 let existingKeys = await MainActor.run {
@@ -476,9 +505,6 @@ private struct PostPickerCell: View {
     let isSelected: Bool
     let onTap: () -> Void
 
-    /// Tracks whether the finger moved enough to be a scroll, not a tap.
-    @State private var hasMoved = false
-
     var body: some View {
         ZStack {
             if let img = image {
@@ -508,20 +534,6 @@ private struct PostPickerCell: View {
             }
         }
         .contentShape(Rectangle())
-        // Use a drag gesture instead of Button so the scroll view's pan gesture
-        // takes precedence. A tap is only fired when the finger barely moved
-        // (< 10 pt); larger movements are treated as scroll and ignored.
-        .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                .onChanged { value in
-                    if abs(value.translation.width) > 10 || abs(value.translation.height) > 10 {
-                        hasMoved = true
-                    }
-                }
-                .onEnded { _ in
-                    if !hasMoved { onTap() }
-                    hasMoved = false
-                }
-        )
+        .onTapGesture(perform: onTap)
     }
 }

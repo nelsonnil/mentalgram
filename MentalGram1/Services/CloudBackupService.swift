@@ -23,6 +23,9 @@ class CloudBackupService: ObservableObject {
     private let prefix = "backup_"
     private let backupDateKey = "backup_lastSyncDate"
     private let setsKVKey = "backup_com.vault.sets"
+    /// userId that owns the sets JSON currently in the cloud backup. Lets the safe
+    /// auto-backup avoid clobbering a different account's backup.
+    private let setsOwnerKey = "backup_setsOwnerUserId"
 
     // MARK: - Debounce
     // Backups are manual-only. These properties remain for backward compatibility with
@@ -34,20 +37,66 @@ class CloudBackupService: ObservableObject {
     static let settingsKeys: [String] = [
         // DateForce
         "dateForce_enabled", "dateForce_format", "dateForce_mode",
-        "dateForce_timeOffset", "dateForce_autoMax", "dateForce_dateGroupSize",
+        "dateForce_timeOffset", "dateForce_autoCount", "dateForce_autoMax",
+        "dateForce_dateGroupSize", "dateForce_selectedIds", "dateForce_baselineIds",
         // ForceReel
         "forceReel_enabled", "forceReel_mediaId", "forceReel_sourceUsername",
-        "forceReel_thumbnailURL", "forceReel_videoURL",
+        "forceReel_thumbnailURL", "forceReel_videoURL", "forceReel_likeCount",
+        "forceReel_commentCount", "forceReel_caption", "forceReel_slots_v2",
+        // ForcePost
+        "forcePost_enabled", "forcePost_entries_v2",
+        "forcePost_userId", "forcePost_username", "forcePost_mediaId",
+        "forcePost_mediaURL", "forcePost_mediaItem",
         // Force Number Reveal
-        "forceNumberRevealEnabled",
+        "forceNumberRevealEnabled", "forceNumberRevealGridSwipeEnabled",
+        "forceNumberRevealOcrEnabled",
         "forceNumberAutoReArchiveEnabled", "forceNumberAutoReArchiveMinutes",
+        "reArchive_pendingIds", "reArchive_deadline",
+        // Amnesia Carousel — toggle, both uploaded post IDs and reveal state so the effect
+        // is restored ready-to-perform without re-uploading. The migration flag is included
+        // so the restored reveal state is not reset by the one-time safety migration.
+        "amnesia_enabled", "amnesia_shortCarouselMediaId",
+        "amnesia_fullCarouselMediaId", "amnesia_isRevealed",
+        "amnesia_reveal_state_safety_migration_v1", "amnesia_ownerUserId",
         // Following Magic
         "followingMagicEnabled", "followingMagicDuration",
         "followingMagicGlitch", "followingMagicTriggerDelay",
+        "followingMagicTargetFollowers", "followingMagicTransferEnabled",
+        "followingMagicTransferOffset",
         // Secret Input
         "secretInputEnabled", "secretInputMode", "secretInputCustomUsername",
-        // Misc
-        "autoProfilePicOnPerformance", "last_note_text",
+        // Lockscreen Input
+        "lockscreenInputEnabled",
+        // Bio templates (all 4 slots)
+        "bio_template", "bio_template_2", "bio_template_3", "bio_template_4",
+        "bio_active_slot", "bio_acrostic_enabled", "bio_feature_enabled",
+        "bioTopInputMode",
+        // Note template & settings
+        "note_template", "note_feature_enabled", "noteTopInputMode",
+        "note_duplicate_warning_text",
+        // Integrations / custom APIs (IntegrationsSettings)
+        "integ_injectID",
+        "integ_custom1Name", "integ_custom2Name", "integ_custom3Name",
+        "integ_custom1Url",  "integ_custom2Url",  "integ_custom3Url",
+        "integ_custom1Field","integ_custom2Field", "integ_custom3Field",
+        "integ_bioApiSource", "integ_noteApiSource", "integ_ppApiSource",
+        "integ_noteText1Source", "integ_noteText2Source", "integ_noteText3Source",
+        "integ_noteText4Source", "integ_noteText5Source",
+        "integ_bioText1Source",  "integ_bioText2Source",  "integ_bioText3Source",
+        "integ_bioText4Source",  "integ_bioText5Source",
+        // OCR settings
+        "ocr_language", "ocr_camera",
+        // App behaviour
+        "autoProfilePicOnPerformance", "launchDirectlyToPerformance",
+        "limitsGuideRead", "fakeHomeScreenEnabled",
+        "clipboardAutoMode", "clipboardAutoLastSent",
+        "performanceCoverMode", "ppTopInputMode",
+        "performance_test_mode_enabled",
+        "activeSetId", "activeSetType", "postPredictionEnabled",
+        "lastPostPredictionSetId", "lastPostPredictionSetType",
+        // Last note text / duplicate guard
+        "last_note_text", "last_note_sent_text", "last_note_sent_timestamp",
+        "last_note_sent_date",
         // Active set IDs
         "activeWordSetId", "activeNumberSetId", "activeCustomSetId", "activeCardSetId",
         // NOTE: Sets JSON (com.vault.sets.*) is backed up separately in syncToCloud()
@@ -74,12 +123,100 @@ class CloudBackupService: ObservableObject {
         iCloudAvailable && kv.object(forKey: backupDateKey) != nil
     }
 
-    /// Backups are manual-only. Local saves must not overwrite the user's cloud backup.
+    /// Schedules a debounced **safe** auto-backup. Coalesces rapid changes into one
+    /// upload. Unlike syncToCloud (the manual button), this never regresses a good cloud
+    /// backup — see performSafeAutoBackup() for the guards.
     func scheduleDebouncedSync() {
         DispatchQueue.main.async {
             self.debounceTimer?.invalidate()
-            print("☁️ [BACKUP] Auto backup skipped — manual backup only")
+            self.debounceTimer = Timer.scheduledTimer(
+                withTimeInterval: self.debouncedDelay, repeats: false
+            ) { [weak self] _ in
+                self?.performSafeAutoBackup()
+            }
         }
+    }
+
+    /// Safe automatic backup. Unlike syncToCloud (the manual "Back up now"), this NEVER
+    /// regresses a good cloud backup:
+    ///  • Settings keys are always mirrored (current local values are the truth).
+    ///  • Sets JSON is written only when it won't clobber a *different* account's backup
+    ///    and won't replace a non-empty backup with an empty (0-set) local state.
+    ///  • It does not run the full photo re-sync — set photos upload per-set on change.
+    func performSafeAutoBackup() {
+        guard iCloudAvailable else { return }
+
+        DispatchQueue.global(qos: .utility).async {
+            var savedCount = 0
+
+            // 1. Settings keys — additive/update only. We deliberately do NOT remove cloud
+            //    keys that are absent locally: a not-yet-restored or failed-restore install
+            //    has empty locals and must never wipe good cloud settings. (The manual
+            //    "Back up now" path is authoritative and still prunes removed keys.)
+            for key in Self.settingsKeys {
+                if let value = UserDefaults.standard.object(forKey: key) {
+                    self.kv.set(value, forKey: self.prefix + key)
+                    savedCount += 1
+                }
+            }
+
+            // 2. Sets JSON — guarded against cross-account clobber and empty regressions.
+            let userId = InstagramService.shared.session.userId
+            let currentOwner = userId.isEmpty ? "guest" : userId
+            let scopedKey = "com.vault.sets.\(currentOwner)"
+            let localData = UserDefaults.standard.data(forKey: scopedKey)
+                ?? UserDefaults.standard.data(forKey: "com.vault.sets")
+            let localSetCount = Self.decodeSetCount(localData)
+
+            let cloudData = self.kv.data(forKey: self.setsKVKey)
+            let cloudSetCount = Self.decodeSetCount(cloudData)
+            let cloudOwner = self.kv.string(forKey: self.setsOwnerKey)
+
+            let canWriteSets: Bool
+            if localData == nil || localSetCount == 0 {
+                // Never push an empty/unknown local state over the cloud backup.
+                canWriteSets = false
+            } else if cloudData == nil || cloudSetCount == 0 {
+                // Empty cloud → safe to seed.
+                canWriteSets = true
+            } else if cloudOwner == nil || cloudOwner == currentOwner {
+                // Same account (or untagged legacy backup) → safe to update.
+                canWriteSets = true
+            } else {
+                // Different account with real data → never auto-clobber. Manual only.
+                canWriteSets = false
+            }
+
+            if canWriteSets, let localData {
+                self.kv.set(localData, forKey: self.setsKVKey)
+                self.kv.set(currentOwner, forKey: self.setsOwnerKey)
+                savedCount += 1
+            } else if !canWriteSets, localSetCount == 0, cloudSetCount > 0 {
+                print("☁️ [BACKUP] Safe auto-backup: kept cloud sets (local is empty) — manual backup required to wipe")
+            } else if !canWriteSets, let cloudOwner, cloudOwner != currentOwner, cloudSetCount > 0 {
+                print("☁️ [BACKUP] Safe auto-backup: skipped sets — cloud belongs to '\(cloudOwner)', current '\(currentOwner)'")
+            }
+
+            let now = Date()
+            self.kv.set(now, forKey: self.backupDateKey)
+            let ok = self.kv.synchronize()
+
+            let kvSetsBytes = self.kv.data(forKey: self.setsKVKey)?.count ?? 0
+            DispatchQueue.main.async {
+                self.lastBackupDate = now
+                self.backedUpSetsBytes = kvSetsBytes
+            }
+            print("☁️ [BACKUP] ✅ Safe auto-backup: \(savedCount) keys, setsWritten=\(canWriteSets), sync=\(ok)")
+        }
+    }
+
+    /// Lightweight set-count without fully decoding the model (avoids coupling to schema).
+    private static func decodeSetCount(_ data: Data?) -> Int {
+        guard let data else { return 0 }
+        if let arr = try? JSONSerialization.jsonObject(with: data) as? [Any] {
+            return arr.count
+        }
+        return 0
     }
 
     /// Copies all local settings + sets JSON → iCloud KV store.
@@ -114,14 +251,17 @@ class CloudBackupService: ObservableObject {
         let userId = InstagramService.shared.session.userId
         let scopedKey = "com.vault.sets.\(userId.isEmpty ? "guest" : userId)"
 
+        let backupOwner = userId.isEmpty ? "guest" : userId
         if let setsData = UserDefaults.standard.data(forKey: scopedKey) {
             kv.set(setsData, forKey: setsKVKey)
+            kv.set(backupOwner, forKey: setsOwnerKey)
             let sizeKB = setsData.count / 1024
             print("☁️ [BACKUP] Sets backed up from '\(scopedKey)' (\(sizeKB) KB)")
             savedCount += 1
         } else if let legacyData = UserDefaults.standard.data(forKey: "com.vault.sets") {
             // Fallback: legacy key (pre-account-scoping installs)
             kv.set(legacyData, forKey: setsKVKey)
+            kv.set(backupOwner, forKey: setsOwnerKey)
             print("☁️ [BACKUP] Sets backed up from legacy key (\(legacyData.count / 1024) KB)")
             savedCount += 1
         } else {
@@ -159,6 +299,16 @@ class CloudBackupService: ObservableObject {
             self.lastKVError = kvError
             self.backedUpSetsBytes = kvSetsBytes
         }
+
+        // Also sync photo files and cover images to iCloud Drive so they survive a reinstall.
+        iCloudDriveSync.shared.syncAllPhotosToCloud { uploaded, skipped, _ in
+            if uploaded > 0 {
+                print("☁️ [BACKUP] iCloud Drive: \(uploaded) new photo(s) uploaded alongside KV backup")
+            }
+        }
+        HomeScreenIllusionService.shared.uploadToCloud()
+        LockscreenInputSettings.shared.uploadWallpaperToCloud()
+        AmnesiaCarouselSettings.shared.uploadImagesToCloud()
 
         let syncMark = syncOK ? "✅" : "⚠️"
         print("☁️ [BACKUP] \(syncMark) Synced \(savedCount) keys to iCloud KV store (\(totalKB) KB total, sync=\(syncOK))")

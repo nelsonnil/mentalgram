@@ -26,7 +26,7 @@
 "backup.just_now" = "剛剛";
 "backup.min_ago" = "%d 分鐘前";
 "backup.h_ago" = "%d 小時前";
-"backup.info.auto" = "只有點一下「立即備份」時才會執行備份。絕不會自動覆寫 iCloud。";
+"backup.info.auto" = "備份會自動且安全地執行——絕不會覆寫良好的 iCloud 備份或其他帳號的資料。你也可以點一下「立即備份」手動執行。";
 "backup.info.what" = "備份內容：所有設定、Date Force、Force Reel、啟用中的套組及其元資料。";
 "backup.info.photos" = "套組照片會同步至 iCloud 雲端硬碟。可在檔案 App → iCloud 雲端硬碟 → Vault → Photos 中查看。";
 "backup.info.excluded" = "不備份：Instagram 工作階段、裝置 ID 和冷卻計時器（裝置專屬）。";
@@ -156,6 +156,8 @@
 "settings.restore_settings" = "設定已恢復";
 "settings.latest_follower" = "最新追蹤者";
 "settings.icloud_applied" = "iCloud備份成功套用";
+"restore.progress.title" = "正在還原您的資料…";
+"restore.progress.subtitle" = "這可能需要幾秒鐘，請保持應用程式開啟。";
 "integrations.title" = "Inject及自訂API";
 "integrations.open_service" = "開啟**已連接服務的官方應用程式**";
 "integrations.login" = "登入您的帳戶";
@@ -1073,6 +1075,7 @@
 "initial_load.estimated_time" = "這可能需要幾分鐘";
 "initial_load.one_time_promise" = "只有這一次 — 下次您將直接進入。";
 "initial_load.footer" = "如果您之後在 Instagram 上傳了新照片，請手動重新整理 Performance 以更新快取。";
+"initial_load.exit" = "退出";
 "initial_load.error.session" = "工作階段已過期。請重新登入以繼續。";
 "initial_load.error.load_failed" = "無法載入個人資料。請檢查網路連線後重試。";
 "guide.amnesia.script.climax.text" = "「再次打開Instagram。找到同一篇帖子。」\n\n[觀眾看到5張圖片]\n\n「你看到幾張？」——五張。\n\n「看一下日期。和之前一樣嗎？」——是的。\n\n「Instagram不會說謊。它無法修改日期。就是這樣上傳的。」\n\n[停頓]\n\n「發生的不是你忘記了一張圖片。你的大腦被引導著沒有看到它。現在你知道這是可能的了。」";
@@ -1412,3 +1415,4 @@ He ji, jian jie he bei zhu zhong yi ci zhi neng qi yong yi zhong jie mian lei xi
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "開啟 Performance 時，App 只會把目前 API 值讀取為基準，不會使用這個舊詞。App 大約每 2 秒輪詢一次，只有收到新值時才會觸發。如果此 API 與另一個輸入組合使用，App 會等兩個值都到達後再送出。";

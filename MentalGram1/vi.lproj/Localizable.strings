@@ -163,6 +163,8 @@
 "settings.restore_settings" = "Cài đặt đã được khôi phục";
 "settings.latest_follower" = "Người theo dõi mới nhất";
 "settings.icloud_applied" = "Sao lưu iCloud đã được áp dụng thành công";
+"restore.progress.title" = "Đang khôi phục dữ liệu của bạn…";
+"restore.progress.subtitle" = "Quá trình này có thể mất vài giây. Vui lòng giữ ứng dụng mở.";
 "settings.launch_direct.title" = "Mở thẳng đến Trình diễn";
 "settings.launch_direct.detail" = "Bỏ qua tab Bộ — ứng dụng mở Trình diễn mỗi lần";
 "settings.lockscreen.description" = "Hiển thị màn hình khóa giả khi vào Trình diễn. Nhấn chữ số cho số bí mật, nhấn ngoài bàn phím để khóa, rồi điền các chấm còn lại.";
@@ -215,7 +217,7 @@
 "backup.just_now" = "Vừa xong";
 "backup.min_ago" = "%d phút trước";
 "backup.h_ago" = "%d giờ trước";
-"backup.info.auto" = "Sao lưu chỉ chạy khi bạn nhấn \"Sao lưu ngay\". Không bao giờ tự ghi đè lên iCloud.";
+"backup.info.auto" = "Sao lưu chạy tự động và an toàn — không bao giờ ghi đè bản sao lưu iCloud tốt hoặc dữ liệu của tài khoản khác. Bạn cũng có thể buộc sao lưu bằng \"Sao lưu ngay\".";
 "backup.info.what" = "Những gì được sao lưu: tất cả cài đặt, Ép ngày, Ép Reel, bộ đang hoạt động và siêu dữ liệu bộ.";
 "backup.info.photos" = "Ảnh bộ được đồng bộ với iCloud Drive. Xem trong ứng dụng Files → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Không được sao lưu: phiên Instagram, ID thiết bị và bộ đếm thời gian chờ (dành riêng cho thiết bị).";
@@ -570,6 +572,7 @@
 "initial_load.estimated_time" = "Có thể mất vài phút";
 "initial_load.one_time_promise" = "Chỉ lần này — lần sau bạn sẽ vào ngay lập tức.";
 "initial_load.footer" = "Nếu bạn tải ảnh mới lên Instagram sau này, hãy làm mới Trình diễn thủ công để cập nhật cache.";
+"initial_load.exit" = "Thoát";
 "initial_load.error.session" = "Phiên đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
 "initial_load.error.load_failed" = "Không thể tải hồ sơ của bạn. Kiểm tra kết nối và thử lại.";
 
@@ -954,3 +957,4 @@ Chi mot loai giao dien co the hoat dong cung luc tren Sets, Bio va Notes. Tiep t
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Khi mở Performance, ứng dụng chỉ đọc giá trị API hiện tại làm mốc tham chiếu. Từ cũ đó sẽ không được dùng. Ứng dụng polling khoảng mỗi 2 giây và chỉ kích hoạt khi có giá trị mới. Nếu API này được kết hợp với input khác, ứng dụng sẽ chờ đủ cả hai giá trị trước khi gửi.";

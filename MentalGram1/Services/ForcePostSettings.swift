@@ -78,6 +78,28 @@ class ForcePostSettings: ObservableObject {
         }
     }
 
+    func reloadFromUserDefaults() {
+        isEnabled = UserDefaults.standard.bool(forKey: "forcePost_enabled")
+        entries = Self.loadEntries()
+        if entries.isEmpty {
+            migrateFromLegacy()
+        }
+        thumbnailImages = [:]
+        for entry in entries {
+            if let img = Self.loadLocalThumbnail(for: entry.userId) {
+                thumbnailImages[entry.userId] = img
+            }
+        }
+        let entriesNeedingThumbnail = entries.filter { thumbnailImages[$0.userId] == nil }
+        Task {
+            for entry in entriesNeedingThumbnail {
+                await ensureDir(for: entry.userId)
+                await downloadAndSaveThumbnail(from: entry.mediaURL, userId: entry.userId)
+            }
+        }
+        print("🎯 [FORCE POST] Reloaded settings from UserDefaults after restore")
+    }
+
     // MARK: - Select / clear
 
     func selectPost(item: InstagramMediaItem, username: String, userId: String) {

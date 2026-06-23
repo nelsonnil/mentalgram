@@ -23,7 +23,7 @@
 "backup.just_now" = "Przed chwilą";
 "backup.min_ago" = "%d min temu";
 "backup.h_ago" = "%d godz. temu";
-"backup.info.auto" = "Kopia zapasowa jest tworzona tylko po stuknięciu „Utwórz kopię teraz\". iCloud nigdy nie jest nadpisywany automatycznie.";
+"backup.info.auto" = "Kopia zapasowa tworzy się automatycznie i bezpiecznie — nigdy nie nadpisuje dobrej kopii iCloud ani danych innego konta. Możesz też wymusić ją przyciskiem „Utwórz kopię teraz\".";
 "backup.info.what" = "Co jest zapisywane: wszystkie ustawienia, Date Force, Force Reel, aktywne sety i ich metadane.";
 "backup.info.photos" = "Zdjęcia setów są synchronizowane z iCloud Drive. Możesz je zobaczyć w aplikacji Pliki → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Nie jest zapisywane: sesja Instagram, ID urządzenia i timery cooldown (specyficzne dla urządzenia).";
@@ -150,6 +150,8 @@
 "settings.restore_settings" = "Ustawienia przywrócone";
 "settings.latest_follower" = "Najnowszy obserwujący";
 "settings.icloud_applied" = "Kopia zapasowa iCloud zastosowana pomyślnie";
+"restore.progress.title" = "Przywracanie Twoich danych…";
+"restore.progress.subtitle" = "Może to potrwać kilka sekund. Nie zamykaj aplikacji.";
 "integrations.title" = "Inject i niestandardowe API";
 "integrations.open_service" = "Otwórz **oficjalną aplikację** połączonej usługi";
 "integrations.login" = "Zaloguj się na swoje konto";
@@ -1412,6 +1414,7 @@
 "initial_load.estimated_time" = "Może to potrwać kilka minut";
 "initial_load.one_time_promise" = "Tylko ten jeden raz — następnym razem wejdziesz od razu.";
 "initial_load.footer" = "Jeśli później dodasz nowe zdjęcia na Instagramie, odśwież Performance ręcznie, aby zaktualizować pamięć podręczną.";
+"initial_load.exit" = "Wyjdź";
 "initial_load.error.session" = "Sesja wygasła. Zaloguj się ponownie, aby kontynuować.";
 "initial_load.error.load_failed" = "Nie udało się załadować profilu. Sprawdź połączenie i spróbuj ponownie.";
 "guide.amnesia.script.climax.text" = "'Otwórz Instagrama ponownie. Znajdź ten sam post.'\n\n[Widz widzi 5 obrazów]\n\n'Ile widzisz?' — Pięć.\n\n'Sprawdź datę. Czy to ta sama co poprzednio?' — Tak.\n\n'Instagram nie kłamie. Nie może modyfikować dat. Tak zostało przesłane.'\n\n[Pauza]\n\n'To, co się stało, to nie to, że zapomniałeś o jednym obrazie. Twój umysł został poprowadzony, żeby go nie widzieć. I teraz wiesz, że to jest możliwe.'";
@@ -1751,3 +1754,4 @@ W zestawach, bio i notatkach jednoczesnie moze byc aktywny tylko jeden typ inter
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Po otwarciu Performance aplikacja odczytuje bieżącą wartość API tylko jako punkt odniesienia. Nie używa tego starego słowa. Odpytuje API mniej więcej co 2 sekundy i uruchamia akcję dopiero po nadejściu nowej wartości. Jeśli ta API jest połączona z innym wejściem, przed wysłaniem czeka na obie wartości.";

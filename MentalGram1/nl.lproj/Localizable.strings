@@ -25,7 +25,7 @@
 "backup.just_now" = "Zojuist";
 "backup.min_ago" = "%d min geleden";
 "backup.h_ago" = "%d u geleden";
-"backup.info.auto" = "De back-up wordt alleen uitgevoerd wanneer je op 'Nu back-uppen' tikt. iCloud wordt nooit automatisch overschreven.";
+"backup.info.auto" = "De back-up wordt automatisch en veilig uitgevoerd — een goede iCloud-back-up of gegevens van een ander account worden nooit overschreven. Je kunt er ook een forceren met 'Nu back-uppen'.";
 "backup.info.what" = "Wat wordt opgeslagen: alle instellingen, Date Force, Force Reel, actieve sets en set-metadata.";
 "backup.info.photos" = "Setfoto's worden gesynchroniseerd met iCloud Drive. Bekijk ze via de Bestanden-app → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Niet opgeslagen: Instagram-sessie, apparaat-ID en cooldown-timers (apparaatspecifiek).";
@@ -152,6 +152,8 @@
 "settings.restore_settings" = "Instellingen hersteld";
 "settings.latest_follower" = "Nieuwste volger";
 "settings.icloud_applied" = "iCloud-back-up succesvol toegepast";
+"restore.progress.title" = "Je gegevens worden hersteld…";
+"restore.progress.subtitle" = "Dit kan een paar seconden duren. Houd de app geopend.";
 "integrations.title" = "Inject en aangepaste API's";
 "integrations.open_service" = "Open de **officiële app** van de verbonden service";
 "integrations.login" = "Log in op uw account";
@@ -1413,6 +1415,7 @@
 "initial_load.estimated_time" = "Dit kan enkele minuten duren";
 "initial_load.one_time_promise" = "Alleen deze ene keer — de volgende keer ga je er direct in.";
 "initial_load.footer" = "Als je later nieuwe foto's uploadt naar Instagram, ververs Performance handmatig om de cache bij te werken.";
+"initial_load.exit" = "Afsluiten";
 "initial_load.error.session" = "Sessie verlopen. Log opnieuw in om door te gaan.";
 "initial_load.error.load_failed" = "Profiel kon niet worden geladen. Controleer de verbinding en probeer het opnieuw.";
 "guide.amnesia.script.climax.text" = "'Open Instagram opnieuw. Zoek hetzelfde bericht.'\n\n[Toeschouwer ziet 5 afbeeldingen]\n\n'Hoeveel zie je?' — Vijf.\n\n'Kijk naar de datum. Is het dezelfde als eerder?' — Ja.\n\n'Instagram liegt niet. Het kan geen datums wijzigen. Zo is het geüpload.'\n\n[Pauze]\n\n'Wat er is gebeurd is niet dat je een afbeelding bent vergeten. Je geest werd geleid om hem niet te zien. En nu weet je dat dat mogelijk is.'";
@@ -1752,3 +1755,4 @@ Slechts een interfacetype kan tegelijk actief zijn voor Sets, Bio en Notities. A
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Wanneer je Performance opent, leest de app de huidige API-waarde alleen als referentie. Dat oude woord wordt niet gebruikt. De app pollt ongeveer elke 2 seconden en activeert pas wanneer er een nieuwe waarde binnenkomt. Als deze API wordt gecombineerd met een andere invoer, wacht de app op beide waarden voordat er wordt verzonden.";

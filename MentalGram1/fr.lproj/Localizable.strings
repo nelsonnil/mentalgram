@@ -289,7 +289,7 @@
 "backup.just_now" = "À l'instant";
 "backup.min_ago" = "Il y a %d min";
 "backup.h_ago" = "Il y a %d h";
-"backup.info.auto" = "La sauvegarde s'exécute uniquement lorsque vous touchez « Sauvegarder maintenant ». Elle n'écrase jamais iCloud automatiquement.";
+"backup.info.auto" = "La sauvegarde s'exécute automatiquement et en toute sécurité — elle n'écrase jamais une bonne sauvegarde iCloud ni les données d'un autre compte. Vous pouvez aussi en forcer une avec « Sauvegarder maintenant ».";
 "backup.info.what" = "Ce qui est sauvegardé : tous les réglages, Date Force, Force Reel, les sets actifs et leurs métadonnées.";
 "backup.info.photos" = "Les photos des sets sont synchronisées sur iCloud Drive. Consultez-les dans l'app Fichiers → iCloud Drive → Vault → Photos.";
 "backup.info.excluded" = "Non sauvegardé : session Instagram, identifiant d'appareil et minuteries de délai (spécifiques à l'appareil).";
@@ -298,6 +298,8 @@
 "explore.load_error" = "Impossible de charger le contenu";
 "action.retry" = "Réessayer";
 "settings.icloud_applied" = "Sauvegarde iCloud appliquée avec succès";
+"restore.progress.title" = "Restauration de vos données…";
+"restore.progress.subtitle" = "Cela peut prendre quelques secondes. Veuillez garder l'application ouverte.";
 "Add minutes to time" = "Ajouter des minutes à l'heure";
 "Another set is currently uploading" = "Un autre set est en cours de transfert";
 "Base64 from external app" = "Base64 depuis une app externe";
@@ -1596,6 +1598,7 @@
 "initial_load.estimated_time" = "Cela peut prendre plusieurs minutes";
 "initial_load.one_time_promise" = "Une seule fois — la prochaine fois vous entrerez directement.";
 "initial_load.footer" = "Si vous ajoutez de nouvelles photos sur Instagram plus tard, actualisez Performance manuellement pour mettre à jour le cache.";
+"initial_load.exit" = "Quitter";
 "initial_load.error.session" = "Session expirée. Reconnectez-vous pour continuer.";
 "initial_load.error.load_failed" = "Impossible de charger votre profil. Vérifiez la connexion et réessayez.";
 "guide.amnesia.script.climax.text" = "« Rouvre Instagram. Cherche ce même post. »\n\n[Le spectateur voit 5 images]\n\n« Combien en vois-tu ? » — Cinq.\n\n« Regarde la date. C'est la même qu'avant ? » — Oui.\n\n« Instagram ne ment pas. Il ne peut pas modifier les dates. C'était publié ainsi. »\n\n[Pause]\n\n« Ce qui s'est passé n'est pas que tu as oublié une image. Ton esprit a été guidé pour ne pas la voir. Et maintenant tu sais que c'est possible. »";
@@ -1936,3 +1939,4 @@ Un seul type d'interface peut etre actif a la fois pour les Sets, la Bio et les 
 "upload.bank.needs_attention" = "Le Bank %d necessite votre attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Quand vous ouvrez Performance, l’app lit seulement la valeur API actuelle comme référence. Elle n’utilise pas cet ancien mot. Elle interroge l’API environ toutes les 2 secondes et ne déclenche que lorsqu’une nouvelle valeur arrive. Si cette API est combinée avec une autre entrée, elle attend les deux valeurs avant d’envoyer.";

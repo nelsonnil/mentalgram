@@ -1,5 +1,38 @@
 import SwiftUI
 
+/// Full-screen "Restoring your data…" overlay shown while a fresh-install restore is
+/// actively downloading from iCloud. Makes the wait read as intentional progress.
+struct RestoreProgressOverlay: View {
+    var body: some View {
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+
+            VStack(spacing: 22) {
+                Image(systemName: "icloud.and.arrow.down.fill")
+                    .font(.system(size: 56, weight: .semibold))
+                    .foregroundColor(.accentColor)
+
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .scaleEffect(1.2)
+
+                VStack(spacing: 6) {
+                    Text("restore.progress.title")
+                        .font(.title3.weight(.semibold))
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.center)
+                    Text("restore.progress.subtitle")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 32)
+            }
+        }
+    }
+}
+
 /// Small non-intrusive banner shown once after a successful iCloud restore.
 struct RestoreBanner: View {
     var body: some View {

@@ -59,6 +59,8 @@ struct UserProfileView: View {
     @State private var taggedLoaded = false
     @State private var isLoadingReels = false
     @State private var isLoadingTagged = false
+    @State private var reelsRetryScheduled = false
+    @State private var taggedRetryScheduled = false
 
     // Secret number input
     @ObservedObject private var secretManager = SecretNumberManager.shared
@@ -165,7 +167,13 @@ struct UserProfileView: View {
     private var postViewerItems: [String: InstagramMediaItem] {
         guard let entry = activeForceEntry, let item = entry.mediaItem else { return mediaItemsByURL }
         var items = mediaItemsByURL
-        items[entry.mediaURL] = item
+        // Video CDN URLs expire. If the loaded profile already has fresh metadata
+        // for the same mediaId, use that item while keeping the forced entry URL as
+        // the viewer key so the hidden/inserted force mechanics remain stable.
+        let freshItem = mediaItemsByURL.values.first { candidate in
+            !entry.mediaId.isEmpty && candidate.mediaId == entry.mediaId
+        }
+        items[entry.mediaURL] = freshItem ?? item
         return items
     }
 
@@ -1254,6 +1262,10 @@ struct UserProfileView: View {
     /// Fetches reels for this profile the first time the reels tab is tapped.
     private func fetchReelsIfNeeded() {
         guard !reelsLoaded, !isLoadingReels else { return }
+        guard !InstagramService.shared.isLocked, !InstagramService.shared.isSessionChallenged else {
+            print("🚫 [USER] Reels fetch skipped — locked or challenged")
+            return
+        }
         guard !UploadManager.shared.isActive else {
             print("🛡️ [USER] Reels fetch skipped — upload active/paused")
             LogManager.shared.warning("SAFETY BLOCK — visited profile reels skipped: upload active", category: .general)
@@ -1265,6 +1277,14 @@ struct UserProfileView: View {
             reelsLoaded = true
             return
         }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .visitedProfilePagination)
+        guard safetyDecision.allowed else {
+            print("🛡️ [USER] Reels fetch gated — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile reels: \(safetyDecision.reason)", category: .general)
+            scheduleReelsRetry(after: safetyDecision.waitSeconds)
+            return
+        }
+        InstagramSafetyGate.shared.record(.visitedProfilePagination)
         isLoadingReels = true
         Task {
             do {
@@ -1275,13 +1295,16 @@ struct UserProfileView: View {
                     currentProfile.cachedReelItems = reels
                     reelsLoaded = true
                     isLoadingReels = false
+                    reelsRetryScheduled = false
                     downloadImagesForURLs(reelURLs)
+                    currentProfile.cachedAt = Date()
+                    VisitedProfileCacheService.shared.saveProfile(currentProfile)
                     LogManager.shared.info("Lazy reels loaded — \(reels.count) reels for @\(currentProfile.username)", category: .profile)
                 }
             } catch {
                 await MainActor.run {
-                    reelsLoaded = true  // don't retry on every tap
                     isLoadingReels = false
+                    reelsLoaded = false
                     LogManager.shared.warning("Lazy reels fetch failed for @\(currentProfile.username): \(error.localizedDescription)", category: .profile)
                 }
             }
@@ -1291,6 +1314,10 @@ struct UserProfileView: View {
     /// Fetches tagged posts for this profile the first time the tagged tab is tapped.
     private func fetchTaggedIfNeeded() {
         guard !taggedLoaded, !isLoadingTagged else { return }
+        guard !InstagramService.shared.isLocked, !InstagramService.shared.isSessionChallenged else {
+            print("🚫 [USER] Tagged fetch skipped — locked or challenged")
+            return
+        }
         guard !UploadManager.shared.isActive else {
             print("🛡️ [USER] Tagged fetch skipped — upload active/paused")
             LogManager.shared.warning("SAFETY BLOCK — visited profile tagged skipped: upload active", category: .general)
@@ -1300,6 +1327,14 @@ struct UserProfileView: View {
             taggedLoaded = true
             return
         }
+        let safetyDecision = InstagramSafetyGate.shared.decision(for: .visitedProfilePagination)
+        guard safetyDecision.allowed else {
+            print("🛡️ [USER] Tagged fetch gated — \(safetyDecision.reason) (\(safetyDecision.waitSeconds)s)")
+            LogManager.shared.warning("SAFETY BLOCK — visited profile tagged: \(safetyDecision.reason)", category: .general)
+            scheduleTaggedRetry(after: safetyDecision.waitSeconds)
+            return
+        }
+        InstagramSafetyGate.shared.record(.visitedProfilePagination)
         isLoadingTagged = true
         Task {
             do {
@@ -1312,16 +1347,41 @@ struct UserProfileView: View {
                     for item in tagged { taggedMediaItemsByURL[item.imageURL] = item }
                     taggedLoaded = true
                     isLoadingTagged = false
+                    taggedRetryScheduled = false
                     downloadImagesForURLs(taggedURLs)
+                    currentProfile.cachedAt = Date()
+                    VisitedProfileCacheService.shared.saveProfile(currentProfile)
                     LogManager.shared.info("Lazy tagged loaded — \(tagged.count) posts for @\(currentProfile.username)", category: .profile)
                 }
             } catch {
                 await MainActor.run {
-                    taggedLoaded = true  // don't retry on every tap
                     isLoadingTagged = false
+                    taggedLoaded = false
                     LogManager.shared.warning("Lazy tagged fetch failed for @\(currentProfile.username): \(error.localizedDescription)", category: .profile)
                 }
             }
+        }
+    }
+
+    private func scheduleReelsRetry(after waitSeconds: Int) {
+        guard !reelsRetryScheduled else { return }
+        reelsRetryScheduled = true
+        let wait = max(1, waitSeconds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(wait) + 0.5) {
+            reelsRetryScheduled = false
+            guard selectedTab == 1, !reelsLoaded, !isLoadingReels else { return }
+            fetchReelsIfNeeded()
+        }
+    }
+
+    private func scheduleTaggedRetry(after waitSeconds: Int) {
+        guard !taggedRetryScheduled else { return }
+        taggedRetryScheduled = true
+        let wait = max(1, waitSeconds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(wait) + 0.5) {
+            taggedRetryScheduled = false
+            guard selectedTab == 2, !taggedLoaded, !isLoadingTagged else { return }
+            fetchTaggedIfNeeded()
         }
     }
 

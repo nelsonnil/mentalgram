@@ -25,7 +25,7 @@
 "backup.just_now" = "たった今";
 "backup.min_ago" = "%d分前";
 "backup.h_ago" = "%d時間前";
-"backup.info.auto" = "バックアップは「今すぐバックアップ」をタップしたときだけ実行されます。iCloud を自動で上書きすることはありません。";
+"backup.info.auto" = "バックアップは自動かつ安全に実行されます。正常な iCloud バックアップや他のアカウントのデータを上書きすることはありません。「今すぐバックアップ」で手動実行もできます。";
 "backup.info.what" = "バックアップ対象：すべての設定、Date Force、Force Reel、アクティブなセットとそのメタデータ。";
 "backup.info.photos" = "セットの写真はiCloud Driveに同期されます。ファイルアプリ → iCloud Drive → Vault → Photos で確認できます。";
 "backup.info.excluded" = "バックアップ対象外：Instagramセッション、デバイスIDとクールダウンタイマー（デバイス固有の情報）。";
@@ -152,6 +152,8 @@
 "settings.restore_settings" = "設定が復元されました";
 "settings.latest_follower" = "最新のフォロワー";
 "settings.icloud_applied" = "iCloudバックアップが正常に適用されました";
+"restore.progress.title" = "データを復元しています…";
+"restore.progress.subtitle" = "数秒かかる場合があります。アプリを開いたままにしてください。";
 "integrations.title" = "Inject及びカスタムAPI";
 "integrations.open_service" = "接続されたサービスの**公式アプリ**を開く";
 "integrations.login" = "アカウントにログイン";
@@ -1414,6 +1416,7 @@
 "initial_load.estimated_time" = "数分かかる場合があります";
 "initial_load.one_time_promise" = "この一回だけ — 次回はすぐに入れます。";
 "initial_load.footer" = "Instagramに新しい写真を追加した場合は、キャッシュを更新するためにPerformanceを手動でリフレッシュしてください。";
+"initial_load.exit" = "終了";
 "initial_load.error.session" = "セッションの有効期限が切れました。続けるには再度ログインしてください。";
 "initial_load.error.load_failed" = "プロフィールを読み込めませんでした。接続を確認して再試行してください。";
 "guide.amnesia.script.climax.text" = "「Instagramをもう一度開いてください。同じ投稿を探してください。」\n\n[観客が5枚の画像を見る]\n\n「何枚見えますか？」— 5枚。\n\n「日付を確認してください。さっきと同じですか？」— はい。\n\n「Instagramは嘘をつきません。日付は変更できません。こうしてアップロードされました。」\n\n[間]\n\n「起きたことは画像を忘れたのではありません。あなたの心はそれを見ないように導かれました。そして今、それが可能だとわかりました。」";
@@ -1753,3 +1756,4 @@ Setto, profairu, noto de douji ni tsukaeru intafeisu wa hitotsu dake desu. Tsuzu
 "upload.bank.needs_attention" = "Bank %d needs attention";
 "upload.escalation.cooldown_before_retry" = "Multiple errors - cooling down before retry";
 "upload.escalation.retrying_after_cooldown" = "Retrying after cooldown...";
+"api.polling.info" = "Performance を開くと、アプリは現在の API 値を基準として読むだけで、その古い単語は使いません。約 2 秒ごとにポーリングし、新しい値が届いたときだけ実行します。この API を別の入力と組み合わせている場合は、送信前に両方の値がそろうまで待ちます。";

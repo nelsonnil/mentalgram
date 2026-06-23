@@ -114,6 +114,7 @@ class VideoPlaybackCoordinator {
 class VideoPlayerManager: ObservableObject {
     @Published var player: AVPlayer?
     private var loopObserver: Any?
+    private var statusObserver: NSKeyValueObservation?
     private var isMuted = true
 
     func setupPlayer(url: String, muted: Bool = true) {
@@ -134,16 +135,31 @@ class VideoPlayerManager: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(true, options: [])
 
         let asset = AVURLAsset(url: videoURL)
-        let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
+        let item = AVPlayerItem(asset: asset)
+        let player = AVPlayer(playerItem: item)
+        player.automaticallyWaitsToMinimizeStalling = true
         player.isMuted = muted
 
         if !muted { VideoPlaybackCoordinator.shared.activate(player) }
+
+        statusObserver = item.observe(\.status, options: [.new]) { [weak player] item, _ in
+            switch item.status {
+            case .readyToPlay:
+                player?.play()
+            case .failed:
+                print("❌ [VIDEO] Player item failed: \(item.error?.localizedDescription ?? "unknown")")
+            case .unknown:
+                break
+            @unknown default:
+                break
+            }
+        }
 
         player.play()
 
         loopObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
-            object: player.currentItem,
+            object: item,
             queue: .main
         ) { [weak player] _ in
             player?.seek(to: .zero)
@@ -163,5 +179,7 @@ class VideoPlayerManager: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
             loopObserver = nil
         }
+        statusObserver?.invalidate()
+        statusObserver = nil
     }
 }

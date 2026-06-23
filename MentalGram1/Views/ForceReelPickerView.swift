@@ -20,6 +20,7 @@ struct ForceReelPickerView: View {
     @State private var searchedUsername: String = ""
     @State private var searchedUserId: String = ""
     @State private var lastSearchTime: Date = .distantPast
+    @State private var lastPageLoadTime: Date = .distantPast
     @State private var showingRelogin = false
 
     private let columns = [
@@ -28,6 +29,7 @@ struct ForceReelPickerView: View {
         GridItem(.flexible(), spacing: 1)
     ]
     private let pageSize = 18
+    private let minPageGap: TimeInterval = 3.5
 
     var body: some View {
         NavigationView {
@@ -244,6 +246,7 @@ struct ForceReelPickerView: View {
                     reels = uniqueFetched
                     nextMaxId = nextId
                     hasMorePages = nextId != nil
+                    lastPageLoadTime = Date()
                     isLoading = false
                     print("🎭 [FORCE] Loaded \(uniqueFetched.count) reels for @\(username)")
                 }
@@ -266,12 +269,26 @@ struct ForceReelPickerView: View {
     private func loadMoreReels() {
         guard let maxId = nextMaxId, !searchedUserId.isEmpty else { return }
         guard !isLoadingMore else { return }
+        guard !instagram.isLocked else {
+            errorMessage = "Service temporarily unavailable. Try again later."
+            return
+        }
+        if instagram.isSessionExpired {
+            showingRelogin = true
+            return
+        }
+        let elapsed = Date().timeIntervalSince(lastPageLoadTime)
+        let waitBeforeRequest = max(0, minPageGap - elapsed)
         isLoadingMore = true
 
         Task {
             do {
-                let pause = UInt64.random(in: 650_000_000...1_200_000_000)
+                if waitBeforeRequest > 0 {
+                    try await Task.sleep(nanoseconds: UInt64(waitBeforeRequest * 1_000_000_000))
+                }
+                let pause = UInt64.random(in: 1_200_000_000...2_400_000_000)
                 try await Task.sleep(nanoseconds: pause)
+                await MainActor.run { lastPageLoadTime = Date() }
 
                 let (fetched, nextId) = try await instagram.getUserReelsPage(userId: searchedUserId, amount: pageSize, maxId: maxId)
                 let existingKeys = await MainActor.run {
@@ -289,7 +306,12 @@ struct ForceReelPickerView: View {
                 }
                 await downloadThumbnails(for: fresh)
             } catch {
-                await MainActor.run { isLoadingMore = false }
+                await MainActor.run {
+                    isLoadingMore = false
+                    if instagram.isSessionExpired {
+                        showingRelogin = true
+                    }
+                }
                 print("⚠️ [FORCE REEL] Pagination error: \(error)")
             }
         }
@@ -301,7 +323,7 @@ struct ForceReelPickerView: View {
         guard let index = reels.firstIndex(where: {
             ($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId) == currentKey
         }) else { return }
-        let threshold = max(1, Int(Double(reels.count) * 0.65))
+        let threshold = max(1, Int(Double(reels.count) * 0.82))
         if index >= threshold {
             loadMoreReels()
         }
@@ -355,8 +377,6 @@ private struct ReelPickerCell: View {
     let isSelected: Bool
     let onTap: () -> Void
 
-    @State private var hasMoved = false
-
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             if let img = image {
@@ -394,17 +414,6 @@ private struct ReelPickerCell: View {
             }
         }
         .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                .onChanged { value in
-                    if abs(value.translation.width) > 10 || abs(value.translation.height) > 10 {
-                        hasMoved = true
-                    }
-                }
-                .onEnded { _ in
-                    if !hasMoved { onTap() }
-                    hasMoved = false
-                }
-        )
+        .onTapGesture(perform: onTap)
     }
 }
