@@ -636,6 +636,8 @@
 "followers.section.all" = "Tutti i follower";
 "followers.follow_back" = "Segui anche";
 "followers.remove_btn" = "Rimuovi";
+"followers.section.following" = "Tutti i seguiti";
+"followers.following_btn" = "Seguendo";
 "followers.search" = "Cerca";
 "**Auto reset.** Spectators are cleared automatically after the Explore post is closed, so the effect is ready to repeat." = "**Reset automatico.** Gli spettatori vengono cancellati automaticamente dopo la chiusura del post Esplora, l'effetto è pronto per ripetersi.";
 "**Auto reset.** Spectators clear automatically after the Explore post is closed." = "**Reset automatico.** Gli spettatori si azzerano automaticamente alla chiusura del post Esplora.";

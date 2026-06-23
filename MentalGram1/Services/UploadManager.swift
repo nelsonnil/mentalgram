@@ -61,6 +61,10 @@ class UploadManager: ObservableObject {
     // MARK: - Active Upload Task (to detect orphaned states)
     var activeTask: Task<Void, Never>? = nil
     var cancellationGeneration: Int = 0
+    /// Photo IDs currently being processed by an upload task. Prevents smart
+    /// auto-resume / repair passes from uploading the same slot twice while a
+    /// previous task is still inside rupload/configure/archive.
+    var inFlightPhotoIds: Set<UUID> = []
     
     // MARK: - Background / Foreground persistence
     /// Absolute timestamp when the current wait/cooldown ends (persisted to UserDefaults).
@@ -182,6 +186,7 @@ class UploadManager: ObservableObject {
         requiresManualResumeAfterChallenge = false
         activeTask?.cancel()
         activeTask = nil
+        inFlightPhotoIds.removeAll()
         clearWaitPersistence()
         invalidateAllTimers()
     }

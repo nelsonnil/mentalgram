@@ -4291,6 +4291,18 @@ struct SetDetailView: View {
         networkAutoResumeTask?.cancel()
         networkAutoResumeTask = nil
 
+        // A network-change auto-resume can fire while the original upload task is
+        // still alive (for example during the human-like wait between upload and
+        // archive). Starting a second task here can re-upload the same letter before
+        // the first task saves/archives it, creating real duplicates in Instagram's
+        // archive. Wait for the old task to reach its pause point instead.
+        guard uploadManager.activeTask == nil else {
+            uploadManager.requestPause = true
+            uploadManager.currentPhaseDescription = "Finishing current upload step before resuming..."
+            LogManager.shared.warning("Resume ignored: upload task still active; waiting for safe pause to avoid duplicate uploads", category: .upload)
+            return
+        }
+
         // B: Network availability check — if the connection is absent or still
         //    stabilising after a recent change, wait it out before firing requests.
         if !instagram.isConnected {
@@ -4908,6 +4920,39 @@ struct SetDetailView: View {
                 }
                 // Check if pause requested between retries
                 if await checkPauseRequested(atPhotoIndex: index) { return }
+
+                // Re-read the latest local state before uploading. A previous task can
+                // have uploaded this same slot already (especially after network
+                // auto-resume / bank repair). Never upload from a stale in-memory
+                // snapshot if the persisted photo now has a mediaId.
+                if let latestSet = dataManager.sets.first(where: { $0.id == currentSet.id }),
+                   let latestPhoto = latestSet.photos.first(where: { $0.id == photo.id }),
+                   let existingMediaId = latestPhoto.mediaId {
+                    if latestPhoto.isArchived && latestPhoto.uploadStatus == .completed {
+                        print("🛡️ [UPLOAD] Skipping Photo #\(index + 1) — already uploaded+archived (ID: \(existingMediaId))")
+                        LogManager.shared.info("Duplicate prevention: skipped already completed photo #\(index + 1) (ID: \(existingMediaId))", category: .upload)
+                        photoUploadSuccess = true
+                        break
+                    }
+
+                    print("🛡️ [UPLOAD] Photo #\(index + 1) already has mediaId \(existingMediaId) — archiving instead of re-uploading")
+                    LogManager.shared.warning("Duplicate prevention: photo #\(index + 1) had mediaId before upload; archiving existing media", category: .upload)
+                    await MainActor.run {
+                        uploadManager.uploadPhase = .archiving(photoNumber: index + 1)
+                        uploadManager.currentPhaseDescription = String(format: String(localized: "Archiving photo #%d..."), index + 1)
+                    }
+                    do {
+                        let archived = try await instagram.archivePhoto(mediaId: existingMediaId, skipPreCheck: true)
+                        if archived {
+                            dataManager.updatePhoto(photoId: photo.id, mediaId: existingMediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
+                            ProfileCacheService.shared.removeMediaEverywhere(mediaId: existingMediaId)
+                            photoUploadSuccess = true
+                            break
+                        }
+                    } catch {
+                        LogManager.shared.warning("Duplicate prevention archive failed for photo #\(index + 1): \(error.localizedDescription)", category: .upload)
+                    }
+                }
                 
                 // Update photo status: uploading
                 dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .uploading, errorMessage: nil)
@@ -4922,6 +4967,14 @@ struct SetDetailView: View {
                 }
                 
                 do {
+                    guard uploadManager.inFlightPhotoIds.insert(photo.id).inserted else {
+                        print("🛡️ [UPLOAD] Skipping Photo #\(index + 1) — already in-flight in another upload task")
+                        LogManager.shared.warning("Duplicate prevention: photo #\(index + 1) already in-flight; skipped stale task", category: .upload)
+                        photoUploadSuccess = true
+                        break
+                    }
+                    defer { uploadManager.inFlightPhotoIds.remove(photo.id) }
+
                     // ANTI-BOT: Allow duplicates for Word/Number Reveal sets
                     let allowDuplicates = (currentSet.type == .word || currentSet.type == .number)
                     let mediaId = try await instagram.uploadPhoto(

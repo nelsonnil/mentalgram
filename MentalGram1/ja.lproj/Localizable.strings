@@ -475,6 +475,8 @@
 "followers.section.all" = "すべてのフォロワー";
 "followers.follow_back" = "フォローする";
 "followers.remove_btn" = "削除";
+"followers.section.following" = "すべてのフォロー中";
+"followers.following_btn" = "フォロー中";
 "followers.search" = "検索";
 "force_reel.title" = "リール強制配置";
 "force_reel.subtitle" = "特定のリールを探索タブに強制表示";

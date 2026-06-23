@@ -235,6 +235,8 @@
 "followers.section.all" = "Tất cả người theo dõi";
 "followers.follow_back" = "Theo dõi lại";
 "followers.remove_btn" = "Xóa";
+"followers.section.following" = "Tất cả đang theo dõi";
+"followers.following_btn" = "Đang theo dõi";
 "followers.search" = "Tìm kiếm";
 "followers.error.load_failed" = "Không thể tải hồ sơ.";
 "followers.error.rate_limited" = "Instagram đang giới hạn yêu cầu.\nChờ vài giây và thử lại.";

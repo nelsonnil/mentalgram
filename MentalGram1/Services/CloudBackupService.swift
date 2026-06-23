@@ -84,6 +84,15 @@ class CloudBackupService: ObservableObject {
         "integ_noteText4Source", "integ_noteText5Source",
         "integ_bioText1Source",  "integ_bioText2Source",  "integ_bioText3Source",
         "integ_bioText4Source",  "integ_bioText5Source",
+        "integ_bioTemplate2Text1Source", "integ_bioTemplate2Text2Source",
+        "integ_bioTemplate2Text3Source", "integ_bioTemplate2Text4Source",
+        "integ_bioTemplate2Text5Source",
+        "integ_bioTemplate3Text1Source", "integ_bioTemplate3Text2Source",
+        "integ_bioTemplate3Text3Source", "integ_bioTemplate3Text4Source",
+        "integ_bioTemplate3Text5Source",
+        "integ_bioTemplate4Text1Source", "integ_bioTemplate4Text2Source",
+        "integ_bioTemplate4Text3Source", "integ_bioTemplate4Text4Source",
+        "integ_bioTemplate4Text5Source",
         // OCR settings
         "ocr_language", "ocr_camera",
         // App behaviour

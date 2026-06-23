@@ -10,6 +10,17 @@ enum InstagramGridMetrics {
     static let spacing: CGFloat = 1.0
 }
 
+private func safeNumber(fromDigits digits: [Int]) -> Int? {
+    var value = 0
+    for digit in digits {
+        guard (0...9).contains(digit), value <= (Int.max - digit) / 10 else {
+            return nil
+        }
+        value = value * 10 + digit
+    }
+    return value
+}
+
 // MARK: - Performance View (Instagram Profile Replica)
 
 struct PerformanceView: View {
@@ -244,6 +255,48 @@ struct PerformanceView: View {
         guard ActiveSetSettings.shared.isPostPredictionEnabled,
               let activeId = ActiveSetSettings.shared.activeSetId else { return nil }
         return DataManager.shared.sets.first { $0.id == activeId }?.resolvedInputMethod
+    }
+
+    init(selectedTab: Binding<Int>, showingExplore: Binding<Bool>, limitsGateShowing: Binding<Bool>) {
+        self._selectedTab = selectedTab
+        self._showingExplore = showingExplore
+        self._limitsGateShowing = limitsGateShowing
+
+        // Paint the cached replica on the very first SwiftUI frame. Previously the
+        // view rendered once with profile=nil / urls=0 and then loaded disk cache in
+        // onAppear, which looked like a white flash on fast devices even though the
+        // cache was complete.
+        if let cached = ProfileCacheService.shared.loadProfile() {
+            var itemsByURL: [String: InstagramMediaItem] = [:]
+            for item in cached.cachedMediaItems + cached.cachedTaggedItems + cached.cachedReelItems {
+                itemsByURL[item.imageURL] = item
+            }
+
+            var initialImages: [String: UIImage] = [:]
+            if let image = ProfileCacheService.shared.pendingProfilePic {
+                initialImages[cached.profilePicURL] = image
+            } else if let image = ProfileCacheService.shared.loadImage(forURL: cached.profilePicURL) {
+                initialImages[cached.profilePicURL] = image
+            }
+
+            for url in cached.cachedMediaURLs.prefix(12) {
+                if let image = ProfileCacheService.shared.loadImage(forURL: url) {
+                    initialImages[url] = image
+                    continue
+                }
+                if let mediaId = itemsByURL[url]?.mediaId,
+                   let image = ProfileCacheService.shared.loadImage(forMediaId: mediaId) {
+                    initialImages[url] = image
+                }
+            }
+
+            self._profile = State(initialValue: cached)
+            self._allMediaURLs = State(initialValue: cached.cachedMediaURLs)
+            self._mediaItemsByURL = State(initialValue: itemsByURL)
+            self._nextMaxId = State(initialValue: cached.cachedNextMaxId)
+            self._hasMorePages = State(initialValue: cached.cachedNextMaxId != nil && cached.cachedMediaURLs.count < 100)
+            self._cachedImages = State(initialValue: initialImages)
+        }
     }
 
     private func resetFullscreenInputPresentationFlags() {
@@ -586,10 +639,29 @@ struct PerformanceView: View {
             // First-time blocking preload overlay — covers everything (incl. bottom bar)
             if isFirstTimePreloading {
                 firstTimePreloadOverlay
-                    .transition(.opacity)
                     .zIndex(2000)
             }
         }
+    }
+
+    @MainActor
+    private func logPerformanceVisualState(_ reason: String) {
+        let visibleURLs = Array(allMediaURLs.prefix(12))
+        let missingVisible = visibleURLs.filter { url in
+            guard !url.hasPrefix("reveal://"), !url.hasPrefix("amnesia://carousel/") else { return false }
+            if cachedImages[url] != nil { return false }
+            if let mediaId = mediaItemsByURL[url]?.mediaId,
+               ProfileCacheService.shared.loadImage(forMediaId: mediaId) != nil { return false }
+            return ProfileCacheService.shared.loadImage(forURL: url) == nil
+        }.count
+        let profilePicCached: Bool = {
+            guard let url = profile?.profilePicURL, !url.isEmpty else { return false }
+            return cachedImages[url] != nil || ProfileCacheService.shared.loadImage(forURL: url) != nil
+        }()
+        let whiteSafetyOverlay = !performanceRemoteCallsAllowed && profile == nil && safetyGateCountdown > 0
+        let message = "VISUAL \(reason) profile:\(profile != nil) user:\(profile?.username ?? "nil") urls:\(allMediaURLs.count) visibleMissing:\(missingVisible)/\(visibleURLs.count) cachedImages:\(cachedImages.count) picCached:\(profilePicCached) overlays{preload:\(isFirstTimePreloading),safetyWhite:\(whiteSafetyOverlay),firstBanner:\(showFirstTimeBanner),home:\(showingHomeScreenIllusion),screenOff:\(showingScreenOffCover),locked:\(instagram.isLocked)} loading{profile:\(isLoading),images:\(isLoadingImages),silent:\(isSilentGridRefreshing),more:\(isLoadingMore)} selectedTab:\(selectedTab) refreshEnabled:\(isRefreshEnabled)"
+        print("🧭 [VISUAL] \(message)")
+        LogManager.shared.info(message, category: .general)
     }
 
     private var testModeFloatingBadge: some View {
@@ -813,7 +885,7 @@ struct PerformanceView: View {
     private func captureGridSideEffects(digits: [Int], source: String) -> Bool {
         guard !digits.isEmpty else { return false }
 
-        let capturedNumber = digits.reduce(0) { $0 * 10 + $1 }
+        let capturedNumber = safeNumber(fromDigits: digits)
         var didCapture = false
 
         if FollowingMagicSettings.shared.isEnabled {
@@ -822,11 +894,14 @@ struct PerformanceView: View {
         }
 
         if ForceReelSettings.shared.isEnabled,
-           ForceReelSettings.shared.hasReel,
-           capturedNumber > 0 {
-            ForceReelSettings.shared.pendingPosition = capturedNumber
-            print("🎭 [FORCE] Position captured from \(source): \(capturedNumber)")
-            didCapture = true
+           ForceReelSettings.shared.hasReel {
+            if let capturedNumber, capturedNumber > 0 {
+                ForceReelSettings.shared.pendingPosition = capturedNumber
+                print("🎭 [FORCE] Position captured from \(source): \(capturedNumber)")
+                didCapture = true
+            } else if capturedNumber == nil {
+                LogManager.shared.warning("Grid side effects skipped Force Reel: digit buffer overflow from \(source)", category: .general)
+            }
         }
 
         return didCapture
@@ -1677,6 +1752,31 @@ struct PerformanceView: View {
         // Persist reveal:// state whenever the grid changes so it survives app restarts.
         .onChange(of: allMediaURLs) { _ in
             persistCurrentRevealState()
+            logPerformanceVisualState("allMediaURLs changed")
+        }
+        .onChange(of: profile?.userId) { _ in
+            logPerformanceVisualState("profile identity changed")
+        }
+        .onChange(of: cachedImages.count) { _ in
+            logPerformanceVisualState("cachedImages count changed")
+        }
+        .onChange(of: isFirstTimePreloading) { value in
+            logPerformanceVisualState("isFirstTimePreloading=\(value)")
+        }
+        .onChange(of: showingHomeScreenIllusion) { value in
+            logPerformanceVisualState("showingHomeScreenIllusion=\(value)")
+        }
+        .onChange(of: showingScreenOffCover) { value in
+            logPerformanceVisualState("showingScreenOffCover=\(value)")
+        }
+        .onChange(of: showFirstTimeBanner) { value in
+            logPerformanceVisualState("showFirstTimeBanner=\(value)")
+        }
+        .onChange(of: performanceRemoteCallsAllowed) { value in
+            logPerformanceVisualState("performanceRemoteCallsAllowed=\(value)")
+        }
+        .onChange(of: isRefreshEnabled) { value in
+            logPerformanceVisualState("isRefreshEnabled=\(value)")
         }
         // When the Limits & Safety gate (owned by HomeView) dismisses, re-run the
         // secret-input presentation that was deferred in onAppear.
@@ -1723,6 +1823,7 @@ struct PerformanceView: View {
             // which would instantly re-present the lockscreen in an infinite loop.
             let interfaceKinds   = integrations.interfaceKindsInUse()
             print("🎩 [PERF] onAppear — limitsGate=\(limitsGateShowing) listActive=\(activeListSet != nil) lockscreenActive=\(isLockscreenActive) cardNumpadActive=\(isCardNumpadActive) clockActive=\(isClockInputActive) urlPending=\(!urlAction.pendingMode.isEmpty) interfaceKinds=\(interfaceKinds) listInputWasShown=\(listInputWasShown) lockscreenWasShown=\(lockscreenWasShown) cardNumpadWasShown=\(cardNumpadWasShown) clockInputWasShown=\(clockInputWasShown)")
+            logPerformanceVisualState("Performance onAppear")
 
             // Present the appropriate secret-input or performance cover.
             // Guards internally against limitsGateShowing — if HomeView's Limits &
@@ -3049,9 +3150,12 @@ struct PerformanceView: View {
         }
 
         // Determine primary source (text1) — falls back to legacy single source
+        let targetSources = target == "note"
+            ? integrations.sourcesForTarget("note")
+            : integrations.bioSources(forTemplateSlot: bioActiveSlot)
         let primarySource = target == "note"
             ? (integrations.noteText1Source != .none ? integrations.noteText1Source : integrations.noteApiSource)
-            : (integrations.bioText1Source  != .none ? integrations.bioText1Source  : integrations.bioApiSource)
+            : (targetSources[0] != .none ? targetSources[0] : integrations.bioApiSource)
         guard primarySource != .none || integrations.hasTemplateSources(for: target) else { return }
 
         // ── Fetch primary (text1) value ──
@@ -3094,10 +3198,10 @@ struct PerformanceView: View {
         var values: [String: String] = [:]
         if !primaryText.isEmpty { values["text1"] = primaryText }
 
-        let src2 = target == "note" ? integrations.noteText2Source : integrations.bioText2Source
-        let src3 = target == "note" ? integrations.noteText3Source : integrations.bioText3Source
-        let src4 = target == "note" ? integrations.noteText4Source : integrations.bioText4Source
-        let src5 = target == "note" ? integrations.noteText5Source : integrations.bioText5Source
+        let src2 = targetSources[1]
+        let src3 = targetSources[2]
+        let src4 = targetSources[3]
+        let src5 = targetSources[4]
         if src2 != .none || src3 != .none || src4 != .none || src5 != .none {
             async let v2 = src2 != .none ? integrations.fetchValue(for: src2) : nil
             async let v3 = src3 != .none ? integrations.fetchValue(for: src3) : nil
@@ -3193,7 +3297,8 @@ struct PerformanceView: View {
         // Bio/Note active if any polled placeholder source is configured — no mode gate needed,
         // the source selection itself determines whether polling should run.
         // .ocr sources are event-driven and excluded via isPolled.
-        let bioActive  = integrations.bioText1Source.isPolled  || integrations.bioText2Source.isPolled  || integrations.bioText3Source.isPolled  || integrations.bioText4Source.isPolled  || integrations.bioText5Source.isPolled  || integrations.bioApiSource.isPolled
+        let activeBioSources = integrations.bioSources(forTemplateSlot: bioActiveSlot)
+        let bioActive  = activeBioSources.contains { $0.isPolled } || integrations.bioApiSource.isPolled
         let noteActive = integrations.noteText1Source.isPolled || integrations.noteText2Source.isPolled || integrations.noteText3Source.isPolled || integrations.noteText4Source.isPolled || integrations.noteText5Source.isPolled || integrations.noteApiSource.isPolled
         let ppActive   = integrations.ppApiSource   != .none && (ppTopInputMode == "api" || activePostPredictionInputMethod == .api)
         guard bioActive || noteActive || ppActive else { return }
@@ -3493,7 +3598,7 @@ struct PerformanceView: View {
     private func templateSourceEntries(for target: String) -> [(slot: Int, source: ApiSource)] {
         let sources: [ApiSource] = target == "note"
             ? [integrations.noteText1Source, integrations.noteText2Source, integrations.noteText3Source, integrations.noteText4Source, integrations.noteText5Source]
-            : [integrations.bioText1Source,  integrations.bioText2Source,  integrations.bioText3Source,  integrations.bioText4Source,  integrations.bioText5Source]
+            : integrations.bioSources(forTemplateSlot: bioActiveSlot)
 
         return sources.enumerated().compactMap { idx, source in
             let slot = idx + 1
@@ -3583,7 +3688,7 @@ struct PerformanceView: View {
         }
         let sources: [ApiSource] = target == "note"
             ? [integrations.noteText1Source, integrations.noteText2Source, integrations.noteText3Source, integrations.noteText4Source, integrations.noteText5Source]
-            : [integrations.bioText1Source,  integrations.bioText2Source,  integrations.bioText3Source,  integrations.bioText4Source,  integrations.bioText5Source]
+            : integrations.bioSources(forTemplateSlot: bioActiveSlot)
         let matchingSlots = sources.enumerated().compactMap { idx, src -> Int? in
             guard let k = src.interfaceKind, kinds.contains(k) else { return nil }
             return idx + 1
@@ -7813,7 +7918,7 @@ struct InstagramProfileView: View {
     private func captureGridSideEffects(digits: [Int], source: String) -> Bool {
         guard !digits.isEmpty else { return false }
 
-        let capturedNumber = digits.reduce(0) { $0 * 10 + $1 }
+        let capturedNumber = safeNumber(fromDigits: digits)
         var didCapture = false
 
         if FollowingMagicSettings.shared.isEnabled {
@@ -7822,11 +7927,14 @@ struct InstagramProfileView: View {
         }
 
         if ForceReelSettings.shared.isEnabled,
-           ForceReelSettings.shared.hasReel,
-           capturedNumber > 0 {
-            ForceReelSettings.shared.pendingPosition = capturedNumber
-            print("🎭 [FORCE] Position captured from \(source): \(capturedNumber)")
-            didCapture = true
+           ForceReelSettings.shared.hasReel {
+            if let capturedNumber, capturedNumber > 0 {
+                ForceReelSettings.shared.pendingPosition = capturedNumber
+                print("🎭 [FORCE] Position captured from \(source): \(capturedNumber)")
+                didCapture = true
+            } else if capturedNumber == nil {
+                LogManager.shared.warning("Grid side effects skipped Force Reel: digit buffer overflow from \(source)", category: .profile)
+            }
         }
 
         return didCapture
@@ -7944,13 +8052,7 @@ struct InstagramProfileView: View {
             || UserDefaults.standard.bool(forKey: "bio_feature_enabled")
         guard bioEnabled else { return }
 
-        let sources = [
-            IntegrationsSettings.shared.bioText1Source,
-            IntegrationsSettings.shared.bioText2Source,
-            IntegrationsSettings.shared.bioText3Source,
-            IntegrationsSettings.shared.bioText4Source,
-            IntegrationsSettings.shared.bioText5Source
-        ]
+        let sources = IntegrationsSettings.shared.bioSources()
         let bioUsesThisInterface = sources.contains { source in
             guard let kind = source.interfaceKind else { return false }
             return kinds.contains(kind)
@@ -8394,6 +8496,11 @@ struct InstagramProfileView: View {
                 }
             }
         }
+        .onChange(of: showTransferGlitch) { value in
+            let message = "VISUAL transferGlitch=\(value) followingEnabled:\(followingMagic.isEnabled) transferEnabled:\(followingMagic.transferEnabled) offset:\(followingMagic.transferOffset)"
+            print("🧭 [VISUAL] \(message)")
+            LogManager.shared.info(message, category: .general)
+        }
         .onChange(of: pendingOCRWord) { word in
             handlePendingOCRWordChange(word)
         }
@@ -8648,8 +8755,9 @@ struct InstagramProfileView: View {
             return
         }
 
-        let slot = digits.reduce(0) { $0 * 10 + $1 }
-        if slot >= 1,
+        let slot = safeNumber(fromDigits: digits)
+        if let slot,
+           slot >= 1,
            let activeId = ActiveSetSettings.shared.activeCustomSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
             showOCRPeek(label: "#\(slot)")
@@ -8658,6 +8766,8 @@ struct InstagramProfileView: View {
                 await revealByCustomSlot(slot, fromSet: activeSet)
             }
             return
+        } else if slot == nil {
+            LogManager.shared.warning("Lockscreen/clock custom reveal skipped: digit buffer overflow", category: .profile)
         }
 
         if let activeId = ActiveSetSettings.shared.activeNumberSetId,
@@ -9233,7 +9343,7 @@ struct InstagramProfileView: View {
             }
 
         } else if let activeSet = activeDigitGridSet, activeSet.type == .custom {
-            let slot = secretManager.digitBuffer.reduce(0) { $0 * 10 + $1 }
+            let slot = safeNumber(fromDigits: secretManager.digitBuffer)
             captureGridSideEffects(digits: secretManager.digitBuffer, source: "post-prediction")
             secretManager.reset()
             followingOverride = nil; followerOverride = nil
@@ -9241,7 +9351,10 @@ struct InstagramProfileView: View {
                 LogManager.shared.warning("Custom reveal blocked: upload in progress", category: .general)
                 onUploadConflict?(); return
             }
-            guard slot >= 1 else { return }
+            guard let slot, slot >= 1 else {
+                LogManager.shared.warning("Custom grid reveal skipped: digit buffer overflow or invalid slot", category: .profile)
+                return
+            }
             showOCRPeek(label: "#\(slot)")
             Task {
                 guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }

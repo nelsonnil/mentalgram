@@ -261,7 +261,7 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .chinese:    return "Chinese (一-了)"
         case .korean:     return "Korean (가-코)"
         case .thai:       return "Thai (ก-ฮ)"
-        case .vietnamese: return "Vietnamese (A-Y+diacritics)"
+        case .vietnamese: return "Vietnamese (90 letters, 6 tones)"
         case .burmese:    return "Burmese (က-အ)"
         case .khmer:      return "Khmer (ក-អ)"
         case .lao:        return "Lao (ກ-ຮ)"
@@ -364,7 +364,27 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .thai:
             return ["ก","ข","ค","ง","จ","ฉ","ช","ซ","ญ","ด","ต","ถ","ท","น","บ","ป","ผ","ฝ","พ","ฟ","ภ","ม","ย","ร","ล","ว","ศ","ส","ห","อ","ฮ"]
         case .vietnamese:
-            return ["A","Ă","Â","B","C","D","Đ","E","Ê","G","H","I","K","L","M","N","O","Ô","Ơ","P","Q","R","S","T","U","Ư","V","X","Y"]
+            // Consonants (no tonal variations)
+            return ["B","C","D","Đ","G","H","K","L","M","N","P","Q","R","S","T","V","X","Y",
+                    // Vowels with all 6 tones: neutral, sắc (´), huyền (`), hỏi (?), ngã (~), nặng (.)
+                    // A family
+                    "A","Á","À","Ả","Ã","Ạ",
+                    "Ă","Ắ","Ằ","Ẳ","Ẵ","Ặ",
+                    "Â","Ấ","Ầ","Ẩ","Ẫ","Ậ",
+                    // E family
+                    "E","É","È","Ẻ","Ẽ","Ẹ",
+                    "Ê","Ế","Ề","Ể","Ễ","Ệ",
+                    // I family
+                    "I","Í","Ì","Ỉ","Ĩ","Ị",
+                    // O family
+                    "O","Ó","Ò","Ỏ","Õ","Ọ",
+                    "Ô","Ố","Ồ","Ổ","Ỗ","Ộ",
+                    "Ơ","Ớ","Ờ","Ở","Ỡ","Ợ",
+                    // U family
+                    "U","Ú","Ù","Ủ","Ũ","Ụ",
+                    "Ư","Ứ","Ừ","Ử","Ữ","Ự",
+                    // Y family
+                    "Y","Ý","Ỳ","Ỷ","Ỹ","Ỵ"]
         case .burmese:
             return ["က","ခ","ဂ","ဃ","င","စ","ဆ","ဇ","ဈ","ဉ","ည","ဋ","ဌ","ဍ","ဎ","ဏ","တ","ထ","ဒ","ဓ","န","ပ","ဖ","ဗ","ဘ","မ","ယ","ရ","လ","ဝ","သ","ဟ","ဠ","အ"]
         case .khmer:

@@ -3359,7 +3359,8 @@ struct SettingsView: View {
                 InlineSourcePickerView(
                     target: "bio",
                     template: bioAcrosticEnabled ? "{text1}" : bioTemplate,
-                    accentColor: Self.colorProfile
+                    accentColor: Self.colorProfile,
+                    bioTemplateSlot: bioActiveSlot
                 )
 
                 // ── Acrostic mode toggle ───────────────────────────────────────
@@ -4236,6 +4237,7 @@ private struct InlineSourcePickerView: View {
     let target: String
     let template: String
     let accentColor: Color
+    var bioTemplateSlot: Int = 0
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
     @AppStorage("ocr_camera")   private var ocrCamera:   Int    = 0
@@ -4260,22 +4262,33 @@ private struct InlineSourcePickerView: View {
     }
 
     private func sourceValue(for token: String) -> ApiSource {
+        if target == "bio" {
+            return integrations.bioSource(for: token, templateSlot: bioTemplateSlot)
+        }
+
         switch token {
-        case "{text2}": return target == "note" ? integrations.noteText2Source : integrations.bioText2Source
-        case "{text3}": return target == "note" ? integrations.noteText3Source : integrations.bioText3Source
-        case "{text4}": return target == "note" ? integrations.noteText4Source : integrations.bioText4Source
-        case "{text5}": return target == "note" ? integrations.noteText5Source : integrations.bioText5Source
-        default:        return target == "note" ? integrations.noteText1Source : integrations.bioText1Source
+        case "{text2}": return integrations.noteText2Source
+        case "{text3}": return integrations.noteText3Source
+        case "{text4}": return integrations.noteText4Source
+        case "{text5}": return integrations.noteText5Source
+        default:        return integrations.noteText1Source
         }
     }
 
     private func sourceBinding(for token: String) -> Binding<ApiSource> {
+        if target == "bio" {
+            return Binding(
+                get: { integrations.bioSource(for: token, templateSlot: bioTemplateSlot) },
+                set: { integrations.setBioSource($0, for: token, templateSlot: bioTemplateSlot) }
+            )
+        }
+
         switch token {
-        case "{text2}": return target == "note" ? $integrations.noteText2Source : $integrations.bioText2Source
-        case "{text3}": return target == "note" ? $integrations.noteText3Source : $integrations.bioText3Source
-        case "{text4}": return target == "note" ? $integrations.noteText4Source : $integrations.bioText4Source
-        case "{text5}": return target == "note" ? $integrations.noteText5Source : $integrations.bioText5Source
-        default:        return target == "note" ? $integrations.noteText1Source : $integrations.bioText1Source
+        case "{text2}": return $integrations.noteText2Source
+        case "{text3}": return $integrations.noteText3Source
+        case "{text4}": return $integrations.noteText4Source
+        case "{text5}": return $integrations.noteText5Source
+        default:        return $integrations.noteText1Source
         }
     }
 
@@ -6392,31 +6405,35 @@ private struct FakeHomeScreenHelpSheet: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+            ZStack {
+                VaultTheme.Colors.background.ignoresSafeArea()
 
-                    helpSection(
-                        icon: "iphone.homebutton",
-                        iconColor: SettingsView.colorData,
-                        title: "What is Performance Cover?",
-                        body: "When you open Performance, the app can first show a cover screen before revealing your profile. Choose Fake Home Screen for a real screenshot, or Fake Screen Off for a black screen that looks like the phone is off."
-                    )
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
 
-                    helpSection(
-                        icon: "hand.tap.fill",
-                        iconColor: SettingsView.colorData,
-                        title: "How to use it",
-                        body: "1. Select a cover mode.\n\n2. For Fake Home Screen, upload a screenshot with the Instagram icon visible.\n\n3. For Fake Screen Off, no image is needed.\n\n4. Next time you open Performance, tap anywhere on the cover to reveal your profile."
-                    )
+                        helpSection(
+                            icon: "iphone.homebutton",
+                            iconColor: SettingsView.colorData,
+                            title: "What is Performance Cover?",
+                            body: "When you open Performance, the app can first show a cover screen before revealing your profile. Choose Fake Home Screen for a real screenshot, or Fake Screen Off for a black screen that looks like the phone is off."
+                        )
 
-                    helpSection(
-                        icon: "eye.slash.fill",
-                        iconColor: SettingsView.colorData,
-                        title: "Why use it?",
-                        body: "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears, making the experience look completely natural."
-                    )
+                        helpSection(
+                            icon: "hand.tap.fill",
+                            iconColor: SettingsView.colorData,
+                            title: "How to use it",
+                            body: "1. Select a cover mode.\n\n2. For Fake Home Screen, upload a screenshot with the Instagram icon visible.\n\n3. For Fake Screen Off, no image is needed.\n\n4. Next time you open Performance, tap anywhere on the cover to reveal your profile."
+                        )
+
+                        helpSection(
+                            icon: "eye.slash.fill",
+                            iconColor: SettingsView.colorData,
+                            title: "Why use it?",
+                            body: "It creates the illusion that you are simply opening the real Instagram app. Anyone looking at your screen only sees the normal home screen before your profile appears, making the experience look completely natural."
+                        )
+                    }
+                    .padding(20)
                 }
-                .padding(20)
             }
             .navigationTitle("Performance Cover")
             .navigationBarTitleDisplayMode(.inline)
@@ -6424,9 +6441,11 @@ private struct FakeHomeScreenHelpSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                         .fontWeight(.semibold)
+                        .foregroundColor(SettingsView.colorData)
                 }
             }
         }
+        .preferredColorScheme(.dark)
     }
 
     private func helpSection(icon: String, iconColor: Color, title: String, body: String) -> some View {
@@ -6442,9 +6461,10 @@ private struct FakeHomeScreenHelpSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
                 Text(body)
                     .font(.system(size: 14))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -6566,45 +6586,49 @@ private struct LockscreenInputHelpSheet: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+            ZStack {
+                VaultTheme.Colors.background.ignoresSafeArea()
 
-                    helpSection(
-                        icon: "lock.fill",
-                        iconColor: SettingsView.colorData,
-                        title: String(localized: "guide.lockscreen.help.what.title"),
-                        body: String(localized: "guide.lockscreen.help.what.body")
-                    )
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
 
-                    helpSection(
-                        icon: "hand.point.up.left.fill",
-                        iconColor: SettingsView.colorData,
-                        title: String(localized: "guide.lockscreen.help.how.title"),
-                        body: String(localized: "guide.lockscreen.help.how.body")
-                    )
+                        helpSection(
+                            icon: "lock.fill",
+                            iconColor: SettingsView.colorData,
+                            title: String(localized: "guide.lockscreen.help.what.title"),
+                            body: String(localized: "guide.lockscreen.help.what.body")
+                        )
 
-                    helpSection(
-                        icon: "photo.fill",
-                        iconColor: SettingsView.colorData,
-                        title: String(localized: "guide.lockscreen.help.wallpaper.title"),
-                        body: String(localized: "guide.lockscreen.help.wallpaper.body")
-                    )
+                        helpSection(
+                            icon: "hand.point.up.left.fill",
+                            iconColor: SettingsView.colorData,
+                            title: String(localized: "guide.lockscreen.help.how.title"),
+                            body: String(localized: "guide.lockscreen.help.how.body")
+                        )
 
-                    helpSection(
-                        icon: "eye.slash.fill",
-                        iconColor: SettingsView.colorData,
-                        title: String(localized: "guide.lockscreen.help.why.title"),
-                        body: String(localized: "guide.lockscreen.help.why.body")
-                    )
+                        helpSection(
+                            icon: "photo.fill",
+                            iconColor: SettingsView.colorData,
+                            title: String(localized: "guide.lockscreen.help.wallpaper.title"),
+                            body: String(localized: "guide.lockscreen.help.wallpaper.body")
+                        )
 
-                    helpSection(
-                        icon: "square.grid.2x2.fill",
-                        iconColor: SettingsView.colorData,
-                        title: String(localized: "guide.lockscreen.help.tricks.title"),
-                        body: String(localized: "guide.lockscreen.help.tricks.body")
-                    )
+                        helpSection(
+                            icon: "eye.slash.fill",
+                            iconColor: SettingsView.colorData,
+                            title: String(localized: "guide.lockscreen.help.why.title"),
+                            body: String(localized: "guide.lockscreen.help.why.body")
+                        )
+
+                        helpSection(
+                            icon: "square.grid.2x2.fill",
+                            iconColor: SettingsView.colorData,
+                            title: String(localized: "guide.lockscreen.help.tricks.title"),
+                            body: String(localized: "guide.lockscreen.help.tricks.body")
+                        )
+                    }
+                    .padding(20)
                 }
-                .padding(20)
             }
             .navigationTitle(String(localized: "guide.lockscreen.title"))
             .navigationBarTitleDisplayMode(.inline)
@@ -6612,9 +6636,11 @@ private struct LockscreenInputHelpSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(String(localized: "action.done")) { dismiss() }
                         .fontWeight(.semibold)
+                        .foregroundColor(SettingsView.colorData)
                 }
             }
         }
+        .preferredColorScheme(.dark)
     }
 
     private func helpSection(icon: String, iconColor: Color, title: String, body: String) -> some View {
@@ -6630,9 +6656,10 @@ private struct LockscreenInputHelpSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
                 Text(body)
                     .font(.system(size: 14))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
