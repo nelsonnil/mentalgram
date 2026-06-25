@@ -85,35 +85,11 @@ struct AcrosticEngine {
         return localeLanguage
     }
 
+    /// Tokeniza la palabra letra por letra.
+    /// Vietnamita se escribe letra por letra (C+H+Ó = 3 letras, no un cluster).
     private static func tokens(for word: String, language: String) -> [String] {
         let upper = word.uppercased()
-        guard language.lowercased().hasPrefix("vi") else {
-            return upper.map { String($0) }
-        }
-
-        return vietnameseTokens(from: upper)
-    }
-
-    /// Vietnamese has multi-letter initials (CH, NGH, NH, PH, TH, TR, etc.).
-    /// Treating each Unicode character separately turns "chó" into C/H/Ó and
-    /// breaks the intended acrostic. Longest-match keeps those initials together.
-    private static func vietnameseTokens(from word: String) -> [String] {
-        let clusters = ["NGH", "CH", "GH", "GI", "KH", "NG", "NH", "PH", "QU", "TH", "TR"]
-        var result: [String] = []
-        var index = word.startIndex
-
-        while index < word.endIndex {
-            let remaining = word[index...]
-            if let cluster = clusters.first(where: { remaining.hasPrefix($0) }) {
-                result.append(cluster)
-                index = word.index(index, offsetBy: cluster.count)
-            } else {
-                result.append(String(word[index]))
-                index = word.index(after: index)
-            }
-        }
-
-        return result
+        return upper.map { String($0) }
     }
 
     /// Produces the bio line for a single character or language-specific token.
