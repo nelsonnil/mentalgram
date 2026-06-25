@@ -1,0 +1,120 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    📋 REGISTRO DE LICENCIAS - MentalGram                      ║
+║                                                                               ║
+║  Total de códigos: 100                                                        ║
+║  Instrucciones: Marca con ✅ cuando entregues un código a un usuario         ║
+║                 Anota el nombre del usuario al lado                          ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ] 001. 2KWOA6-BGUNQ-ZXU825-GLECMT-T6JF4   → Usuario: _____________ | Fecha: ____
+[ ] 002. MA4O7-WOZHR-ZAGQY-4QQUW-OWR9F      → Usuario: _____________ | Fecha: ____
+[ ] 003. FMT6Q-IVMCYD-0B3GQ-IVW4BI-7MWRK    → Usuario: _____________ | Fecha: ____
+[ ] 004. HHDJVA-X4X37Y-YDBJA-NHBGZD-NWZM7   → Usuario: _____________ | Fecha: ____
+[ ] 005. JQGQS-53BRE8-6VV8W-XN6EIC-WHSI7    → Usuario: _____________ | Fecha: ____
+[ ] 006. A7FLN-H5JID3-0F08OP-T527VO-WI49TM  → Usuario: _____________ | Fecha: ____
+[ ] 007. IRO2Q5-GE2YT-L189MX-02FAD-S8JR0    → Usuario: _____________ | Fecha: ____
+[ ] 008. O6Z02-95WGKI-H1KVD-995LT-SPZ09     → Usuario: _____________ | Fecha: ____
+[ ] 009. K2LUX-INZK4-PUBDEI-RW6SAG-W6HKQ    → Usuario: _____________ | Fecha: ____
+[ ] 010. XME0W-W3ZI5J-LA636-H1JRZ-S0FP1     → Usuario: _____________ | Fecha: ____
+[ ] 011. ZHJ0O-6MI97-XO343-NSTIXR-EBV0N     → Usuario: _____________ | Fecha: ____
+[ ] 012. YHA8X6-IXO5MV-YCXJ9M-ZV92Q-G2OGJ   → Usuario: _____________ | Fecha: ____
+[ ] 013. CA0ED7-PIGZW9-TK9R5N-TY2VEV-OOSYBH → Usuario: _____________ | Fecha: ____
+[ ] 014. JJ8U0F-RN90AP-M23OUU-3PL9M7-CZNCL  → Usuario: _____________ | Fecha: ____
+[ ] 015. NO29O-ABL60V-MFWL0-5L1GVX-9V7L9    → Usuario: _____________ | Fecha: ____
+[ ] 016. VUSY1F-BMO90E-HLUZI-KCN58K-O49AX   → Usuario: _____________ | Fecha: ____
+[ ] 017. XZ2KW-WWE9N-R9P0RN-3WYWMV-NFDEG    → Usuario: _____________ | Fecha: ____
+[ ] 018. YI2PO-YOEGZ-T5KYU-4NCAT-NMAQT      → Usuario: _____________ | Fecha: ____
+[ ] 019. 4SPBU-UPM49Z-DM9R1I-JQM0PZ-40RYE3  → Usuario: _____________ | Fecha: ____
+[ ] 020. VGU4A-U0B2IS-MKEYI-LCTVWB-IRNPV5   → Usuario: _____________ | Fecha: ____
+[ ] 021. V97YNC-5X22W-TIUO3-MKXDE-F194O     → Usuario: _____________ | Fecha: ____
+[ ] 022. 0CILPU-R2T9C3-S3HRMO-IDZI7-F1UTD2  → Usuario: _____________ | Fecha: ____
+[ ] 023. UWIL39-SI716U-FBJYPK-IAHJ4S-P2R1I  → Usuario: _____________ | Fecha: ____
+[ ] 024. L0C5N1-RRFEX-1NE9NX-S5HHCR-4ZIKVD → Usuario: _____________ | Fecha: ____
+[ ] 025. Y2PTO4-8EXBIT-9SWDG-35TSR-DJVTSL  → Usuario: _____________ | Fecha: ____
+[ ] 026. 35KQ9G-7EDPV-DAK8D-ZCH4L-EQW5DT    → Usuario: _____________ | Fecha: ____
+[ ] 027. QQY60I-EOROM-0GT4JP-QUUY1Y-FM4I2   → Usuario: _____________ | Fecha: ____
+[ ] 028. XN1RYM-LJVI6M-T58GN-6QW5CU-ZUGYAP  → Usuario: _____________ | Fecha: ____
+[ ] 029. HS7P1T-MXRMB-VUOSRP-026GH-YG2GK9   → Usuario: _____________ | Fecha: ____
+[ ] 030. NBO0I-RT1M93-P6B9P-VI14I9-5GOAU    → Usuario: _____________ | Fecha: ____
+[ ] 031. PVFM1R-27O0F-Y5869Q-CQ2ZB-XJ38G    → Usuario: _____________ | Fecha: ____
+[ ] 032. 1725I-BGLU5-GO5IJ0-Z7XW8-3TWUT8    → Usuario: _____________ | Fecha: ____
+[ ] 033. B00V74-XNX3G-ET7CP-H9L8SN-SMC69    → Usuario: _____________ | Fecha: ____
+[ ] 034. SQAU8-OCDQY-18KMXK-M2PBY6-XSJ1I    → Usuario: _____________ | Fecha: ____
+[ ] 035. KMQ547-9C5AZR-K5VLR1-VN9HX6-2PZFMU → Usuario: _____________ | Fecha: ____
+[ ] 036. I7DKGM-2N3MVL-D5NAJU-TNXO9-L1F3I   → Usuario: _____________ | Fecha: ____
+[ ] 037. GPS9U8-T5KUJU-RWMIRO-216G4-IJFNK   → Usuario: _____________ | Fecha: ____
+[ ] 038. I9D137-BHNT9A-ZAWC2-9UUSSU-VLN4MT  → Usuario: _____________ | Fecha: ____
+[ ] 039. 1VBJF-TA0UYO-2PLLU-RD6URN-J2LXNC   → Usuario: _____________ | Fecha: ____
+[ ] 040. IAUEZ-IP1E8-K89TVG-NP5VKG-54V5BP    → Usuario: _____________ | Fecha: ____
+[ ] 041. 2S1845-0RF86I-YUUZM-243QB-FQ3UP8   → Usuario: _____________ | Fecha: ____
+[ ] 042. M15W22-ON1ZBZ-OJKAAE-FS5GF-ZEHBE   → Usuario: _____________ | Fecha: ____
+[ ] 043. PVTRHB-UA9YE-98EPDP-L9OC8G-KKVLG6  → Usuario: _____________ | Fecha: ____
+[ ] 044. FV944W-KJ1EXH-R36AR0-EE6BK-DQZSM8  → Usuario: _____________ | Fecha: ____
+[ ] 045. VPV5H6-X8HAW-MKGD4I-VAL4W-7H1NY    → Usuario: _____________ | Fecha: ____
+[ ] 046. 8SUVS9-TS7Y5-8WU3LD-JKP7I-BKH4NV   → Usuario: _____________ | Fecha: ____
+[ ] 047. G6SURV-AEVVL-MAG80V-N35P7-5G3XK    → Usuario: _____________ | Fecha: ____
+[ ] 048. JKR8OK-WQF7V-8Z0L6-U24KS9-TLCLL    → Usuario: _____________ | Fecha: ____
+[ ] 049. U2S00Z-V47CL-J68R8L-J7YO6-TCVO1    → Usuario: _____________ | Fecha: ____
+[ ] 050. EK19IU-1SY9K-NARFXU-7E47Y0-JRBOE   → Usuario: _____________ | Fecha: ____
+[ ] 051. B6FXXW-NBN80-PN6GOI-SN471-BBBS3B   → Usuario: _____________ | Fecha: ____
+[ ] 052. SNVWO-I2PRGS-BHB6W-9Y7L6U-24AFW0   → Usuario: _____________ | Fecha: ____
+[ ] 053. 5UN6I-6LV6R-IID40-VSCDEK-0Z2ACN    → Usuario: _____________ | Fecha: ____
+[ ] 054. ZV8KU-ZBQ16O-BJDH2U-6CTSE-KPXQPU   → Usuario: _____________ | Fecha: ____
+[ ] 055. 6B6SD-7TNCU-ATJKM4-6CYMC-8HQWG     → Usuario: _____________ | Fecha: ____
+[ ] 056. Z2TZ7N-K0XWQ-MNMKH1-47ZB8-LQ1NXQ   → Usuario: _____________ | Fecha: ____
+[ ] 057. HR0O2I-D2M7I-G6LXR-IAH558-8ZGCNV   → Usuario: _____________ | Fecha: ____
+[ ] 058. GQ99C-H3JE2-L4VVZH-AY2TU9-1XFEQE   → Usuario: _____________ | Fecha: ____
+[ ] 059. 0OSF75-KGMBW-ZXYK7X-0P46X-XGN60    → Usuario: _____________ | Fecha: ____
+[ ] 060. 8W8QTL-L3D71C-1PR8M-8B6WH-0F57R    → Usuario: _____________ | Fecha: ____
+[ ] 061. GIOUX-XOBE0-4HAG0-BVOA0-7KD2VC     → Usuario: _____________ | Fecha: ____
+[ ] 062. 4N37Z-HLFVP-EIEY0S-HZEP3-G3NIM     → Usuario: _____________ | Fecha: ____
+[ ] 063. WLRGR-RP7GBH-301AT3-O33T8N-W5ATJY  → Usuario: _____________ | Fecha: ____
+[ ] 064. LCTX8E-50OAU-RFQH11-9IPDY6-MHTAAE  → Usuario: _____________ | Fecha: ____
+[ ] 065. 0ED5C-3CKU64-3PP4S-E9Y7XY-LM472    → Usuario: _____________ | Fecha: ____
+[ ] 066. DQRDN-INWK0-T2TKW5-SKCR2-QYIIK     → Usuario: _____________ | Fecha: ____
+[ ] 067. 8EU1BL-3MRIY-LBP6X-K2SHHR-M4G5G    → Usuario: _____________ | Fecha: ____
+[ ] 068. 4BQYL-VGNQY-473LD-WFCQ2-DL107      → Usuario: _____________ | Fecha: ____
+[ ] 069. KNT6K-E470WF-1KO8T-07H7M-HTTI7     → Usuario: _____________ | Fecha: ____
+[ ] 070. O5H8Q-4BD5O3-PJ93E-65KFL-8BKM6     → Usuario: _____________ | Fecha: ____
+[ ] 071. BDM1N4-CUMC7-BKY8KB-XHROX-V87G99   → Usuario: _____________ | Fecha: ____
+[ ] 072. D0SZ9-TYCC9-I9LN32-HHVTC-IAL6LL    → Usuario: _____________ | Fecha: ____
+[ ] 073. 42CFK-DS0JR-Y5UZC-EDEEWY-B49I6W    → Usuario: _____________ | Fecha: ____
+[ ] 074. VCPUMT-D9XGBI-1J8BYU-BNU3SD-OB65QU → Usuario: _____________ | Fecha: ____
+[ ] 075. IVLEN-EKOH0-KOVUAK-UB03TT-T51XMG   → Usuario: _____________ | Fecha: ____
+[ ] 076. WPU4R-1Z2AIM-YES2T-XGRFSO-W235D    → Usuario: _____________ | Fecha: ____
+[ ] 077. P5EGD-UUJ5KF-1WGPN-9GVO8-SPDXYV    → Usuario: _____________ | Fecha: ____
+[ ] 078. AARI6-6MTI8J-0ZILV-PU4HR-H78IVN    → Usuario: _____________ | Fecha: ____
+[ ] 079. 0BMMC-V1NA1-JJA7E-GUCW1F-X3VHT     → Usuario: _____________ | Fecha: ____
+[ ] 080. PMOBI-OOHE5-93TK8X-57AYC-JCXH5J    → Usuario: _____________ | Fecha: ____
+[ ] 081. 876Y7D-289WXH-HRPXD6-92TEJR-KH1MTZ → Usuario: _____________ | Fecha: ____
+[ ] 082. OXD1E-PZVCT9-84GKK5-HHQ7Y-DVRFR3   → Usuario: _____________ | Fecha: ____
+[ ] 083. R1D4WK-NYBPGL-39XYG-WV1J5-S9OJU    → Usuario: _____________ | Fecha: ____
+[ ] 084. DY8I1-NN8C5N-DD7UOM-86OO5Q-P8DKLZ  → Usuario: _____________ | Fecha: ____
+[ ] 085. 6WFOG-WDC3Z-WFCO3-15YVHR-3X2PP     → Usuario: _____________ | Fecha: ____
+[ ] 086. XHNHEJ-G6KSR-O6784-YSI01M-H19341   → Usuario: _____________ | Fecha: ____
+[ ] 087. 0O6AW6-WQPVNY-ZGDJJC-KYKXH-UBCX8D  → Usuario: _____________ | Fecha: ____
+[ ] 088. QNVAUI-BN7OR-OHXEU-R9C9A0-YN8AFR   → Usuario: _____________ | Fecha: ____
+[ ] 089. 22L6Z-S0U4G-NAQBT-QZBMD-8QV7LM     → Usuario: _____________ | Fecha: ____
+[ ] 090. MK0PN-W8UDUD-QOD1S-NCKNTA-YM4R60   → Usuario: _____________ | Fecha: ____
+[ ] 091. ZK3JHN-Y32D8-TNTSS-80OEWC-PF5A5    → Usuario: _____________ | Fecha: ____
+[ ] 092. FT2KU-8MO1XX-C9VSY-LEL7N-WGU5VX    → Usuario: _____________ | Fecha: ____
+[ ] 093. 5EZYJ-2A2SX-QBPHYV-4TOVBJ-I4GSY1   → Usuario: _____________ | Fecha: ____
+[ ] 094. JT9NY2-BK3MN6-Z4JKIR-TS1MV-0JKWI2  → Usuario: _____________ | Fecha: ____
+[ ] 095. R5FW0-PFDDOX-IQUBAK-QAZQO-NGIMG    → Usuario: _____________ | Fecha: ____
+[ ] 096. F174H2-3T8UDU-HEOBFU-LNH3Y-D4MTO   → Usuario: _____________ | Fecha: ____
+[ ] 097. 3YECV-ND1VSB-37HXY-D820U-3V1GP7    → Usuario: _____________ | Fecha: ____
+[ ] 098. OCCMQ-3RY3L-LHEQPG-6J21IA-9SB1V    → Usuario: _____________ | Fecha: ____
+[ ] 099. 9DM9G-YORB1-ENPSC-E4Z1U-1OSKG      → Usuario: _____________ | Fecha: ____
+[ ] 100. L2DB4-BPUCYC-1HWSE3-FCT9Z2-S4WRV   → Usuario: _____________ | Fecha: ____
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTAS IMPORTANTES:
+- Cada código solo funciona UNA VEZ en UNA instalación
+- Los usuarios existentes NO necesitan código (acceso automático)
+- Mantén este archivo seguro y privado
+- Para generar más códigos: python3 generar_licencias.py 10
+
+═══════════════════════════════════════════════════════════════════════════════
