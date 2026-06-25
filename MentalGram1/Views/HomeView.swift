@@ -1362,9 +1362,10 @@ struct SetURLSchemeRow: View {
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? set.name
         guard let mode = set.type.revealURLTemplate else { return "" }
         switch set.type {
-        case .word:           return "vault://reveal?\(mode)=<word>&set=\(safeName)"
-        case .number, .custom, .list: return "vault://reveal?\(mode)=<value>&set=\(safeName)"
-        case .card:           return "vault://reveal?\(mode)=3D&set=\(safeName)"
+        case .word:           return "vault://reveal?\(mode)=<word>"
+        case .number:         return "vault://reveal?\(mode)=1"     // Example: vault://reveal?slot=1
+        case .custom, .list:  return "vault://reveal?\(mode)=<1-100>"
+        case .card:           return "vault://reveal?\(mode)=3D"     // Example: vault://reveal?card=3D
         }
     }
 
