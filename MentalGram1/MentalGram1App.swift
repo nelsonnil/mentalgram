@@ -78,6 +78,7 @@ struct MentalGram1App: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject var instagram  = InstagramService.shared
     @ObservedObject var backup     = CloudBackupService.shared
+    @ObservedObject var license    = LicenseManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showRestoreBanner = false
@@ -89,6 +90,8 @@ struct MentalGram1App: App {
     @State private var lastBackgroundedAt: Date? = nil
     /// Background time threshold (seconds) above which a warm-resume window is opened.
     private let warmResumeThreshold: TimeInterval = 300 // 5 minutes
+    /// True once grandfathering check has been performed
+    @State private var grandfatheringChecked = false
 
     init() {
         requestNotificationPermission()
@@ -132,11 +135,20 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: restoreInProgress)
+                // License activation overlay — shown for new users who need to activate
+                .overlay {
+                    if license.needsActivation {
+                        LicenseActivationView()
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: license.isActivated)
                 .onOpenURL { url in
                     URLActionManager.shared.handleURL(url)
                 }
                 .onAppear {
                     UIApplication.shared.isIdleTimerDisabled = true
+                    checkLicenseGrandfathering()
                     handleFirstLaunch()
                     // Backups are manual-only. Do not upload local state/photos on launch,
                     // because a bad local state could overwrite the user's good backup.
@@ -194,6 +206,70 @@ struct MentalGram1App: App {
                 break
             }
         }
+    }
+
+    // MARK: - License Grandfathering
+
+    /// Verifica si el usuario es existente y le otorga acceso automático sin código de licencia
+    private func checkLicenseGrandfathering() {
+        guard !grandfatheringChecked else { return }
+        grandfatheringChecked = true
+        
+        // Si ya está activado, no hacer nada
+        guard license.needsActivation else { return }
+        
+        // Criterios de grandfathering: usuario existente con datos previos
+        let isExistingUser = hasExistingUserData()
+        
+        if isExistingUser {
+            print("🎁 [LICENSE] Usuario existente detectado - otorgando acceso grandfathered")
+            license.grantGrandfatheredAccess()
+        } else {
+            print("👤 [LICENSE] Usuario nuevo - se requiere código de activación")
+        }
+    }
+    
+    /// Determina si es un usuario existente basándose en datos previos
+    private func hasExistingUserData() -> Bool {
+        // 1. Verificar si tiene una sesión de Instagram guardada
+        let hasSession = !InstagramService.shared.session.sessionId.isEmpty
+        if hasSession {
+            print("   ✓ Tiene sesión de Instagram guardada")
+            return true
+        }
+        
+        // 2. Verificar si tiene sets creados
+        let hasSets = !DataManager.shared.sets.isEmpty
+        if hasSets {
+            print("   ✓ Tiene sets creados")
+            return true
+        }
+        
+        // 3. Verificar si tiene backups en iCloud (needsCloudRestore es true cuando hay backup)
+        let hasBackup = CloudBackupService.shared.needsCloudRestore || (
+            CloudBackupService.shared.iCloudAvailable &&
+            NSUbiquitousKeyValueStore.default.object(forKey: "com.vault.backup.date") != nil
+        )
+        if hasBackup {
+            print("   ✓ Tiene backup en iCloud")
+            return true
+        }
+        
+        // 4. Verificar UserDefaults para cualquier configuración previa
+        let hasAnySettings = UserDefaults.standard.dictionaryRepresentation().keys.contains { key in
+            key.hasPrefix("com.vault.") || 
+            key.contains("instagram") || 
+            key.contains("performance") ||
+            key.contains("bio_") ||
+            key.contains("note_")
+        }
+        if hasAnySettings {
+            print("   ✓ Tiene configuraciones previas")
+            return true
+        }
+        
+        print("   ✗ No se encontraron datos de usuario existente")
+        return false
     }
 
     // MARK: - One-time iCloud Drive photo migration

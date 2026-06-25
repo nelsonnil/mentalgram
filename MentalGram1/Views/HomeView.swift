@@ -2533,6 +2533,7 @@ struct SettingsView: View {
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @ObservedObject private var profileCache = ProfileCacheService.shared
     @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
+    @ObservedObject private var license = LicenseManager.shared
     var onContinuePreload: () -> Void = {}
     @State private var settingsProfilePic: UIImage? = nil
     @State private var showingLogoutAlert = false
@@ -2623,6 +2624,11 @@ struct SettingsView: View {
     @State private var showProfilePicHelp = false
     @State private var showNoteHelp = false
     @State private var showBioHelp = false
+    // License activation
+    @State private var showLicenseInput = false
+    @State private var licenseInputCode = ""
+    @State private var showLicenseAlert = false
+    @State private var licenseAlertMessage = ""
     // TEST: Archive access
     
     var body: some View {
@@ -2661,6 +2667,22 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingLogin) {
             InstagramWebLoginView(isPresented: $showingLogin)
+        }
+        .sheet(isPresented: $showLicenseInput) {
+            LicenseInputSheet(
+                isPresented: $showLicenseInput,
+                onActivate: { code in
+                    let result = license.activate(code: code)
+                    licenseAlertMessage = result.message
+                    showLicenseAlert = true
+                    if result == .success {
+                        showLicenseInput = false
+                    }
+                }
+            )
+        }
+        .alert(licenseAlertMessage, isPresented: $showLicenseAlert) {
+            Button("OK") {}
         }
     }
 
@@ -3113,6 +3135,56 @@ struct SettingsView: View {
                                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                             }
                     }
+                    
+                    // License section
+                    modernDivider()
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Licencia")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            if let code = license.licenseCode {
+                                if code == "GRANDFATHERED" {
+                                    Text("Usuario grandfathered")
+                                        .font(VaultTheme.Typography.caption())
+                                        .foregroundColor(VaultTheme.Colors.success)
+                                } else {
+                                    Text(formatLicenseCode(code))
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                                }
+                            }
+                        }
+                        Spacer()
+                        
+                        if license.isActivated {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(VaultTheme.Colors.success)
+                                Text("Activada")
+                                    .font(VaultTheme.Typography.caption())
+                                    .foregroundColor(VaultTheme.Colors.success)
+                            }
+                        } else {
+                            Button {
+                                showLicenseInput = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "key.fill")
+                                        .font(.system(size: 14))
+                                    Text("Activar")
+                                        .font(VaultTheme.Typography.bodyBold())
+                                }
+                                .foregroundColor(Color(hex: "8A2BE2"))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color(hex: "8A2BE2").opacity(0.15))
+                                .cornerRadius(8)
+                            }
+                        }
+                    }
+                    
                     #if DEBUG
                     if developerMode {
                         modernDivider()
@@ -4272,7 +4344,130 @@ struct SettingsView: View {
         }
     }
     
+    // MARK: - License Helpers
+    
+    private func formatLicenseCode(_ code: String) -> String {
+        // Mostrar solo los primeros y últimos segmentos para privacidad
+        let parts = code.split(separator: "-")
+        guard parts.count == 5 else { return code }
+        return "\(parts[0])-***-***-***-\(parts[4])"
+    }
+    
 }
+
+// MARK: - License Input Sheet
+
+private struct LicenseInputSheet: View {
+    @Binding var isPresented: Bool
+    let onActivate: (String) -> Void
+    @State private var licenseCode: String = ""
+    @FocusState private var codeFieldFocused: Bool
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(hex: "0F0F0F").ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    Spacer()
+                    
+                    // Icono
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "8A2BE2"), Color(hex: "4B0082")],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 80, height: 80)
+                        
+                        Image(systemName: "key.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.white)
+                    }
+                    
+                    Text("Activar Licencia")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text("Ingresa el código de 5 segmentos")
+                        .font(.system(size: 15))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                    
+                    // Campo de código
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("XXXXX-XXXXX-XXXXX-XXXXX-XXXXX", text: $licenseCode)
+                            .font(.system(size: 15, weight: .medium, design: .monospaced))
+                            .foregroundColor(.white)
+                            .textInputAutocapitalization(.characters)
+                            .disableAutocorrection(true)
+                            .padding(14)
+                            .background(Color(hex: "2C2C2E"))
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(codeFieldFocused ? Color(hex: "8A2BE2") : Color.clear, lineWidth: 2)
+                            )
+                            .focused($codeFieldFocused)
+                            .submitLabel(.done)
+                            .onSubmit { activateLicense() }
+                        
+                        Text("Formato: 5 grupos de 5-6 caracteres separados por guión")
+                            .font(.system(size: 11))
+                            .foregroundColor(.gray)
+                            .padding(.leading, 4)
+                    }
+                    .padding(.horizontal, 24)
+                    
+                    // Botón activar
+                    Button(action: activateLicense) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Activar")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(hex: "8A2BE2"), Color(hex: "4B0082")],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(10)
+                    }
+                    .disabled(licenseCode.isEmpty)
+                    .opacity(licenseCode.isEmpty ? 0.5 : 1.0)
+                    .padding(.horizontal, 24)
+                    
+                    Spacer()
+                }
+            }
+            .navigationTitle("Licencia")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") {
+                        isPresented = false
+                    }
+                    .foregroundColor(Color(hex: "8A2BE2"))
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+    
+    private func activateLicense() {
+        codeFieldFocused = false
+        onActivate(licenseCode)
+    }
+}
+
 
 // MARK: - Inline Source Picker
 // Shows per-placeholder source pickers (Inject / API1 / API2 / API3 / OCR)
