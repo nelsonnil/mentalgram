@@ -20,7 +20,28 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // (including during app startup) is captured and written to disk.
         CrashLoggerService.install()
         CrashLoggerService.shared.recordAction("app launched")
+        _ = BackupRoutineManager.shared
+        if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem,
+           BackupRoutineManager.shared.queueShortcutItem(shortcutItem) {
+            LogManager.shared.info("Backup routine shortcut received in launch options", category: .general)
+            return false
+        }
         return true
+    }
+
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = SceneDelegate.self
+        return configuration
+    }
+
+    func application(_ application: UIApplication,
+                     performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        LogManager.shared.info("Backup routine shortcut received by AppDelegate", category: .general)
+        completionHandler(BackupRoutineManager.shared.handleShortcutItem(shortcutItem))
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
@@ -32,6 +53,23 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         return .portrait
+    }
+}
+
+final class SceneDelegate: NSObject, UIWindowSceneDelegate {
+    func scene(_ scene: UIScene,
+               willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        guard let shortcutItem = connectionOptions.shortcutItem else { return }
+        LogManager.shared.info("Backup routine shortcut received on scene launch", category: .general)
+        _ = BackupRoutineManager.shared.queueShortcutItem(shortcutItem)
+    }
+
+    func windowScene(_ windowScene: UIWindowScene,
+                     performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        LogManager.shared.info("Backup routine shortcut received by SceneDelegate", category: .general)
+        completionHandler(BackupRoutineManager.shared.handleShortcutItem(shortcutItem))
     }
 }
 
@@ -118,6 +156,9 @@ struct MentalGram1App: App {
             case .background:
                 CrashLoggerService.shared.recordLifecycle("background")
                 UIApplication.shared.isIdleTimerDisabled = false
+                if um.activeTask != nil || um.isUploading || um.isActive {
+                    LogManager.shared.warning("Upload left foreground — uploads cannot continue for hours in background. phase=\(um.uploadPhase)", category: .upload)
+                }
                 um.beginBackgroundWork()
                 lastBackgroundedAt = Date()
                 // Safe auto-backup at the natural end-of-session checkpoint. Captures the

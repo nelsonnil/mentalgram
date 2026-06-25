@@ -855,7 +855,7 @@ private struct UserGuidePrintDocument: View {
                 title: String(localized: "input.guide.lockscreen.title", defaultValue: "Number Lockscreen") + "  ·  " + String(localized: "input.guide.lockscreen.compat", defaultValue: "Number · Custom sets"),
                 color: indigo,
                 items: [
-                    .body(String(localized: "input.guide.lockscreen.body", defaultValue: "Vault shows a fake iPhone lock screen with a standard PIN keypad. You type the secret number (up to 4 digits) first — then the spectator can type anything they like on the visible keypad. Only your secret sequence is captured; the spectator's taps have no effect. The predict fires when 4 digits are entered.")),
+                    .body(String(localized: "input.guide.lockscreen.body", defaultValue: "Vault shows a fake iPhone lock screen with a standard PIN keypad. You type the secret number (up to 6 digits) first — then the spectator can type anything they like on the visible keypad. Only your secret sequence is captured; the spectator's taps have no effect. The prediction fires when all 6 dots are filled.")),
                     .highlight(String(localized: "input.guide.lockscreen.activate", defaultValue: "Open the lock screen from the Performance tab. Enter your secret digits on the keypad — they appear as filled dots. Tap outside the keypad to mark the end of your secret input. The spectator can then type freely without changing your captured number.")),
                     .note(String(localized: "input.guide.lockscreen.tip", defaultValue: "Add a real wallpaper screenshot to make it indistinguishable from a genuine iOS lock screen. Setup is covered in the Lockscreen guide under Camouflage.")),
                     .visual(.lockscreen)
@@ -868,7 +868,7 @@ private struct UserGuidePrintDocument: View {
                 items: [
                     .body(String(localized: "input.guide.lockscreencard.body", defaultValue: "The same fake lock screen as Number Lockscreen, but the digits are decoded into a playing card: value + suit. Values are A=1, 2-9 as themselves, 10=10, J=11, Q=12, K=13. Suits are 1=♠, 2=♥, 3=♣, 4=♦. The card can reveal a prediction or fill Notes/Bio with the localized card name.")),
                     .body("Code format: [value][suit]. Use 0 prefix for 3-digit code if needed.\nA♠ = 11  ·  7♥ = 72  ·  9♦ = 94  ·  10♠ = 101  ·  J♥ = 112  ·  Q♣ = 123  ·  K♦ = 134\nExample: to reveal Q♥ enter 122."),
-                    .highlight(String(localized: "input.guide.lockscreencard.activate", defaultValue: "Enter the 4-digit code that corresponds to your card (the full table is in the set config). Tap outside to lock in your input. The spectator can type any digits after — only your secret sequence matters.")),
+                    .highlight(String(localized: "input.guide.lockscreencard.activate", defaultValue: "Enter the code that corresponds to your card (the full table is in the set config). Tap outside to lock in your input. The spectator can type any digits after — only your secret sequence matters.")),
                     .visual(.lockscreen)
                 ]
             )

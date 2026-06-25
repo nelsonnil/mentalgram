@@ -164,11 +164,11 @@ struct SetDetailView: View {
     // slots in just below all existing posts. Any posts pinned or uploaded afterwards
     // naturally appear above it without any manual configuration.
     @State private var uploadTakenAt: Date? = nil
-
+    
     var currentSet: PhotoSet {
         dataManager.sets.first(where: { $0.id == set.id }) ?? set
     }
-
+    
     /// Effective slot labels used for grid display.
     /// For custom sets, derives labels numerically from existing photos (or defaults to 1 slot).
     /// For word/number sets, returns the model's fixed labels.
@@ -281,7 +281,7 @@ struct SetDetailView: View {
                 verifySyncSection
                 reverifySection
                 if instagram.isLoggedIn {
-                    statusSection
+                statusSection
                         .id("\(uploadManager.uploadPhase)-\(uploadManager.nextPhotoCountdown)-\(uploadManager.botCountdownSeconds)-\(uploadManager.autoRetryCountdown)-\(uploadManager.escalatedPauseCountdown)")
                     if uploadManager.isPhotoRejected {
                         photoRejectedRecoverySection
@@ -1304,8 +1304,12 @@ struct SetDetailView: View {
     /// button. Re-evaluated whenever `safetyCountdownTick` changes.
     private func formatCountdown(_ seconds: Int) -> String {
         let s = max(0, seconds)
+        let h = s / 3600
         let m = s / 60
         let r = s % 60
+        if h > 0 {
+            return String(format: "%dh %02dm", h, (s % 3600) / 60)
+        }
         if m > 0 {
             return String(format: "%dm %02ds", m, r)
         }
@@ -1482,6 +1486,11 @@ struct SetDetailView: View {
         guard !instagram.isLocked else {
             uploadManager.reverifyError = "App is in safety lockdown — wait for it to clear."
             print("⚠️ [RE-VERIFY] Skipped — lockdown active")
+            return
+        }
+        if let pause = activeUploadSafetyPause {
+            uploadManager.reverifyError = "\(pause.title): wait \(formatCountdown(pause.seconds)) before checking Instagram again."
+            LogManager.shared.warning("Re-verify blocked by upload safety pause: \(pause.title)", category: .upload)
             return
         }
         // ANTI-BOT: Cooldown 90s between re-verify runs. The log showed the
@@ -1854,6 +1863,9 @@ struct SetDetailView: View {
             print("⚠️ [S&A] Already running or no photos")
             return
         }
+        if await blockUploadIfSafetyPauseActive(source: "sync archive", includeRecentActivity: false) {
+            return
+        }
         if uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive {
             print("🛑 [S&A] Cancelling active upload before Sync & Archive")
             LogManager.shared.warning("Upload cancelled before Sync & Archive", category: .upload)
@@ -2207,16 +2219,16 @@ struct SetDetailView: View {
             NotificationCenter.default.post(name: .performanceManualRefresh, object: nil)
         }
     }
-
+    
     // MARK: - Stats Section
-
+    
     private var statsSection: some View {
         HStack(spacing: VaultTheme.Spacing.xl) {
             StatCard(title: "Total", value: "\(currentSet.totalPhotos)", icon: "photo.stack")
             
             // Only show "Uploaded" when logged in
             if instagram.isLoggedIn {
-                StatCard(title: "Uploaded", value: "\(currentSet.uploadedPhotos)", icon: "arrow.up.circle")
+            StatCard(title: "Uploaded", value: "\(currentSet.uploadedPhotos)", icon: "arrow.up.circle")
             }
             
             if !currentSet.banks.isEmpty {
@@ -2224,7 +2236,7 @@ struct SetDetailView: View {
             }
         }
     }
-
+    
     // MARK: - Status Section (Enhanced - Single Source of Truth)
     
     private var isThisSetActive: Bool {
@@ -2238,7 +2250,7 @@ struct SetDetailView: View {
                     // === THIS SET is the active upload set ===
 
                     // E: Network status pill — visible whenever the upload is active.
-                    HStack {
+            HStack {
                         Spacer()
                         networkStatusPill
                     }
@@ -2248,8 +2260,8 @@ struct SetDetailView: View {
                         Image(systemName: uploadManager.uploadPhase.icon)
                             .font(.title3)
                         Text(uploadManager.currentPhaseDescription.isEmpty ? phaseDefaultText : uploadManager.currentPhaseDescription)
-                            .font(.headline)
-                    }
+                    .font(.headline)
+            }
                     .foregroundColor(uploadManager.uploadPhase.borderColor)
                     
                     // COUNTDOWN DISPLAY (per phase)
@@ -2267,6 +2279,7 @@ struct SetDetailView: View {
                     
                     // Action buttons
                     actionButtons
+                    uploadSafetyPauseBanner
                     uploadInfoBanner
                     
                 } else if uploadManager.activeSetId != nil {
@@ -2286,7 +2299,7 @@ struct SetDetailView: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.title3)
                             Text("Ready to upload")
-                                .font(.headline)
+                        .font(.headline)
                         }
                         .foregroundColor(.green)
                         
@@ -2436,17 +2449,17 @@ struct SetDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                .padding()
+                        .padding()
                 .background(Color.yellow.opacity(0.1))
-                .cornerRadius(12)
-            }
+                        .cornerRadius(12)
+                }
         case .escalatedPause(let seconds) where seconds > 0:
-            VStack(spacing: 8) {
+                VStack(spacing: 8) {
                 countdownDisplay(seconds: seconds, color: .red, label: "Multiple errors - Cooling down")
                 Text("Upload will resume automatically after this wait")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
         case .botLockdown(let seconds) where seconds > 0:
             countdownDisplay(seconds: seconds, color: .red, label: "Lockdown - Wait")
         case .sessionExpired:
@@ -2626,6 +2639,7 @@ struct SetDetailView: View {
                 }
                 .disabled(uploadManager.activeTask != nil)
 
+                uploadSafetyPauseBanner
                 uploadInfoBanner
             }
         }
@@ -2740,8 +2754,7 @@ struct SetDetailView: View {
                         showingLockdownSheet = true
                         return
                     }
-                    dataManager.updateSetStatus(id: currentSet.id, status: .ready)
-                    Task { await uploadAllPhotos() }
+                    startUpload()
                 } label: {
                     if isLocked && lockSeconds > 0 {
                         let m = lockSeconds / 60
@@ -2875,12 +2888,12 @@ struct SetDetailView: View {
         if !currentSet.banks.isEmpty || showActions {
             HStack(spacing: 8) {
                 // Tabs — scrollable
-                ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: VaultTheme.Spacing.sm) {
                         ForEach(Array(currentSet.banks.enumerated()), id: \.element.id) { index, bank in
-                            Button(action: { selectedBankIndex = index }) {
+                    Button(action: { selectedBankIndex = index }) {
                                 Text(bank.name)
-                                    .font(.subheadline.weight(selectedBankIndex == index ? .bold : .regular))
+                            .font(.subheadline.weight(selectedBankIndex == index ? .bold : .regular))
                                     .foregroundColor(selectedBankIndex == index ? .white : VaultTheme.Colors.primary)
                                     .padding(.horizontal, VaultTheme.Spacing.lg)
                                     .padding(.vertical, VaultTheme.Spacing.sm)
@@ -3054,7 +3067,7 @@ struct SetDetailView: View {
                         .font(.caption.bold())
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                            .padding(.vertical, 8)
                         .background(Color(hex: "0A84FF"))
                         .cornerRadius(9)
                 }
@@ -3239,8 +3252,8 @@ struct SetDetailView: View {
     }
     
     private var photosGridSection: some View {
-        let photosToShow = currentSet.banks.isEmpty
-            ? currentSet.photos
+        let photosToShow = currentSet.banks.isEmpty 
+            ? currentSet.photos 
             : selectedBankIfAvailable.map { dataManager.getPhotosForBank(setId: currentSet.id, bankId: $0.id) } ?? []
         
         if isReorderMode {
@@ -4095,6 +4108,9 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD] Ignored startUpload() — another upload task is running (phase: \(uploadManager.uploadPhase))")
             return
         }
+        if blockUploadIfSafetyPauseActive(source: "start") {
+            return
+        }
         if uploadManager.isActive {
             print("⚠️ [UPLOAD] Clearing paused/stale upload state before starting this set")
             uploadManager.resetAllState()
@@ -4163,6 +4179,9 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD SINGLE] Stale upload state detected — resetting before single upload")
             uploadManager.resetAllState()
         }
+        if blockUploadIfSafetyPauseActive(source: "single upload") {
+            return
+        }
         guard let index = currentSet.photos.firstIndex(where: { $0.id == photoId }) else { return }
         let photo = currentSet.photos[index]
         guard photo.mediaId == nil, let imageData = photo.imageData else {
@@ -4192,7 +4211,7 @@ struct SetDetailView: View {
         uploadManager.uploadPhase = .uploading(photoNumber: index + 1)
         uploadManager.currentPhaseDescription = "Uploading \(photo.symbol)…"
         dataManager.updateSetStatus(id: currentSet.id, status: .uploading)
-
+        
         let task = Task {
             var uploadedMediaId: String? = nil
             defer {
@@ -4271,6 +4290,17 @@ struct SetDetailView: View {
                 } else {
                     dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: error.localizedDescription)
                 }
+                if isRestrictedSessionError(error) || uploadManager.remainingUploadRestrictionSeconds() > 0 {
+                    await armRestrictionPause(
+                        photoIndex: index,
+                        message: """
+                        Instagram safety pause
+
+                        Instagram restricted the session during upload. Vault paused uploads for 6 hours to protect the account.
+                        """
+                    )
+                    return
+                }
                 uploadManager.showingError = "Upload failed for \(photo.symbol): \(error.localizedDescription)"
                 uploadManager.uploadPhase = .paused
                 dataManager.updateSetStatus(id: currentSet.id, status: .error)
@@ -4300,6 +4330,9 @@ struct SetDetailView: View {
             uploadManager.requestPause = true
             uploadManager.currentPhaseDescription = "Finishing current upload step before resuming..."
             LogManager.shared.warning("Resume ignored: upload task still active; waiting for safe pause to avoid duplicate uploads", category: .upload)
+            return
+        }
+        if blockUploadIfSafetyPauseActive(photoIndex: uploadManager.failedPhotoIndex, source: "resume") {
             return
         }
 
@@ -4432,6 +4465,98 @@ struct SetDetailView: View {
     }
 
     private let maxAutomaticBankRepairDepth = 96   // ~8+ hours with the waits below
+    private let uploadRestrictionSeconds = 6 * 60 * 60
+
+    private var activeUploadSafetyPause: (title: String, message: String, seconds: Int, color: Color, icon: String)? {
+        let _ = safetyCountdownTick
+        let restrictionSeconds = uploadManager.remainingUploadRestrictionSeconds()
+        if restrictionSeconds > 0 {
+            return (
+                "Instagram safety pause",
+                "Instagram restricted the session. Uploads are paused to protect the account.",
+                restrictionSeconds,
+                .red,
+                "lock.shield.fill"
+            )
+        }
+
+        return nil
+    }
+
+    private var activeRecentInstagramActivityPause: (title: String, message: String, seconds: Int, color: Color, icon: String)? {
+        let _ = safetyCountdownTick
+        let seconds = InstagramSafetyGate.shared.preUploadQuietSecondsRemaining
+        guard seconds > 0 else { return nil }
+        let activity = InstagramSafetyGate.shared.lastPreUploadQuietActivity
+        return (
+            "Upload waiting",
+            "Recent Instagram activity (\(activity)). Vault waits before uploading.",
+            seconds,
+            .blue,
+            "hourglass"
+        )
+    }
+
+    @ViewBuilder
+    private var uploadSafetyPauseBanner: some View {
+        if let pause = activeUploadSafetyPause ?? activeRecentInstagramActivityPause {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: pause.icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(pause.color)
+                    .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(pause.title) — \(formatCountdown(pause.seconds))")
+                        .font(.subheadline.bold())
+                        .foregroundColor(pause.color)
+                        .monospacedDigit()
+                    Text(pause.message)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+            }
+            .padding(12)
+            .background(pause.color.opacity(0.08))
+            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(pause.color.opacity(0.28), lineWidth: 1))
+            .onReceive(safetySectionTimer) { _ in
+                safetyCountdownTick &+= 1
+            }
+        }
+    }
+
+    @MainActor
+    private func blockUploadIfSafetyPauseActive(photoIndex: Int? = nil, source: String, includeRecentActivity: Bool = true) -> Bool {
+        let pause = activeUploadSafetyPause ?? (includeRecentActivity ? activeRecentInstagramActivityPause : nil)
+        guard let pause else { return false }
+        if let photoIndex {
+            uploadManager.failedPhotoIndex = photoIndex
+        }
+        uploadManager.requestPause = false
+        uploadManager.invalidateAllTimers()
+        uploadManager.safetyBlockMessage = "\(pause.title)\n\n\(pause.message)\n\nWait \(formatCountdown(pause.seconds)) before continuing."
+        uploadManager.uploadPhase = pause.title == "Instagram safety pause"
+            ? .botLockdown(remainingSeconds: pause.seconds)
+            : .cooldown(remainingSeconds: pause.seconds)
+        uploadManager.currentPhaseDescription = pause.title
+        uploadManager.activeTask = nil
+        dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+        LogManager.shared.warning("Upload blocked by safety pause (\(source)): \(pause.title), \(pause.seconds)s remaining", category: .upload)
+        return true
+    }
+
+    @MainActor
+    private func armRestrictionPause(photoIndex: Int, message: String) {
+        uploadManager.failedPhotoIndex = photoIndex
+        uploadManager.activateUploadRestriction(seconds: uploadRestrictionSeconds)
+        uploadManager.safetyBlockMessage = message
+        uploadManager.activeTask = nil
+        dataManager.updateSetStatus(id: currentSet.id, status: .error)
+        uploadManager.sendUploadSafetyPauseNotification()
+    }
 
     private func automaticBankRepairWaitSeconds(depth: Int) -> Int {
         // Start gently, then settle into long overnight-safe retries.
@@ -4481,6 +4606,16 @@ struct SetDetailView: View {
             || description.contains("checkpoint")
             || description.contains("checkpoint_challenge_required")
             || description.contains("instagram verification")
+    }
+
+    private func isRestrictedSessionError(_ error: Error) -> Bool {
+        let description = error.localizedDescription.lowercased()
+        let context = InstagramService.shared.sessionExpiredContext
+        return context == .restriction
+            || context == .challenge
+            || description.contains("restriction")
+            || description.contains("checkpoint")
+            || description.contains("challenge")
     }
 
     private func isRecentRevealProtectionError(_ error: Error) -> Bool {
@@ -4607,6 +4742,10 @@ struct SetDetailView: View {
         print("🚀 [UPLOAD ALL] Starting upload process...")
         print("   Total photos to upload: \(currentSet.photos.count)")
         LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
+
+        if await blockUploadIfSafetyPauseActive(photoIndex: startFrom, source: "upload loop") {
+            return
+        }
 
         // CRITICAL: Check if lockdown is active before starting
         if instagram.isLocked {
@@ -4747,6 +4886,17 @@ struct SetDetailView: View {
                         print("⚠️ [RESCUE] Archive returned false for \(stuckPhoto.symbol) — marked as error")
                     }
                 } catch {
+                    if isRestrictedSessionError(error) || uploadManager.remainingUploadRestrictionSeconds() > 0 {
+                        await armRestrictionPause(
+                            photoIndex: 0,
+                            message: """
+                            Instagram safety pause
+
+                            Instagram restricted the session while recovering an interrupted archive. Vault paused uploads for 6 hours to protect the account.
+                            """
+                        )
+                        return
+                    }
                     if isRecentRevealProtectionError(error) {
                         let wait = recentRevealProtectionWaitSeconds(from: error) + Int.random(in: 3...8)
                         LogManager.shared.info("Rescue archive deferred by post-reveal protection — waiting \(wait)s", category: .upload)
@@ -4950,6 +5100,17 @@ struct SetDetailView: View {
                             break
                         }
                     } catch {
+                        if isRestrictedSessionError(error) || uploadManager.remainingUploadRestrictionSeconds() > 0 {
+                            await armRestrictionPause(
+                                photoIndex: index,
+                                message: """
+                                Instagram safety pause
+
+                                Instagram restricted the session while recovering an already uploaded photo. Vault paused uploads for 6 hours before trying again.
+                                """
+                            )
+                            return
+                        }
                         LogManager.shared.warning("Duplicate prevention archive failed for photo #\(index + 1): \(error.localizedDescription)", category: .upload)
                     }
                 }
@@ -4984,8 +5145,8 @@ struct SetDetailView: View {
                         photoIndex: index,
                         takenAt: uploadTakenAt
                     )
-                    
-                    if let mediaId = mediaId {
+                
+                if let mediaId = mediaId {
                         print("✅ [UPLOAD] Photo #\(index + 1) uploaded. Media ID: \(mediaId)")
                         
                         // Update status: uploaded (waiting for archive).
@@ -5063,7 +5224,7 @@ struct SetDetailView: View {
                         continue
                     }
                     
-                } catch {
+            } catch {
                     if await stopIfUploadWasCancelled(error, runGeneration: uploadRunGeneration, photoIndex: index, photoId: photo.id) {
                         return
                     }
@@ -5078,6 +5239,10 @@ struct SetDetailView: View {
                                            errorDescription.contains("session invalid") ||
                                            errorDescription.contains("please login again") ||
                                            errorDescription.contains("login_required")
+                    let sessionExpiredContext = InstagramService.shared.sessionExpiredContext
+                    let isRestrictedSessionExpiry = sessionExpiredContext == .restriction ||
+                                                   sessionExpiredContext == .challenge ||
+                                                   errorDescription.contains("restriction")
 
                     // BOT DETECTION - STOP, lockdown
                     // Note: login_required is intentionally excluded — it means session expired, not bot
@@ -5170,15 +5335,27 @@ struct SetDetailView: View {
                         // If already uploaded: leave the existing .archiving status intact.
                         // Rescue pass will handle re-archiving on next upload start.
                         
-                        await MainActor.run {
-                            uploadManager.failedPhotoIndex = index
-                            uploadManager.uploadPhase = .sessionExpired
-                            uploadManager.currentPhaseDescription = String(localized: "Session Expired - Re-login Required")
-                            dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                            uploadManager.activeTask = nil
-                            uploadManager.sendSessionExpiredNotification()
+                        if isRestrictedSessionExpiry {
+                            let message = """
+                            Instagram safety pause
+
+                            Instagram restricted this session during upload/archive. Vault paused uploads for 6 hours to protect the account.
+
+                            Re-login if needed, but do not continue uploading until the timer ends.
+                            """
+                            LogManager.shared.warning("Restriction cooldown armed at \(photoInfo) after session expiry context=\(sessionExpiredContext)", category: .upload)
+                            await armRestrictionPause(photoIndex: index, message: message)
+                        } else {
+                            await MainActor.run {
+                                uploadManager.failedPhotoIndex = index
+                                uploadManager.uploadPhase = .sessionExpired
+                                uploadManager.currentPhaseDescription = String(localized: "Session Expired - Re-login Required")
+                dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                                uploadManager.activeTask = nil
+                                uploadManager.sendSessionExpiredNotification()
+                            }
                         }
-                        return
+                return
                         
                     } else if isBotError {
                         LogManager.shared.bot("Bot detection triggered at \(photoInfo): \(error.localizedDescription)")
@@ -5189,32 +5366,14 @@ struct SetDetailView: View {
                             dataManager.updatePhoto(photoId: photo.id, mediaId: nil, uploadStatus: .error, errorMessage: "Bot detected")
                         }
                         
-                        await MainActor.run {
-                            uploadManager.failedPhotoIndex = index
-                            uploadManager.botDetectionTime = Date()
-                            uploadManager.botCountdownSeconds = 900
-                            
-                            uploadManager.uploadPhase = .botLockdown(remainingSeconds: 900)
-                            uploadManager.currentPhaseDescription = String(localized: "Bot Detection - Account Locked")
-                            
-                            uploadManager.botCountdownTimer?.invalidate()
-                            uploadManager.botCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak uploadManager] _ in
-                                guard let um = uploadManager else { return }
-                                if um.botCountdownSeconds > 0 {
-                                    um.botCountdownSeconds -= 1
-                                    um.uploadPhase = .botLockdown(remainingSeconds: um.botCountdownSeconds)
-                                    um.currentPhaseDescription = String(localized: "Bot Detection - Account Locked")
-                                } else {
-                                    um.botCountdownTimer?.invalidate()
-                                    um.botCountdownTimer = nil
-                                    um.uploadPhase = .paused
-                                    um.currentPhaseDescription = String(localized: "Upload Paused - Ready to Resume")
-                                }
-                            }
-                            
-                            dataManager.updateSetStatus(id: currentSet.id, status: .error)
-                            uploadManager.activeTask = nil
-                        }
+                        await armRestrictionPause(
+                            photoIndex: index,
+                            message: """
+                            Instagram safety pause
+
+                            Instagram showed a bot/checkpoint signal during upload. Vault paused uploads for 6 hours to protect the account.
+                            """
+                        )
                         return
                         
                     } else if isPhotoError {
@@ -5315,17 +5474,17 @@ struct SetDetailView: View {
             await MainActor.run {
                 uploadManager.uploadProgress.current = index + 1
             }
-            
+
             // ANTI-BOT: Delay before next photo (wait for cooldown from archive)
             if relativeIndex < photosToUpload.count - 1 {
                 let (hasCooldown, cooldownRemaining) = instagram.isPhotoUploadOnCooldown()
                 let delaySeconds: Int
                 
                 if hasCooldown && cooldownRemaining > 0 {
-                    delaySeconds = cooldownRemaining + Int.random(in: 5...15)
+                    delaySeconds = cooldownRemaining + Int.random(in: 45...75)
                     print("   Using archive cooldown: \(cooldownRemaining)s + buffer = \(delaySeconds)s")
                 } else {
-                    delaySeconds = Int(Double.random(in: 160...220))
+                    delaySeconds = Int(Double.random(in: 240...330))
                     print("   Using fallback delay: \(delaySeconds)s")
                 }
                 
@@ -5457,6 +5616,17 @@ struct SetDetailView: View {
                     await uploadAllPhotos(startFrom: repairIndex, bankRepairDepth: bankRepairDepth + 1)
                     return
                 } catch {
+                    if isRestrictedSessionError(error) || uploadManager.remainingUploadRestrictionSeconds() > 0 {
+                        await armRestrictionPause(
+                            photoIndex: repairIndex,
+                            message: """
+                            Instagram safety pause
+
+                            Instagram restricted the session during bank repair. Vault paused uploads for 6 hours before continuing.
+                            """
+                        )
+                        return
+                    }
                     if isRecentRevealProtectionError(error) {
                         let wait = recentRevealProtectionWaitSeconds(from: error) + Int.random(in: 3...8)
                         LogManager.shared.info("Bank archive repair deferred by post-reveal protection — waiting \(wait)s", category: .upload)
@@ -5769,12 +5939,12 @@ struct PhotoItemView: View {
         VStack(spacing: 0) {
             // Photo con badges
             ZStack {
-                if let imageData = photo.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
+            if let imageData = photo.imageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
                         .frame(width: 110, height: 110)
-                        .clipped()
+                    .clipped()
                         .cornerRadius(12)
                         .opacity(photo.isArchived ? 0.5 : 1.0) // Más opaco si está archivado
                         .overlay(
@@ -5784,15 +5954,15 @@ struct PhotoItemView: View {
                                     .cornerRadius(12)
                                 : nil
                         )
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
                         .frame(width: 110, height: 110)
                         .cornerRadius(12)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        )
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(.gray)
+                    )
                 }
                 
                 // Position badge (top-left)
@@ -5825,26 +5995,26 @@ struct PhotoItemView: View {
                 
                 // ONLY show upload-related info when logged in
                 if instagram.isLoggedIn {
-                    if let uploadDate = photo.uploadDate {
-                        Text(uploadDate.formatted(date: .abbreviated, time: .omitted))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    
+                if let uploadDate = photo.uploadDate {
+                    Text(uploadDate.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
                     // Status - Detailed based on uploadStatus
                     statusBadge(for: photo)
                 }
                 
                 // Action Buttons - ONLY VISIBLE WHEN LOGGED IN
                 if instagram.isLoggedIn {
-                    if let mediaId = photo.mediaId {
-                        if isProcessing {
-                            ProgressView()
+                if let mediaId = photo.mediaId {
+                    if isProcessing {
+                        ProgressView()
                                 .scaleEffect(0.8)
                                 .padding(.top, 6)
-                        } else {
-                            if photo.isArchived {
-                                Button(action: { revealPhoto() }) {
+                    } else {
+                        if photo.isArchived {
+                            Button(action: { revealPhoto() }) {
                                     HStack(spacing: 4) {
                                         Image(systemName: "eye.fill")
                                         Text("Reveal")
@@ -5863,10 +6033,10 @@ struct PhotoItemView: View {
                                     .foregroundColor(.white)
                                     .cornerRadius(VaultTheme.CornerRadius.sm)
                                     .shadow(color: VaultTheme.Colors.success.opacity(0.3), radius: 3, x: 0, y: 2)
-                                }
+                            }
                                 .padding(.top, 6)
-                            } else {
-                                Button(action: { hidePhoto() }) {
+                        } else {
+                            Button(action: { hidePhoto() }) {
                                     HStack(spacing: 4) {
                                         Image(systemName: "archivebox.fill")
                                         Text("Hide")
@@ -6098,7 +6268,7 @@ struct TapToSwapPhotoCell: View {
                 // Selected checkmark
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.title2)
+                .font(.title2)
                         .foregroundColor(VaultTheme.Colors.success)
                         .shadow(color: .black.opacity(0.3), radius: 2)
                 }

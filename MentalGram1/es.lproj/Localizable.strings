@@ -734,8 +734,6 @@
 "followers.section.all" = "Todos los seguidores";
 "followers.follow_back" = "Seguir también";
 "followers.remove_btn" = "Quitar";
-"followers.section.following" = "Todos los seguidos";
-"followers.following_btn" = "Siguiendo";
 "followers.search" = "Buscar";
 "force_reel.title" = "Force Reel";
 "force_reel.subtitle" = "Fuerza un reel concreto a aparecer en Explorar";

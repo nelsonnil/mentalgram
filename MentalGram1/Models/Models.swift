@@ -218,10 +218,12 @@ enum AlphabetType: String, Codable, CaseIterable {
     case tamil      = "tamil"
     case gujarati   = "gujarati"
     // East Asia
-    case hiragana   = "hiragana"
-    case katakana   = "katakana"
-    case chinese    = "chinese"
-    case korean     = "korean"
+    case hiragana     = "hiragana"
+    case hiraganaFull = "hiraganaFull"
+    case katakana     = "katakana"
+    case katakanaFull = "katakanaFull"
+    case chinese      = "chinese"
+    case korean       = "korean"
     // Southeast Asia
     case thai       = "thai"
     case vietnamese = "vietnamese"
@@ -256,10 +258,12 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .bengali:    return "Bengali (অ-হ)"
         case .tamil:      return "Tamil (அ-ஹ)"
         case .gujarati:   return "Gujarati (અ-હ)"
-        case .hiragana:   return "Hiragana (あ-ん)"
-        case .katakana:   return "Katakana (ア-ン)"
-        case .chinese:    return "Chinese (一-了)"
-        case .korean:     return "Korean (가-코)"
+        case .hiragana:     return "Hiragana Basic (あ-ん)"
+        case .hiraganaFull: return "Hiragana Full (dakuten + small kana)"
+        case .katakana:     return "Katakana Basic (ア-ン)"
+        case .katakanaFull: return "Katakana Full (dakuten + small kana)"
+        case .chinese:      return "Chinese (一-了)"
+        case .korean:       return "Korean (가-코)"
         case .thai:       return "Thai (ก-ฮ)"
         case .vietnamese: return "Vietnamese (90 letters, 6 tones)"
         case .burmese:    return "Burmese (က-အ)"
@@ -294,10 +298,12 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .bengali:    return "🇧🇩"
         case .tamil:      return "🇱🇰"
         case .gujarati:   return "🇮🇳"
-        case .hiragana:   return "🇯🇵"
-        case .katakana:   return "🇯🇵"
-        case .chinese:    return "🇨🇳"
-        case .korean:     return "🇰🇷"
+        case .hiragana:     return "🇯🇵"
+        case .hiraganaFull: return "🇯🇵"
+        case .katakana:     return "🇯🇵"
+        case .katakanaFull: return "🇯🇵"
+        case .chinese:      return "🇨🇳"
+        case .korean:       return "🇰🇷"
         case .thai:       return "🇹🇭"
         case .vietnamese: return "🇻🇳"
         case .burmese:    return "🇲🇲"
@@ -355,8 +361,44 @@ enum AlphabetType: String, Codable, CaseIterable {
             return ["અ","આ","ઇ","ઈ","ઉ","ઊ","એ","ઐ","ઓ","ઔ","ક","ખ","ગ","ઘ","ચ","છ","જ","ઝ","ટ","ઠ","ડ","ઢ","ત","થ","દ","ધ","ન","પ","ફ","બ","ભ","મ","ય","ર","લ","વ","શ","ષ","સ","હ"]
         case .hiragana:
             return ["あ","い","う","え","お","か","き","く","け","こ","さ","し","す","せ","そ","た","ち","つ","て","と","な","に","ぬ","ね","の","は","ひ","ふ","へ","ほ","ま","み","む","め","も","や","ゆ","よ","ら","り","る","れ","ろ","わ","を","ん"]
+        case .hiraganaFull:
+            return ["あ","い","う","え","お",
+                    "か","き","く","け","こ",
+                    "が","ぎ","ぐ","げ","ご",
+                    "さ","し","す","せ","そ",
+                    "ざ","じ","ず","ぜ","ぞ",
+                    "た","ち","つ","て","と",
+                    "だ","ぢ","づ","で","ど",
+                    "な","に","ぬ","ね","の",
+                    "は","ひ","ふ","へ","ほ",
+                    "ば","び","ぶ","べ","ぼ",
+                    "ぱ","ぴ","ぷ","ぺ","ぽ",
+                    "ま","み","む","め","も",
+                    "や","ゆ","よ",
+                    "ら","り","る","れ","ろ",
+                    "わ","を","ん",
+                    "っ","ゃ","ゅ","ょ","ー",
+                    "ぁ","ぃ","ぅ","ぇ","ぉ"]
         case .katakana:
             return ["ア","イ","ウ","エ","オ","カ","キ","ク","ケ","コ","サ","シ","ス","セ","ソ","タ","チ","ツ","テ","ト","ナ","ニ","ヌ","ネ","ノ","ハ","ヒ","フ","ヘ","ホ","マ","ミ","ム","メ","モ","ヤ","ユ","ヨ","ラ","リ","ル","レ","ロ","ワ","ヲ","ン"]
+        case .katakanaFull:
+            return ["ア","イ","ウ","エ","オ",
+                    "カ","キ","ク","ケ","コ",
+                    "ガ","ギ","グ","ゲ","ゴ",
+                    "サ","シ","ス","セ","ソ",
+                    "ザ","ジ","ズ","ゼ","ゾ",
+                    "タ","チ","ツ","テ","ト",
+                    "ダ","ヂ","ヅ","デ","ド",
+                    "ナ","ニ","ヌ","ネ","ノ",
+                    "ハ","ヒ","フ","ヘ","ホ",
+                    "バ","ビ","ブ","ベ","ボ",
+                    "パ","ピ","プ","ペ","ポ",
+                    "マ","ミ","ム","メ","モ",
+                    "ヤ","ユ","ヨ",
+                    "ラ","リ","ル","レ","ロ",
+                    "ワ","ヲ","ン",
+                    "ッ","ャ","ュ","ョ","ー",
+                    "ァ","ィ","ゥ","ェ","ォ"]
         case .chinese:
             return ["一","二","三","四","五","六","七","八","九","十","人","大","小","中","国","水","火","山","木","日","月","年","时","上","下","左","右","前","后","好","你","我","他","们","来","去","说","看","听","想","会","能","要","有","是","不","在","和","的","了"]
         case .korean:

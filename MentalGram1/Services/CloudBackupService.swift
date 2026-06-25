@@ -106,6 +106,9 @@ class CloudBackupService: ObservableObject {
         // Last note text / duplicate guard
         "last_note_text", "last_note_sent_text", "last_note_sent_timestamp",
         "last_note_sent_date",
+        // Local replica state that can be visible immediately after a routine restore
+        "perf_local_bio_override_text", "perf_local_bio_override_timestamp",
+        "postPredRevealRingActive",
         // Active set IDs
         "activeWordSetId", "activeNumberSetId", "activeCustomSetId", "activeCardSetId",
         // NOTE: Sets JSON (com.vault.sets.*) is backed up separately in syncToCloud()
@@ -168,6 +171,7 @@ class CloudBackupService: ObservableObject {
                     savedCount += 1
                 }
             }
+            self.kv.removeObject(forKey: self.prefix + BackupRoutineManager.storageKey)
 
             // 2. Sets JSON — guarded against cross-account clobber and empty regressions.
             let userId = InstagramService.shared.session.userId
@@ -254,6 +258,7 @@ class CloudBackupService: ObservableObject {
                 kv.removeObject(forKey: prefix + key)
             }
         }
+        kv.removeObject(forKey: prefix + BackupRoutineManager.storageKey)
 
         // 2. Sets JSON — DataManager uses an account-scoped key: "com.vault.sets.<userId>"
         //    We must read from there, not from the legacy "com.vault.sets" key.

@@ -204,8 +204,6 @@
 "followers.section.all" = "All followers";
 "followers.follow_back" = "Follow too";
 "followers.remove_btn" = "Remove";
-"followers.section.following" = "All following";
-"followers.following_btn" = "Following";
 "followers.search" = "Search";
 "force_reel.title" = "Force Reel";
 "force_reel.subtitle" = "Force a specific reel to appear in Explore";

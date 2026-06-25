@@ -9,6 +9,7 @@ struct ForcePostPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = ForcePostSettings.shared
     @ObservedObject private var instagram = InstagramService.shared
+    @ObservedObject private var uploadManager = UploadManager.shared
 
     @State private var usernameInput: String = ""
     @State private var posts: [InstagramMediaItem] = []
@@ -36,6 +37,10 @@ struct ForcePostPickerView: View {
     private let panelBackground = Color(red: 0.07, green: 0.07, blue: 0.08)
     private let fieldBackground = Color(red: 0.11, green: 0.11, blue: 0.13)
     private let accentBlue = Color(red: 0.10, green: 0.45, blue: 1.0)
+    private var isUploadBusy: Bool {
+        uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive || uploadManager.isSyncArchiveActive
+    }
+    private let uploadBusyMessage = "Upload in progress. Wait until the upload pauses or finishes before loading Instagram posts."
 
     var body: some View {
         NavigationView {
@@ -45,6 +50,9 @@ struct ForcePostPickerView: View {
                 VStack(spacing: 0) {
                     searchBar
                     playingCardProfileTip
+                    if isUploadBusy {
+                        uploadBusyBanner
+                    }
                     if let error = errorMessage {
                         Text(error)
                             .font(.system(size: 13, weight: .medium))
@@ -128,12 +136,28 @@ struct ForcePostPickerView: View {
                         .cornerRadius(12)
                 }
             }
-            .disabled(isSearching || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked)
-            .opacity(isSearching || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked ? 0.55 : 1.0)
+            .disabled(isSearching || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked || isUploadBusy)
+            .opacity(isSearching || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked || isUploadBusy ? 0.55 : 1.0)
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 10)
+    }
+
+    private var uploadBusyBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.orange)
+                .padding(.top, 1)
+            Text(uploadBusyMessage)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 
     private var playingCardProfileTip: some View {
@@ -230,7 +254,7 @@ struct ForcePostPickerView: View {
                                     .padding(.vertical, 14)
                             }
                         }
-                        .disabled(isLoadingMore)
+                        .disabled(isLoadingMore || isUploadBusy)
                         .background(panelBackground)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
@@ -267,6 +291,10 @@ struct ForcePostPickerView: View {
     private func searchPosts() {
         let username = usernameInput.trimmingCharacters(in: .whitespaces).lowercased()
         guard !username.isEmpty else { return }
+        guard !isUploadBusy else {
+            errorMessage = uploadBusyMessage
+            return
+        }
 
         let now = Date()
         if now.timeIntervalSince(lastSearchTime) < 2 {
@@ -313,6 +341,13 @@ struct ForcePostPickerView: View {
 
                 let pause = UInt64.random(in: 450_000_000...900_000_000)
                 try await Task.sleep(nanoseconds: pause)
+                guard await MainActor.run(body: { !isUploadBusy }) else {
+                    await MainActor.run {
+                        isSearching = false
+                        errorMessage = uploadBusyMessage
+                    }
+                    return
+                }
 
                 let (fetched, nextId) = try await instagram.getUserMediaItems(userId: userId, amount: pageSize)
                 let uniqueFetched = uniquePosts(fetched)
@@ -348,6 +383,10 @@ struct ForcePostPickerView: View {
     private func loadMorePosts() {
         guard let maxId = nextMaxId, !searchedUserId.isEmpty else { return }
         guard !isLoadingMore else { return }
+        guard !isUploadBusy else {
+            errorMessage = uploadBusyMessage
+            return
+        }
         guard !instagram.isLocked else {
             errorMessage = "Service temporarily unavailable. Try again later."
             return
@@ -367,6 +406,13 @@ struct ForcePostPickerView: View {
                 }
                 let pause = UInt64.random(in: 1_200_000_000...2_400_000_000)
                 try await Task.sleep(nanoseconds: pause)
+                guard await MainActor.run(body: { !isUploadBusy }) else {
+                    await MainActor.run {
+                        isLoadingMore = false
+                        errorMessage = uploadBusyMessage
+                    }
+                    return
+                }
                 await MainActor.run { lastPageLoadTime = Date() }
 
                 let (fetched, nextId) = try await instagram.getUserMediaItems(userId: searchedUserId, amount: pageSize, maxId: maxId)
@@ -412,7 +458,7 @@ struct ForcePostPickerView: View {
     private func prefetchInitialPagesIfNeeded() async {
         while true {
             let shouldContinue = await MainActor.run {
-                hasMorePages && !isLoadingMore && !searchedUserId.isEmpty && posts.count < initialPrefetchTarget
+                hasMorePages && !isLoadingMore && !searchedUserId.isEmpty && posts.count < initialPrefetchTarget && !isUploadBusy
             }
             guard shouldContinue else { return }
 
@@ -430,6 +476,13 @@ struct ForcePostPickerView: View {
                 }
                 let pause = UInt64.random(in: 1_200_000_000...2_400_000_000)
                 try await Task.sleep(nanoseconds: pause)
+                guard await MainActor.run(body: { !isUploadBusy }) else {
+                    await MainActor.run {
+                        isLoadingMore = false
+                        errorMessage = uploadBusyMessage
+                    }
+                    return
+                }
                 await MainActor.run { lastPageLoadTime = Date() }
 
                 let (fetched, nextId) = try await instagram.getUserMediaItems(userId: searchedUserId, amount: pageSize, maxId: cursor)

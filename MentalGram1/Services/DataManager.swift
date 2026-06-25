@@ -848,6 +848,7 @@ class DataManager: ObservableObject {
             FollowingMagicSettings.shared.reloadFromUserDefaults()
             DateForceSettings.shared.reloadFromUserDefaults()
             AmnesiaCarouselSettings.shared.reloadFromUserDefaults()
+            BackupRoutineManager.shared.reloadFromUserDefaults()
         }
     }
 

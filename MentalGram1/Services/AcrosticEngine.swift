@@ -34,12 +34,12 @@ struct AcrosticEngine {
         let clean = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
 
-        let language = locale.language.languageCode?.identifier ?? "en"
+        let language = languageCode(for: clean, locale: locale)
         var usageIndex: [String: Int] = [:]
         var lines: [String] = []
 
-        for char in clean.uppercased() {
-            lines.append(line(for: char, language: language, usageIndex: &usageIndex))
+        for token in tokens(for: clean, language: language) {
+            lines.append(line(for: token, language: language, usageIndex: &usageIndex))
         }
 
         let result = lines.joined(separator: "\n")
@@ -58,29 +58,72 @@ struct AcrosticEngine {
 
     /// Preview helper — returns an array of (character, line) pairs for display.
     static func preview(word: String, locale: Locale = .current) -> [(letter: String, word: String)] {
-        let clean = word.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let language = locale.language.languageCode?.identifier ?? "en"
+        let clean = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        let language = languageCode(for: clean, locale: locale)
         var usageIndex: [String: Int] = [:]
         var pairs: [(String, String)] = []
 
-        for char in clean {
-            let key  = String(char)
-            let text = line(for: char, language: language, usageIndex: &usageIndex)
-            pairs.append((key, text))
+        for token in tokens(for: clean, language: language) {
+            let text = line(for: token, language: language, usageIndex: &usageIndex)
+            pairs.append((token, text))
         }
         return pairs
     }
 
     // MARK: - Private helpers
 
-    /// Produces the bio line for a single character.
-    private static func line(for char: Character,
+    private static let vietnameseCharacterSet = CharacterSet(charactersIn: "ĂăÂâĐđÊêÔôƠơƯưÁáÀàẢảÃãẠạẮắẰằẲẳẴẵẶặẤấẦầẨẩẪẫẬậÉéÈèẺẻẼẽẸẹẾếỀềỂểỄễỆệÍíÌìỈỉĨĩỊịÓóÒòỎỏÕõỌọỐốỒồỔổỖỗỘộỚớỜờỞởỠỡỢợÚúÙùỦủŨũỤụỨứỪừỬửỮữỰựÝýỲỳỶỷỸỹỴỵ")
+
+    private static func languageCode(for word: String, locale: Locale) -> String {
+        let localeLanguage = locale.language.languageCode?.identifier ?? "en"
+        if localeLanguage.lowercased().hasPrefix("vi") {
+            return "vi"
+        }
+        if word.rangeOfCharacter(from: vietnameseCharacterSet) != nil {
+            return "vi"
+        }
+        return localeLanguage
+    }
+
+    private static func tokens(for word: String, language: String) -> [String] {
+        let upper = word.uppercased()
+        guard language.lowercased().hasPrefix("vi") else {
+            return upper.map { String($0) }
+        }
+
+        return vietnameseTokens(from: upper)
+    }
+
+    /// Vietnamese has multi-letter initials (CH, NGH, NH, PH, TH, TR, etc.).
+    /// Treating each Unicode character separately turns "chó" into C/H/Ó and
+    /// breaks the intended acrostic. Longest-match keeps those initials together.
+    private static func vietnameseTokens(from word: String) -> [String] {
+        let clusters = ["NGH", "CH", "GH", "GI", "KH", "NG", "NH", "PH", "QU", "TH", "TR"]
+        var result: [String] = []
+        var index = word.startIndex
+
+        while index < word.endIndex {
+            let remaining = word[index...]
+            if let cluster = clusters.first(where: { remaining.hasPrefix($0) }) {
+                result.append(cluster)
+                index = word.index(index, offsetBy: cluster.count)
+            } else {
+                result.append(String(word[index]))
+                index = word.index(after: index)
+            }
+        }
+
+        return result
+    }
+
+    /// Produces the bio line for a single character or language-specific token.
+    private static func line(for token: String,
                               language: String,
                               usageIndex: inout [String: Int]) -> String {
-        if char.isNumber {
+        if token.count == 1, let char = token.first, char.isNumber {
             return digitLine(startingWith: char)
         } else {
-            return letterLine(for: char, language: language, usageIndex: &usageIndex)
+            return letterLine(for: token, language: language, usageIndex: &usageIndex)
         }
     }
 
@@ -91,11 +134,11 @@ struct AcrosticEngine {
     }
 
     /// Letter rule: a real word from AcrosticWordBank starting with that letter.
-    private static func letterLine(for char: Character,
+    private static func letterLine(for token: String,
                                    language: String,
                                    usageIndex: inout [String: Int]) -> String {
-        let key   = String(char)
-        let words = AcrosticWordBank.words(for: char, language: language)
+        let key = token.uppercased()
+        let words = AcrosticWordBank.words(forKey: key, language: language)
         let index = usageIndex[key, default: 0] % words.count
         usageIndex[key] = index + 1
         return words[index]

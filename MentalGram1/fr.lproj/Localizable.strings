@@ -638,8 +638,6 @@
 "followers.section.all" = "Tous les abonnés";
 "followers.follow_back" = "Suivre aussi";
 "followers.remove_btn" = "Supprimer";
-"followers.section.following" = "Tous les abonnements";
-"followers.following_btn" = "Abonné(e)";
 "followers.search" = "Rechercher";
 "**Auto reset.** Spectators are cleared automatically after the Explore post is closed, so the effect is ready to repeat." = "**Réinitialisation auto.** Les spectateurs sont effacés automatiquement après la fermeture du post Explorer, l'effet est prêt à recommencer.";
 "**Auto reset.** Spectators clear automatically after the Explore post is closed." = "**Réinitialisation auto.** Les spectateurs se vident automatiquement à la fermeture du post Explorer.";

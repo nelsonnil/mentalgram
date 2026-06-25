@@ -82,6 +82,18 @@ class UploadManager: ObservableObject {
         get { UserDefaults.standard.integer(forKey: "upload_waitNextPhotoIndex") }
         set { UserDefaults.standard.set(newValue, forKey: "upload_waitNextPhotoIndex") }
     }
+    /// Hard stop after Instagram returns a restriction/session-expired 403 during upload.
+    /// This survives relogin/restart so a hot account cannot continue immediately.
+    var uploadRestrictionEndTime: Date? {
+        get { UserDefaults.standard.object(forKey: "upload_restrictionEndTime") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_restrictionEndTime") }
+    }
+    /// Legacy rest inserted after a safe block of uploads. New versions no longer
+    /// use this pause, but the key is still cleared for users updating mid-upload.
+    var uploadBlockRestEndTime: Date? {
+        get { UserDefaults.standard.object(forKey: "upload_blockRestEndTime") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_blockRestEndTime") }
+    }
     /// Background task identifier for finishing in-flight uploads.
     var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
     
@@ -132,6 +144,8 @@ class UploadManager: ObservableObject {
     @Published var autoRetryCountdown: Int = 0
     @Published var escalatedPauseCountdown: Int = 0
     @Published var nextPhotoCountdown: Int = 0
+    @Published var uploadRestrictionCountdown: Int = 0
+    @Published var uploadBlockRestCountdown: Int = 0
 
     // MARK: - Smart Network Auto-Resume (A, D)
     /// Countdown (seconds) until the upload auto-resumes after a network change.
@@ -248,11 +262,49 @@ class UploadManager: ObservableObject {
             resetAllState()
         }
     }
+
+    func remainingUploadRestrictionSeconds() -> Int {
+        guard let end = uploadRestrictionEndTime else { return 0 }
+        let remaining = max(0, Int(end.timeIntervalSinceNow))
+        if remaining == 0 { uploadRestrictionEndTime = nil }
+        return remaining
+    }
+
+    func remainingUploadBlockRestSeconds() -> Int {
+        uploadBlockRestEndTime = nil
+        uploadBlockRestCountdown = 0
+        return 0
+    }
+
+    func activateUploadRestriction(seconds: Int = 6 * 60 * 60) {
+        let end = Date().addingTimeInterval(Double(seconds))
+        uploadRestrictionEndTime = end
+        uploadRestrictionCountdown = seconds
+        uploadPhase = .botLockdown(remainingSeconds: seconds)
+        currentPhaseDescription = "Instagram safety pause"
+        LogManager.shared.warning("Upload restriction cooldown armed until \(end)", category: .upload)
+    }
+
+    func activateUploadBlockRest(seconds: Int = 2 * 60 * 60) {
+        uploadBlockRestEndTime = nil
+        uploadBlockRestCountdown = 0
+        LogManager.shared.info("Upload block rest skipped; continuing without long pause", category: .upload)
+    }
     
     // MARK: - Restore Timers (called on view appear)
     func restoreTimersIfNeeded() {
         // First, detect and fix stuck states
         clearStuckState()
+
+        let restrictionRemaining = remainingUploadRestrictionSeconds()
+        if restrictionRemaining > 0 {
+            uploadRestrictionCountdown = restrictionRemaining
+            uploadPhase = .botLockdown(remainingSeconds: restrictionRemaining)
+            currentPhaseDescription = "Instagram safety pause"
+            return
+        }
+
+        _ = remainingUploadBlockRestSeconds()
         
         // Restore bot lockdown timer
         if case .botLockdown(let seconds) = uploadPhase, seconds > 0 {
@@ -498,9 +550,11 @@ class UploadManager: ObservableObject {
         guard backgroundTaskId == .invalid else { return }
 
         backgroundTaskId = UIApplication.shared.beginBackgroundTask(withName: "FinishUpload") { [weak self] in
+            LogManager.shared.warning("Upload background time expired — iOS is suspending the app", category: .upload)
             self?.endBackgroundWork()
         }
         print("🌙 [BG] Background task started (id: \(backgroundTaskId.rawValue))")
+        LogManager.shared.warning("Upload entered background — only a short iOS grace period is available", category: .upload)
     }
 
     /// Call when the app returns to foreground or when background work finishes.

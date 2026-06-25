@@ -9,12 +9,14 @@
 /* Begin PBXBuildFile section */
 		20BB7F302F3893500061C002 /* letras in Resources */ = {isa = PBXBuildFile; fileRef = 20BB7F302F3893500061C001 /* letras */; };
 		20BB7F312F3893500061C003 /* number in Resources */ = {isa = PBXBuildFile; fileRef = 20BB7F312F3893500061C004 /* number */; };
+		20BB7F322F3893500061C005 /* cards in Resources */ = {isa = PBXBuildFile; fileRef = 20BB7F322F3893500061C006 /* cards */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		200E7F302F3893500061C768 /* MentalGram1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MentalGram1.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		20BB7F302F3893500061C001 /* letras */ = {isa = PBXFileReference; lastKnownFileType = folder; path = letras; sourceTree = "<group>"; };
 		20BB7F312F3893500061C004 /* number */ = {isa = PBXFileReference; lastKnownFileType = folder; path = number; sourceTree = "<group>"; };
+		20BB7F322F3893500061C006 /* cards */ = {isa = PBXFileReference; lastKnownFileType = folder; path = cards; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -56,6 +58,7 @@
 				200E7F312F3893500061C768 /* Products */,
 				20BB7F302F3893500061C001 /* letras */,
 				20BB7F312F3893500061C004 /* number */,
+				20BB7F322F3893500061C006 /* cards */,
 			);
 			sourceTree = "<group>";
 		};
@@ -149,6 +152,7 @@
 			files = (
 				20BB7F302F3893500061C002 /* letras in Resources */,
 				20BB7F312F3893500061C003 /* number in Resources */,
+				20BB7F322F3893500061C005 /* cards in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -288,7 +292,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 117;
+				CURRENT_PROJECT_VERSION = 118;
 				DEVELOPMENT_TEAM = 6XSHKM2M34;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
@@ -340,7 +344,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 117;
+				CURRENT_PROJECT_VERSION = 118;
 				DEVELOPMENT_TEAM = 6XSHKM2M34;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;

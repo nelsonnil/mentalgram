@@ -10,6 +10,7 @@ struct HomeView: View {
     @ObservedObject private var urlAction = URLActionManager.shared
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     @ObservedObject private var integrations = IntegrationsSettings.shared
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 1 // Start on Sets tab
     @State private var showingCreateSet = false
     @State private var showingExplore = false
@@ -149,6 +150,10 @@ struct HomeView: View {
             print("📲 [URL] Switching to Performance tab for action: \(mode)")
             requestPerformanceEntry()
         }
+        .onReceive(NotificationCenter.default.publisher(for: BackupRoutineManager.openPerformanceNotification)) { _ in
+            print("🔁 [ROUTINE] Opening Performance after routine restore")
+            openPerformanceFromRoutineIfNeeded(force: true)
+        }
         .onAppear {
             CrashLoggerService.shared.recordScreen(tabName(for: selectedTab))
             // Auto-unlock the Limits gate for users who already have a cached profile
@@ -158,10 +163,15 @@ struct HomeView: View {
                 limitsGuideRead = true
             }
 
+            processPendingRoutineShortcut(reason: "HomeView.onAppear")
             handleLaunchDirectToPerformanceIfNeeded()
             updateTabBarAppearance(forTab: selectedTab)
             // Clean up any stuck upload state (e.g. deleted active set from infinite-loop bug)
             UploadManager.shared.clearStuckState()
+        }
+        .onChange(of: scenePhase) { phase in
+            guard phase == .active else { return }
+            processPendingRoutineShortcut(reason: "HomeView.scenePhase.active")
         }
         .fullScreenCover(isPresented: $showLimitsGate) {
             LimitsHelpView(
@@ -458,6 +468,40 @@ struct HomeView: View {
     private func enterPerformanceDirectly() {
         selectedTab = 0
         updateTabBarAppearance(forTab: 0)
+    }
+
+    private func openPerformanceFromRoutineIfNeeded(force: Bool = false) {
+        guard force || BackupRoutineManager.shared.consumePendingOpenPerformance() else { return }
+        BackupRoutineManager.shared.consumePendingOpenPerformance()
+        BackupRoutineManager.shared.clearPendingShortcutRequest()
+        enterPerformanceFromRoutine()
+    }
+
+    private func processPendingRoutineShortcut(reason: String) {
+        let restored = BackupRoutineManager.shared.restorePendingShortcutIfNeeded()
+        if restored {
+            print("🔁 [ROUTINE] Pending shortcut restored — \(reason)")
+        }
+        for delay in [0.15, 0.45, 0.9, 1.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                openPerformanceFromRoutineIfNeeded()
+            }
+        }
+    }
+
+    private func enterPerformanceFromRoutine() {
+        performanceEntryRequestInFlight = false
+        initialProfileLoadAttempted = false
+        allowPartialPerformanceEntryAfterInitialLoad = false
+        requestPerformanceEntry(skipVisiblePhotos: true)
+        for delay in [0.15, 0.5, 1.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard selectedTab != 0 else { return }
+                print("🔁 [ROUTINE] Re-applying Performance entry after routine restore")
+                performanceEntryRequestInFlight = false
+                requestPerformanceEntry(skipVisiblePhotos: true)
+            }
+        }
     }
 
     private func continuePerformancePreload() {
@@ -3052,6 +3096,7 @@ struct SettingsView: View {
     @ViewBuilder private var dataSection: some View {
         settingsSectionLabel("DATA & INFO", icon: "externaldrive.fill", color: Self.colorData)
         accentedSection(color: Self.colorData) {
+            BackupRoutineCard()
             BackupCard(backup: backup)
             modernCard {
                 VStack(spacing: 0) {
@@ -5921,6 +5966,207 @@ struct DateForceSettingsCard: View {
         }
         .sheet(isPresented: $showingHelp) {
             DateForceHelpView(onClose: { showingHelp = false })
+        }
+    }
+}
+
+// MARK: - Backup Routine Card
+
+private struct BackupRoutineCard: View {
+    @ObservedObject private var routines = BackupRoutineManager.shared
+    @State private var showCreateAlert = false
+    @State private var newRoutineName = ""
+    @State private var routineToDelete: BackupRoutine?
+    @State private var restoredRoutineName: String?
+    @State private var loadingRoutineId: UUID?
+    @State private var loadedRoutineId: UUID?
+
+    private var canSaveRoutine: Bool {
+        !newRoutineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }
+
+    var body: some View {
+        VaultCard {
+            VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                        .foregroundColor(SettingsView.colorData)
+                    Text("Backup Routines")
+                        .font(VaultTheme.Typography.titleSmall())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("New Feature")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.yellow.opacity(0.12))
+                    .clipShape(Capsule())
+                    Spacer()
+                    Text("\(routines.routines.count)/\(routines.maxRoutines)")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(6)
+                }
+
+                Text("Save the current configuration, then restore it later from Settings or from the app icon quick actions. Photos and full set contents stay in the general backup.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: {
+                    newRoutineName = ""
+                    showCreateAlert = true
+                }) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Create backup routine")
+                            .font(VaultTheme.Typography.body().weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(routines.canCreateRoutine ? SettingsView.colorData : Color.gray.opacity(0.35))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .disabled(!routines.canCreateRoutine)
+
+                if routines.routines.isEmpty {
+                    Text("No routines saved yet.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Restore settings from")
+                            .font(VaultTheme.Typography.caption().weight(.semibold))
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                        ForEach(routines.routines) { routine in
+                            routineRow(routine)
+                        }
+                    }
+                }
+            }
+        }
+        .alert("Create Backup Routine", isPresented: $showCreateAlert) {
+            TextField("Routine name", text: $newRoutineName)
+            Button("Cancel", role: .cancel) { newRoutineName = "" }
+            Button("Save") {
+                _ = routines.createRoutine(named: newRoutineName)
+                newRoutineName = ""
+            }
+            .disabled(!canSaveRoutine)
+        } message: {
+            Text("This saves current Settings, active set selection, input methods, OCR camera/language, Bio, Notes, Reels and related routine state. It does not copy set photos or archived uploads.")
+        }
+        .alert(item: $routineToDelete) { routine in
+            Alert(
+                title: Text("Delete routine?"),
+                message: Text("“\(routine.name)” will be removed from Settings and app icon quick actions."),
+                primaryButton: .destructive(Text("Delete")) {
+                    routines.deleteRoutine(id: routine.id)
+                },
+                secondaryButton: .cancel()
+            )
+        }
+        .alert("Routine restored", isPresented: Binding(
+            get: { restoredRoutineName != nil },
+            set: { if !$0 { restoredRoutineName = nil } }
+        )) {
+            Button("OK") { restoredRoutineName = nil }
+        } message: {
+            Text(restoredRoutineName.map { "Loaded: \($0)" } ?? "")
+        }
+    }
+
+    private func routineRow(_ routine: BackupRoutine) -> some View {
+        let isLoading = loadingRoutineId == routine.id
+        let isLoaded = loadedRoutineId == routine.id
+
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(routine.name)
+                    .font(VaultTheme.Typography.body().weight(.semibold))
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                    .lineLimit(1)
+                Text(dateFormatter.string(from: routine.createdAt))
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+            }
+
+            Spacer()
+
+            Button {
+                loadRoutine(routine)
+            } label: {
+                HStack(spacing: 5) {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.65)
+                            .tint(SettingsView.colorData)
+                    } else if isLoaded {
+                        Image(systemName: "checkmark.circle.fill")
+                    }
+                    Text(isLoading ? "Loading" : (isLoaded ? "Loaded" : "Load"))
+                }
+            }
+            .font(VaultTheme.Typography.caption().weight(.semibold))
+            .foregroundColor(isLoaded ? .green : SettingsView.colorData)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background((isLoaded ? Color.green : SettingsView.colorData).opacity(0.12))
+            .cornerRadius(8)
+            .disabled(isLoading)
+
+            Button {
+                routineToDelete = routine
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.red)
+                    .frame(width: 30, height: 30)
+                    .background(Color.red.opacity(0.10))
+                    .cornerRadius(8)
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(10)
+    }
+
+    private func loadRoutine(_ routine: BackupRoutine) {
+        loadingRoutineId = routine.id
+        loadedRoutineId = nil
+
+        DispatchQueue.main.async {
+            let success = routines.restoreRoutine(routine)
+            loadingRoutineId = nil
+
+            if success {
+                loadedRoutineId = routine.id
+                restoredRoutineName = routine.name
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    if loadedRoutineId == routine.id {
+                        loadedRoutineId = nil
+                    }
+                }
+            } else {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
         }
     }
 }

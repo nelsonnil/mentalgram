@@ -8,6 +8,7 @@ struct ForceReelPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = ForceReelSettings.shared
     @ObservedObject private var instagram = InstagramService.shared
+    @ObservedObject private var uploadManager = UploadManager.shared
 
     @State private var usernameInput: String = ""
     @State private var reels: [InstagramMediaItem] = []
@@ -30,6 +31,10 @@ struct ForceReelPickerView: View {
     ]
     private let pageSize = 18
     private let minPageGap: TimeInterval = 3.5
+    private var isUploadBusy: Bool {
+        uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive || uploadManager.isSyncArchiveActive
+    }
+    private let uploadBusyMessage = "Upload in progress. Wait until the upload pauses or finishes before loading Instagram reels."
 
     var body: some View {
         NavigationView {
@@ -58,10 +63,14 @@ struct ForceReelPickerView: View {
                                 .cornerRadius(10)
                         }
                     }
-                    .disabled(isLoading || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked)
+                    .disabled(isLoading || usernameInput.trimmingCharacters(in: .whitespaces).isEmpty || instagram.isLocked || isUploadBusy)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+
+                if isUploadBusy {
+                    uploadBusyBanner
+                }
 
                 if let error = errorMessage {
                     Text(error)
@@ -133,7 +142,7 @@ struct ForceReelPickerView: View {
                                             .padding(.vertical, 14)
                                     }
                                 }
-                                .disabled(isLoadingMore)
+                                .disabled(isLoadingMore || isUploadBusy)
                                 .buttonStyle(.bordered)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
@@ -164,11 +173,31 @@ struct ForceReelPickerView: View {
         }
     }
 
+    private var uploadBusyBanner: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.orange)
+                .padding(.top, 1)
+            Text(uploadBusyMessage)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
     // MARK: - Search
 
     private func searchReels() {
         let username = usernameInput.trimmingCharacters(in: .whitespaces).lowercased()
         guard !username.isEmpty else { return }
+        guard !isUploadBusy else {
+            errorMessage = uploadBusyMessage
+            return
+        }
 
         // ANTI-BOT: Enforce minimum 8 s cooldown between searches
         let now = Date()
@@ -239,6 +268,13 @@ struct ForceReelPickerView: View {
                 // ANTI-BOT: Random pause between search and reel fetch (1.0–2.5 s)
                 let pause = UInt64.random(in: 1_000_000_000...2_500_000_000)
                 try await Task.sleep(nanoseconds: pause)
+                guard await MainActor.run(body: { !isUploadBusy }) else {
+                    await MainActor.run {
+                        isLoading = false
+                        errorMessage = uploadBusyMessage
+                    }
+                    return
+                }
 
                 let (fetchedReels, nextId) = try await instagram.getUserReelsPage(userId: userId, amount: pageSize)
                 let uniqueFetched = uniqueReels(fetchedReels)
@@ -269,6 +305,10 @@ struct ForceReelPickerView: View {
     private func loadMoreReels() {
         guard let maxId = nextMaxId, !searchedUserId.isEmpty else { return }
         guard !isLoadingMore else { return }
+        guard !isUploadBusy else {
+            errorMessage = uploadBusyMessage
+            return
+        }
         guard !instagram.isLocked else {
             errorMessage = "Service temporarily unavailable. Try again later."
             return
@@ -288,6 +328,13 @@ struct ForceReelPickerView: View {
                 }
                 let pause = UInt64.random(in: 1_200_000_000...2_400_000_000)
                 try await Task.sleep(nanoseconds: pause)
+                guard await MainActor.run(body: { !isUploadBusy }) else {
+                    await MainActor.run {
+                        isLoadingMore = false
+                        errorMessage = uploadBusyMessage
+                    }
+                    return
+                }
                 await MainActor.run { lastPageLoadTime = Date() }
 
                 let (fetched, nextId) = try await instagram.getUserReelsPage(userId: searchedUserId, amount: pageSize, maxId: maxId)

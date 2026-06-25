@@ -11216,20 +11216,16 @@ private struct PostCardView: View {
                   let videoURL = item.videoURL,
                   !videoURL.isEmpty {
             // Inline video playback for feed-style posts/reels.
-            // fillMode: false → resizeAspect (no crop, black bars if needed).
-            // Aspect ratio drives the container: real w÷h when known, otherwise
-            // Instagram's standard 4:5 portrait as fallback.
+            // Large post viewer should behave like an Instagram media surface:
+            // sound enabled and aspectFill so videos fill the cell without side bars.
             let ratio: CGFloat = item.videoAspectRatio ?? (4.0 / 5.0)
             Color.black
                 .aspectRatio(ratio, contentMode: .fit)
                 .overlay(
                     GridVideoPlayer(
                         videoURL: videoURL,
-                        // Feed-style autoplay should be muted like Instagram. This
-                        // also prevents another off-screen/adjacent unmuted player
-                        // from pausing the forced video through the audio coordinator.
-                        muted: true,
-                        fillMode: false,
+                        muted: false,
+                        fillMode: true,
                         posterImage: cachedImages[url]
                     )
                     .id(videoURL)

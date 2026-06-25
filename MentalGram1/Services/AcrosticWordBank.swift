@@ -12,13 +12,33 @@ import Foundation
 
 enum AcrosticWordBank {
 
-    // Returns 3 words for the given uppercase letter in the given language.
+    // Returns 3 words for the given uppercase letter/token in the given language.
     // Falls back to English if the language has no entry.
     static func words(for letter: Character, language: String) -> [String] {
+        words(forKey: String(letter), language: language)
+    }
+
+    static func words(forKey rawKey: String, language: String) -> [String] {
         let lang = language.lowercased().prefix(2)
         let table = banks[String(lang)] ?? banks["en"]!
-        let key = String(letter).uppercased()
-        return table[key] ?? digitFallbacks[key] ?? table["_"] ?? [String(letter)]
+        let key = rawKey.uppercased()
+        if let words = table[key] ?? digitFallbacks[key] {
+            return words
+        }
+
+        // Vietnamese OCR/API values often include tone marks. If a specific toned
+        // vowel is missing, fall back to its base Vietnamese letter instead of "_",
+        // otherwise "chó" could become CH + Từ ("CHT").
+        if String(lang) == "vi" {
+            let folded = key
+                .folding(options: [.diacriticInsensitive], locale: Locale(identifier: "vi_VN"))
+                .uppercased()
+            if let words = table[folded] {
+                return words
+            }
+        }
+
+        return table["_"] ?? [rawKey]
     }
 
     private static let digitFallbacks: [String: [String]] = [
@@ -496,23 +516,36 @@ enum AcrosticWordBank {
             "A": ["Ánh sáng", "An bình", "Ái tình"],
             "B": ["Biển", "Bầu trời", "Bình minh"],
             "C": ["Cầu vồng", "Cảm xúc", "Chân trời"],
+            "CH": ["Chân trời", "Chú ý", "Chuyện kể"],
             "D": ["Dòng sông", "Đêm", "Đường đời"],
+            "Đ": ["Đêm", "Đường đời", "Đất nước"],
             "E": ["Em bé", "Eo biển", "Ép"],
             "F": ["Gia đình", "Gặp gỡ", "Ghi nhớ"],
             "G": ["Giấc mơ", "Gió", "Giọt sương"],
+            "GH": ["Ghi nhớ", "Ghềnh đá", "Ghé thăm"],
+            "GI": ["Giấc mơ", "Gió", "Giọt sương"],
             "H": ["Hoa", "Hành trình", "Hồn"],
             "I": ["Ít", "Ích lợi", "Im lặng"],
             "J": ["Gia tài", "Giàu có", "Gió nhẹ"],
             "K": ["Kỳ diệu", "Khát vọng", "Khung cảnh"],
+            "KH": ["Khát vọng", "Khung cảnh", "Khiêm nhường"],
             "L": ["Lá", "Làn sóng", "Lời hứa"],
             "M": ["Mặt trời", "Mây", "Mơ"],
             "N": ["Nước", "Niềm vui", "Ngọc"],
+            "NG": ["Ngọc", "Ngày mai", "Ngọn gió"],
+            "NGH": ["Nghĩa tình", "Nghệ thuật", "Nghị lực"],
+            "NH": ["Nhịp tim", "Nhớ thương", "Nhẹ nhàng"],
             "O": ["Ôm ấp", "Ông", "Ổn định"],
+            "Ó": ["Óng ánh", "Óc sáng", "Óng mượt"],
             "P": ["Phong cảnh", "Phép màu", "Pháo hoa"],
+            "PH": ["Phong cảnh", "Phép màu", "Pháo hoa"],
             "Q": ["Quê hương", "Quả tim", "Quảng trường"],
+            "QU": ["Quê hương", "Quả tim", "Quảng trường"],
             "R": ["Rừng", "Rạng rỡ", "Rộng lớn"],
             "S": ["Sao", "Sóng", "Sức mạnh"],
             "T": ["Trăng", "Trời", "Tình yêu"],
+            "TH": ["Thiên đường", "Thương nhớ", "Thời gian"],
+            "TR": ["Trăng", "Trời", "Trái tim"],
             "U": ["Ước mơ", "Ưu tiên", "Ung dung"],
             "V": ["Vầng trăng", "Vàng", "Vui vẻ"],
             "W": ["Xa xôi", "Xanh", "Xứ sở"],

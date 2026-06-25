@@ -635,7 +635,7 @@ struct DetailVideoPlayer: View {
                 if let poster = posterImage {
                     Image(uiImage: poster)
                         .resizable()
-                        .scaledToFit()       // same fit mode as the video → no crop mismatch
+                        .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
                         .clipped()
                         .opacity(manager.playerReady ? 0 : 1)
@@ -673,8 +673,8 @@ struct DetailVideoPlayer: View {
 }
 
 /// AVPlayer with sound enabled, loops automatically, supports tap-to-pause.
-/// Detects horizontal vs vertical video and adjusts videoGravity accordingly,
-/// matching the same logic used in GridVideoPlayer.
+/// Fullscreen/detail video player. Uses aspectFill so media fills the available
+/// surface instead of showing black side bars.
 private class DetailVideoPlayerManager: ObservableObject {
     @Published var player: AVPlayer?
     @Published var videoGravity: AVLayerVideoGravity = .resizeAspectFill
@@ -707,19 +707,9 @@ private class DetailVideoPlayerManager: ObservableObject {
 
         let asset = AVURLAsset(url: videoURL)
 
-        // Resolve video gravity before playing: horizontal reels → aspectFit
-        // (no zoom-in on wide videos), vertical reels → aspectFill (fills screen).
-        asset.loadValuesAsynchronously(forKeys: ["tracks"]) { [weak self] in
-            guard let self else { return }
-            var err: NSError?
-            guard asset.statusOfValue(forKey: "tracks", error: &err) == .loaded,
-                  let track = asset.tracks(withMediaType: .video).first else { return }
-            let size = track.naturalSize.applying(track.preferredTransform)
-            let isHorizontal = abs(size.width) > abs(size.height) * 1.05
-            DispatchQueue.main.async {
-                self.videoGravity = isHorizontal ? .resizeAspect : .resizeAspectFill
-            }
-        }
+        // Detail view should fill the screen/cell like Instagram. Cropping is
+        // preferable to black side bars for wide or oddly-shaped CDN videos.
+        videoGravity = .resizeAspectFill
 
         let item = AVPlayerItem(asset: asset)
         let player = AVPlayer(playerItem: item)

@@ -475,8 +475,6 @@
 "followers.section.all" = "모든 팔로워";
 "followers.follow_back" = "맞팔로우";
 "followers.remove_btn" = "삭제";
-"followers.section.following" = "모든 팔로잉";
-"followers.following_btn" = "팔로잉";
 "followers.search" = "검색";
 "force_reel.title" = "릴 강제 배치";
 "force_reel.subtitle" = "특정 릴을 탐색 탭에 강제 표시";

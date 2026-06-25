@@ -1060,10 +1060,19 @@ class InstagramService: ObservableObject {
     private func resetUploadPhaseAfterRelogin() {
         let um = UploadManager.shared
         if case .sessionExpired = um.uploadPhase {
-            um.uploadPhase = .paused
-            um.currentPhaseDescription = String(localized: "Session restored — tap Resume to continue")
-            print("🔓 [SESSION] uploadPhase reset from .sessionExpired → .paused after re-login")
-            LogManager.shared.info("Upload phase reset to paused after re-login", category: .auth)
+            let restrictionRemaining = um.remainingUploadRestrictionSeconds()
+            if restrictionRemaining > 0 {
+                um.uploadRestrictionCountdown = restrictionRemaining
+                um.uploadPhase = .botLockdown(remainingSeconds: restrictionRemaining)
+                um.currentPhaseDescription = "Instagram safety pause"
+                print("🔒 [SESSION] Re-login done, but upload restriction cooldown remains (\(restrictionRemaining)s)")
+                LogManager.shared.warning("Re-login completed while upload restriction cooldown remains: \(restrictionRemaining)s", category: .auth)
+            } else {
+                um.uploadPhase = .paused
+                um.currentPhaseDescription = String(localized: "Session restored — tap Resume to continue")
+                print("🔓 [SESSION] uploadPhase reset from .sessionExpired → .paused after re-login")
+                LogManager.shared.info("Upload phase reset to paused after re-login", category: .auth)
+            }
         }
     }
     
@@ -7731,6 +7740,10 @@ final class InstagramSafetyGate {
     /// by POST /clips/user/ or multiple reveal POSTs, which produced challenge_required
     /// in tester logs.
     private let postMutationQuietWindow: TimeInterval = 120
+    /// Any Instagram-facing read/search/settings action should be separated from
+    /// the next upload start. Upload's own requests are excluded so the loop does
+    /// not block itself between photos.
+    private let preUploadQuietWindow: TimeInterval = 300
 
     private init() {}
 
@@ -7824,6 +7837,26 @@ final class InstagramSafetyGate {
         let until = defaults.double(forKey: key("post_mutation_quiet_until"))
         guard until > 0 else { return 0 }
         return max(0, Int(ceil(until - Date().timeIntervalSince1970)))
+    }
+
+    var preUploadQuietSecondsRemaining: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        let last = defaults.double(forKey: key("last_non_upload_activity_at"))
+        guard last > 0 else { return 0 }
+        let remaining = preUploadQuietWindow - (Date().timeIntervalSince1970 - last)
+        if remaining <= 0 {
+            defaults.removeObject(forKey: key("last_non_upload_activity_at"))
+            defaults.removeObject(forKey: key("last_non_upload_activity_action"))
+            return 0
+        }
+        return Int(ceil(remaining))
+    }
+
+    var lastPreUploadQuietActivity: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return defaults.string(forKey: key("last_non_upload_activity_action")) ?? "Instagram activity"
     }
 
     private func sensitiveMutationActionsContain(_ action: Action) -> Bool {
@@ -8118,7 +8151,9 @@ final class InstagramSafetyGate {
     }
 
     func recordApiRequest(method: String, path: String) {
-        record(actionFor(method: method, path: path))
+        let action = actionFor(method: method, path: path)
+        record(action)
+        markPreUploadQuietActivityIfNeeded(action)
     }
 
     /// Removes the most recently recorded timestamp for the action that
@@ -8136,6 +8171,11 @@ final class InstagramSafetyGate {
         guard !values.isEmpty else { return }
         values.removeLast()
         setTimestamps(values, for: action)
+        if shouldCountAsPreUploadActivity(action),
+           defaults.string(forKey: key("last_non_upload_activity_action")) == action.rawValue {
+            defaults.removeObject(forKey: key("last_non_upload_activity_at"))
+            defaults.removeObject(forKey: key("last_non_upload_activity_action"))
+        }
     }
 
     // MARK: - Challenge circuit
@@ -8378,6 +8418,23 @@ final class InstagramSafetyGate {
         if path.contains("/only_me/") { return .archive }
         if path.contains("upload") || path.contains("configure") || path.contains("sidecar") { return .upload }
         return .apiWrite
+    }
+
+    private func shouldCountAsPreUploadActivity(_ action: Action) -> Bool {
+        switch action {
+        case .upload, .archive, .unarchive, .reveal, .probe:
+            return false
+        default:
+            return true
+        }
+    }
+
+    private func markPreUploadQuietActivityIfNeeded(_ action: Action) {
+        guard shouldCountAsPreUploadActivity(action) else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        defaults.set(Date().timeIntervalSince1970, forKey: key("last_non_upload_activity_at"))
+        defaults.set(action.rawValue, forKey: key("last_non_upload_activity_action"))
     }
 
     private func recordLocked(_ action: Action, at now: Double) {
