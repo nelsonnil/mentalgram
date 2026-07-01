@@ -26,12 +26,16 @@ struct HomeView: View {
     @State private var visiblePhotosToArchive: [SetPhoto] = []
     @State private var isArchivingBeforePerformance = false
     @State private var archiveProgress: (done: Int, total: Int) = (0, 0)
+    @State private var archiveProgressMessage = "Please wait. Do not close the app."
     @State private var showArchiveProgressSheet = false
     @State private var performanceGate: PerformanceGate?
     @State private var showPerformanceRelogin = false
     @State private var showInitialProfileLoad = false
     @State private var initialProfileLoadAttempted = false
     @State private var allowPartialPerformanceEntryAfterInitialLoad = false
+    @State private var showPhotoDownloadOverlay = false
+    @State private var photoDownloadProgress = ""
+    @State private var photoDownloadCompleted = false
     @State private var showBudgetWarning = false
     @State private var budgetWarningUsed: Int = 0
     @State private var budgetWarningRemaining: Int = 55
@@ -163,6 +167,11 @@ struct HomeView: View {
                 limitsGuideRead = true
             }
 
+            // Check if a restore just completed and photos need downloading from iCloud Drive
+            if UserDefaults.standard.bool(forKey: "backup_pendingPhotoDownload") {
+                showPhotoDownloadOverlay = true
+            }
+
             processPendingRoutineShortcut(reason: "HomeView.onAppear")
             handleLaunchDirectToPerformanceIfNeeded()
             updateTabBarAppearance(forTab: selectedTab)
@@ -284,6 +293,15 @@ struct HomeView: View {
             }
         }) {
             ExploreView(selectedTab: $selectedTab, showingExplore: $showingExplore)
+        }
+        .fullScreenCover(isPresented: $showPhotoDownloadOverlay) {
+            PhotoDownloadAfterRestoreView(
+                progress: $photoDownloadProgress,
+                onComplete: {
+                    showPhotoDownloadOverlay = false
+                    UserDefaults.standard.set(false, forKey: "backup_pendingPhotoDownload")
+                }
+            )
         }
     }
 
@@ -533,8 +551,10 @@ struct HomeView: View {
         }
         let photos = visiblePhotosToArchive
         archiveProgress = (0, photos.count)
+        archiveProgressMessage = "Preparing safe archive..."
         isArchivingBeforePerformance = true
         var archivedCount = 0
+        var didFail = false
 
         for (i, photo) in photos.enumerated() {
             guard let mediaId = photo.mediaId else { continue }
@@ -543,20 +563,44 @@ struct HomeView: View {
             // would be inside the SafetyGate hold window and would risk a bot signal.
             if InstagramSafetyGate.shared.isMediaPostRevealProtected(mediaId: mediaId) {
                 print("⏭️ [PRE-PERF] Skipping \(mediaId) — post-reveal protected")
-                archiveProgress = (i + 1, photos.count)
-                continue
+                archiveProgress = (i, photos.count)
+                archiveProgressMessage = "Recent reveal protection is still active. Wait before archiving."
+                didFail = true
+                break
             }
 
             do {
+                guard await waitForPrePerformanceArchiveBudget(photoNumber: i + 1, total: photos.count) else {
+                    didFail = true
+                    break
+                }
                 let archived = try await InstagramService.shared.archivePhoto(mediaId: mediaId, skipPreCheck: false)
                 if archived {
                     dataManager.updatePhoto(photoId: photo.id, isArchived: true, uploadStatus: .completed)
                     // Remove from ProfileCache + reveal_state so Performance is already clean on entry.
                     ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                     archivedCount += 1
+
+                    // Anti-bot: human-like pause between archives.
+                    // Rapid consecutive POSTs to /only_me/ look like bot activity to Instagram.
+                    // Skip the pause after the last photo.
+                    if i < photos.count - 1 {
+                        let pauseSeconds = Int.random(in: 8...15)
+                        for remaining in stride(from: pauseSeconds, through: 1, by: -1) {
+                            archiveProgressMessage = "Safety pause between archives: \(remaining)s…"
+                            try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        }
+                    }
+                } else {
+                    archiveProgressMessage = "Instagram did not confirm the archive. Please try again before Performance."
+                    didFail = true
+                    break
                 }
             } catch {
                 print("⚠️ [PRE-PERF] Failed to archive \(mediaId): \(error.localizedDescription)")
+                archiveProgressMessage = error.localizedDescription
+                didFail = true
+                break
             }
             archiveProgress = (i + 1, photos.count)
         }
@@ -572,10 +616,41 @@ struct HomeView: View {
         }
 
         isArchivingBeforePerformance = false
+        guard !didFail, archivedCount == photos.count else {
+            LogManager.shared.warning("Pre-Performance archive stopped — \(archivedCount)/\(photos.count) archived. Performance entry blocked.", category: .upload)
+            archiveProgressMessage = "Archived \(archivedCount)/\(photos.count). Performance will not open until all visible photos are archived."
+            return
+        }
+
         showArchiveProgressSheet = false
         visiblePhotosToArchive = []
         if ensurePerformanceReplicaReadyBeforeEntry() {
             enterPerformanceDirectly()
+        }
+    }
+
+    @MainActor
+    private func waitForPrePerformanceArchiveBudget(photoNumber: Int, total: Int) async -> Bool {
+        while true {
+            let budget = InstagramSafetyGate.shared.decision(for: .archive)
+            guard !budget.allowed else {
+                archiveProgressMessage = "Archiving photo \(photoNumber) of \(total)..."
+                return true
+            }
+
+            // Very long waits should not trap the user in a sheet. Let them close,
+            // wait naturally, then try Archive Now again.
+            guard budget.waitSeconds <= 15 * 60 else {
+                archiveProgressMessage = "Safety pause: \(budget.reason). Try again in \(budget.waitSeconds)s."
+                return false
+            }
+
+            let waitSeconds = max(1, budget.waitSeconds + 2)
+            LogManager.shared.info("Pre-Performance archive budget pause — waiting \(waitSeconds)s (\(budget.reason))", category: .upload)
+            for remaining in stride(from: waitSeconds, through: 1, by: -1) {
+                archiveProgressMessage = "Safety pause: \(budget.reason). Resuming in \(remaining)s."
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
         }
     }
 
@@ -605,10 +680,22 @@ struct HomeView: View {
                     .font(.system(size: 14))
                     .foregroundColor(.gray)
             }
-            Text("Please wait. Do not close the app.")
+            Text(archiveProgressMessage)
                 .font(.system(size: 12))
                 .foregroundColor(.gray.opacity(0.7))
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+            if !isArchivingBeforePerformance {
+                Button("Close") {
+                    showArchiveProgressSheet = false
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.14))
+                .cornerRadius(12)
+            }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1358,41 +1445,59 @@ struct SetURLSchemeRow: View {
     @State private var copied = false
 
     private var urlScheme: String {
-        let safeName = set.name
-            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? set.name
         guard let mode = set.type.revealURLTemplate else { return "" }
         switch set.type {
         case .word:           return "vault://reveal?\(mode)=<word>"
-        case .number:         return "vault://reveal?\(mode)=1"     // Example: vault://reveal?slot=1
+        case .number:         return "vault://reveal?\(mode)=1"
         case .custom, .list:  return "vault://reveal?\(mode)=<1-100>"
-        case .card:           return "vault://reveal?\(mode)=3D"     // Example: vault://reveal?card=3D
+        case .card:           return "vault://reveal?\(mode)=3D"
+        }
+    }
+
+    private var helperText: String {
+        switch set.type {
+        case .word:
+            return "Replace <word> with the word to reveal, for example: vault://reveal?word=MAGIC"
+        case .number:
+            return "Put the number after word=. Example: vault://reveal?word=7 reveals the digit 7. For multi-digit: vault://reveal?word=42"
+        case .custom, .list:
+            return "Put the value after slot=. Example: vault://reveal?slot=15 reveals item 15. Do not add value=."
+        case .card:
+            return "Use value + suit after card=. Example: vault://reveal?card=3D for 3 of Diamonds."
         }
     }
 
     var body: some View {
-        HStack(spacing: VaultTheme.Spacing.sm) {
-            Image(systemName: "link")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(VaultTheme.Colors.textTertiary)
-            Text(urlScheme)
-                .font(.system(size: 11, weight: .regular, design: .monospaced))
-                .foregroundColor(VaultTheme.Colors.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 4)
-            Button {
-                UIPasteboard.general.string = urlScheme
-                withAnimation(.easeInOut(duration: 0.15)) { copied = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    withAnimation { copied = false }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: VaultTheme.Spacing.sm) {
+                Image(systemName: "link")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                Text(urlScheme)
+                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                Button {
+                    UIPasteboard.general.string = urlScheme
+                    withAnimation(.easeInOut(duration: 0.15)) { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation { copied = false }
+                    }
+                } label: {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(copied ? .green : VaultTheme.Colors.textSecondary)
+                        .frame(width: 28, height: 28)
                 }
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(copied ? .green : VaultTheme.Colors.textSecondary)
-                    .frame(width: 28, height: 28)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+
+            Text(helperText)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(VaultTheme.Colors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -2078,6 +2183,7 @@ struct PostRevealArchiveBanner: View {
     @State private var doneSoFar        = 0
     @State private var totalToArchive   = 0
     @State private var archiveError: String? = nil
+    @State private var archiveStatus: String? = nil
     @State private var postRevealLeft: Int  = 0
     @State private var timer: Timer?        = nil
     @State private var blinkTimer: Timer?   = nil
@@ -2143,6 +2249,11 @@ struct PostRevealArchiveBanner: View {
                     Text(String(format: String(localized: "post_reveal_archive.error"), err))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if isArchiving, let archiveStatus {
+                    Text(archiveStatus)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.red.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
                 } else if postRevealLeft > 0 {
                     Text(String(format: String(localized: "post_reveal_archive.cooldown"), formatSeconds(postRevealLeft)))
@@ -2245,6 +2356,7 @@ struct PostRevealArchiveBanner: View {
             doneSoFar        = 0
             totalToArchive   = photos.count
             archiveError     = nil
+            archiveStatus    = nil
         }
 
         for (_, photo) in photos {
@@ -2262,6 +2374,10 @@ struct PostRevealArchiveBanner: View {
             }
 
             do {
+                guard await waitForArchiveBudgetIfNeeded() else {
+                    await MainActor.run { isArchiving = false }
+                    return
+                }
                 // skipPreCheck = true: skip the GET state-check (we know from local
                 // model that the photo is unarchived).  archivePhoto internally
                 // applies the 3–6.5 s anti-bot delay before the POST.
@@ -2283,6 +2399,29 @@ struct PostRevealArchiveBanner: View {
         }
 
         await MainActor.run { isArchiving = false }
+    }
+
+    @MainActor
+    private func waitForArchiveBudgetIfNeeded() async -> Bool {
+        while true {
+            let budget = InstagramSafetyGate.shared.decision(for: .archive)
+            guard !budget.allowed else {
+                archiveStatus = nil
+                return true
+            }
+
+            guard budget.waitSeconds <= 15 * 60 else {
+                archiveError = "Safety pause: \(budget.reason). Try again in \(budget.waitSeconds)s."
+                return false
+            }
+
+            let waitSeconds = max(1, budget.waitSeconds + 2)
+            LogManager.shared.info("Post-reveal archive budget pause — waiting \(waitSeconds)s (\(budget.reason))", category: .upload)
+            for remaining in stride(from: waitSeconds, through: 1, by: -1) {
+                archiveStatus = "Safety pause: \(budget.reason). Resuming in \(remaining)s."
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
     }
 
     // MARK: - Timer
@@ -2595,6 +2734,9 @@ struct SettingsView: View {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
         return "\(version) (\(build))"
     }
+    // PROVISIONAL RELEASE: hide license UI while the activation system is paused.
+    // Flip this back to true when license activation is ready to ship.
+    private let licenseFeatureEnabled = false
 
     // OCR configuration (shared between note and bio)
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
@@ -3137,6 +3279,7 @@ struct SettingsView: View {
                             }
                     }
                     
+                    if licenseFeatureEnabled {
                     // License section
                     modernDivider()
                     HStack {
@@ -3184,6 +3327,7 @@ struct SettingsView: View {
                                 .cornerRadius(8)
                             }
                         }
+                    }
                     }
                     
                     #if DEBUG
@@ -4100,14 +4244,30 @@ struct SettingsView: View {
     
     private func canUpload() -> Bool {
         // Check all anti-bot conditions
-        guard selectedImageData != nil else { return false }
-        guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else { return false }
-        guard !instagram.isLocked else { return false }
-        guard !instagram.isNetworkStabilizing else { return false }
+        guard selectedImageData != nil else {
+            print("🚫 [PP-CHECK] Cannot upload: no image selected")
+            return false
+        }
+        guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
+            print("🚫 [PP-CHECK] Cannot upload: upload/sync active (isActive:\(uploadManager.isActive), isSyncActive:\(uploadManager.isSyncArchiveActive))")
+            return false
+        }
+        guard !instagram.isLocked else {
+            print("🚫 [PP-CHECK] Cannot upload: Instagram locked")
+            return false
+        }
+        guard !instagram.isNetworkStabilizing else {
+            print("🚫 [PP-CHECK] Cannot upload: network stabilizing")
+            return false
+        }
         
-        let (onCooldown, _) = instagram.isProfilePicOnCooldown()
-        guard !onCooldown else { return false }
+        let (onCooldown, remaining) = instagram.isProfilePicOnCooldown()
+        guard !onCooldown else {
+            print("🚫 [PP-CHECK] Cannot upload: on cooldown (\(Int(remaining))s remaining)")
+            return false
+        }
         
+        print("✅ [PP-CHECK] Can upload: all conditions passed")
         return true
     }
     
@@ -4291,18 +4451,30 @@ struct SettingsView: View {
     // MARK: - Profile Picture Upload
     
     private func uploadProfilePicture() {
-        guard let imageData = selectedImageData else { return }
+        print("🖼️ [UI] uploadProfilePicture() called")
+        LogManager.shared.info("Profile pic upload: button pressed", category: .general)
+        
+        guard let imageData = selectedImageData else {
+            print("❌ [UI] Upload blocked: no image selected")
+            LogManager.shared.warning("Profile pic upload blocked: no image data", category: .general)
+            return
+        }
+        
         guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
+            print("❌ [UI] Upload blocked: upload/sync active (isActive:\(uploadManager.isActive), isSyncActive:\(uploadManager.isSyncArchiveActive))")
+            LogManager.shared.warning("Profile pic upload blocked: upload/sync active", category: .general)
             uploadMessage = uploadWriteBlockedMessage
             showingUploadAlert = true
             return
         }
         
         isUploadingProfilePic = true
+        print("🖼️ [UI] Guards passed, starting upload task...")
+        LogManager.shared.info("Profile pic upload: starting task", category: .general)
         
         Task {
             do {
-                print("🖼️ [UI] Starting profile picture upload...")
+                print("🖼️ [UI] Inside upload task, calling Instagram API...")
                 
                 // Upload with all anti-bot protections
                 let success = try await instagram.changeProfilePicture(imageData: imageData, userInitiated: true)
@@ -8510,5 +8682,90 @@ struct HomeScreenImagePicker: UIViewControllerRepresentable {
                 DispatchQueue.main.async { self?.onPick(image) }
             }
         }
+    }
+}
+
+// MARK: - Photo Download After Restore Overlay
+
+struct PhotoDownloadAfterRestoreView: View {
+    @Binding var progress: String
+    let onComplete: () -> Void
+    @State private var downloadedCount: Int = 0
+    @State private var isDownloading = true
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 24) {
+                if isDownloading {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(.white)
+                    
+                    Text("Downloading Set Photos")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                    
+                    Text(progress.isEmpty ? "Connecting to iCloud Drive..." : progress)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .font(.system(size: 12))
+                        Text("This may take a minute")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 8)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.green)
+                    
+                    Text("Download Complete")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                    
+                    Text("\(downloadedCount) photos restored")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled()
+        .task {
+            await downloadPhotos()
+        }
+    }
+    
+    private func downloadPhotos() async {
+        await MainActor.run { progress = "Preparing download..." }
+        
+        // Use Task.detached to avoid blocking the UI
+        await Task.detached(priority: .userInitiated) {
+            let count = await iCloudDriveSync.shared.downloadAllPhotosAsync()
+            
+            await MainActor.run {
+                downloadedCount = count
+                progress = "Downloaded \(count) photos"
+                isDownloading = false
+                
+                // Notify DataManager to force SwiftUI re-render
+                DataManager.shared.notifyPhotosChanged()
+                
+                LogManager.shared.success("Photo download after restore: \(count) photos materialized from iCloud Drive", category: .general)
+                
+                // Auto-dismiss after 1.5 seconds
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    onComplete()
+                }
+            }
+        }.value
     }
 }
