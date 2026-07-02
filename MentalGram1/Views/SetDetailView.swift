@@ -2276,7 +2276,10 @@ struct SetDetailView: View {
                             progressText
                         }
                     }
-                    
+
+                    // Daily upload counter pill
+                    dailyUploadCounterView
+
                     // Action buttons
                     actionButtons
                     uploadSafetyPauseBanner
@@ -2349,8 +2352,12 @@ struct SetDetailView: View {
         switch uploadManager.uploadPhase {
         case .idle:
             return String(localized: "Ready to upload")
-        case .uploading(let n):
-            return String(format: String(localized: "Uploading photo #%d of %d"), n, uploadManager.uploadProgress.total)
+        case .uploading:
+            let current = uploadManager.uploadProgress.current + 1
+            let total   = uploadManager.uploadProgress.total
+            return total > 0
+                ? String(format: String(localized: "Uploading photo %d of %d"), current, total)
+                : String(localized: "Uploading...")
         case .archiving(let n):
             return String(format: String(localized: "Archiving photo #%d..."), n)
         case .waiting(_, let secs):
@@ -4108,7 +4115,9 @@ struct SetDetailView: View {
             print("⚠️ [UPLOAD] Ignored startUpload() — another upload task is running (phase: \(uploadManager.uploadPhase))")
             return
         }
-        if blockUploadIfSafetyPauseActive(source: "start") {
+        // Recent-activity (apiread) quiet window is now waited out automatically inside
+        // uploadAllPhotos (no modal). Only a real restriction blocks the start here.
+        if blockUploadIfSafetyPauseActive(source: "start", includeRecentActivity: false) {
             return
         }
         if uploadManager.isActive {
@@ -4277,7 +4286,14 @@ struct SetDetailView: View {
                     if currentSet.photos.allSatisfy({ $0.id == photo.id || ($0.mediaId != nil && $0.uploadStatus == .completed) }) {
                         dataManager.updateSetStatus(id: currentSet.id, status: .completed)
                     }
+                    await uploadManager.incrementDailyCount()
+                    let singleDaily = await MainActor.run { uploadManager.dailyUploadCount }
+                    let singleLimit = uploadManager.dailyUploadLimit
                     LogManager.shared.success("Single photo uploaded+archived: \(photo.symbol)", category: .upload)
+                    LogManager.shared.info(
+                        "Daily upload count: \(singleDaily)/\(singleLimit) — \(max(0, singleLimit - singleDaily)) remaining today",
+                        category: .upload
+                    )
                 } else {
                     dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: false, uploadStatus: .error, errorMessage: "Archive failed")
                     uploadManager.showingError = "Uploaded \(photo.symbol), but archive failed. Tap it again to retry archive."
@@ -4332,7 +4348,9 @@ struct SetDetailView: View {
             LogManager.shared.warning("Resume ignored: upload task still active; waiting for safe pause to avoid duplicate uploads", category: .upload)
             return
         }
-        if blockUploadIfSafetyPauseActive(photoIndex: uploadManager.failedPhotoIndex, source: "resume") {
+        // Recent-activity (apiread) quiet window is handled automatically inside
+        // uploadAllPhotos (no modal); only a real restriction should block resume.
+        if blockUploadIfSafetyPauseActive(photoIndex: uploadManager.failedPhotoIndex, source: "resume", includeRecentActivity: false) {
             return
         }
 
@@ -4497,9 +4515,45 @@ struct SetDetailView: View {
         )
     }
 
+    // MARK: - Daily Upload Counter View
+
+    @ViewBuilder
+    private var dailyUploadCounterView: some View {
+        let count = uploadManager.dailyUploadCount
+        let limit = uploadManager.dailyUploadLimit
+        let remaining = max(0, limit - count)
+        let atLimit = count >= limit
+        let fraction = min(1.0, Double(count) / Double(max(1, limit)))
+        let barColor: Color = atLimit ? .red : (fraction >= 0.75 ? .orange : .green)
+
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: atLimit ? "exclamationmark.circle.fill" : "calendar.badge.clock")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(barColor)
+                Text(atLimit
+                     ? String(localized: "Daily limit reached — resume tomorrow")
+                     : String(format: String(localized: "Today: %d / %d uploaded (%d remaining)"), count, limit, remaining))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(atLimit ? barColor : .secondary)
+                Spacer()
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.08)).frame(height: 4)
+                    Capsule().fill(barColor.opacity(0.75))
+                        .frame(width: geo.size.width * fraction, height: 4)
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(.vertical, 4)
+    }
+
     @ViewBuilder
     private var uploadSafetyPauseBanner: some View {
-        if let pause = activeUploadSafetyPause ?? activeRecentInstagramActivityPause {
+        if let pause = activeUploadSafetyPause {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: pause.icon)
                     .font(.system(size: 18, weight: .semibold))
@@ -4606,6 +4660,12 @@ struct SetDetailView: View {
             || description.contains("checkpoint")
             || description.contains("checkpoint_challenge_required")
             || description.contains("instagram verification")
+    }
+
+    private func isLocalDuplicateUploadError(_ error: Error) -> Bool {
+        let description = error.localizedDescription.lowercased()
+        return description.contains("already uploaded")
+            && description.contains("duplicate upload")
     }
 
     private func isRestrictedSessionError(_ error: Error) -> Bool {
@@ -4743,8 +4803,19 @@ struct SetDetailView: View {
         print("   Total photos to upload: \(currentSet.photos.count)")
         LogManager.shared.upload("Starting upload process for set '\(currentSet.name)' - \(currentSet.photos.count) photos")
 
-        if await blockUploadIfSafetyPauseActive(photoIndex: startFrom, source: "upload loop") {
+        // Real restriction (6h bot pause) still blocks and surfaces the banner.
+        if await blockUploadIfSafetyPauseActive(photoIndex: startFrom, source: "upload loop", includeRecentActivity: false) {
             return
+        }
+        // "Recent Instagram activity (apiread)" used to pop a modal with an OK button.
+        // It's only a short quiet window after a non-upload read — wait it out
+        // automatically (the inline banner already shows the countdown) instead of
+        // forcing the user to tap OK.
+        let preUploadQuietRemaining = InstagramSafetyGate.shared.preUploadQuietSecondsRemaining
+        if preUploadQuietRemaining > 0 {
+            LogManager.shared.info("Auto-waiting pre-upload quiet window (\(preUploadQuietRemaining)s) — no modal", category: .upload)
+            await waitWithCountdown(seconds: preUploadQuietRemaining + Int.random(in: 2...6), label: String(localized: "Waiting after recent Instagram activity"))
+            if await checkPauseRequested(atPhotoIndex: startFrom) { return }
         }
 
         // CRITICAL: Check if lockdown is active before starting
@@ -5022,7 +5093,28 @@ struct SetDetailView: View {
             
             // Check if pause requested
             if await checkPauseRequested(atPhotoIndex: index) { return }
-            
+
+            // DAILY LIMIT: Stop gracefully if today's quota is exhausted
+            if uploadManager.isDailyLimitReached {
+                let limit = uploadManager.dailyUploadLimit
+                LogManager.shared.warning(
+                    "Daily upload limit reached: \(uploadManager.dailyUploadCount)/\(limit) — upload paused until tomorrow",
+                    category: .upload
+                )
+                await MainActor.run {
+                    uploadManager.failedPhotoIndex = index
+                    uploadManager.uploadPhase = .paused
+                    uploadManager.currentPhaseDescription = "Daily limit reached"
+                    uploadManager.showingError = String(
+                        format: String(localized: "Daily upload limit reached (%d photos). Resume tomorrow — the counter resets at midnight."),
+                        limit
+                    )
+                    dataManager.updateSetStatus(id: currentSet.id, status: .paused)
+                    uploadManager.activeTask = nil
+                }
+                return
+            }
+
             // CRITICAL: Check if lockdown is active (bot detection)
             if instagram.isLocked {
                 print("🚨 [UPLOAD] Lockdown is active - STOPPING upload")
@@ -5035,18 +5127,7 @@ struct SetDetailView: View {
                 return
             }
 
-            let liveRate = instagram.checkRateLimit()
-            if liveRate.actionsUsed >= 45 {
-                await pauseUploadForSafety(
-                    photoIndex: index,
-                    message: """
-                    Upload paused for safety.
-
-                    Vault has reached \(liveRate.actionsUsed) Instagram actions in the last hour. Continuing to upload/archive now would be risky.
-
-                    Wait before resuming. This protects the account from Instagram verification.
-                    """
-                )
+            if await waitForUploadBudgetIfNeeded(photoIndex: index) {
                 return
             }
             
@@ -5121,10 +5202,11 @@ struct SetDetailView: View {
                 
                 // UPDATE PHASE: Uploading
                 await MainActor.run {
+                    let relativePos = uploadManager.uploadProgress.current + 1
                     uploadManager.uploadPhase = .uploading(photoNumber: index + 1)
                     uploadManager.currentPhaseDescription = retryAttempt > 0
                         ? String(format: String(localized: "Retrying photo #%d (attempt %d)"), index + 1, retryAttempt + 1)
-                        : String(format: String(localized: "Uploading photo #%d of %d"), index + 1, totalPhotos)
+                        : String(format: String(localized: "Uploading photo %d of %d"), relativePos, totalPhotos)
                 }
                 
                 do {
@@ -5190,7 +5272,16 @@ struct SetDetailView: View {
                             dataManager.updatePhoto(photoId: photo.id, mediaId: mediaId, isArchived: true, uploadStatus: .completed, errorMessage: nil)
                             ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId)
                             photoUploadSuccess = true
-                            
+
+                            // Increment and log daily counter
+                            await uploadManager.incrementDailyCount()
+                            let daily = await MainActor.run { uploadManager.dailyUploadCount }
+                            let limit = uploadManager.dailyUploadLimit
+                            LogManager.shared.info(
+                                "Daily upload count: \(daily)/\(limit) — \(max(0, limit - daily)) remaining today",
+                                category: .upload
+                            )
+
                             // Reset consecutive retries on success
                             await MainActor.run { uploadManager.consecutiveAutoRetries = 0 }
                         } else {
@@ -5252,6 +5343,7 @@ struct SetDetailView: View {
                                      errorDescription.contains("spam") ||
                                      errorDescription.contains("checkpoint") ||
                                      errorDescription.contains("bot")
+                    let isLocalDuplicateUpload = isLocalDuplicateUploadError(error)
                     
                     // PHOTO REJECTED - STOP, offer skip
                     let isPhotoError = errorDescription.contains("aspect ratio") ||
@@ -5267,7 +5359,31 @@ struct SetDetailView: View {
                     
                     // ===== HANDLE BY TYPE =====
                     
-                    if isRecentRevealProtectionError(error),
+                    if isLocalDuplicateUpload {
+                        LogManager.shared.warning("Duplicate upload guard stopped \(photoInfo): \(error.localizedDescription)", category: .upload)
+                        dataManager.updatePhoto(
+                            photoId: photo.id,
+                            mediaId: nil,
+                            uploadStatus: .error,
+                            errorMessage: "Duplicate upload skipped"
+                        )
+                        await MainActor.run {
+                            uploadManager.failedPhotoIndex = index
+                            uploadManager.uploadPhase = .paused
+                            uploadManager.currentPhaseDescription = String(localized: "Upload Paused")
+                            uploadManager.activeTask = nil
+                            uploadManager.showingError = """
+                            Upload stopped before sending \(photo.symbol).
+
+                            Vault detected this exact image was the last upload attempt and skipped it to avoid creating a duplicate Instagram post. This is not an Instagram checkpoint.
+
+                            If this happened after an interrupted upload, map the already uploaded/archived photo back to this slot or replace the image, then resume.
+                            """
+                            dataManager.updateSetStatus(id: currentSet.id, status: .error)
+                        }
+                        return
+
+                    } else if isRecentRevealProtectionError(error),
                        let uploadedMediaId = currentSet.photos.first(where: { $0.id == photo.id })?.mediaId {
                         let wait = recentRevealProtectionWaitSeconds(from: error) + Int.random(in: 3...8)
                         LogManager.shared.info("Upload archive deferred by post-reveal protection at \(photoInfo) — waiting \(wait)s", category: .upload)
@@ -5480,12 +5596,17 @@ struct SetDetailView: View {
                 let (hasCooldown, cooldownRemaining) = instagram.isPhotoUploadOnCooldown()
                 let delaySeconds: Int
                 
+                // 4–6 min between photos. Widened after a tester's account was closed
+                // by bot detection during a long upload. Avoid the exact 4:00 / 6:00
+                // round marks, and never let the archive-cooldown path produce a real
+                // gap below the 4-minute floor (it used to be able to undercut it).
+                let baseDelay = Int.random(in: 241...359)
                 if hasCooldown && cooldownRemaining > 0 {
-                    delaySeconds = cooldownRemaining + Int.random(in: 45...75)
-                    print("   Using archive cooldown: \(cooldownRemaining)s + buffer = \(delaySeconds)s")
+                    delaySeconds = max(baseDelay, cooldownRemaining + Int.random(in: 45...75))
+                    print("   Using max(base \(baseDelay)s, archive cooldown \(cooldownRemaining)s + buffer) = \(delaySeconds)s")
                 } else {
-                    delaySeconds = Int(Double.random(in: 240...330))
-                    print("   Using fallback delay: \(delaySeconds)s")
+                    delaySeconds = baseDelay
+                    print("   Using base delay: \(delaySeconds)s")
                 }
                 
                 // Persist the absolute end-time so background/kill doesn't lose it
@@ -5764,6 +5885,25 @@ struct SetDetailView: View {
         }
     }
     
+    /// Waits automatically when the rolling Instagram budget is too low for the
+    /// next full image upload. Returns true only when the upload should stop.
+    private func waitForUploadBudgetIfNeeded(photoIndex index: Int) async -> Bool {
+        while true {
+            let waitSeconds = instagram.secondsUntilUploadBudgetAvailable(maxUsed: 35, requiredRemaining: 8)
+            guard waitSeconds > 0 else { return false }
+
+            let rate = instagram.checkRateLimit()
+            print("⏳ [UPLOAD BUDGET] Waiting \(waitSeconds)s before photo #\(index + 1) — actions \(rate.actionsUsed)/55, remaining \(rate.remaining)")
+            LogManager.shared.info("Upload budget wait: \(waitSeconds)s before photo #\(index + 1) (actions \(rate.actionsUsed)/55)", category: .upload)
+
+            await waitWithCountdown(seconds: waitSeconds, label: "Waiting for Instagram budget")
+            if uploadManager.requestPause {
+                return await checkPauseRequested(atPhotoIndex: index)
+            }
+            if Task.isCancelled { return true }
+        }
+    }
+
     /// Wait with countdown for cooldown (used before first upload)
     private func waitWithCountdown(seconds: Int, label: String) async {
         await MainActor.run {
@@ -5774,8 +5914,11 @@ struct SetDetailView: View {
         for remaining in stride(from: seconds, to: 0, by: -1) {
             if uploadManager.requestPause { return }
             await MainActor.run {
+                let countdown = "\(remaining / 60):\(String(format: "%02d", remaining % 60))"
                 uploadManager.uploadPhase = .cooldown(remainingSeconds: remaining)
-                uploadManager.currentPhaseDescription = String(format: String(localized: "Cooldown %@"), "\(remaining / 60):\(String(format: "%02d", remaining % 60))")
+                uploadManager.currentPhaseDescription = label.isEmpty
+                    ? String(format: String(localized: "Cooldown %@"), countdown)
+                    : "\(label) \(countdown)"
             }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }

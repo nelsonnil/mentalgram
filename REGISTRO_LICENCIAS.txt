@@ -8,12 +8,12 @@
 
 ═══════════════════════════════════════════════════════════════════════════════
 
-[ ] 001. 2KWOA6-BGUNQ-ZXU825-GLECMT-T6JF4   → Usuario: _____________ | Fecha: ____
-[ ] 002. MA4O7-WOZHR-ZAGQY-4QQUW-OWR9F      → Usuario: _____________ | Fecha: ____
+[ ] -4QQUW-OWR9F      → Usuario: _____________ | Fecha: ____
 [ ] 003. FMT6Q-IVMCYD-0B3GQ-IVW4BI-7MWRK    → Usuario: _____________ | Fecha: ____
 [ ] 004. HHDJVA-X4X37Y-YDBJA-NHBGZD-NWZM7   → Usuario: _____________ | Fecha: ____
 [ ] 005. JQGQS-53BRE8-6VV8W-XN6EIC-WHSI7    → Usuario: _____________ | Fecha: ____
-[ ] 006. A7FLN-H5JID3-0F08OP-T527VO-WI49TM  → Usuario: _____________ | Fecha: ____
+[ ] 006. A7FLN-H5JID3-0F08OP001. 2KWOA6-BGUNQ-ZXU825-GLECMT-T6JF4   → Usuario: _____________ | Fecha: ____
+[ ] 002. MA4O7-WOZHR-ZAGQY-T527VO-WI49TM  → Usuario: _____________ | Fecha: ____
 [ ] 007. IRO2Q5-GE2YT-L189MX-02FAD-S8JR0    → Usuario: _____________ | Fecha: ____
 [ ] 008. O6Z02-95WGKI-H1KVD-995LT-SPZ09     → Usuario: _____________ | Fecha: ____
 [ ] 009. K2LUX-INZK4-PUBDEI-RW6SAG-W6HKQ    → Usuario: _____________ | Fecha: ____

@@ -926,6 +926,7 @@
 "limits.help.warning.step3" = "在 Vault 中从设置退出登录,等待约一分钟,然后重新登录。";
 "limits.help.warning.step4" = "可以继续使用了 — 您的账号是安全的。";
 "limits.help.warning.reassure" = "您的账号仍然正常运作。这仅仅让 Vault 暂停几分钟,仅此而已。";
+"limits.help.warning.uploadblock" = "遭遇强烈封锁后，照片上传将暂停约 24 小时——即使你退出并重新登录也是如此。这能保护被标记的账号。显示照片和实时 Performance 仍可正常使用。";
 
 "limits.help.show.title" = "演出期间";
 "limits.help.show.body" = "如果观众正在看屏幕时出现提示,Vault 会隐藏所有技术细节,并显示一个通用的\"无网络连接\"画面。";
@@ -1032,7 +1033,7 @@
 "guide.lockscreen.help.tricks.title" = "同一秘密数字 — 多种魔术";
 "guide.lockscreen.help.tricks.body" = "此处输入的数字与网格输入和所有其他魔术技巧使用的秘密数字相同：\n\n• 从数字套装中解档照片\n• 显示扑克牌\n• 显示自定义图像\n• 激活计数器故障效果\n• 在探索中强制显示卷轴";
 "guide.lockscreen.help.cards.title" = "扑克牌代码";
-"guide.lockscreen.help.cards.body" = "输入扑克牌代码作为秘密数字以揭示对应的牌：\n\n花色：  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nA–9 的牌  →  [牌值][花色]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\n10、J、Q、K  →  [十位][个位][花色]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\n示例：揭示 Q♥ 请输入 122。";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen的工作方式与Number Lockscreen相同：\n\n1. 输入卡片代码（2或3位数字）\n2. 点击键盘外部确认\n3. 用任意数字填充剩余的锁屏点\n\n花色：  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nA–9 的牌  →  [牌值][花色]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\n10、J、Q、K  →  [十位][个位][花色]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\n示例：揭示 Q♥ 请输入 122，点击外部，然后完成6个点。";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "启用效果";

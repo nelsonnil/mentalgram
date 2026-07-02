@@ -3,6 +3,7 @@ import SwiftUI
 struct IntegrationsSettingsView: View {
     @ObservedObject private var settings = IntegrationsSettings.shared
     @State private var testingSource: ApiSource? = nil
+    @State private var testingExploreSpy = false
     @State private var alertTitle = ""
     @State private var alertMessage = ""
     @State private var showingAlert = false
@@ -10,6 +11,90 @@ struct IntegrationsSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+
+                // MARK: - Explore Spy
+                sectionLabel("EXPLORE SPY", icon: "magnifyingglass.circle.fill")
+                card {
+                    cardHeader(icon: "magnifyingglass.circle.fill", iconColor: .purple,
+                               title: "Explore Spy")
+
+                    Text("When enabled, any profile the spectator views in the Explore search is automatically sent to Inject 2.0.")
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    divider()
+
+                    // Toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Send profile data")
+                                .font(VaultTheme.Typography.body())
+                                .foregroundColor(VaultTheme.Colors.textPrimary)
+                            Text("Fires silently when a profile loads")
+                                .font(VaultTheme.Typography.caption())
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $settings.exploreSpyEnabled)
+                            .labelsHidden()
+                            .tint(VaultTheme.Colors.primary)
+                    }
+
+                    divider()
+
+                    // Inject 2.0 ID
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Inject 2.0 ID (gg0.us)")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        TextField("e.g. 5136", text: $settings.exploreSpy2InjectId)
+                            .font(VaultTheme.Typography.body())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                            .padding(10)
+                            .background(Color(hex: "#2C2C2E"))
+                            .cornerRadius(8)
+                            .autocapitalization(.none)
+                            .autocorrectionDisabled()
+                            .keyboardType(.numberPad)
+                    }
+
+                    divider()
+
+                    // Format picker
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Data format")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                        ForEach(ExploreSpyFormat.allCases, id: \.rawValue) { fmt in
+                            Button {
+                                settings.exploreSpyFormat = fmt
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: settings.exploreSpyFormat == fmt
+                                          ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(settings.exploreSpyFormat == fmt
+                                                         ? VaultTheme.Colors.primary : .gray)
+                                        .font(.system(size: 16))
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(fmt.displayName)
+                                            .font(VaultTheme.Typography.body())
+                                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                                        Text(fmt.example)
+                                            .font(VaultTheme.Typography.caption())
+                                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+
+                    divider()
+
+                    // Test button
+                    exploreSpyTestButton
+                }
 
                 // MARK: - Inject
                 sectionLabel("INJECT (11z.co)", icon: "bolt.fill")
@@ -77,6 +162,60 @@ struct IntegrationsSettingsView: View {
         } message: {
             Text(alertMessage)
         }
+    }
+
+    // MARK: - Explore Spy Test Button
+
+    @ViewBuilder
+    private var exploreSpyTestButton: some View {
+        Button {
+            guard !testingExploreSpy else { return }
+            testingExploreSpy = true
+            Task {
+                let id = settings.exploreSpy2InjectId.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !id.isEmpty else {
+                    await MainActor.run {
+                        testingExploreSpy = false
+                        alertTitle = "Missing ID"
+                        alertMessage = "Enter your Inject 2.0 ID (gg0.us) above first."
+                        showingAlert = true
+                    }
+                    return
+                }
+                let testValue: String
+                switch settings.exploreSpyFormat {
+                case .followersOnly:          testValue = "12 345"
+                case .followersFollowing:     testValue = "12 345, 678"
+                case .nameFollowers:          testValue = "Test User, 12 345"
+                case .nameFollowersFollowing: testValue = "Test User, 12 345, 678"
+                }
+                let ok = await IntegrationsSettings.shared.sendToInject2(id: id, value: testValue)
+                await MainActor.run {
+                    testingExploreSpy = false
+                    alertTitle = ok ? "✅ Connected" : "❌ Failed"
+                    alertMessage = ok
+                        ? "Sent \"\(testValue)\" to Inject 2.0 successfully."
+                        : "Could not reach gg0.us. Check your ID and internet connection."
+                    showingAlert = true
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                if testingExploreSpy {
+                    ProgressView().scaleEffect(0.8).tint(.white)
+                } else {
+                    Image(systemName: "play.fill")
+                }
+                Text(testingExploreSpy ? "integrations.testing" : "Test Send")
+                    .font(VaultTheme.Typography.bodyBold())
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.purple)
+            .cornerRadius(8)
+        }
+        .disabled(testingExploreSpy)
     }
 
     // MARK: - Name Field

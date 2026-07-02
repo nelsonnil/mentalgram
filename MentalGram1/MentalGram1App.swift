@@ -135,7 +135,10 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: restoreInProgress)
-                // License activation overlay — shown for new users who need to activate
+                // PROVISIONAL RELEASE: license activation is temporarily disabled.
+                // Keep LicenseManager/LicenseActivationView in the project so it can be
+                // re-enabled later, but do not block users in this version.
+                /*
                 .overlay {
                     if license.needsActivation {
                         LicenseActivationView()
@@ -143,12 +146,14 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: license.isActivated)
+                */
                 .onOpenURL { url in
                     URLActionManager.shared.handleURL(url)
                 }
                 .onAppear {
                     UIApplication.shared.isIdleTimerDisabled = true
-                    checkLicenseGrandfathering()
+                    // PROVISIONAL RELEASE: license activation is temporarily disabled.
+                    // checkLicenseGrandfathering()
                     handleFirstLaunch()
                     // Backups are manual-only. Do not upload local state/photos on launch,
                     // because a bad local state could overwrite the user's good backup.
@@ -173,10 +178,9 @@ struct MentalGram1App: App {
                 }
                 um.beginBackgroundWork()
                 lastBackgroundedAt = Date()
-                // Safe auto-backup at the natural end-of-session checkpoint. Captures the
-                // latest settings + sets in one shot. Guarded so it never regresses a good
-                // cloud backup (empty local state or a different account are skipped).
-                CloudBackupService.shared.performSafeAutoBackup()
+                // Auto-backup removed: backups are manual-only (Back up now in Settings).
+                // This prevents the app from overwriting a good iCloud backup during
+                // migrations, updates, or partial-restore states.
             case .active:
                 CrashLoggerService.shared.recordLifecycle("active")
                 UIApplication.shared.isIdleTimerDisabled = true
@@ -471,6 +475,19 @@ struct LockdownView: View {
     private var isChallenge: Bool { instagram.challengeRequiredStreak >= 1 }
 
     var body: some View {
+        Group {
+            // During a live show: keep the disguised "No Internet" look so a spectator
+            // never sees a security warning. Outside a show (Sets / Settings): show the
+            // explicit bot-detection screen with steps + Log Out.
+            if instagram.isPerformanceActive {
+                disguisedBody
+            } else {
+                BotAlertView()
+            }
+        }
+    }
+
+    private var disguisedBody: some View {
         ZStack {
             Color(.systemBackground)
                 .ignoresSafeArea()

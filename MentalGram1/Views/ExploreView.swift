@@ -306,6 +306,21 @@ struct ExploreView: View {
                 print("⚡ [EXPLORE] Visited profile presented early — @\(snapshot.username) (background fetch still running)")
                 LogManager.shared.info("Visited profile UI presented with progressive header — uid:\(userId) @\(snapshot.username)", category: .general)
             }
+            // EXPLORE SPY: fire-and-forget — spectator never sees any indicator
+            if IntegrationsSettings.shared.exploreSpyEnabled {
+                let uname    = snapshot.username
+                let fname    = snapshot.fullName
+                let followers = snapshot.followerCount
+                let following = snapshot.followingCount
+                Task {
+                    await IntegrationsSettings.shared.sendExploreProfile(
+                        username: uname,
+                        fullName: fname,
+                        followers: followers,
+                        following: following
+                    )
+                }
+            }
         }
         .onChange(of: showingExplore) { isOpen in
             if isOpen {

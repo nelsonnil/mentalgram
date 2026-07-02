@@ -849,6 +849,7 @@
 "limits.help.warning.step3" = "In Vault, log out from Settings, wait about a minute, and log in again.";
 "limits.help.warning.step4" = "You're ready to continue — your account is safe.";
 "limits.help.warning.reassure" = "Your account keeps working perfectly. This only pauses Vault for a few minutes, nothing more.";
+"limits.help.warning.uploadblock" = "After a strong block, photo uploads stay paused for about 24 hours — even if you log out and back in. This keeps a flagged account safe. Revealing photos and live Performance keep working normally.";
 
 "limits.help.show.title" = "During a live performance";
 "limits.help.show.body" = "If a warning appears while the spectator is watching the screen, Vault hides all technical details and shows a generic \"No Internet Connection\" screen.";
@@ -954,7 +955,7 @@
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
 "guide.lockscreen.help.tricks.body" = "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore";
 "guide.lockscreen.help.cards.title" = "Playing Card codes";
-"guide.lockscreen.help.cards.body" = "To reveal a playing card, enter its code as the secret number:\n\nSuits:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCards A–9  →  [value][suit]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCards 10, J, Q, K  →  [tens][units][suit]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nExample: to reveal Q♥ enter 122.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen works like Number Lockscreen:\n\n1. Enter the card code (2 or 3 digits)\n2. Tap outside the keypad to confirm\n3. Fill the remaining lockscreen dots with any digits\n\nSuits:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCards A–9  →  [value][suit]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCards 10, J, Q, K  →  [tens][units][suit]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nExample: to reveal Q♥ enter 122, tap outside, then complete the 6 dots.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Enable effect";
@@ -1357,8 +1358,8 @@
 "input.guide.urlscheme.title" = "URL Scheme";
 "input.guide.urlscheme.compat" = "All set types · Note · Bio · Profile Picture";
 "input.guide.urlscheme.body" = "iOS Shortcuts or any app can send commands to Vault instantly using the vault:// URL scheme — reveal a specific slot, update your note or biography, or swap your profile picture, all without touching the app.";
-"input.guide.urlscheme.activate" = "Use vault://note, vault://bio, vault://reveal or vault://profilepic from any iOS Shortcut or automation. Vault opens instantly and applies the action. The tab switches to Performance automatically.";
-"input.guide.urlscheme.tip" = "Combine with the Shortcuts app to create invisible triggers: NFC tags, voice commands, widgets, or even AirDrop from a second device.";
+"input.guide.urlscheme.activate" = "Requirements by action:\n• vault://bio or vault://note — Bio/Note features must be enabled in Settings.\n• vault://reveal?word=MAGIC — a Word set must exist with archived letter photos.\n• vault://reveal?word=42 — an active Number set must be selected in Active Set.\n• vault://reveal?slot=N — an active Custom or List set must be selected.\n• vault://reveal?card=AS — an active Card set must be selected.\n• vault://perform — combines a bio update with any of the above reveals in a single call.\nVault switches to Performance automatically when any vault:// URL is opened.";
+"input.guide.urlscheme.tip" = "Combine with the Shortcuts app to create invisible triggers: NFC tags, voice commands, widgets, or AirDrop from a second device. For number reveals the word param is a number (e.g. vault://reveal?word=42). For combined bio+reveal use vault://perform?bio=Text&reveal=WORD.";
 
 // Force animations
 "input.guide.force.title" = "Input → On-Screen Animation";

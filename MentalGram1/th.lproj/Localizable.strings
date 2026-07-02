@@ -873,6 +873,7 @@
 "limits.help.warning.step3" = "ใน Vault ให้ออกจากระบบจากการตั้งค่า รอประมาณหนึ่งนาที แล้วเข้าสู่ระบบอีกครั้ง";
 "limits.help.warning.step4" = "พร้อมดำเนินการต่อ — บัญชีของคุณปลอดภัย";
 "limits.help.warning.reassure" = "บัญชีของคุณยังทำงานได้ตามปกติ สิ่งนี้แค่หยุด Vault ชั่วคราวไม่กี่นาทีเท่านั้น";
+"limits.help.warning.uploadblock" = "หลังจากการบล็อกที่รุนแรง การอัปโหลดรูปภาพจะถูกหยุดชั่วคราวประมาณ 24 ชั่วโมง — แม้ว่าคุณจะออกจากระบบแล้วเข้าสู่ระบบใหม่ก็ตาม สิ่งนี้ช่วยปกป้องบัญชีที่ถูกตั้งค่าสถานะ การเปิดเผยรูปภาพและโหมด Performance แบบสดยังคงทำงานได้ตามปกติ";
 
 "limits.help.show.title" = "ระหว่างการแสดง";
 "limits.help.show.body" = "หากมีคำเตือนปรากฏขณะผู้ชมกำลังดูหน้าจอ Vault จะซ่อนรายละเอียดทางเทคนิคทั้งหมดและแสดงหน้าจอทั่วไปว่า \"ไม่มีการเชื่อมต่ออินเทอร์เน็ต\"";
@@ -979,7 +980,7 @@
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
 "guide.lockscreen.help.tricks.body" = "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore";
 "guide.lockscreen.help.cards.title" = "รหัสไพ่";
-"guide.lockscreen.help.cards.body" = "เพื่อเปิดเผยไพ่ ให้ป้อนรหัสเป็นตัวเลขลับ:\n\nดอก:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nไพ่ A–9  →  [ค่า][ดอก]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nไพ่ 10, J, Q, K  →  [หลักสิบ][หลักหน่วย][ดอก]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nตัวอย่าง: เปิดเผย Q♥ ให้ป้อน 122";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen ทำงานเหมือนกับ Number Lockscreen:\n\n1. ป้อนรหัสการ์ด (2 หรือ 3 หลัก)\n2. แตะนอกแป้นพิมพ์เพื่อยืนยัน\n3. เติมจุดล็อกหน้าจอที่เหลือด้วยตัวเลขใดก็ได้\n\nดอก:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nไพ่ A–9  →  [ค่า][ดอก]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nไพ่ 10, J, Q, K  →  [หลักสิบ][หลักหน่วย][ดอก]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nตัวอย่าง: เปิดเผย Q♥ ให้ป้อน 122 แตะนอกแป้นพิมพ์ แล้วเติมจุด 6 จุด";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "เปิดใช้เอฟเฟกต์";

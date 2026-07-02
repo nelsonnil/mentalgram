@@ -26,6 +26,9 @@ class CloudBackupService: ObservableObject {
     /// userId that owns the sets JSON currently in the cloud backup. Lets the safe
     /// auto-backup avoid clobbering a different account's backup.
     private let setsOwnerKey = "backup_setsOwnerUserId"
+    /// Timestamp when the sets JSON was last backed up. Used to detect if the cloud
+    /// backup is older than the local data (e.g., restore timing race on multi-device).
+    private let setsTimestampKey = "backup_setsTimestamp"
 
     // MARK: - Debounce
     // Backups are manual-only. These properties remain for backward compatibility with
@@ -186,28 +189,42 @@ class CloudBackupService: ObservableObject {
             let cloudOwner = self.kv.string(forKey: self.setsOwnerKey)
 
             let canWriteSets: Bool
+            var skipReason: String? = nil
             if localData == nil || localSetCount == 0 {
                 // Never push an empty/unknown local state over the cloud backup.
                 canWriteSets = false
+                skipReason = "local is empty (\(localSetCount) sets)"
             } else if cloudData == nil || cloudSetCount == 0 {
                 // Empty cloud → safe to seed.
                 canWriteSets = true
-            } else if cloudOwner == nil || cloudOwner == currentOwner {
-                // Same account (or untagged legacy backup) → safe to update.
-                canWriteSets = true
-            } else {
+            } else if let cloudOwner, cloudOwner != currentOwner {
                 // Different account with real data → never auto-clobber. Manual only.
                 canWriteSets = false
+                skipReason = "cloud belongs to '\(cloudOwner)', current '\(currentOwner)'"
+            } else if localSetCount < cloudSetCount {
+                // Auto-backup must NEVER reduce the set count in the cloud.
+                // If local has fewer sets than the cloud backup it could mean a migration
+                // race, a partial restore, or a bug — protecting the cloud is safer.
+                // The user can use the manual "Back up now" button to intentionally reduce.
+                canWriteSets = false
+                skipReason = "REGRESSION GUARD — local \(localSetCount) sets < cloud \(cloudSetCount) sets. Manual backup required to reduce count."
+                LogManager.shared.warning(
+                    "Auto-backup regression guard: local has \(localSetCount) sets but cloud has \(cloudSetCount). Skipping to protect backup. Use 'Back up now' to override.",
+                    category: .general
+                )
+            } else {
+                // Same account, local count >= cloud count → safe to update.
+                canWriteSets = true
             }
 
             if canWriteSets, let localData {
+                let now = Date()
                 self.kv.set(localData, forKey: self.setsKVKey)
                 self.kv.set(currentOwner, forKey: self.setsOwnerKey)
+                self.kv.set(now.timeIntervalSince1970, forKey: self.setsTimestampKey)
                 savedCount += 1
-            } else if !canWriteSets, localSetCount == 0, cloudSetCount > 0 {
-                print("☁️ [BACKUP] Safe auto-backup: kept cloud sets (local is empty) — manual backup required to wipe")
-            } else if !canWriteSets, let cloudOwner, cloudOwner != currentOwner, cloudSetCount > 0 {
-                print("☁️ [BACKUP] Safe auto-backup: skipped sets — cloud belongs to '\(cloudOwner)', current '\(currentOwner)'")
+            } else if let reason = skipReason {
+                print("☁️ [BACKUP] Safe auto-backup: kept cloud sets (\(reason))")
             }
 
             let now = Date()
@@ -266,20 +283,36 @@ class CloudBackupService: ObservableObject {
         let scopedKey = "com.vault.sets.\(userId.isEmpty ? "guest" : userId)"
 
         let backupOwner = userId.isEmpty ? "guest" : userId
-        if let setsData = UserDefaults.standard.data(forKey: scopedKey) {
+        let setsDataToBackup: Data? = UserDefaults.standard.data(forKey: scopedKey)
+            ?? UserDefaults.standard.data(forKey: "com.vault.sets")
+        let localSetCountForManual = Self.decodeSetCount(setsDataToBackup)
+        let cloudSetCountForManual = Self.decodeSetCount(kv.data(forKey: setsKVKey))
+
+        if localSetCountForManual > 0 && localSetCountForManual < cloudSetCountForManual {
+            // Warn in log when manual backup would reduce the cloud set count.
+            // The user pressed "Back up now" intentionally, so we still proceed —
+            // but the warning helps diagnose accidental overwrites.
+            LogManager.shared.warning(
+                "Manual backup: local has \(localSetCountForManual) sets but cloud had \(cloudSetCountForManual). Cloud will be reduced. (Intentional manual backup.)",
+                category: .general
+            )
+        }
+
+        if let setsData = setsDataToBackup {
+            let now = Date()
             kv.set(setsData, forKey: setsKVKey)
             kv.set(backupOwner, forKey: setsOwnerKey)
+            kv.set(now.timeIntervalSince1970, forKey: setsTimestampKey)
             let sizeKB = setsData.count / 1024
-            print("☁️ [BACKUP] Sets backed up from '\(scopedKey)' (\(sizeKB) KB)")
+            let source = UserDefaults.standard.data(forKey: scopedKey) != nil ? scopedKey : "com.vault.sets (legacy)"
+            print("☁️ [BACKUP] Sets backed up from '\(source)' (\(sizeKB) KB, \(localSetCountForManual) sets, timestamp=\(now.timeIntervalSince1970))")
             savedCount += 1
-        } else if let legacyData = UserDefaults.standard.data(forKey: "com.vault.sets") {
-            // Fallback: legacy key (pre-account-scoping installs)
-            kv.set(legacyData, forKey: setsKVKey)
-            kv.set(backupOwner, forKey: setsOwnerKey)
-            print("☁️ [BACKUP] Sets backed up from legacy key (\(legacyData.count / 1024) KB)")
-            savedCount += 1
+
+            // Save a crash-safe snapshot to iCloud Drive (never overwritten by auto-backup)
+            iCloudDriveSync.shared.saveSnapshotToiCloudDrive(setsData, setCount: localSetCountForManual)
         } else {
             kv.removeObject(forKey: setsKVKey)
+            kv.removeObject(forKey: setsTimestampKey)
             print("☁️ [BACKUP] No sets data found to back up (scopedKey='\(scopedKey)')")
         }
 
@@ -357,9 +390,35 @@ class CloudBackupService: ObservableObject {
         // 2. Sets JSON — write to the LEGACY key so migrateLegacySetsIfNeeded()
         //    in DataManager.reloadAfterRestore() can pick it up and move it to the scoped key.
         if let setsData = kv.data(forKey: setsKVKey) {
+            // Timestamp regression check: warn if cloud backup has fewer sets than local.
+            // This helps diagnose multi-device timing issues where Device B uploads new
+            // sets but Device A restores before iCloud propagates the latest backup.
+            let cloudTimestamp = kv.double(forKey: setsTimestampKey)
+            let userId = InstagramService.shared.session.userId
+            let localKey = userId.isEmpty ? "com.vault.sets" : "com.vault.sets.\(userId)"
+            if let localData = UserDefaults.standard.data(forKey: localKey) {
+                let localSetCount = Self.decodeSetCount(localData)
+                let cloudSetCount = Self.decodeSetCount(setsData)
+                
+                // Simple heuristic: if cloud has fewer sets, it's likely older.
+                // Combined with the timestamp (if available), this catches most timing races.
+                if cloudSetCount > 0 && localSetCount > 0 && cloudSetCount < localSetCount {
+                    let cloudDate = cloudTimestamp > 0 ? Date(timeIntervalSince1970: cloudTimestamp) : nil
+                    let formatter = DateFormatter()
+                    formatter.dateStyle = .short
+                    formatter.timeStyle = .short
+                    let dateInfo = cloudDate != nil ? " from \(formatter.string(from: cloudDate!))" : ""
+                    LogManager.shared.warning(
+                        "⚠️ RESTORE WARNING: Cloud backup\(dateInfo) has \(cloudSetCount) sets, but your local data has \(localSetCount) sets. This can happen if another device backed up recently but iCloud hasn't synced yet. To avoid data loss, wait 2-3 minutes after backing up on one device before restoring on another.",
+                        category: .general
+                    )
+                    print("☁️ [BACKUP]   ⚠️ REGRESSION: cloud has \(cloudSetCount) sets, local has \(localSetCount) — proceeding with restore (user action)")
+                }
+            }
+            
             UserDefaults.standard.set(setsData, forKey: "com.vault.sets")
             let sizeKB = setsData.count / 1024
-            print("☁️ [BACKUP]   ✓ restored sets JSON (\(sizeKB) KB) → 'com.vault.sets' (pending migration)")
+            print("☁️ [BACKUP]   ✓ restored sets JSON (\(sizeKB) KB, timestamp=\(cloudTimestamp)) → 'com.vault.sets' (pending migration)")
             restored += 1
         } else {
             print("☁️ [BACKUP]   ⚠️ No sets JSON found in backup (key='\(setsKVKey)')")

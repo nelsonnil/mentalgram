@@ -96,7 +96,73 @@ class UploadManager: ObservableObject {
     }
     /// Background task identifier for finishing in-flight uploads.
     var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
-    
+
+    // MARK: - Daily Upload Counter
+    /// Maximum photos allowed per calendar day. Persisted so the user can adjust it.
+    /// Default: 80. Raising this is the user's responsibility.
+    var dailyUploadLimit: Int {
+        get {
+            let v = UserDefaults.standard.integer(forKey: "upload_dailyLimit")
+            return v > 0 ? v : 80
+        }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_dailyLimit") }
+    }
+    /// How many photos have been successfully uploaded+archived today (resets at midnight).
+    @Published var dailyUploadCount: Int = 0
+
+    private var storedDailyCount: Int {
+        get { UserDefaults.standard.integer(forKey: "upload_dailyCount") }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_dailyCount") }
+    }
+    private var storedDailyDate: String {
+        get { UserDefaults.standard.string(forKey: "upload_dailyCountDate") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "upload_dailyCountDate") }
+    }
+
+    private func todayDateString() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.string(from: Date())
+    }
+
+    /// Resets the stored count if the calendar day has changed. Safe to call from any thread.
+    func refreshDailyCountIfNeeded() {
+        let today = todayDateString()
+        if storedDailyDate != today {
+            storedDailyCount = 0
+            storedDailyDate = today
+            DispatchQueue.main.async { self.dailyUploadCount = 0 }
+        }
+    }
+
+    /// Loads (and if needed, resets) the persisted daily count into the @Published var.
+    /// Call on init and on view appear.
+    func loadDailyCount() {
+        refreshDailyCountIfNeeded()
+        dailyUploadCount = storedDailyCount
+    }
+
+    /// Increments the counter after a successful upload+archive. Must be called on MainActor.
+    @MainActor
+    func incrementDailyCount() {
+        refreshDailyCountIfNeeded()
+        storedDailyCount += 1
+        dailyUploadCount = storedDailyCount
+    }
+
+    /// True when the daily limit has been reached and no more uploads should start.
+    var isDailyLimitReached: Bool {
+        refreshDailyCountIfNeeded()
+        return dailyUploadCount >= dailyUploadLimit
+    }
+
+    /// Remaining uploads allowed today.
+    var remainingUploadsToday: Int {
+        refreshDailyCountIfNeeded()
+        return max(0, dailyUploadLimit - dailyUploadCount)
+    }
+
     // MARK: - Computed Properties (derived from uploadPhase)
     var isUploading: Bool {
         switch uploadPhase {
@@ -161,7 +227,9 @@ class UploadManager: ObservableObject {
     var autoRetryTimer: Timer?
     var escalatedPauseTimer: Timer?
     
-    private init() {}
+    private init() {
+        loadDailyCount()
+    }
     
     // MARK: - Reset Error State
     func resetErrorState() {
@@ -277,10 +345,15 @@ class UploadManager: ObservableObject {
     }
 
     func activateUploadRestriction(seconds: Int = 6 * 60 * 60) {
-        let end = Date().addingTimeInterval(Double(seconds))
+        let candidate = Date().addingTimeInterval(Double(seconds))
+        // Never shrink an already-armed (longer) cooldown. A later, shorter
+        // restriction must not reduce the protection of an earlier 24h
+        // bot-detection block that is meant to survive a re-login.
+        let end = max(candidate, uploadRestrictionEndTime ?? candidate)
         uploadRestrictionEndTime = end
-        uploadRestrictionCountdown = seconds
-        uploadPhase = .botLockdown(remainingSeconds: seconds)
+        let remaining = max(0, Int(end.timeIntervalSinceNow))
+        uploadRestrictionCountdown = remaining
+        uploadPhase = .botLockdown(remainingSeconds: remaining)
         currentPhaseDescription = "Instagram safety pause"
         LogManager.shared.warning("Upload restriction cooldown armed until \(end)", category: .upload)
     }
@@ -293,6 +366,7 @@ class UploadManager: ObservableObject {
     
     // MARK: - Restore Timers (called on view appear)
     func restoreTimersIfNeeded() {
+        loadDailyCount()
         // First, detect and fix stuck states
         clearStuckState()
 
@@ -408,6 +482,12 @@ class UploadManager: ObservableObject {
                 // Wait already elapsed while in background — ready immediately
                 nextPhotoCountdown = 0
                 clearWaitPersistence()
+                if activeSetId != nil, activeTask == nil {
+                    uploadPhase = .paused
+                    currentPhaseDescription = "Next photo ready"
+                    autoResumePending = true
+                    LogManager.shared.info("Upload wait elapsed in background — requesting auto-resume", category: .upload)
+                }
             }
         } else if case .waiting(let nextPhoto, _) = uploadPhase, nextPhotoCountdown > 0 {
             // Fallback for old in-memory countdown (no persisted timestamp)
@@ -478,12 +558,13 @@ class UploadManager: ObservableObject {
 
         let content = UNMutableNotificationContent()
         content.title = "Upload Ready"
-        content.body = "Next photo is ready to upload. Open the app to continue."
+        content.body = "Next photo is ready. Open Vault now and it will continue uploading automatically."
         content.sound = .default
 
-        // Fire 5 seconds before the cooldown ends (or immediately if <5s left)
-        let fireDate = endTime.addingTimeInterval(-5)
-        let delay = max(1, fireDate.timeIntervalSinceNow)
+        // Fire exactly when the next photo is ready. If iOS suspended the app
+        // during the wait, opening from this notification brings it foreground
+        // and the upload loop continues from the persisted timestamp.
+        let delay = max(1, endTime.timeIntervalSinceNow)
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
 
         let request = UNNotificationRequest(identifier: "uploadReady", content: content, trigger: trigger)

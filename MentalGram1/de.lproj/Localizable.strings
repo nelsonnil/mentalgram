@@ -1416,6 +1416,7 @@
 "limits.help.warning.step3" = "Melde dich in Vault über Einstellungen ab, warte etwa eine Minute und melde dich erneut an.";
 "limits.help.warning.step4" = "Du kannst weitermachen — dein Konto ist sicher.";
 "limits.help.warning.reassure" = "Dein Konto funktioniert weiterhin einwandfrei. Das pausiert Vault nur für wenige Minuten, mehr nicht.";
+"limits.help.warning.uploadblock" = "Nach einer starken Sperre bleiben Foto-Uploads etwa 24 Stunden pausiert — selbst wenn du dich ab- und wieder anmeldest. Das schützt ein markiertes Konto. Fotos aufdecken und der Live-Performance-Modus funktionieren weiterhin normal.";
 
 "limits.help.show.title" = "Während einer Vorführung";
 "limits.help.show.body" = "Wenn eine Warnung erscheint, während der Zuschauer auf den Bildschirm schaut, verbirgt Vault alle technischen Details und zeigt einen generischen Bildschirm \"Keine Internetverbindung\".";
@@ -1512,7 +1513,7 @@
 "guide.lockscreen.help.tricks.title" = "Dieselbe Geheimzahl — viele Tricks";
 "guide.lockscreen.help.tricks.body" = "Die hier eingegebene Zahl ist dieselbe Geheimzahl, die von der Rastereingabe und allen anderen Zaubertricks verwendet wird:\n\n• Foto aus einem numerischen Set dearchivieren\n• Spielkarte enthüllen\n• Benutzerdefiniertes Bild zeigen\n• Zähler-Glitch aktivieren\n• Reel in Entdecken erzwingen";
 "guide.lockscreen.help.cards.title" = "Spielkarten-Codes";
-"guide.lockscreen.help.cards.body" = "Um eine Spielkarte aufzudecken, gib ihren Code als Geheimzahl ein:\n\nFarben:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKarten A–9  →  [Wert][Farbe]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKarten 10, B, D, K  →  [Zehner][Einer][Farbe]\n  10♠ = 101    B♥ = 112\n  D♣  = 123    K♦  = 134\n\nBeispiel: Um D♥ aufzudecken, gib 122 ein.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen funktioniert wie Number Lockscreen:\n\n1. Gib den Kartencode ein (2 oder 3 Ziffern)\n2. Tippe außerhalb der Tastatur, um zu bestätigen\n3. Fülle die verbleibenden Sperrbildschirmpunkte mit beliebigen Ziffern\n\nFarben:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKarten A–9  →  [Wert][Farbe]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKarten 10, B, D, K  →  [Zehner][Einer][Farbe]\n  10♠ = 101    B♥ = 112\n  D♣  = 123    K♦  = 134\n\nBeispiel: Um D♥ aufzudecken, gib 122 ein, tippe außerhalb und vervollständige die 6 Punkte.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Effekt aktivieren";

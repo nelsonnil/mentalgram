@@ -212,6 +212,7 @@ final class PostPredictionTestMode: ObservableObject {
 
     private(set) var letterTemplate: LetterTemplate?
     private(set) var numberTemplate: NumberTemplate?
+    private(set) var cardTemplate: CardTemplate?
 
     private let enabledKey = "performance_test_mode_enabled"
 
@@ -226,6 +227,7 @@ final class PostPredictionTestMode: ObservableObject {
         insertedPseudoURLs.removeAll()
         letterTemplate = nil
         numberTemplate = nil
+        cardTemplate = nil
         print("🧪 [TEST MODE] Reloaded settings from UserDefaults after restore")
     }
 
@@ -244,9 +246,15 @@ final class PostPredictionTestMode: ObservableObject {
             numberTemplate = TemplateManager.shared.numberTemplates().first
             letterTemplate = nil
             return true
-        case .custom, .card, .list:
+        case .card:
             letterTemplate = nil
             numberTemplate = nil
+            cardTemplate = TemplateManager.shared.cardTemplates().first
+            return true
+        case .custom, .list:
+            letterTemplate = nil
+            numberTemplate = nil
+            cardTemplate = nil
             return true
         }
     }
@@ -276,6 +284,7 @@ final class PostPredictionTestMode: ObservableObject {
     func clearRuntimeState() {
         letterTemplate = nil
         numberTemplate = nil
+        cardTemplate = nil
         insertedPseudoURLs.removeAll()
     }
 }

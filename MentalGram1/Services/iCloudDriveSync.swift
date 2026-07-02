@@ -400,7 +400,7 @@ class iCloudDriveSync: ObservableObject {
 
     /// Non-blocking implementation. Uses `Task.sleep` (not `Thread.sleep`) so the cooperative
     /// thread pool is never starved — which was causing the UI freezes on fresh restores.
-    private func downloadAllPhotosAsync() async -> Int {
+    public func downloadAllPhotosAsync() async -> Int {
         let localRoot = self.localPhotosRoot
         try? self.fm.createDirectory(at: localRoot, withIntermediateDirectories: true)
 
@@ -628,5 +628,87 @@ class iCloudDriveSync: ObservableObject {
             }
         }
         return count
+    }
+
+    // MARK: - Sets JSON Snapshot (crash-safe local backup)
+
+    /// Saves the given sets JSON as a dated snapshot inside the iCloud Drive container.
+    /// Each manual backup creates a new file; auto-backup never writes here.
+    /// Keeps only the last `maxSnapshots` files to avoid filling iCloud storage.
+    ///
+    /// Path: <container>/Documents/Backups/sets_backup_YYYY-MM-DD_HH-mm.json
+    ///
+    /// Users can access these files via: Files app → iCloud Drive → Vault → Backups
+    func saveSnapshotToiCloudDrive(_ setsData: Data, setCount: Int, maxSnapshots: Int = 5) {
+        DispatchQueue.global(qos: .utility).async {
+            guard let base = self.fm.url(forUbiquityContainerIdentifier: self.containerID) else {
+                print("☁️ [SNAPSHOT] iCloud container unavailable — snapshot skipped")
+                return
+            }
+
+            let backupsDir = base.appendingPathComponent("Documents/Backups", isDirectory: true)
+            do {
+                try self.fm.createDirectory(at: backupsDir, withIntermediateDirectories: true)
+            } catch {
+                print("☁️ [SNAPSHOT] Could not create Backups dir: \(error.localizedDescription)")
+                return
+            }
+
+            // Date-stamped filename
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd_HH-mm"
+            fmt.locale = Locale(identifier: "en_US_POSIX")
+            let stamp = fmt.string(from: Date())
+            let fileName = "sets_backup_\(stamp).json"
+            let dest = backupsDir.appendingPathComponent(fileName)
+
+            do {
+                try setsData.write(to: dest, options: .atomic)
+                print("☁️ [SNAPSHOT] ✅ Saved \(setCount) sets → \(fileName) (\(setsData.count / 1024) KB)")
+                LogManager.shared.info(
+                    "Sets snapshot saved to iCloud Drive: \(fileName) (\(setCount) sets, \(setsData.count / 1024) KB)",
+                    category: .general
+                )
+            } catch {
+                print("☁️ [SNAPSHOT] Write failed: \(error.localizedDescription)")
+                return
+            }
+
+            // Prune oldest snapshots beyond maxSnapshots
+            guard let all = try? self.fm.contentsOfDirectory(at: backupsDir,
+                                                              includingPropertiesForKeys: [.creationDateKey],
+                                                              options: .skipsHiddenFiles) else { return }
+            let snapshots = all
+                .filter { $0.lastPathComponent.hasPrefix("sets_backup_") && $0.pathExtension == "json" }
+                .sorted {
+                    let d1 = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                    let d2 = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                    return d1 < d2
+                }
+            if snapshots.count > maxSnapshots {
+                let toDelete = snapshots.prefix(snapshots.count - maxSnapshots)
+                for old in toDelete {
+                    try? self.fm.removeItem(at: old)
+                    print("☁️ [SNAPSHOT] Pruned old snapshot: \(old.lastPathComponent)")
+                }
+            }
+        }
+    }
+
+    /// Returns a sorted list of snapshot files available in iCloud Drive.
+    /// Useful for building a "restore from snapshot" UI in the future.
+    func availableSnapshots() -> [URL] {
+        guard let base = fm.url(forUbiquityContainerIdentifier: containerID) else { return [] }
+        let backupsDir = base.appendingPathComponent("Documents/Backups", isDirectory: true)
+        guard let all = try? fm.contentsOfDirectory(at: backupsDir,
+                                                     includingPropertiesForKeys: [.creationDateKey],
+                                                     options: .skipsHiddenFiles) else { return [] }
+        return all
+            .filter { $0.lastPathComponent.hasPrefix("sets_backup_") && $0.pathExtension == "json" }
+            .sorted {
+                let d1 = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let d2 = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                return d1 > d2  // newest first
+            }
     }
 }

@@ -11,6 +11,7 @@ struct LockscreenInputView: View {
     @State private var isValidated = false
     @State private var pressedDigit: Int? = nil
 
+    private let maxPasscodeDigits = 6
     private let buttonSize: CGFloat = 80
 
     private let numpadLayout: [[NumpadKey]] = [
@@ -79,7 +80,7 @@ struct LockscreenInputView: View {
                 .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
 
             HStack(spacing: 16) {
-                ForEach(0..<4, id: \.self) { index in
+                ForEach(0..<maxPasscodeDigits, id: \.self) { index in
                     Circle()
                         .fill(index < allDigits.count ? Color.white : Color.clear)
                         .overlay(
@@ -191,7 +192,7 @@ struct LockscreenInputView: View {
     // MARK: - Logic
 
     private func handleDigitTap(_ digit: Int) {
-        guard allDigits.count < 4 else { return }
+        guard allDigits.count < maxPasscodeDigits else { return }
 
         allDigits.append(digit)
 
@@ -201,7 +202,7 @@ struct LockscreenInputView: View {
 
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
-        if allDigits.count == 4 {
+        if allDigits.count == maxPasscodeDigits {
             commitAndDismiss()
         }
     }

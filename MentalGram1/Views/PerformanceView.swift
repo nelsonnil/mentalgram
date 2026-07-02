@@ -245,6 +245,13 @@ struct PerformanceView: View {
     @State private var showingListInput = false
     @State private var listInputWasShown = false
 
+    // MARK: - Notes Input (FakeNotes)
+    @State private var showingFakeNotes = false
+    /// Prevents re-presenting the Notes interface when onAppear re-fires after dismiss.
+    @State private var fakeNotesWasShown = false
+    /// Lines captured from the Notes interface, routed to Bio/Notes slots or Word set.
+    @State private var pendingFakeNotesLines: [String]? = nil
+
     private var activeListSet: PhotoSet? {
         guard ActiveSetSettings.shared.isPostPredictionEnabled,
               let activeId = ActiveSetSettings.shared.activeListSetId else { return nil }
@@ -304,10 +311,12 @@ struct PerformanceView: View {
         clockInputWasShown = false
         cardNumpadWasShown = false
         listInputWasShown = false
+        fakeNotesWasShown = false
         showingLockscreen = false
         showingClockInput = false
         showingCardNumpad = false
         showingListInput = false
+        showingFakeNotes = false
         cardRevealConsumedThisPerformance = false
     }
 
@@ -392,10 +401,19 @@ struct PerformanceView: View {
                 print("🖤 [CLOCK-INPUT] Showing black screen for swipe digit input")
             }
         }
+        else if !fakeNotesWasShown && isFakeNotesActive {
+            if canStartSecretPerformanceInput() {
+                fakeNotesWasShown = true
+                showingFakeNotes = true
+                print("📝 [FAKE-NOTES] Showing Notes lookalike input")
+            }
+        }
         // Show performance cover if enabled and NO other secret input was already shown.
         else if shouldShowPerformanceCover && !performanceCoverWasShown
                     && !showingLockscreen && !showingClockInput && !showingCardNumpad && !showingListInput
-                    && !lockscreenWasShown && !clockInputWasShown && !cardNumpadWasShown && !listInputWasShown {
+                    && !showingFakeNotes
+                    && !lockscreenWasShown && !clockInputWasShown && !cardNumpadWasShown && !listInputWasShown
+                    && !fakeNotesWasShown {
             presentPerformanceCoverIfNeeded()
             print("🏠 [ILLUSION] \(effectivePerformanceCoverMode.title) active — tap to reveal profile")
         }
@@ -405,6 +423,10 @@ struct PerformanceView: View {
     private func startPerformanceSessionServicesIfNeeded() {
         guard !performanceSessionServicesStarted else { return }
         performanceSessionServicesStarted = true
+
+        // Live show is active: bot-detection overlays must keep the disguised
+        // "No Internet" look while we're here (a spectator must never see a warning).
+        instagram.isPerformanceActive = true
 
         // Performance has priority over setup. Cancel any active/pending upload
         // pipeline before secret inputs run so captured Bio/Notes/PP actions are
@@ -538,6 +560,11 @@ struct PerformanceView: View {
         if LockscreenInputSettings.shared.isReady { return true }
         let kinds = integrations.interfaceKindsInUse()
         return kinds.contains(.numberLockscreen) || kinds.contains(.cardLockscreen)
+    }
+
+    /// True when the Notes Input interface should appear on Performance open.
+    private var isFakeNotesActive: Bool {
+        integrations.interfaceKindsInUse().contains(.fakeNotes)
     }
 
     // MARK: - Spectator profile overlay
@@ -1041,6 +1068,10 @@ struct PerformanceView: View {
             onTabSelected: { tab in handleTabSelected(tab) },
             onInterfaceCapture: { value, kinds in
                 Task { await applyInterfaceCapture(value: value, kinds: kinds) }
+            },
+            pendingFakeNotesLines: $pendingFakeNotesLines,
+            onFakeNotesCapture: { lines in
+                Task { await applyFakeNotesCapture(lines: lines) }
             }
         )
     }
@@ -1721,6 +1752,18 @@ struct PerformanceView: View {
                     }
                 )
             }
+            .fullScreenCover(isPresented: $showingFakeNotes) {
+                FakeNotesInputView(
+                    onCapture: { lines in
+                        showingFakeNotes = false
+                        pendingFakeNotesLines = lines
+                        presentPerformanceCoverIfNeeded()
+                    },
+                    onCancel: {
+                        showingFakeNotes = false
+                    }
+                )
+            }
     }
 
     private var performanceObservedView: some View {
@@ -1845,7 +1888,7 @@ struct PerformanceView: View {
             // same session → strong bot signal (especially POST+GET combos).
             Task { @MainActor in
                 guard !showingLockscreen, !showingClockInput, !showingCardNumpad,
-                      !showingListInput, !showingHomeScreenIllusion, !showingScreenOffCover else {
+                      !showingListInput, !showingFakeNotes, !showingHomeScreenIllusion, !showingScreenOffCover else {
                     print("🛡️ [PERF] Auto-actions skipped — fullscreen input active")
                     LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped while fullscreen input is active", category: .general)
                     return
@@ -1855,30 +1898,32 @@ struct PerformanceView: View {
                     LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped: upload active", category: .general)
                     return
                 }
-                // Abort auto-actions only if a previous real API action already marked
-                // the session expired. Normal cached Performance entry no longer spends
-                // a validation call just to display the local replica.
-                guard ppTestMode.isActive || performanceRemoteCallsAllowed else {
-                    print("🛡️ [PERF] Auto-actions skipped — cache-only safety entry")
-                    LogManager.shared.warning("SAFETY BLOCK — Performance auto-actions skipped in cache-only mode", category: .general)
-                    return
-                }
-                guard ppTestMode.isActive || !instagram.isSessionExpired else {
-                    print("🚫 [PERF] Auto-actions skipped — session expired")
-                    return
-                }
-                // 1. Auto profile pic. The local fake UI update happens immediately inside
-                // autoUploadLatestGalleryPhoto(); only the real Instagram POST is delayed
-                // by cold-start / profile-refresh safety gates.
+                
+                // 1. Auto profile pic — ALWAYS runs when toggle is active (user explicitly enabled it).
+                // The function handles its own anti-bot protections (locked, challenged, cooldowns).
+                // We do NOT block it with performanceRemoteCallsAllowed because the local UI update
+                // should be instant, and the real Instagram POST has its own safety gates inside.
                 if autoProfilePicOnPerformance {
                     guard ppTestMode.isActive || (!instagram.isLocked && !instagram.isSessionChallenged) else {
-                        print("📷 [AUTO PIC] Skipped in serial queue — locked or challenged")
+                        print("📷 [AUTO PIC] Skipped — locked or challenged")
                         return
                     }
                     await autoUploadLatestGalleryPhoto()
                 }
+                
+                // 2. Other auto-actions (URL schemes, clipboard) — blocked in cache-only mode.
+                // These are more aggressive/bot-like, so we respect the safety gate.
+                guard ppTestMode.isActive || performanceRemoteCallsAllowed else {
+                    print("🛡️ [PERF] Other auto-actions skipped — cache-only safety entry")
+                    LogManager.shared.warning("SAFETY BLOCK — URL/clipboard auto-actions skipped in cache-only mode", category: .general)
+                    return
+                }
+                guard ppTestMode.isActive || !instagram.isSessionExpired else {
+                    print("🚫 [PERF] Other auto-actions skipped — session expired")
+                    return
+                }
 
-                // 2. URL scheme action OR clipboard (API mode is handled only by polling).
+                // URL scheme action OR clipboard (API mode is handled only by polling).
                 // The polling baseline prevents old Inject/API values from firing on app launch.
                 if let action = urlAction.consume() {
                     if action.mode.hasPrefix("profilepic") {
@@ -1954,6 +1999,7 @@ struct PerformanceView: View {
                 showingLockscreen = false
                 showingClockInput = false
                 showingCardNumpad = false
+                showingFakeNotes = false
                 showingHomeScreenIllusion = false
                 showingScreenOffCover = false
                 print("📲 [URL] In-view action detected — dismissed manual input screens")
@@ -2248,7 +2294,7 @@ struct PerformanceView: View {
             // This prevents the race where showingClockInput/showingLockscreen is set to
             // false mid-presentation, causing the black screen to vanish immediately.
             guard !showingLockscreen, !showingClockInput, !showingCardNumpad,
-                  !showingListInput, !showingHomeScreenIllusion, !showingScreenOffCover else {
+                  !showingListInput, !showingFakeNotes, !showingHomeScreenIllusion, !showingScreenOffCover else {
                 print("🎩 [PERF] Transient onDisappear (modal active) — keeping input flags")
                 return
             }
@@ -2272,6 +2318,8 @@ struct PerformanceView: View {
 
             // Clear the performance-context pause flag regardless of how we got here.
             uploadManager.isPausedByPerformance = false
+            // Left the live show: bot-detection overlays go back to explicit mode.
+            instagram.isPerformanceActive = false
 
             // Anti-bot: if we auto-paused an upload on appear, signal SetDetailView to resume it.
             // Only resume if the upload is still in .paused state (user didn't cancel/error).
@@ -2284,6 +2332,8 @@ struct PerformanceView: View {
         }
         .onChange(of: selectedTab) { tab in
             if tab == 0 {
+                // Entering / selecting the Performance tab → live show is active.
+                instagram.isPerformanceActive = true
                 if uploadManager.isActive || uploadManager.activeTask != nil || uploadManager.isUploading {
                     uploadManager.resetAllState()
                     didAutoPauseUpload = false
@@ -2292,6 +2342,8 @@ struct PerformanceView: View {
                 }
                 return
             }
+            // Any non-Performance tab → live show ended.
+            instagram.isPerformanceActive = false
             // TabView can keep PerformanceView alive, so onDisappear is not always
             // enough. Reset the one-shot fullscreen input flags when the user leaves
             // Performance so Card Numpad / Lockscreen / Clock / List show again next time.
@@ -2564,12 +2616,8 @@ struct PerformanceView: View {
 
     @discardableResult
     private func applyURLBiography(text: String, values: [String: String]) async -> Bool {
-        guard bioFeatureEnabled else {
-            print("⏭️ [URL] bio disabled — skipping")
-            LogManager.shared.info("URL scheme bio skipped because feature is disabled", category: .general)
-            return false
-        }
-
+        // URL scheme bio is an explicit user-initiated command: bypass the bioFeatureEnabled
+        // toggle (which only guards automatic/passive updates inside Performance).
         let effectiveValues: [String: String] = values.isEmpty ? ["text1": text] : values
         let tpl = bioTemplate
         let composed = tpl.isEmpty ? expandEscapes(text) : applyTemplate(effectiveValues, template: tpl)
@@ -2848,11 +2896,9 @@ struct PerformanceView: View {
             return
         }
 
-        if (mode == "note" && !noteFeatureEnabled) || (mode == "bio" && !bioFeatureEnabled) {
-            print("⏭️ [URL] \(mode) disabled — skipping")
-            LogManager.shared.info("URL scheme \(mode) skipped because feature is disabled", category: .general)
-            return
-        }
+        // URL scheme commands are explicit user-initiated requests — they bypass the
+        // bio/note feature toggles, which were designed to block automatic updates only
+        // (OCR, API polling, lockscreen captures). A direct vault:// command always executes.
 
         do {
             // Build effective value dict: use URL-scheme values when provided, else fall back to `text`
@@ -3594,6 +3640,149 @@ struct PerformanceView: View {
     // Prevents a second accidental lockscreen/clock dismiss from firing a second POST
     // within seconds of the first — same philosophy as interRevealCooldown for unarchives.
     private let interfaceCaptureCooldown: TimeInterval = 90
+
+    // MARK: - Notes Input capture routing
+
+    /// Routes lines from FakeNotesInputView to bio/note {textN} slots configured for
+    /// .fakeNotes, assigning each line sequentially (line[0] → first fakeNotes slot,
+    /// line[1] → second fakeNotes slot, etc.). If the active Word Set uses .fakeNotes,
+    /// line[0] is also sent to the post-prediction reveal pipeline.
+    private func applyFakeNotesCapture(lines: [String]) async {
+        guard !lines.isEmpty else { return }
+        // Route to word set if active
+        if let activeId = ActiveSetSettings.shared.activeSetId,
+           let set = DataManager.shared.sets.first(where: { $0.id == activeId }),
+           set.resolvedInputMethod == .fakeNotes,
+           let firstLine = lines.first, !firstLine.isEmpty {
+            await MainActor.run {
+                ForceNumberRevealSettings.shared.urlRevealActive = true
+                pendingOCRWord = firstLine
+            }
+            print("📝 [FAKE-NOTES] Word set reveal queued: \(firstLine)")
+        }
+        // Route lines to note/bio text slots
+        await applyFakeNotesCaptureToTarget(lines: lines, target: "note")
+        await applyFakeNotesCaptureToTarget(lines: lines, target: "bio")
+    }
+
+    private func applyFakeNotesCaptureToTarget(lines: [String], target: String) async {
+        guard targetFeatureEnabled(target) else { return }
+
+        let sources: [ApiSource] = target == "note"
+            ? [integrations.noteText1Source, integrations.noteText2Source, integrations.noteText3Source, integrations.noteText4Source, integrations.noteText5Source]
+            : integrations.bioSources(forTemplateSlot: bioActiveSlot)
+
+        let fakeNotesSlots = sources.enumerated().compactMap { idx, src -> Int? in
+            src == .fakeNotes ? (idx + 1) : nil
+        }
+        guard !fakeNotesSlots.isEmpty else { return }
+
+        // Build per-slot values: each captured line goes to the next fakeNotes slot in order
+        var resolvedValues: [String: String] = [:]
+        for (lineIdx, slot) in fakeNotesSlots.enumerated() {
+            guard lineIdx < lines.count else { break }
+            let line = lines[lineIdx].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            resolvedValues["text\(slot)"] = line
+        }
+        guard !resolvedValues.isEmpty else { return }
+
+        // Merge API-polled values for any non-fakeNotes slots
+        guard let polledValues = await waitForPolledTemplateValues(
+            target: target,
+            excluding: Set(fakeNotesSlots)
+        ) else { return }
+        for (key, val) in polledValues { resolvedValues[key] = val }
+
+        // Check all required slots are filled
+        let requiredEntries = templateSourceEntries(for: target)
+        let missingSlots = requiredEntries.compactMap { entry -> String? in
+            let key = "text\(entry.slot)"
+            return (resolvedValues[key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ? key : nil
+        }
+        guard missingSlots.isEmpty else {
+            print("⏳ [FAKE-NOTES] \(target) waiting for slots: \(missingSlots.joined(separator: ", "))")
+            return
+        }
+
+        let tpl = target == "note" ? noteTemplate : bioTemplate
+        let firstLine = lines.first ?? ""
+        let composed = tpl.isEmpty ? firstLine : applyTemplate(resolvedValues, template: tpl)
+
+        let ud = UserDefaults.standard
+        let lastKey = target == "note" ? "last_note_auto_input"     : "last_biography_text"
+        let dateKey = target == "note" ? "last_note_auto_sent_date" : "last_biography_sent_date"
+
+        let finalText: String
+        if target == "note" {
+            finalText = truncateAtWordBoundary(composed, limit: 60)
+            if ppTestMode.isActive {
+                await MainActor.run { applyTestNote(finalText) }
+                LogManager.shared.info("TEST MODE — Notes Input note painted locally", category: .general)
+                return
+            }
+            await MainActor.run { lastNoteText = finalText }
+        } else {
+            let inputForBio = bioAcrosticEnabled ? firstLine : composed
+            let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
+            finalText = truncateAtWordBoundary(acrosticComposed, limit: 150)
+            if ppTestMode.isActive {
+                await MainActor.run { applyTestBiography(finalText) }
+                LogManager.shared.info("TEST MODE — Notes Input bio painted locally", category: .general)
+                return
+            }
+            await MainActor.run { pinLocalBiography(finalText) }
+        }
+
+        guard instagram.isLoggedIn && !instagram.isLocked else { return }
+        guard !UploadManager.shared.isActive else { return }
+
+        let cooldownKey = "last_interface_capture_sent_\(target)"
+        let lastSentTime = UserDefaults.standard.double(forKey: cooldownKey)
+        let timeSinceLast = Date().timeIntervalSince1970 - lastSentTime
+        if lastSentTime > 0, timeSinceLast < interfaceCaptureCooldown {
+            print("⏭️ [FAKE-NOTES] \(target) cooldown: \(Int(interfaceCaptureCooldown - timeSinceLast))s remaining")
+            return
+        }
+
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cooldownKey)
+        if target != "note" {
+            await MainActor.run { beginLocalBioPostPredictionBioSend(source: "fake-notes-bio") }
+        }
+
+        do {
+            if target == "note" {
+                let ok = try await instagram.createNote(text: finalText)
+                if ok {
+                    ud.set(firstLine, forKey: lastKey)
+                    ud.set(Date(), forKey: dateKey)
+                    await MainActor.run { lastNoteSentTimestamp = Date().timeIntervalSince1970 }
+                    print("✅ [FAKE-NOTES] Note sent: \"\(finalText)\"")
+                    fireDoubleConfirmationVibration()
+                }
+            } else {
+                let ok = try await instagram.changeBiography(text: finalText)
+                await MainActor.run {
+                    pendingBioText = nil
+                    completeLocalBioPostPredictionBioSend(success: ok, source: "fake-notes-bio")
+                }
+                if ok {
+                    ud.set(firstLine, forKey: lastKey)
+                    ud.set(Date(), forKey: dateKey)
+                    print("✅ [FAKE-NOTES] Biography updated: \"\(finalText)\"")
+                    fireDoubleConfirmationVibration()
+                }
+            }
+        } catch {
+            if target != "note" {
+                await MainActor.run {
+                    pendingBioText = nil
+                    completeLocalBioPostPredictionBioSend(success: false, source: "fake-notes-bio")
+                }
+            }
+            LogManager.shared.warning("Notes Input send failed (\(target)): \(error.localizedDescription)", category: .general)
+        }
+    }
 
     private func templateSourceEntries(for target: String) -> [(slot: Int, source: ApiSource)] {
         let sources: [ApiSource] = target == "note"
@@ -7874,6 +8063,10 @@ struct InstagramProfileView: View {
     /// captures a value, so PerformanceView can inject it into bio/note {textN} slots
     /// configured for that interface kind and send the note/biography.
     var onInterfaceCapture: ((String, Set<InterfaceKind>) -> Void)? = nil
+    /// Set by PerformanceView after FakeNotesInputView commits lines.
+    @Binding var pendingFakeNotesLines: [String]?
+    /// Called when pendingFakeNotesLines changes so PerformanceView can route the lines.
+    var onFakeNotesCapture: (([String]) -> Void)? = nil
 
     // Single fullScreenCover for posts/reels/tagged — avoids SwiftUI bugs when
     // multiple .fullScreenCover modifiers are stacked on the same view.
@@ -8147,7 +8340,9 @@ struct InstagramProfileView: View {
 
         didShowUnsupportedTestSetAlert = true
         revealErrorTitle = "Test unavailable"
-        revealErrorMessage = "\(activeSet.type.title) sets do not have templates. Test Mode can use this set only after you upload photos to it."
+        revealErrorMessage = activeSet.type == .card
+            ? "This card set has no photos yet. Create a new card set using a card template, or open the set and upload the card images manually."
+            : "\(activeSet.type.title) sets do not support templates. Test Mode can use this set only after you upload photos to it."
         showRevealError = true
     }
 
@@ -8213,18 +8408,36 @@ struct InstagramProfileView: View {
 
     private func revealTestSlot(symbol: String, label: String, fromSet set: PhotoSet) async {
         guard ppTestMode.isTesting(set) else { return }
-        guard let photo = testPhotoFromSet(set, symbol: symbol),
-              let data = photo.imageData,
-              let image = UIImage(data: data) else {
-            await showPostPredictionTestError("Test Mode needs uploaded/local photos for this set. No template is available for \(set.type.title) sets.")
+
+        // 1. Try uploaded / template-populated image stored in the set.
+        if let photo = testPhotoFromSet(set, symbol: symbol),
+           let data = photo.imageData,
+           let image = UIImage(data: data) {
+            let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "set-\(label)-\(symbol)", index: 0)
+            await insertTestPhotos(
+                [(pseudoURL: pseudoURL, image: image)],
+                logMessage: "🧪 [PP TEST] Inserted local \(label) image from set '\(set.name)'"
+            )
             return
         }
 
-        let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "set-\(label)-\(symbol)", index: 0)
-        await insertTestPhotos(
-            [(pseudoURL: pseudoURL, image: image)],
-            logMessage: "🧪 [PP TEST] Inserted local \(label) image from set '\(set.name)'"
-        )
+        // 2. Fallback: load directly from the bundle card template (same as number/word sets do).
+        if set.type == .card, let template = ppTestMode.cardTemplate,
+           let data = TemplateManager.shared.cardImageData(for: symbol, template: template),
+           let image = UIImage(data: data) {
+            let pseudoURL = ppTestMode.makePseudoURL(setId: set.id, token: "card-tmpl-\(symbol)", index: 0)
+            await insertTestPhotos(
+                [(pseudoURL: pseudoURL, image: image)],
+                logMessage: "🧪 [PP TEST] Inserted card template image '\(symbol)' from bundle template '\(template.name)'"
+            )
+            return
+        }
+
+        // 3. No image available anywhere.
+        let hint = set.type == .card
+            ? "No card template found in the app bundle. Make sure at least one card template is included."
+            : "No image found for '\(symbol)' in this set. Upload photos to use Test Mode with \(set.type.title) sets."
+        await showPostPredictionTestError(hint)
     }
 
     private func revealTestDigits(_ digits: [Int], fromSet set: PhotoSet) async {
@@ -8571,6 +8784,12 @@ struct InstagramProfileView: View {
             pendingLockscreenDigits = nil
             routeDigitsFromLockscreen(digits)
         }
+        // ── Notes Input: route captured lines to bio/note slots or word set ──────
+        .onChange(of: pendingFakeNotesLines) { lines in
+            guard let lines = lines, !lines.isEmpty else { return }
+            pendingFakeNotesLines = nil
+            onFakeNotesCapture?(lines)
+        }
         // ── Notify PerformanceView when the tab changes (for lazy loading) ──────
         .onChange(of: selectedTab) { tab in
             onTabSelected?(tab)
@@ -8605,6 +8824,10 @@ struct InstagramProfileView: View {
         if let digits = pendingLockscreenDigits, !digits.isEmpty {
             pendingLockscreenDigits = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { pendingLockscreenDigits = digits }
+        }
+        if let lines = pendingFakeNotesLines, !lines.isEmpty {
+            pendingFakeNotesLines = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { pendingFakeNotesLines = lines }
         }
     }
 
@@ -9805,23 +10028,36 @@ struct InstagramProfileView: View {
 
     // MARK: - Playing Card Reveal
 
-    /// Decode a 2- or 3-digit buffer into a card value (1–13) and suit (1–4).
+    /// Decode the lockscreen digit buffer into a card value (1–13) and suit (1–4).
     ///
-    /// - 2 digits [v, s]      → value = v  (1=A … 9=9),   suit = s
+    /// Normal flow matches Number Lockscreen:
+    /// enter the hidden card code, tap outside to validate, then fill the remaining
+    /// lockscreen dots with any digits. In that case this receives only the hidden
+    /// 2- or 3-digit code.
+    ///
+    /// As a fallback for users who type a full 6-digit value without tapping outside,
+    /// leading zeros are ignored (e.g. 000122 → Q♥).
+    ///
+    /// - 2 digits [v, s]      → value = v  (1=A … 9=9), suit = s
     /// - 3 digits [0, v, s]   → value = v  (leading-zero alias, e.g. 061 = 6♠)
     /// - 3 digits [t, u, s]   → value = t×10+u (10, 11=J, 12=Q, 13=K), suit = s
     ///
     /// Returns `nil` for invalid input (wrong digit count, out-of-range value/suit).
     private func decodeCardInput(_ digits: [Int]) -> (value: Int, suit: Int)? {
-        switch digits.count {
+        let normalized = {
+            let withoutLeadingZeros = Array(digits.drop { $0 == 0 })
+            return withoutLeadingZeros.isEmpty ? digits : withoutLeadingZeros
+        }()
+
+        switch normalized.count {
         case 2:
-            let value = digits[0], suit = digits[1]
+            let value = normalized[0], suit = normalized[1]
             guard (1...9).contains(value), (1...4).contains(suit) else { return nil }
             return (value, suit)
         case 3:
-            let value = digits[0] == 0 ? digits[1] : digits[0] * 10 + digits[1]
-            let suit = digits[2]
-            let validValue = digits[0] == 0 ? (1...9).contains(value) : (10...13).contains(value)
+            let value = normalized[0] == 0 ? normalized[1] : normalized[0] * 10 + normalized[1]
+            let suit = normalized[2]
+            let validValue = normalized[0] == 0 ? (1...9).contains(value) : (10...13).contains(value)
             guard validValue, (1...4).contains(suit) else { return nil }
             return (value, suit)
         default:

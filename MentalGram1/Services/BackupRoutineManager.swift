@@ -239,7 +239,7 @@ final class BackupRoutineManager: ObservableObject {
                 return
             }
             UserDefaults.standard.set(data, forKey: Self.storageKey)
-            CloudBackupService.shared.scheduleDebouncedSync()
+            // Auto-backup removed: backups are manual-only (Back up now in Settings).
         }
     }
 

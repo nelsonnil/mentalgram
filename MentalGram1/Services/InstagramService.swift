@@ -93,12 +93,17 @@ class InstagramService: ObservableObject {
     /// True for ~5 minutes after any challenge_required is detected (GET or POST).
     /// Views use this to skip non-essential API calls and avoid cascading bot signals.
     @Published var isSessionChallenged: Bool = false
+    /// True while the user is inside a live Performance (show). Set by PerformanceView.
+    /// When true, bot-detection overlays keep the disguised "No Internet" look so a
+    /// spectator never sees a security warning. When false (Sets / Settings), the
+    /// overlays switch to the explicit BotAlertView with steps + Log Out.
+    @Published var isPerformanceActive: Bool = false
     /// True whenever there is at least one unresolved network/API error. Views use
     /// this to skip optimistic background refreshes that would fire into a broken
     /// session (e.g. the cold-start deferred refresh that was triggering
     /// challenge_required on /feed/user/ immediately after a /current_user/ timeout).
     @Published var hasRecentApiError: Bool = false
-
+    
     // Network change tracking (anti-bot protection)
     private var lastConnectionType: String = "unknown"
     private var lastNetworkChangeTime: Date?
@@ -283,7 +288,7 @@ class InstagramService: ObservableObject {
         // ANTI-BOT: Restore the trailing window of recent action timestamps so
         // the burst guard works across quick relaunches.
         restoreRecentActionTimestamps()
-
+        
         // Start network monitoring
         startNetworkMonitoring()
     }
@@ -366,7 +371,7 @@ class InstagramService: ObservableObject {
             category: .auth
         )
     }
-
+    
     // MARK: - Network Monitoring
     
     private func startNetworkMonitoring() {
@@ -463,7 +468,7 @@ class InstagramService: ObservableObject {
                 duration: lockDuration
             )
             if isWriteOperation {
-                throw InstagramError.botDetected("Challenge required - complete verification in Instagram app")
+            throw InstagramError.botDetected("Challenge required - complete verification in Instagram app")
             } else {
                 throw InstagramError.challengeRequired
             }
@@ -528,11 +533,27 @@ class InstagramService: ObservableObject {
         }
     }
     
+    /// Duration of the upload-only cooldown armed after a genuine bot-detection
+    /// signal (POST challenge_required / checkpoint). It is persisted to
+    /// UserDefaults via `UploadManager.uploadRestrictionEndTime`, so it SURVIVES
+    /// a logout / re-login: a freshly re-logged account stays "cold" and cannot
+    /// upload again immediately, which is exactly the pattern that escalates a
+    /// flagged account into a permanent ban. Reveals and Performance keep working.
+    static let botDetectionUploadCooldownSeconds = 24 * 60 * 60
+    
     @MainActor
-    private func triggerLockdown(reason: String, duration: TimeInterval) {
+    private func triggerLockdown(reason: String, duration: TimeInterval, armUploadCooldown: Bool = false) {
         isLocked = true
         lockReason = reason
         lockUntil = Date().addingTimeInterval(duration)
+
+        // For real bot-detection events, also arm a long upload-only cooldown that
+        // outlives the short lockdown timer AND a re-login. This blocks only
+        // uploads/archiving; revealing photos and live Performance stay available.
+        if armUploadCooldown {
+            UploadManager.shared.activateUploadRestriction(seconds: InstagramService.botDetectionUploadCooldownSeconds)
+            print("🔒 [LOCKDOWN] Armed 24h upload-only cooldown (survives re-login)")
+        }
         
         print("🔒 [LOCKDOWN] Activated for \(Int(duration/60)) minutes")
         print("🔒 [LOCKDOWN] Reason: \(reason)")
@@ -574,7 +595,7 @@ class InstagramService: ObservableObject {
             }
         }
     }
-
+    
     @MainActor
     func unlock() {
         isLocked = false
@@ -653,10 +674,10 @@ class InstagramService: ObservableObject {
 
         // Stop background pre-loading.
         ProfileFullLoaderService.shared.pause()
-
+        
         // Reset lockdown
         unlock()
-
+        
         // Clear archive cache — next login belongs to a potentially different account
         invalidateArchiveCache()
 
@@ -705,7 +726,7 @@ class InstagramService: ObservableObject {
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
             modifiedSince: Date(timeIntervalSince1970: 0)
         ) { }
-
+        
         // Clear cached data
         URLCache.shared.removeAllCachedResponses()
 
@@ -715,7 +736,7 @@ class InstagramService: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "ig_edit_phone")
         UserDefaults.standard.removeObject(forKey: "ig_edit_gender")
         UserDefaults.standard.removeObject(forKey: "ig_edit_birthday")
-
+        
         print("🚨 [EMERGENCY] Full logout and cache clear completed")
     }
 
@@ -903,7 +924,7 @@ class InstagramService: ObservableObject {
             print("✅ [EDIT-FIELDS] Cached: email=\(fetchedEmail.isEmpty ? "(none)" : "***") phone=\(fetchedPhone.isEmpty ? "(none)" : "***") gender=\(fetchedGender)")
         }
     }
-
+    
     /// Waits if network changed recently (anti-bot protection)
     /// Returns immediately if network is stable
     func waitForNetworkStability() async throws {
@@ -1119,7 +1140,7 @@ class InstagramService: ObservableObject {
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
             modifiedSince: Date(timeIntervalSince1970: 0)
         ) { }
-
+        
         print("✅ Logged out successfully")
     }
     
@@ -1370,7 +1391,7 @@ class InstagramService: ObservableObject {
         if !bearerToSend.isEmpty {
             headers["Authorization"] = bearerToSend
         }
-
+        
         return headers
     }
 
@@ -1413,12 +1434,12 @@ class InstagramService: ObservableObject {
         // re-opens it within seconds — without persistence the in-memory array
         // is empty and the guard would let the first call through).
         persistRecentActionTimestamps()
-
+        
         DispatchQueue.main.async {
             self.actionsThisHour = self.actionTimestamps.count
             self.isRateLimited = self.actionTimestamps.count >= self.maxActionsPerHour
         }
-
+        
         if actionTimestamps.count >= maxActionsPerHour {
             print("⚠️ [RATE LIMIT] \(actionTimestamps.count)/\(maxActionsPerHour) actions this hour - LIMIT REACHED")
             LogManager.shared.warning("Rate limit approaching: \(actionTimestamps.count)/\(maxActionsPerHour) actions/hour", category: .api)
@@ -1468,6 +1489,47 @@ class InstagramService: ObservableObject {
         let recentActions = actionTimestamps.filter { now.timeIntervalSince($0) < 3600 }
         let remaining = max(0, maxActionsPerHour - recentActions.count)
         return (recentActions.count >= maxActionsPerHour, recentActions.count, remaining)
+    }
+
+    /// Seconds until enough rolling-hour budget is available for the next image upload.
+    /// Image uploads consume multiple direct Instagram actions, so upload flows keep
+    /// a larger buffer than read-only Performance/Explore calls.
+    func secondsUntilUploadBudgetAvailable(maxUsed: Int = 35, requiredRemaining: Int = 8) -> Int {
+        let now = Date()
+        let recent = actionTimestamps
+            .filter { now.timeIntervalSince($0) < 3600 }
+            .sorted()
+        let currentRemaining = max(0, maxActionsPerHour - recent.count)
+        guard recent.count >= maxUsed || currentRemaining < requiredRemaining else { return 0 }
+
+        let expirationsForMaxUsed = max(0, recent.count - maxUsed + 1)
+        let expirationsForRemaining = max(0, requiredRemaining - currentRemaining)
+        let expirationsNeeded = max(expirationsForMaxUsed, expirationsForRemaining)
+        guard expirationsNeeded > 0, recent.indices.contains(expirationsNeeded - 1) else { return 60 }
+
+        let unlockAt = recent[expirationsNeeded - 1].addingTimeInterval(3600)
+        return max(1, Int(ceil(unlockAt.timeIntervalSince(now))) + 5)
+    }
+
+    /// Counts direct Instagram requests that do not go through `apiRequest()`
+    /// (notably rupload/configure_sidecar). Without this, long image uploads
+    /// under-report the real number of POSTs Instagram sees.
+    func reserveDirectInstagramAction(method: String, path: String) throws {
+        let rateCheck = checkRateLimit()
+        guard !rateCheck.limited else {
+            print("🚫 [RATE LIMIT] Direct \(method) \(path) blocked — \(rateCheck.actionsUsed)/\(maxActionsPerHour)")
+            LogManager.shared.warning("Direct request blocked by rate limit: \(method) \(path) (\(rateCheck.actionsUsed)/\(maxActionsPerHour))", category: .api)
+            throw InstagramError.apiError("Rate limit reached. \(rateCheck.actionsUsed) actions in the last hour. Wait before continuing.")
+        }
+
+        trackAction()
+        InstagramSafetyGate.shared.recordApiRequest(method: method, path: path)
+        let updated = checkRateLimit()
+        LogManager.shared.log(
+            "\(method) \(path) [direct] [actions:\(updated.actionsUsed)/\(maxActionsPerHour)]",
+            level: .debug,
+            category: .api
+        )
     }
 
     /// True when only user-critical actions should be allowed. Performance entry,
@@ -1905,7 +1967,7 @@ class InstagramService: ObservableObject {
         // Persistent safety gate: blocks/retries patterns that look like testing
         // bursts (rapid refreshes, post-reveal re-archives, pending challenges).
         try await InstagramSafetyGate.shared.waitForApiSlot(method: method, path: path)
-
+        
         // ANTI-BOT: Check rate limit (max 55 actions/hour)
         let rateCheck = checkRateLimit()
         if rateCheck.limited {
@@ -2041,13 +2103,13 @@ class InstagramService: ObservableObject {
                 print("🩺 [DIAG] Response body: \(s)")
             }
         }
-
+        
         // ANTI-BOT: Extract MID (Machine ID) from response if present
         extractMID(from: response)
 
         // Auth: refresh CSRF token if Instagram rotated it (prevents POST failures)
         extractAndUpdateCSRF(from: response)
-
+        
         // ANTI-BOT: Reset consecutive errors on success
         if httpResponse.statusCode == 200 {
             consecutiveErrors = 0
@@ -2148,7 +2210,9 @@ class InstagramService: ObservableObject {
                     print("🚨 [API] challenge_required (\(method)) — streak \(challengeRequiredStreak) — triggering \(lockMinutes)min lockdown")
                     LogManager.shared.warning("challenge_required (\(method)) streak:\(challengeRequiredStreak) — lockdown \(lockMinutes)min", category: .api)
                     await markSessionChallenged(duration: lockDuration)
-                    await triggerLockdown(reason: lockReason, duration: lockDuration)
+                    // POST challenges are genuine bot-detection — arm the 24h upload
+                    // cooldown. GET challenges are often transient, so don't penalise them.
+                    await triggerLockdown(reason: lockReason, duration: lockDuration, armUploadCooldown: method != "GET")
                     // Signal upload manager to require manual resume (not auto-resume)
                     if method != "GET" {
                         await MainActor.run { UploadManager.shared.requiresManualResumeAfterChallenge = true }
@@ -2171,6 +2235,22 @@ class InstagramService: ObservableObject {
                         duration: 20 * 60,
                         reason: "feed returned \(message.isEmpty ? "restriction" : message)"
                     )
+                }
+
+                // feedback_required on a mutating POST (archive/unarchive/edit) means
+                // Instagram soft-blocked this action. Treat it as bot-detected so the
+                // lockdown kicks in and the WiFi disguise covers the screen during
+                // Performance — prevents the raw Instagram dialog from leaking to spectators.
+                if method != "GET", isFeedRestriction {
+                    let feedbackTitle = errorJson["feedback_title"] as? String ?? "feedback_required"
+                    print("🤖 [API] POST \(shortPath) → feedback_required (\(feedbackTitle)) — triggering bot lockdown")
+                    LogManager.shared.warning("POST \(shortPath) → \(feedbackTitle) — rate-limit lockdown", category: .api)
+                    await triggerLockdown(
+                        reason: "Instagram rate limit (feedback_required) on \(shortPath). Wait before continuing.",
+                        duration: 15 * 60,
+                        armUploadCooldown: false
+                    )
+                    throw InstagramError.botDetected("Instagram rate limit: \(feedbackTitle)")
                 }
                 
                 if !message.isEmpty {
@@ -2468,7 +2548,7 @@ class InstagramService: ObservableObject {
                 return true
             }
         }
-
+        
         // ANTI-BOT: Realistic human delay (3-6 seconds with jitter)
         let baseDelay = UInt64.random(in: 3_000_000_000...6_000_000_000)
         let jitter = UInt64.random(in: 0...500_000_000) // up to 0.5s extra jitter
@@ -2506,15 +2586,15 @@ class InstagramService: ObservableObject {
                 // happening right after must not return the stale "visible" entry.
                 let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
                 stateCheckCache.removeValue(forKey: pk)
-
+                
                 // When called from S&A (skipPreCheck=true), S&A manages its own
                 // inter-archive timing — don't impose an upload cooldown here.
                 if !skipPreCheck {
-                    let cooldownSeconds = Double.random(in: 160...220)
-                    let cooldownUntil = Date().addingTimeInterval(cooldownSeconds)
-                    UserDefaults.standard.set(cooldownUntil, forKey: "photo_upload_cooldown_until")
-                    print("   ⏳ Cooldown set: \(Int(cooldownSeconds))s after archive")
-                    LogManager.shared.info("Cooldown: \(Int(cooldownSeconds))s until next upload", category: .upload)
+                let cooldownSeconds = Double.random(in: 160...220)
+                let cooldownUntil = Date().addingTimeInterval(cooldownSeconds)
+                UserDefaults.standard.set(cooldownUntil, forKey: "photo_upload_cooldown_until")
+                print("   ⏳ Cooldown set: \(Int(cooldownSeconds))s after archive")
+                LogManager.shared.info("Cooldown: \(Int(cooldownSeconds))s until next upload", category: .upload)
                 }
                 
                 return true
@@ -2563,7 +2643,7 @@ class InstagramService: ObservableObject {
                 return true
             }
         }
-
+        
         // ANTI-BOT: Shorter delay for unarchive (used during performance/trick)
         // Only 2-3s since these are small bursts (max ~5 photos), not sustained patterns
         let baseDelay = UInt64.random(in: 2_000_000_000...3_000_000_000)
@@ -2811,7 +2891,7 @@ class InstagramService: ObservableObject {
             LogManager.shared.warning("[FOLLOWER] Heavy op active — skipped", category: .general)
             return nil
         }
-
+        
         let data = try await apiRequest(
             method: "GET",
             path: "/friendships/\(session.userId)/followers/?count=1"
@@ -3008,7 +3088,7 @@ class InstagramService: ObservableObject {
     }
     
     // MARK: - Get Profile Info (Complete Profile Data)
-
+    
     private func extractProfileUserId(from dict: [String: Any]) -> String {
         if let pkInt64 = dict["pk"] as? Int64 { return String(pkInt64) }
         if let pkString = dict["pk"] as? String { return pkString }
@@ -3268,8 +3348,8 @@ class InstagramService: ObservableObject {
         }
 
         if !usedFastPath {
-            let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
-
+        let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
+        
             // Detect the "endpoint permanently broken" pattern so we can fast-path
             // future calls. The empty-body response is ~25 bytes (`{"user":{},...}`).
             if data.count <= 50 {
@@ -3286,7 +3366,7 @@ class InstagramService: ObservableObject {
                 print("❌ [PROFILE] Failed to parse JSON response")
                 let rawStr = String(data: data.prefix(500), encoding: .utf8) ?? "(binary)"
                 LogManager.shared.error("getProfileInfo: JSON parse failed — raw: \(rawStr)", category: .api)
-                return nil
+            return nil
             }
 
             guard let u = json["user"] as? [String: Any] else {
@@ -3297,7 +3377,7 @@ class InstagramService: ObservableObject {
             }
             user = u
         }
-
+        
         // Debug: Print user data
         print("📊 [PROFILE] User data keys: \(user.keys.sorted().joined(separator: ", "))")
         LogManager.shared.debug("Profile user keys: \(user.keys.sorted().joined(separator: ","))", category: .profile)
@@ -3614,7 +3694,7 @@ class InstagramService: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
 
                 let (mediaItems, ownNextId) = try await getUserMediaItems(userId: uid, amount: 18)
-                mediaURLs = mediaItems.map { $0.imageURL }
+            mediaURLs = mediaItems.map { $0.imageURL }
                 initialMediaItems = mediaItems
                 initialNextMaxId = ownNextId
                 if !mediaItems.isEmpty {
@@ -4006,7 +4086,7 @@ class InstagramService: ObservableObject {
             cachedNextMaxId: initialNextMaxId
         )
         profile.cachedMediaItems = initialMediaItems
-
+        
         print("✅ [PROFILE] Profile loaded for @\(profile.username)")
         print("📊 [PROFILE] Profile pic URL: \(profile.profilePicURL.isEmpty ? "EMPTY" : String(profile.profilePicURL.prefix(80)))")
         LogManager.shared.success("Profile loaded — @\(profile.username.isEmpty ? "EMPTY" : profile.username) mediaURLs:\(profile.cachedMediaURLs.count) pic:\(profile.profilePicURL.isEmpty ? "EMPTY" : "OK")", category: .profile)
@@ -4028,7 +4108,7 @@ class InstagramService: ObservableObject {
             LogManager.shared.warning("[COLD-START] getFollowedByUsers blocked for user \(userId) — \(remaining)s", category: .general)
             return []
         }
-
+        
         let data = try await apiRequest(
             method: "GET",
             path: "/friendships/\(userId)/followers/?count=\(count)"
@@ -4080,7 +4160,7 @@ class InstagramService: ObservableObject {
     }
     
     // MARK: - Get User Reels
-
+    
     func getUserReelsPage(
         userId: String? = nil,
         amount: Int = 18,
@@ -4144,7 +4224,7 @@ class InstagramService: ObservableObject {
     ) async throws -> [InstagramMediaItem] {
         let uid = userId ?? session.userId
         print("🎬 [REELS] Fetching reels for user ID: \(uid)")
-
+        
         var allItems: [InstagramMediaItem] = []
         var pagingMaxId: String? = nil
         var page = 0
@@ -4152,21 +4232,21 @@ class InstagramService: ObservableObject {
 
         repeat {
             var body: [String: String] = [
-                "target_user_id": uid,
-                "page_size": String(amount),
-                "include_feed_video": "true"
-            ]
+            "target_user_id": uid,
+            "page_size": String(amount),
+            "include_feed_video": "true"
+        ]
             if let cursor = pagingMaxId { body["max_id"] = cursor }
 
-            let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
-
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                print("❌ [REELS] Failed to parse reels response")
+        let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
+        
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [REELS] Failed to parse reels response")
                 break
-            }
-
+        }
+        
             if page == 0 {
-                print("🎬 [REELS] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
+        print("🎬 [REELS] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
             }
 
             // Parse items — API wraps under "items" or "clips_items", each may have nested "media"
@@ -4197,7 +4277,7 @@ class InstagramService: ObservableObject {
 
             if moreAvailable, let cursor = nextCursor, cursor != pagingMaxId {
                 pagingMaxId = cursor
-            } else {
+        } else {
                 pagingMaxId = nil   // stop pagination
             }
 
@@ -4234,7 +4314,7 @@ class InstagramService: ObservableObject {
     ) async throws -> [InstagramMediaItem] {
         let uid = userId ?? session.userId
         print("🏷️ [TAGGED] Fetching tagged posts for user ID: \(uid)")
-
+        
         var allItems: [InstagramMediaItem] = []
         var nextMaxId: String? = nil
         var page = 0
@@ -4245,21 +4325,21 @@ class InstagramService: ObservableObject {
             if let cursor = nextMaxId { path += "&max_id=\(cursor)" }
 
             let data = try await apiRequest(method: "GET", path: path)
-
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                print("❌ [TAGGED] Failed to parse tagged response")
+        
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("❌ [TAGGED] Failed to parse tagged response")
                 break
-            }
-
+        }
+        
             if page == 0 {
-                print("🏷️ [TAGGED] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
+        print("🏷️ [TAGGED] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
             }
-
+        
             guard let taggedItems = json["items"] as? [[String: Any]] else {
                 print("⚠️ [TAGGED] No 'items' key found page \(page)")
                 break
             }
-
+        
             print("🏷️ [TAGGED] Page \(page): \(taggedItems.count) items from API")
             for item in taggedItems {
                 guard let mediaItem = parseMediaItem(item) else { continue }
@@ -4271,7 +4351,7 @@ class InstagramService: ObservableObject {
 
             if moreAvailable, let c = cursor, c != nextMaxId {
                 nextMaxId = c
-            } else {
+        } else {
                 nextMaxId = nil
             }
 
@@ -4343,9 +4423,9 @@ class InstagramService: ObservableObject {
                     return url
                 }
                 if let imgVersions = dictionary["image_versions2"] as? [String: Any],
-                   let candidates = imgVersions["candidates"] as? [[String: Any]],
-                   let first = candidates.first,
-                   let url = first["url"] as? String {
+                          let candidates = imgVersions["candidates"] as? [[String: Any]],
+                          let first = candidates.first,
+                          let url = first["url"] as? String {
                     return url
                 }
                 if let candidates = dictionary["candidates"] as? [[String: Any]],
@@ -4407,7 +4487,7 @@ class InstagramService: ObservableObject {
                 videoAspectRatio = CGFloat(w) / CGFloat(h)
             }
         }
-
+        
         guard !imageURL.isEmpty else { return nil }
         
         // Extract media ID
@@ -4903,7 +4983,7 @@ class InstagramService: ObservableObject {
             let photoInfo = photoIndex != nil ? " (Photo #\(photoIndex! + 1))" : ""
             throw InstagramError.apiError("Please wait \(minutes)m \(seconds)s before uploading another photo.\(photoInfo)")
         }
-
+        
         try await waitForUploadSafetyWindow(label: photoDesc)
         
         // Always normalize image before rupload: fix orientation, aspect ratio and compression.
@@ -4929,7 +5009,7 @@ class InstagramService: ObservableObject {
                lastHash == finalHash {
                 print("⚠️ [UPLOAD] Same image already uploaded - SKIP")
                 let photoInfo = photoIndex != nil ? " Photo #\(photoIndex! + 1)" : " This photo"
-                throw InstagramError.apiError("\(photoInfo) was already uploaded. Duplicate uploads may trigger bot detection.")
+                throw InstagramError.apiError("\(photoInfo) was already uploaded. Duplicate upload skipped to avoid creating the same Instagram post twice.")
             }
         }
         
@@ -4988,6 +5068,7 @@ class InstagramService: ObservableObject {
         uploadRequest.httpBody = uploadData
         
         print("   Sending image bytes to Instagram...")
+        try reserveDirectInstagramAction(method: "POST", path: "/rupload_igphoto/")
         let (responseData, uploadResponse) = try await postSession.data(for: uploadRequest)
         
         if let httpResponse = uploadResponse as? HTTPURLResponse {
@@ -5043,7 +5124,8 @@ class InstagramService: ObservableObject {
                     LogManager.shared.bot("Upload blocked: checkpoint_challenge_required (lock:\(isLocked))")
                     await triggerLockdown(
                         reason: "Instagram blocked the upload and requires checkpoint verification. Open the Instagram app — if you see a verification prompt complete it, otherwise wait ~5 minutes.",
-                        duration: 300  // 5 minutes; user can unlock early after completing checkpoint
+                        duration: 300,  // 5 minutes; user can unlock early after completing checkpoint
+                        armUploadCooldown: true
                     )
                     await markSessionChallenged(duration: 60)
                     throw InstagramError.botDetected("checkpoint_challenge_required (lock:\(isLocked))")
@@ -5129,13 +5211,13 @@ class InstagramService: ObservableObject {
         print("✅ [UPLOAD] Photo uploaded successfully via sidecar! Media ID: \(mediaId)")
         let photoDescSuccess = photoIndex != nil ? "Photo #\(photoIndex! + 1)" : "Photo"
         LogManager.shared.success("\(photoDescSuccess) uploaded successfully (ID: \(mediaId))", category: .upload)
-        
-        // ANTI-BOT: Save hash and cooldown after successful upload
-        let imageHash = hashImageData(uploadData)
-        UserDefaults.standard.set(imageHash, forKey: "last_upload_photo_hash")
-        print("   ⏳ Cooldown will be set after archive completes")
-        
-        return mediaId
+                
+                // ANTI-BOT: Save hash and cooldown after successful upload
+                let imageHash = hashImageData(uploadData)
+                UserDefaults.standard.set(imageHash, forKey: "last_upload_photo_hash")
+                print("   ⏳ Cooldown will be set after archive completes")
+                
+                return mediaId
     }
     
     /// Check if photo upload is on cooldown (PUBLIC for SetDetailView)
@@ -5286,7 +5368,7 @@ class InstagramService: ObservableObject {
             print("❌ [SEARCH] Failed to load profile for user ID: \(exactMatch.userId)")
             throw InstagramError.apiError("Error al cargar el perfil")
         }
-
+        
         let headerIsEmpty = profile.username.isEmpty ||
             profile.userId == "0" ||
             profile.profilePicURL.isEmpty ||
@@ -5384,7 +5466,7 @@ class InstagramService: ObservableObject {
         req.httpBody = imageData
 
         try await InstagramSafetyGate.shared.waitForApiSlot(method: "POST", path: "/rupload_igphoto/")
-        InstagramSafetyGate.shared.recordApiRequest(method: "POST", path: "/rupload_igphoto/")
+        try reserveDirectInstagramAction(method: "POST", path: "/rupload_igphoto/")
         let (data, response) = try await postSession.data(for: req)
         if let http = response as? HTTPURLResponse {
             print("   [AMNESIA] Upload HTTP \(http.statusCode) for \(label)")
@@ -5497,6 +5579,7 @@ class InstagramService: ObservableObject {
             for (k, v) in warmHeaders { warmReq.setValue(v, forHTTPHeaderField: k) }
             do {
                 try await InstagramSafetyGate.shared.waitForApiSlot(method: "GET", path: "/accounts/current_user/")
+                try reserveDirectInstagramAction(method: "GET", path: "/accounts/current_user/")
                 if let (_, warmResp) = try? await getSession.data(for: warmReq),
                    let warmHttp = warmResp as? HTTPURLResponse,
                    let hdrs = warmHttp.allHeaderFields as? [String: String],
@@ -5528,7 +5611,7 @@ class InstagramService: ObservableObject {
                 configReq.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
                 print("📋 [AMNESIA] POSTing signed configure_sidecar to i.instagram.com (attempt \(attempt))…")
                 try await InstagramSafetyGate.shared.waitForApiSlot(method: "POST", path: "/media/configure_sidecar/")
-                InstagramSafetyGate.shared.recordApiRequest(method: "POST", path: "/media/configure_sidecar/")
+                try reserveDirectInstagramAction(method: "POST", path: "/media/configure_sidecar/")
                 let (rawData, rawResp) = try await postSession.data(for: configReq)
                 let httpResp = rawResp as? HTTPURLResponse
                 let statusCode = httpResp?.statusCode ?? 0
@@ -5698,7 +5781,6 @@ class InstagramService: ObservableObject {
         try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
         let mediaIdA = try await configureSidecar(uploadIds: uploadIdsA, caption: "", clientSidecarId: sidecarIdA)
         advance()
-        trackAction()
 
         // Anti-bot: 5-8s before starting carousel B
         try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...8_000_000_000))
@@ -5725,7 +5807,6 @@ class InstagramService: ObservableObject {
         try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
         let mediaIdB = try await configureSidecar(uploadIds: uploadIdsB, caption: "", clientSidecarId: sidecarIdB)
         advance()
-        trackAction()
 
         // Anti-bot: 5-9s before archiving carousel B
         try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...9_000_000_000))
@@ -5803,7 +5884,7 @@ class InstagramService: ObservableObject {
             LogManager.shared.success("Amnesia Carousel reseteado (4 imágenes visibles)", category: .api)
         }
     }
-
+    
     // MARK: - Instagram Notes
     //
     // ── ENDPOINT HISTORY (update this when Instagram breaks Notes) ────────────────
@@ -5956,7 +6037,7 @@ class InstagramService: ObservableObject {
             print("🔬 \(label) — NO claim header found in response. IG did not send one.")
         }
     }
-
+    
     /// Create an Instagram Note (bubble above profile pic in DMs)
     /// Max 60 characters, lasts 24 hours
     func createNote(text: String, audience: Int = 0, userInitiated: Bool = false) async throws -> Bool {
@@ -6001,7 +6082,7 @@ class InstagramService: ObservableObject {
             let elapsed  = lastSent > 0 ? Date().timeIntervalSince1970 - lastSent : 0
             if elapsed < 86400 {   // 24 h window — same as note expiry on Instagram
                 UserDefaults.standard.set(text, forKey: "note_duplicate_warning_text")
-                throw InstagramError.apiError("You already sent this note. Instagram may flag duplicate notes as spam.\n\nPlease write something different.")
+            throw InstagramError.apiError("You already sent this note. Instagram may flag duplicate notes as spam.\n\nPlease write something different.")
             }
         }
 
@@ -6032,15 +6113,15 @@ class InstagramService: ObservableObject {
                 try await Task.sleep(nanoseconds: jitter)
             }
         }
-
+        
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
-
+        
         // ANTI-BOT: Human delay (1-3 seconds) - longer than before
         let delay = UInt64.random(in: 1_000_000_000...3_000_000_000)
         print("   Waiting \(delay / 1_000_000_000)s (human delay)...")
         try await Task.sleep(nanoseconds: delay)
-
+        
         print("   [NOTE] csrfToken=\(String(session.csrfToken.prefix(8)))... len=\(session.csrfToken.count) audience=\(audience)")
         print("   [NOTE] wwwClaim=\(String(wwwClaim.prefix(20)))")
 
@@ -6100,11 +6181,11 @@ class InstagramService: ObservableObject {
         if let rawResponse = String(data: data, encoding: .utf8) {
             print("   [NOTE] Raw response: \(rawResponse.prefix(400))")
         }
-
+        
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let status = json["status"] as? String, status == "ok" {
                 print("✅ [NOTE] Note created successfully")
-
+                
                 // `last_note_text` is the UI bubble value; `last_note_sent_text` is
                 // the API-confirmed duplicate guard. Keep them separate.
                 UserDefaults.standard.set(text, forKey: "last_note_text")
@@ -6117,7 +6198,7 @@ class InstagramService: ObservableObject {
                 // note was ready while the safety gate still blocked the real POST.
                 let cooldownUntil = Date().addingTimeInterval(150)
                 UserDefaults.standard.set(cooldownUntil, forKey: "note_cooldown_until")
-
+                
                 return true
             } else {
                 let message = json["message"] as? String ?? "Unknown error"
@@ -6125,7 +6206,7 @@ class InstagramService: ObservableObject {
                 throw InstagramError.apiError("Note failed: \(message)")
             }
         }
-
+        
         return false
     }
     
@@ -6133,8 +6214,8 @@ class InstagramService: ObservableObject {
     func isNoteOnCooldown() -> (onCooldown: Bool, remainingSeconds: Int) {
         var remainingSeconds = 0
         if let cooldownUntil = UserDefaults.standard.object(forKey: "note_cooldown_until") as? Date {
-            let remaining = cooldownUntil.timeIntervalSinceNow
-            if remaining > 0 {
+        let remaining = cooldownUntil.timeIntervalSinceNow
+        if remaining > 0 {
                 remainingSeconds = max(remainingSeconds, Int(remaining))
             } else {
                 UserDefaults.standard.removeObject(forKey: "note_cooldown_until")
@@ -6300,10 +6381,15 @@ class InstagramService: ObservableObject {
             throw InstagramError.apiError("Lockdown active. Wait before editing biography.")
         }
 
-        // ANTI-BOT: Duplicate check
+        // Do not block solely because Vault sent this same text before. That key
+        // tracks the last Vault mutation, not Instagram's current biography; using
+        // it as an authority prevented users from restoring an "original" bio when
+        // the real profile had since changed.
         if let lastBio = UserDefaults.standard.string(forKey: "last_biography_text"),
-           lastBio == text {
-            throw InstagramError.apiError("This is already your current biography. Please write something different.")
+           normalizedBiography(lastBio) == normalizedBiography(text) {
+            let cachedBio = ProfileCacheService.shared.cachedProfile?.biography
+            let cacheState = cachedBio.map { normalizedBiography($0) == normalizedBiography(text) ? "cached-same" : "cached-different" } ?? "cached-unknown"
+            LogManager.shared.info("Bio duplicate memory matched last Vault-sent text; allowing POST (\(cacheState))", category: .api)
         }
 
         // ANTI-BOT: Cooldown between consecutive edits (120 s)
@@ -6425,30 +6511,18 @@ class InstagramService: ObservableObject {
                 let cooldownUntil = Date().addingTimeInterval(180)
                 UserDefaults.standard.set(cooldownUntil, forKey: "biography_cooldown_until")
 
-                // Update in-memory cache so PerformanceView shows it instantly
-                if let cached = ProfileCacheService.shared.cachedProfile {
-                    let updated = InstagramProfile(
-                        userId: cached.userId, username: cached.username,
-                        fullName: cached.fullName, biography: text,
-                        externalUrl: cached.externalUrl, profilePicURL: cached.profilePicURL,
-                        isVerified: cached.isVerified, isPrivate: cached.isPrivate,
-                        followerCount: cached.followerCount, followingCount: cached.followingCount,
-                        mediaCount: cached.mediaCount, followedBy: cached.followedBy,
-                        isFollowing: cached.isFollowing, isFollowRequested: cached.isFollowRequested,
-                        cachedAt: cached.cachedAt, cachedMediaURLs: cached.cachedMediaURLs,
-                        cachedReelURLs: cached.cachedReelURLs, cachedTaggedURLs: cached.cachedTaggedURLs,
-                        cachedHighlights: cached.cachedHighlights,
-                        cachedReelItems: cached.cachedReelItems,
-                        cachedTaggedItems: cached.cachedTaggedItems,
-                        cachedNextMaxId: cached.cachedNextMaxId
-                    )
-                    ProfileCacheService.shared.saveProfile(updated)
-                }
+                cacheSuccessfulBiographyUpdate(text)
 
                 return true
             }
 
             let message = json["message"] as? String ?? "Unknown error"
+            if isBiographyAlreadyCurrentMessage(message) {
+                LogManager.shared.info("Biography update returned no-op from Instagram; treating as already current", category: .api)
+                UserDefaults.standard.set(text, forKey: "last_biography_text")
+                cacheSuccessfulBiographyUpdate(text)
+                return true
+            }
             print("❌ [BIO] Failed: \(message)")
             throw InstagramError.apiError("Biography update failed: \(message)")
         }
@@ -6457,6 +6531,50 @@ class InstagramService: ObservableObject {
         throw InstagramError.apiError("Biography update failed: could not parse Instagram response.")
     }
 
+    private func normalizedBiography(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isBiographyAlreadyCurrentMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("current biography")
+            || lowercased.contains("same biography")
+            || lowercased.contains("already your biography")
+            || lowercased.contains("not changed")
+            || lowercased.contains("no changes")
+    }
+
+    private func cacheSuccessfulBiographyUpdate(_ text: String) {
+        guard let cached = ProfileCacheService.shared.cachedProfile else { return }
+        let updated = InstagramProfile(
+            userId: cached.userId,
+            username: cached.username,
+            fullName: cached.fullName,
+            biography: text,
+            externalUrl: cached.externalUrl,
+            profilePicURL: cached.profilePicURL,
+            isVerified: cached.isVerified,
+            isPrivate: cached.isPrivate,
+            followerCount: cached.followerCount,
+            followingCount: cached.followingCount,
+            mediaCount: cached.mediaCount,
+            followedBy: cached.followedBy,
+            isFollowing: cached.isFollowing,
+            isFollowRequested: cached.isFollowRequested,
+            cachedAt: cached.cachedAt,
+            cachedMediaURLs: cached.cachedMediaURLs,
+            cachedReelURLs: cached.cachedReelURLs,
+            cachedTaggedURLs: cached.cachedTaggedURLs,
+            cachedHighlights: cached.cachedHighlights,
+            cachedReelItems: cached.cachedReelItems,
+            cachedTaggedItems: cached.cachedTaggedItems,
+            cachedNextMaxId: cached.cachedNextMaxId
+        )
+        ProfileCacheService.shared.saveProfile(updated)
+    }
+    
     // MARK: - Change Profile Picture
     
     /// Changes Instagram profile picture
@@ -6466,7 +6584,7 @@ class InstagramService: ObservableObject {
     /// - Image hash is different from last upload
     func changeProfilePicture(imageData: Data, userInitiated: Bool = false) async throws -> Bool {
         print("🖼️ [PROFILE PIC] Starting profile picture change...")
-
+        
         // CRITICAL: Check lockdown
         if isLocked {
             print("🚨 [PROFILE PIC] Lockdown active - ABORT")
@@ -6507,7 +6625,7 @@ class InstagramService: ObservableObject {
                 try await Task.sleep(nanoseconds: jitter)
             }
         }
-
+        
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
         
@@ -6544,7 +6662,7 @@ class InstagramService: ObservableObject {
             print("❌ [PROFILE PIC] Failed to convert image to JPEG")
             throw InstagramError.apiError("Failed to process image")
         }
-
+        
         print("   Image size: \(jpegData.count / 1024) KB (cropped to \(Int(targetSide))×\(Int(targetSide))px square)")
         print("   Image hash: \(String(imageHash.prefix(16)))...")
         
@@ -6622,7 +6740,8 @@ class InstagramService: ObservableObject {
                     LogManager.shared.bot("Profile pic upload blocked: checkpoint_challenge_required (lock:\(isLock))")
                     await triggerLockdown(
                         reason: "Instagram blocked the profile pic upload and requires checkpoint verification. Open the Instagram app to complete it.",
-                        duration: 300
+                        duration: 300,
+                        armUploadCooldown: true
                     )
                     await markSessionChallenged(duration: 60)
                     throw InstagramError.botDetected("checkpoint_challenge_required (lock:\(isLock))")
@@ -6734,7 +6853,7 @@ class InstagramService: ObservableObject {
         if let s = value as? String, let i = Int(s) { return i }
         return 0
     }
-
+    
     // MARK: - Image Orientation Fix
     
     /// Normalize image orientation to prevent rotation issues

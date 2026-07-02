@@ -303,6 +303,22 @@ class ForceNumberRevealSettings: ObservableObject {
             return
         }
 
+        // ── REVEAL LOCK ───────────────────────────────────────────────────────
+        // Never mix auto re-archive with a live reveal. The tester log showed the
+        // dangerous pattern:
+        //   undo_only_me(new digit) -> only_me(old digit) -> undo_only_me(new digit)
+        // That interleaving makes the user think Archive Now unarchived photos and
+        // also consumes the archive budget mid-performance. Defer the old cleanup
+        // until the reveal is completely finished.
+        if instagram.isRevealOperationActive {
+            deferReArchiveForSafety(
+                mediaIds: mediaIds,
+                minimumSeconds: 180,
+                reason: "reveal operation active"
+            )
+            return
+        }
+
         // ── UPLOAD LOCK ───────────────────────────────────────────────────────
         // Never mix auto re-archive with an active upload/auto-archive pipeline.
         // Both use sensitive POST /only_me/ calls and sharing the same session can
@@ -402,6 +418,16 @@ class ForceNumberRevealSettings: ObservableObject {
                 return
             }
 
+            if instagram.isRevealOperationActive {
+                updatePersisted(remaining: remaining)
+                deferReArchiveForSafety(
+                    mediaIds: remaining,
+                    minimumSeconds: 180,
+                    reason: "reveal operation became active mid-run"
+                )
+                return
+            }
+
             // Re-check rate limit before each call
             let midCheck = instagram.checkRateLimit()
             if midCheck.remaining < 2 {
@@ -426,12 +452,35 @@ class ForceNumberRevealSettings: ObservableObject {
                 return
             }
 
+            let archiveBudget = InstagramSafetyGate.shared.decision(for: .archive)
+            if !archiveBudget.allowed {
+                print("🛡️ [RE-ARCHIVE] Archive budget pause — \(archiveBudget.reason), retry in \(archiveBudget.waitSeconds)s")
+                LogManager.shared.warning("SAFETY BLOCK — auto re-archive postponed: \(archiveBudget.reason)", category: .upload)
+                updatePersisted(remaining: remaining)
+                let retrySeconds = max(archiveBudget.waitSeconds + 10, 60)
+                let retryDate = Date().addingTimeInterval(TimeInterval(retrySeconds))
+                reArchiveScheduledAt = retryDate
+                persistPending(ids: remaining, deadline: retryDate)
+                scheduleTask(ids: remaining, afterSeconds: TimeInterval(retrySeconds), deadline: retryDate)
+                return
+            }
+
             // Anti-bot: auto re-archive is not performer-visible. Use a much
             // slower human cadence than reveal calls to avoid POST bursts.
             let delay = UInt64.random(in: 35_000_000_000...70_000_000_000)
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else {
                 updatePersisted(remaining: remaining)
+                return
+            }
+
+            if instagram.isRevealOperationActive {
+                updatePersisted(remaining: remaining)
+                deferReArchiveForSafety(
+                    mediaIds: remaining,
+                    minimumSeconds: 180,
+                    reason: "reveal operation active after wait"
+                )
                 return
             }
 
@@ -468,6 +517,16 @@ class ForceNumberRevealSettings: ObservableObject {
                 let msg = error.localizedDescription.lowercased()
                 if msg.contains("session expired") || msg.contains("login_required") || msg.contains("please login again") {
                     UploadManager.shared.sendSessionExpiredNotification()
+                } else if msg.contains("archive budget exceeded") || msg.contains("safety pause") {
+                    updatePersisted(remaining: remaining)
+                    let budget = InstagramSafetyGate.shared.decision(for: .archive)
+                    let retrySeconds = max(budget.waitSeconds + 10, 60)
+                    let retryDate = Date().addingTimeInterval(TimeInterval(retrySeconds))
+                    reArchiveScheduledAt = retryDate
+                    persistPending(ids: remaining, deadline: retryDate)
+                    scheduleTask(ids: remaining, afterSeconds: TimeInterval(retrySeconds), deadline: retryDate)
+                    LogManager.shared.warning("Auto re-archive paused after archive safety error; retry in \(retrySeconds)s", category: .upload)
+                    return
                 }
             }
         }

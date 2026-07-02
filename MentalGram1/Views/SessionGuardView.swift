@@ -22,7 +22,28 @@ struct SessionGuardView: View {
         KeychainService.shared.loadCredentials() == nil
     }
 
+    /// True when the session ended because Instagram flagged the account
+    /// (challenge / restriction) rather than a plain expiry.
+    private var isBotContext: Bool {
+        instagram.challengeRequiredStreak >= 1 ||
+        instagram.sessionExpiredContext == .challenge ||
+        instagram.sessionExpiredContext == .restriction
+    }
+
     var body: some View {
+        Group {
+            // Outside a live show, when Instagram flagged the account, show the explicit
+            // bot screen with steps + Log Out. During a show (or for a plain session
+            // expiry), keep the disguised "No Internet" look.
+            if !instagram.isPerformanceActive && isBotContext {
+                BotAlertView()
+            } else {
+                disguisedBody
+            }
+        }
+    }
+
+    private var disguisedBody: some View {
         ZStack {
             Color.white.ignoresSafeArea()
 

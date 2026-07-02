@@ -1232,6 +1232,7 @@
 "limits.help.warning.step3" = "W Vault wyloguj się z Ustawień, odczekaj około minuty i zaloguj ponownie.";
 "limits.help.warning.step4" = "Gotowe, możesz kontynuować — Twoje konto jest bezpieczne.";
 "limits.help.warning.reassure" = "Twoje konto nadal działa bez zarzutu. To tylko wstrzymuje Vault na kilka minut, nic więcej.";
+"limits.help.warning.uploadblock" = "Po silnej blokadzie przesyłanie zdjęć pozostaje wstrzymane przez około 24 godziny — nawet jeśli się wylogujesz i zalogujesz ponownie. Chroni to oznaczone konto. Odsłanianie zdjęć i tryb Performance na żywo działają normalnie.";
 
 "limits.help.show.title" = "Podczas występu";
 "limits.help.show.body" = "Jeśli ostrzeżenie pojawi się, gdy widz patrzy na ekran, Vault ukrywa wszystkie szczegóły techniczne i wyświetla ogólny ekran \"Brak połączenia z internetem\".";
@@ -1328,7 +1329,7 @@
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
 "guide.lockscreen.help.tricks.body" = "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore";
 "guide.lockscreen.help.cards.title" = "Kody kart";
-"guide.lockscreen.help.cards.body" = "Aby ujawnić kartę, wpisz jej kod jako tajną liczbę:\n\nKolory:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKarty A–9  →  [wartość][kolor]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKarty 10, J, Q, K  →  [dziesiątki][jedności][kolor]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nPrzykład: aby ujawnić Q♥ wpisz 122.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen działa jak Number Lockscreen:\n\n1. Wpisz kod karty (2 lub 3 cyfry)\n2. Dotknij poza klawiaturą, aby potwierdzić\n3. Uzupełnij pozostałe punkty ekranu blokady dowolnymi cyframi\n\nKolory:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKarty A–9  →  [wartość][kolor]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKarty 10, J, Q, K  →  [dziesiątki][jedności][kolor]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nPrzykład: aby ujawnić Q♥ wpisz 122, dotknij poza klawiaturą, a następnie uzupełnij 6 punktów.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Włącz efekt";

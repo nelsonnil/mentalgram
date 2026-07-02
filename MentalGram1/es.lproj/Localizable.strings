@@ -1453,6 +1453,7 @@
 "limits.help.warning.step3" = "En Vault, cierra sesión desde Ajustes, espera un minuto y vuelve a iniciar sesión.";
 "limits.help.warning.step4" = "Listo para continuar — tu cuenta está segura.";
 "limits.help.warning.reassure" = "Tu cuenta sigue funcionando perfectamente. Esto solo pausa Vault unos minutos, nada más.";
+"limits.help.warning.uploadblock" = "Tras un bloqueo fuerte, las subidas de fotos quedan en pausa unas 24 horas — aunque cierres sesión y vuelvas a entrar. Esto protege una cuenta marcada. Revelar fotos y el modo Performance en directo siguen funcionando con normalidad.";
 
 "limits.help.show.title" = "Durante una actuación";
 "limits.help.show.body" = "Si aparece un aviso mientras el espectador está mirando la pantalla, Vault oculta todos los detalles técnicos y muestra una pantalla genérica de \"Sin conexión a Internet\".";
@@ -1558,7 +1559,7 @@
 "guide.lockscreen.help.tricks.title" = "El mismo número secreto — muchos trucos";
 "guide.lockscreen.help.tricks.body" = "El número que introduces aquí es el mismo número secreto usado por la entrada de cuadrícula y todos los demás trucos. Con él puedes activar:\n\n• Desarchivar una foto de un set numérico\n• Revelar una carta\n• Mostrar una imagen personalizada\n• Activar el efecto de contador\n• Forzar un reel en Explorar";
 "guide.lockscreen.help.cards.title" = "Códigos de cartas";
-"guide.lockscreen.help.cards.body" = "Para revelar una carta, introduce su código como número secreto:\n\nPalos:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartas A–9  →  [valor][palo]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartas 10, J, Q, K  →  [decena][unidad][palo]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nEjemplo: para revelar Q♥ introduce 122.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen funciona igual que Number Lockscreen:\n\n1. Introduce el código de la carta (2 o 3 dígitos)\n2. Toca fuera del teclado para confirmar\n3. Completa los puntos restantes con cualquier dígito\n\nPalos:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartas A–9  →  [valor][palo]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartas 10, J, Q, K  →  [decena][unidad][palo]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nEjemplo: para revelar Q♥ introduce 122, toca fuera, luego completa los 6 puntos.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Activar efecto";
@@ -1949,8 +1950,8 @@ Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Not
 "input.guide.urlscheme.title" = "URL Scheme";
 "input.guide.urlscheme.compat" = "Todos los tipos de set · Nota · Bio · Foto de perfil";
 "input.guide.urlscheme.body" = "Los Atajos de iOS o cualquier app puede enviar comandos a Vault al instante usando el esquema de URL vault:// — revela un slot concreto, actualiza tu nota o biografía, o cambia tu foto de perfil, todo sin tocar la app.";
-"input.guide.urlscheme.activate" = "Usa vault://note, vault://bio, vault://reveal o vault://profilepic desde cualquier Atajo de iOS. Vault abre al instante y aplica la acción. La pestaña cambia automáticamente a Performance.";
-"input.guide.urlscheme.tip" = "Combínalo con la app Atajos para crear disparadores invisibles: etiquetas NFC, comandos de voz, widgets o incluso AirDrop desde un segundo dispositivo.";
+"input.guide.urlscheme.activate" = "Requisitos según la acción:\n• vault://bio o vault://note — la feature Bio/Nota debe estar activada en Ajustes.\n• vault://reveal?word=MAGIC — debe existir un set de Palabras con fotos de letras archivadas.\n• vault://reveal?word=42 — debe haber un set de Números activo seleccionado en Active Set.\n• vault://reveal?slot=N — debe haber un set Custom o Lista activo seleccionado.\n• vault://reveal?card=AS — debe haber un set de Cartas activo seleccionado.\n• vault://perform — combina actualización de bio con cualquiera de los reveals anteriores en una sola llamada.\nVault cambia automáticamente a Performance al abrir cualquier URL vault://.";
+"input.guide.urlscheme.tip" = "Combínalo con la app Atajos para crear disparadores invisibles: etiquetas NFC, comandos de voz, widgets o AirDrop desde un segundo dispositivo. Para revelar números el parámetro word es un número (ej. vault://reveal?word=42). Para bio+reveal combinados usa vault://perform?bio=Texto&reveal=PALABRA.";
 "input.guide.force.title" = "Entrada → Animación en Pantalla";
 "input.guide.force.body" = "La Cuadrícula de Dígitos, el Reloj de Números y el Reloj de Cartas hacen algo más que revelar un set — el número capturado también alimenta dos animaciones opcionales en pantalla que hacen la revelación visible y dramática para el espectador.";
 "input.guide.force.post.title" = "Force Post";

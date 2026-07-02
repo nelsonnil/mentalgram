@@ -1416,6 +1416,7 @@
 "limits.help.warning.step3" = "Dans Vault, déconnecte-toi depuis les Réglages, attends environ une minute et reconnecte-toi.";
 "limits.help.warning.step4" = "Tu peux continuer — ton compte est en sécurité.";
 "limits.help.warning.reassure" = "Ton compte continue de fonctionner parfaitement. Cela ne met Vault en pause que quelques minutes, rien de plus.";
+"limits.help.warning.uploadblock" = "Après un blocage important, les envois de photos restent en pause pendant environ 24 heures — même si tu te déconnectes et te reconnectes. Cela protège un compte signalé. Révéler des photos et le mode Performance en direct continuent de fonctionner normalement.";
 
 "limits.help.show.title" = "Pendant un spectacle";
 "limits.help.show.body" = "Si un avertissement apparaît pendant que le spectateur regarde l'écran, Vault masque tous les détails techniques et affiche un écran générique \"Pas de connexion Internet\".";
@@ -1512,7 +1513,7 @@
 "guide.lockscreen.help.tricks.title" = "Le même numéro secret — plusieurs tours";
 "guide.lockscreen.help.tricks.body" = "Le numéro saisi ici est le même que celui utilisé par la saisie en grille et tous les autres tours de magie:\n\n• Désarchiver une photo d'un set numérique\n• Révéler une carte à jouer\n• Afficher une image personnalisée\n• Activer l'effet de compteur\n• Forcer un reel dans Explorer";
 "guide.lockscreen.help.cards.title" = "Codes des cartes";
-"guide.lockscreen.help.cards.body" = "Pour révéler une carte, saisissez son code comme numéro secret :\n\nCouleurs :  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartes A–9  →  [valeur][couleur]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartes 10, V, D, R  →  [dizaine][unité][couleur]\n  10♠ = 101    V♥ = 112\n  D♣  = 123    R♦  = 134\n\nExemple : pour révéler D♥ saisissez 122.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen fonctionne comme Number Lockscreen :\n\n1. Saisissez le code de la carte (2 ou 3 chiffres)\n2. Appuyez en dehors du clavier pour confirmer\n3. Complétez les points restants avec n'importe quels chiffres\n\nCouleurs :  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartes A–9  →  [valeur][couleur]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartes 10, V, D, R  →  [dizaine][unité][couleur]\n  10♠ = 101    V♥ = 112\n  D♣  = 123    R♦  = 134\n\nExemple : pour révéler D♥, saisissez 122, appuyez en dehors, puis complétez les 6 points.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Activer l'effet";

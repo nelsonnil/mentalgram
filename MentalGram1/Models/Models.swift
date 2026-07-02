@@ -535,7 +535,7 @@ enum SetType: String, Codable, CaseIterable {
     var revealURLTemplate: String? {
         switch self {
         case .word:   return "word"
-        case .number: return "slot"
+        case .number: return "word"
         case .custom: return "slot"
         case .card:   return "card"
         case .list:   return "slot"
@@ -882,6 +882,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
     case cardClock   = "cardClock"    // Card: clock-face swipe pairs (4 swipes → value+suit)
     case numpadCard  = "numpadCard"   // Card: black screen tap-to-show value+suit selector
     case listInput   = "listInput"    // List: visible private list selection
+    case fakeNotes   = "fakeNotes"    // Word: iOS Notes lookalike, confirm by face-down
 
     var id: String { rawValue }
 
@@ -896,6 +897,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .cardClock:   return "Card Clock"
         case .numpadCard:  return "Numpad Card"
         case .listInput:   return "List Input"
+        case .fakeNotes:   return "Notes Input"
         }
     }
 
@@ -910,6 +912,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .cardClock:   return "4 directional swipes encode value + suit"
         case .numpadCard:  return "Black screen tap selector for value + suit"
         case .listInput:   return "Tap a private list item to reveal its linked media"
+        case .fakeNotes:   return "Spectator types in a fake iOS Notes interface"
         }
     }
 
@@ -924,6 +927,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .cardClock:   return "clock.fill"
         case .numpadCard:  return "rectangle.grid.3x2.fill"
         case .listInput:   return "list.bullet.rectangle.portrait.fill"
+        case .fakeNotes:   return "note.text"
         }
     }
 
@@ -944,6 +948,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .clockInput: return .numberClock
         case .cardClock:  return .cardClock
         case .numpadCard: return .cardNumpad
+        case .fakeNotes:  return .fakeNotes
         default:          return nil
         }
     }
@@ -951,7 +956,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
     /// The subset of input methods valid for a given set type.
     static func allowed(for type: SetType) -> [InputMethod] {
         switch type {
-        case .word:   return [.coverTyping, .api, .ocr]
+        case .word:   return [.coverTyping, .api, .ocr, .fakeNotes]
         case .number: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
         case .custom: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
         case .card:   return [.cardClock, .numpadCard, .lockscreen]

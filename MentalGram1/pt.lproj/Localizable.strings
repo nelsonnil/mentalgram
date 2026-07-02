@@ -1415,6 +1415,7 @@
 "limits.help.warning.step3" = "No Vault, saia da conta em Configurações, espere cerca de um minuto e entre novamente.";
 "limits.help.warning.step4" = "Pronto para continuar — sua conta está segura.";
 "limits.help.warning.reassure" = "Sua conta continua funcionando perfeitamente. Isso só pausa o Vault por alguns minutos, nada mais.";
+"limits.help.warning.uploadblock" = "Após um bloqueio forte, os envios de fotos ficam pausados por cerca de 24 horas — mesmo que você saia e entre novamente. Isso mantém uma conta sinalizada segura. Revelar fotos e o modo Performance ao vivo continuam funcionando normalmente.";
 
 "limits.help.show.title" = "Durante uma apresentação";
 "limits.help.show.body" = "Se um aviso aparecer enquanto o espectador estiver olhando para a tela, o Vault esconde todos os detalhes técnicos e mostra uma tela genérica \"Sem conexão com a internet\".";
@@ -1507,7 +1508,7 @@
 "guide.lockscreen.help.tricks.title" = "O mesmo número secreto — muitos truques";
 "guide.lockscreen.help.tricks.body" = "O número inserido aqui é o mesmo usado pela entrada em grade e todos os outros truques:\n\n• Desarquivar uma foto de um set numérico\n• Revelar uma carta\n• Mostrar uma imagem personalizada\n• Ativar o efeito contador\n• Forçar um reel no Explorar";
 "guide.lockscreen.help.cards.title" = "Códigos das cartas";
-"guide.lockscreen.help.cards.body" = "Para revelar uma carta, insira seu código como número secreto:\n\nNaipes:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartas A–9  →  [valor][naipe]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartas 10, J, Q, K  →  [dezena][unidade][naipe]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nExemplo: para revelar Q♥ insira 122.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen funciona como Number Lockscreen:\n\n1. Insira o código da carta (2 ou 3 dígitos)\n2. Toque fora do teclado para confirmar\n3. Preencha os pontos restantes com quaisquer dígitos\n\nNaipes:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCartas A–9  →  [valor][naipe]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCartas 10, J, Q, K  →  [dezena][unidade][naipe]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nExemplo: para revelar Q♥ insira 122, toque fora, depois complete os 6 pontos.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Ativar efeito";

@@ -712,10 +712,8 @@ class DataManager: ObservableObject {
         if let data = try? JSONEncoder().encode(sets) {
             UserDefaults.standard.set(data, forKey: setsKey)
         }
-        // Schedule a debounced, *safe* auto-backup so users don't lose set metadata by
-        // forgetting to press "Back up now". The safe path never clobbers another
-        // account's backup or overwrites real data with an empty local state.
-        CloudBackupService.shared.scheduleDebouncedSync()
+        // Auto-backup removed: backups are manual-only (Back up now in Settings).
+        // This prevents the app from overwriting iCloud during migrations or updates.
     }
 
     /// Forces an immediate iCloud backup. Keep for explicit user actions only.
@@ -849,6 +847,14 @@ class DataManager: ObservableObject {
             DateForceSettings.shared.reloadFromUserDefaults()
             AmnesiaCarouselSettings.shared.reloadFromUserDefaults()
             BackupRoutineManager.shared.reloadFromUserDefaults()
+
+            // Mark that a restore just completed — HomeView will show a blocking overlay
+            // to download set photos from iCloud Drive before allowing navigation.
+            // This prevents the confusing "empty slots" issue where metadata is restored
+            // but physical .jpg files haven't materialized yet.
+            UserDefaults.standard.set(true, forKey: "backup_pendingPhotoDownload")
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "backup_restoreTimestamp")
+            print("☁️ [BACKUP] Flagged pending photo download — HomeView will handle with modal overlay")
         }
     }
 

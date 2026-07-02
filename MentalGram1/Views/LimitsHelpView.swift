@@ -505,6 +505,13 @@ struct LimitsHelpView: View {
                     text: "limits.help.warning.reassure",
                     bgColor: VaultTheme.Colors.success
                 )
+
+                infoBox(
+                    icon: "lock.fill",
+                    iconColor: Color(hex: "FF9F0A"),
+                    text: "limits.help.warning.uploadblock",
+                    bgColor: Color(hex: "FF9F0A")
+                )
             }
         }
     }

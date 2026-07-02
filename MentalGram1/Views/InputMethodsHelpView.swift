@@ -1037,24 +1037,61 @@ private struct IMLockscreenMiniDemo: View {
 }
 
 private struct IMURLExamples: View {
-    private let examples = [
-        "vault://reveal?word=MAGIC",
-        "vault://reveal?slot=15",
-        "vault://reveal?card=J\u{2660}",
-        "vault://bio?text=Now"
+    private let accent = Color(hex: "FB923C")
+
+    private struct URLGroup {
+        let label: String
+        let icon: String
+        let urls: [(url: String, note: String)]
+    }
+
+    private let groups: [URLGroup] = [
+        URLGroup(label: "Post Prediction", icon: "photo.on.rectangle", urls: [
+            ("vault://reveal?word=MAGIC",   "Word set — unarchives letter photos"),
+            ("vault://reveal?word=42",      "Number set — needs active number set"),
+            ("vault://reveal?slot=15",      "Custom/list set — unarchives slot 15"),
+            ("vault://reveal?card=J\u{2660}", "Card set — unarchives the J♠ slot")
+        ]),
+        URLGroup(label: "Note & Bio", icon: "text.alignleft", urls: [
+            ("vault://note?text=Well%20done", "Sends an Instagram Note"),
+            ("vault://bio?text=Magician",     "Updates your Instagram Bio"),
+            ("vault://bio?text1=Paris&text2=3\u{2666}", "Multi-slot bio template")
+        ]),
+        URLGroup(label: "Combined (Bio + Reveal)", icon: "bolt.fill", urls: [
+            ("vault://perform?bio=Hello&reveal=MAGIC", "Bio first, then word reveal"),
+            ("vault://perform?bio=Paris&card=3D",      "Bio first, then card reveal")
+        ])
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(examples, id: \.self) { example in
-                Text(example)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color(hex: "FB923C"))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.04))
-                    .cornerRadius(6)
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(groups, id: \.label) { group in
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5) {
+                        Image(systemName: group.icon)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(accent)
+                        Text(group.label.uppercased())
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(accent)
+                            .tracking(0.5)
+                    }
+                    ForEach(group.urls, id: \.url) { item in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.url)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundColor(accent)
+                            Text(item.note)
+                                .font(.system(size: 10))
+                                .foregroundColor(VaultTheme.Colors.textSecondary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.04))
+                        .cornerRadius(6)
+                    }
+                }
             }
         }
     }

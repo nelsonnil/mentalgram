@@ -1,6 +1,34 @@
 import Foundation
 import Combine
 
+// MARK: - Explore Spy Format
+
+/// What data is sent to Inject 2.0 when the spectator views a profile in Explore.
+enum ExploreSpyFormat: Int, CaseIterable {
+    case followersOnly          = 0  // "1 234"
+    case followersFollowing      = 1  // "1 234, 567"
+    case nameFollowers           = 2  // "John Doe, 1 234"
+    case nameFollowersFollowing  = 3  // "John Doe, 1 234, 567"
+
+    var displayName: String {
+        switch self {
+        case .followersOnly:         return "Followers"
+        case .followersFollowing:    return "Followers, Following"
+        case .nameFollowers:         return "Name, Followers"
+        case .nameFollowersFollowing: return "Name, Followers, Following"
+        }
+    }
+
+    var example: String {
+        switch self {
+        case .followersOnly:         return "e.g. \"1 234\""
+        case .followersFollowing:    return "e.g. \"1 234, 567\""
+        case .nameFollowers:         return "e.g. \"John, 1 234\""
+        case .nameFollowersFollowing: return "e.g. \"John, 1 234, 567\""
+        }
+    }
+}
+
 // MARK: - Auto Input Mode
 
 enum AutoInputMode: String, CaseIterable {
@@ -43,7 +71,7 @@ enum AutoInputMode: String, CaseIterable {
 /// only be in one mode at a time (numbers OR cards), so e.g. a Number Lockscreen and a
 /// Card Lockscreen cannot coexist.
 enum InterfaceKind: String, Hashable {
-    case ocr, numberClock, cardClock, cardNumpad, numberLockscreen, cardLockscreen
+    case ocr, numberClock, cardClock, cardNumpad, numberLockscreen, cardLockscreen, fakeNotes
 
     var displayName: String {
         switch self {
@@ -53,6 +81,7 @@ enum InterfaceKind: String, Hashable {
         case .cardNumpad:       return "Numpad Card"
         case .numberLockscreen: return "Number Lockscreen"
         case .cardLockscreen:   return "Card Lockscreen"
+        case .fakeNotes:        return "Notes (Typed)"
         }
     }
 }
@@ -71,6 +100,7 @@ enum ApiSource: Int, CaseIterable {
     case cardClock        = 8   // interface: black screen swipe → card (value+suit)
     case cardLockscreen   = 9   // interface: fake lockscreen card code → card (value+suit)
     case cardNumpad       = 10  // interface: black screen tap-to-show card selector
+    case fakeNotes        = 11  // interface: iOS Notes lookalike, confirm by face-down
 
     var displayName: String {
         switch self {
@@ -85,6 +115,7 @@ enum ApiSource: Int, CaseIterable {
         case .cardClock:        return "Card Clock"
         case .cardLockscreen:   return "Card Lockscreen"
         case .cardNumpad:       return "Numpad Card"
+        case .fakeNotes:        return "Notes Input"
         }
     }
 
@@ -97,6 +128,7 @@ enum ApiSource: Int, CaseIterable {
         case .cardClock:        return .cardClock
         case .cardLockscreen:   return .cardLockscreen
         case .cardNumpad:       return .cardNumpad
+        case .fakeNotes:        return .fakeNotes
         default:                return nil
         }
     }
@@ -118,9 +150,20 @@ struct ApiFetchedValue {
 final class IntegrationsSettings: ObservableObject {
     static let shared = IntegrationsSettings()
 
-    // Inject
+    // Inject (receive — 11z.co)
     @Published var injectID: String {
         didSet { UserDefaults.standard.set(injectID, forKey: "integ_injectID") }
+    }
+
+    // Explore Spy — sends searched-profile data to Inject 2.0 (gg0.us)
+    @Published var exploreSpyEnabled: Bool {
+        didSet { UserDefaults.standard.set(exploreSpyEnabled, forKey: "integ_exploreSpyEnabled") }
+    }
+    @Published var exploreSpy2InjectId: String {
+        didSet { UserDefaults.standard.set(exploreSpy2InjectId, forKey: "integ_exploreSpy2InjectId") }
+    }
+    @Published var exploreSpyFormat: ExploreSpyFormat {
+        didSet { UserDefaults.standard.set(exploreSpyFormat.rawValue, forKey: "integ_exploreSpyFormat") }
     }
 
     // Custom API names (user-defined labels shown in pickers)
@@ -201,7 +244,10 @@ final class IntegrationsSettings: ObservableObject {
 
     private init() {
         let ud = UserDefaults.standard
-        injectID        = ud.string(forKey: "integ_injectID")       ?? ""
+        injectID              = ud.string(forKey: "integ_injectID")              ?? ""
+        exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
+        exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
+        exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
         customApi1Name  = ud.string(forKey: "integ_custom1Name")    ?? ""
         customApi2Name  = ud.string(forKey: "integ_custom2Name")    ?? ""
         customApi3Name  = ud.string(forKey: "integ_custom3Name")    ?? ""
@@ -235,7 +281,10 @@ final class IntegrationsSettings: ObservableObject {
     /// Must be called on the main thread after CloudBackupService.restoreFromCloud().
     func reloadFromUserDefaults() {
         let ud = UserDefaults.standard
-        injectID        = ud.string(forKey: "integ_injectID")       ?? ""
+        injectID              = ud.string(forKey: "integ_injectID")              ?? ""
+        exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
+        exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
+        exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
         customApi1Name  = ud.string(forKey: "integ_custom1Name")    ?? ""
         customApi2Name  = ud.string(forKey: "integ_custom2Name")    ?? ""
         customApi3Name  = ud.string(forKey: "integ_custom3Name")    ?? ""
@@ -282,7 +331,7 @@ final class IntegrationsSettings: ObservableObject {
         case .custom2: return await loadCustomApiPayload(url: customApi2Url, field: customApi2Field)
         case .custom3: return await loadCustomApiPayload(url: customApi3Url, field: customApi3Field)
         // Interface-family sources are captured live at performance, never polled here.
-        case .ocr, .numberLockscreen, .cardLockscreen, .numberClock, .cardClock, .cardNumpad: return nil
+        case .ocr, .numberLockscreen, .cardLockscreen, .numberClock, .cardClock, .cardNumpad, .fakeNotes: return nil
         }
     }
 
@@ -421,6 +470,7 @@ final class IntegrationsSettings: ObservableObject {
         case .cardClock:  return .cardClock
         case .numpadCard: return .cardNumpad
         case .lockscreen: return set.type == .card ? .cardLockscreen : .numberLockscreen
+        case .fakeNotes:  return .fakeNotes
         default:          return nil
         }
     }
@@ -572,6 +622,68 @@ final class IntegrationsSettings: ObservableObject {
         case ("bio", _): setBioSource(source, for: token)
         default: break
         }
+    }
+
+    // MARK: - Inject 2.0 Send (gg0.us)
+
+    /// Sends `value` to Inject 2.0. Returns `true` on HTTP 200.
+    @discardableResult
+    func sendToInject2(id: String, value: String) async -> Bool {
+        let cleanId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanId.isEmpty, !value.isEmpty else { return false }
+        guard let url = URL(string: "https://gg0.us/_w/\(cleanId)/selection?") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["value": value, "source": "web"]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let ok = (response as? HTTPURLResponse)?.statusCode == 200
+            print(ok
+                  ? "✅ [INJECT2] Sent '\(value)' → id:\(cleanId)"
+                  : "❌ [INJECT2] Send failed (status \((response as? HTTPURLResponse)?.statusCode ?? -1)) value:'\(value)' id:\(cleanId)")
+            return ok
+        } catch {
+            print("❌ [INJECT2] Network error: \(error)")
+            return false
+        }
+    }
+
+    /// Formats and sends an Instagram profile to Inject 2.0 using the Explore Spy settings.
+    /// Fires-and-forgets; call from a Task context.
+    func sendExploreProfile(username: String, fullName: String, followers: Int, following: Int) async {
+        guard exploreSpyEnabled else { return }
+        let id = exploreSpy2InjectId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty else {
+            print("⚠️ [EXPLORE SPY] Inject 2.0 ID is empty — configure it in Settings → Integrations")
+            return
+        }
+        let displayName = fullName.isEmpty ? username : fullName
+        let fmtFollowers = formatCount(followers)
+        let fmtFollowing = formatCount(following)
+        let value: String
+        switch exploreSpyFormat {
+        case .followersOnly:
+            value = fmtFollowers
+        case .followersFollowing:
+            value = "\(fmtFollowers), \(fmtFollowing)"
+        case .nameFollowers:
+            value = "\(displayName), \(fmtFollowers)"
+        case .nameFollowersFollowing:
+            value = "\(displayName), \(fmtFollowers), \(fmtFollowing)"
+        }
+        LogManager.shared.info("Explore Spy → sending '@\(username)' data to Inject2 id:\(id) value:'\(value)'", category: .general)
+        await sendToInject2(id: id, value: value)
+    }
+
+    /// Formats an Instagram count with a thousands separator (space), e.g. 1234 → "1 234".
+    private func formatCount(_ n: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = " "
+        formatter.groupingSize = 3
+        return formatter.string(from: NSNumber(value: n)) ?? "\(n)"
     }
 
     // MARK: - Inject (11z.co)

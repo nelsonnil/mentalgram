@@ -1416,6 +1416,7 @@
 "limits.help.warning.step3" = "In Vault, esci dall'account dalle Impostazioni, aspetta circa un minuto e rientra.";
 "limits.help.warning.step4" = "Pronto per continuare — il tuo account è al sicuro.";
 "limits.help.warning.reassure" = "Il tuo account continua a funzionare perfettamente. Questo mette in pausa Vault solo per qualche minuto, nulla di più.";
+"limits.help.warning.uploadblock" = "Dopo un blocco forte, i caricamenti delle foto restano in pausa per circa 24 ore — anche se esci e rientri. Questo mantiene al sicuro un account segnalato. Rivelare le foto e la modalità Performance dal vivo continuano a funzionare normalmente.";
 
 "limits.help.show.title" = "Durante uno spettacolo";
 "limits.help.show.body" = "Se compare un avviso mentre lo spettatore sta guardando lo schermo, Vault nasconde tutti i dettagli tecnici e mostra una schermata generica \"Nessuna connessione Internet\".";
@@ -1512,7 +1513,7 @@
 "guide.lockscreen.help.tricks.title" = "Lo stesso numero segreto — tanti trucchi";
 "guide.lockscreen.help.tricks.body" = "Il numero inserito qui è lo stesso usato dall'inserimento a griglia e da tutti gli altri trucchi:\n\n• Disarchiviare una foto da un set numerico\n• Rivelare una carta da gioco\n• Mostrare un'immagine personalizzata\n• Attivare l'effetto contatore\n• Forzare un reel in Esplora";
 "guide.lockscreen.help.cards.title" = "Codici delle carte";
-"guide.lockscreen.help.cards.body" = "Per rivelare una carta, inserisci il suo codice come numero segreto:\n\nSemi:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCarte A–9  →  [valore][seme]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCarte 10, J, Q, K  →  [decina][unità][seme]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nEsempio: per rivelare Q♥ inserisci 122.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen funziona come Number Lockscreen:\n\n1. Inserisci il codice della carta (2 o 3 cifre)\n2. Tocca fuori dalla tastiera per confermare\n3. Completa i punti rimanenti con cifre qualsiasi\n\nSemi:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nCarte A–9  →  [valore][seme]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nCarte 10, J, Q, K  →  [decina][unità][seme]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nEsempio: per rivelare Q♥ inserisci 122, tocca fuori, poi completa i 6 punti.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Attiva effetto";

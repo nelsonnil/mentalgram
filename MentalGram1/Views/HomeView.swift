@@ -3392,7 +3392,12 @@ struct SettingsView: View {
                                    loading: isUploadingProfilePic,
                                    enabled: canUpload()) { uploadProfilePicture() }
             }
-            if let msg = getCooldownMessage() { modernStatusRow(msg, color: VaultTheme.Colors.warning, icon: "clock.fill") }
+            if let msg = getCooldownMessage() { 
+                modernStatusRow(msg, color: VaultTheme.Colors.warning, icon: "clock.fill") 
+            }
+            if let msg = getUploadBlockedMessage() {
+                modernStatusRow(msg, color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill")
+            }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
             profilePicURLSchemesContent
@@ -4246,28 +4251,34 @@ struct SettingsView: View {
         // Check all anti-bot conditions
         guard selectedImageData != nil else {
             print("🚫 [PP-CHECK] Cannot upload: no image selected")
+            LogManager.shared.warning("Profile pic upload blocked: no image selected", category: .general)
             return false
         }
         guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else {
             print("🚫 [PP-CHECK] Cannot upload: upload/sync active (isActive:\(uploadManager.isActive), isSyncActive:\(uploadManager.isSyncArchiveActive))")
+            LogManager.shared.warning("Profile pic upload blocked: upload/sync active (isActive:\(uploadManager.isActive), isSyncActive:\(uploadManager.isSyncArchiveActive))", category: .general)
             return false
         }
         guard !instagram.isLocked else {
             print("🚫 [PP-CHECK] Cannot upload: Instagram locked")
+            LogManager.shared.warning("Profile pic upload blocked: Instagram locked (bot detection)", category: .general)
             return false
         }
         guard !instagram.isNetworkStabilizing else {
             print("🚫 [PP-CHECK] Cannot upload: network stabilizing")
+            LogManager.shared.warning("Profile pic upload blocked: network stabilizing", category: .general)
             return false
         }
         
         let (onCooldown, remaining) = instagram.isProfilePicOnCooldown()
         guard !onCooldown else {
             print("🚫 [PP-CHECK] Cannot upload: on cooldown (\(Int(remaining))s remaining)")
+            LogManager.shared.warning("Profile pic upload blocked: on cooldown (\(Int(remaining))s remaining)", category: .general)
             return false
         }
         
         print("✅ [PP-CHECK] Can upload: all conditions passed")
+        LogManager.shared.info("Profile pic upload ready: all conditions passed", category: .general)
         return true
     }
     
@@ -4277,6 +4288,29 @@ struct SettingsView: View {
             let minutes = remaining / 60
             let seconds = remaining % 60
             return "Wait \(minutes)m \(seconds)s before next upload"
+        }
+        return nil
+    }
+    
+    private func getUploadBlockedMessage() -> String? {
+        // Show why the upload button is disabled
+        if selectedImageData == nil {
+            return nil // Don't show message if no image selected
+        }
+        if uploadManager.isActive || uploadManager.isSyncArchiveActive {
+            return "Profile picture upload disabled while set is uploading"
+        }
+        if instagram.isLocked {
+            return "Profile picture upload disabled: Instagram lockdown active (bot detection)"
+        }
+        if instagram.isNetworkStabilizing {
+            return "Profile picture upload disabled: network stabilizing"
+        }
+        let (onCooldown, remaining) = instagram.isProfilePicOnCooldown()
+        if onCooldown {
+            let minutes = remaining / 60
+            let seconds = remaining % 60
+            return "Profile picture on cooldown: wait \(minutes)m \(seconds)s"
         }
         return nil
     }

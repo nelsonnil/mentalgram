@@ -14,9 +14,11 @@ struct CreateSetView: View {
     @State private var selectedAlphabet: AlphabetType = .latin
     @State private var selectedTemplate: LetterTemplate? = nil       // nil = upload own (word)
     @State private var selectedNumberTemplate: NumberTemplate? = nil  // nil = upload own (number)
+    @State private var selectedCardTemplate: CardTemplate? = nil      // nil = upload own (card)
     @State private var isCreating = false
     @State private var availableTemplates: [LetterTemplate] = []
     @State private var availableNumberTemplates: [NumberTemplate] = []
+    @State private var availableCardTemplates: [CardTemplate] = []
 
     private var canCreate: Bool {
         !setName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -134,6 +136,14 @@ struct CreateSetView: View {
                         )
                     }
 
+                    // ── Playing card template picker ─────────────────────────
+                    if selectedType == .card {
+                        CardTemplatePicker(
+                            templates: availableCardTemplates,
+                            selectedTemplate: $selectedCardTemplate
+                        )
+                    }
+
                     // ── Bank / slot count ─────────────────────────────────────
                     if selectedType == .card {
                         // Card sets are always 52 slots — no configuration needed
@@ -226,6 +236,10 @@ struct CreateSetView: View {
             .onAppear {
             refreshTemplates(for: selectedAlphabet)
             availableNumberTemplates = TemplateManager.shared.numberTemplates()
+            availableCardTemplates = TemplateManager.shared.cardTemplates()
+            if selectedCardTemplate == nil {
+                selectedCardTemplate = availableCardTemplates.first
+            }
         }
         }
         .navigationViewStyle(.stack)
@@ -254,6 +268,8 @@ struct CreateSetView: View {
         if selectedType == .word, let template = selectedTemplate {
             templatePhotos = TemplateManager.shared.photos(for: template)
         } else if selectedType == .number, let template = selectedNumberTemplate {
+            templatePhotos = TemplateManager.shared.photos(for: template)
+        } else if selectedType == .card, let template = selectedCardTemplate {
             templatePhotos = TemplateManager.shared.photos(for: template)
         }
 
@@ -492,6 +508,88 @@ private struct NumberTemplatePicker: View {
 
 private struct NumberTemplateCardFromDisk: View {
     let template: NumberTemplate
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    @State private var previewImages: [UIImage] = []
+
+    var body: some View {
+        TemplateCard(
+            title: template.name,
+            icon: nil,
+            previewImages: previewImages,
+            isSelected: isSelected,
+            isCustom: false,
+            onTap: onTap
+        )
+        .onAppear {
+            previewImages = TemplateManager.shared.previewImages(for: template, count: 4)
+        }
+    }
+}
+
+// MARK: - Card Template Picker
+
+private struct CardTemplatePicker: View {
+    let templates: [CardTemplate]
+    @Binding var selectedTemplate: CardTemplate?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            Text("Card Template")
+                .font(.headline)
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+
+            if templates.isEmpty {
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    Image(systemName: "suit.spade.fill")
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                    Text("No card templates available. You'll upload your own 52 images.")
+                        .font(.caption)
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                .padding(VaultTheme.Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(VaultTheme.Colors.cardBackground)
+                .cornerRadius(VaultTheme.CornerRadius.sm)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: VaultTheme.Spacing.md) {
+                        TemplateCard(
+                            title: String(localized: "Upload my own"),
+                            icon: "photo.badge.plus",
+                            previewImages: [],
+                            isSelected: selectedTemplate == nil,
+                            isCustom: true
+                        ) {
+                            selectedTemplate = nil
+                        }
+
+                        ForEach(templates) { template in
+                            CardTemplateCardFromDisk(
+                                template: template,
+                                isSelected: selectedTemplate == template
+                            ) {
+                                selectedTemplate = template
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 4)
+                }
+
+                Text("DECK1 fills all 52 slots automatically: A♠ through K♦.")
+                    .font(.caption)
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+            }
+        }
+    }
+}
+
+// MARK: - Card Template Card (from disk images)
+
+private struct CardTemplateCardFromDisk: View {
+    let template: CardTemplate
     let isSelected: Bool
     let onTap: () -> Void
 

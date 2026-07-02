@@ -166,6 +166,7 @@ struct SetInputConfigSheet: View {
                     case .cardClock:   CardClockConfig()
                     case .numpadCard:  NumpadCardConfig()
                     case .listInput:   ListInputConfig()
+                    case .fakeNotes:   FakeNotesInputConfig()
                     }
                 }
                 .padding(VaultTheme.Spacing.lg)
@@ -226,6 +227,17 @@ private struct NumpadCardConfig: View {
             Label("set.input.numpadcard.noconfig", systemImage: "checkmark.seal")
                 .font(VaultTheme.Typography.caption())
                 .foregroundColor(VaultTheme.Colors.success)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct FakeNotesInputConfig: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            Text("Notes Input opens a fake iOS Notes interface when Performance starts. The spectator types their selection and confirms by placing the phone face-down. The typed word is used to reveal the matching image.")
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

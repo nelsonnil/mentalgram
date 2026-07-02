@@ -1233,6 +1233,7 @@
 "limits.help.warning.step3" = "Log in Vault uit via Instellingen, wacht ongeveer een minuut en log weer in.";
 "limits.help.warning.step4" = "Klaar om verder te gaan — je account is veilig.";
 "limits.help.warning.reassure" = "Je account blijft perfect werken. Dit pauzeert Vault slechts een paar minuten, meer niet.";
+"limits.help.warning.uploadblock" = "Na een sterke blokkade blijven foto-uploads ongeveer 24 uur gepauzeerd — zelfs als je uitlogt en weer inlogt. Dit houdt een gemarkeerd account veilig. Foto's onthullen en live Performance blijven gewoon werken.";
 
 "limits.help.show.title" = "Tijdens een voorstelling";
 "limits.help.show.body" = "Als er een melding verschijnt terwijl de toeschouwer naar het scherm kijkt, verbergt Vault alle technische details en toont een algemeen \"Geen internetverbinding\"-scherm.";
@@ -1329,7 +1330,7 @@
 "guide.lockscreen.help.tricks.title" = "Same secret number — many tricks";
 "guide.lockscreen.help.tricks.body" = "The number you enter here is the same secret number used by the Grid Input and all other magic tricks. With it you can trigger:\n\n• Unarchive a photo from a numeric set\n• Reveal a playing card\n• Show a custom image\n• Activate counter glitch\n• Force a reel in Explore";
 "guide.lockscreen.help.cards.title" = "Speelkaartcodes";
-"guide.lockscreen.help.cards.body" = "Voer de code van een speelkaart in als geheim getal om deze te onthullen:\n\nKleur:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKaarten A–9  →  [waarde][kleur]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKaarten 10, B, V, H  →  [tientallen][eenheden][kleur]\n  10♠ = 101    B♥ = 112\n  V♣  = 123    H♦  = 134\n\nVoorbeeld: typ 122 om V♥ te onthullen.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen werkt net als Number Lockscreen:\n\n1. Voer de kaartcode in (2 of 3 cijfers)\n2. Tik buiten het toetsenblok om te bevestigen\n3. Vul de resterende vergrendelingspunten met willekeurige cijfers\n\nKleur:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nKaarten A–9  →  [waarde][kleur]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nKaarten 10, B, V, H  →  [tientallen][eenheden][kleur]\n  10♠ = 101    B♥ = 112\n  V♣  = 123    H♦  = 134\n\nVoorbeeld: typ 122, tik buiten het toetsenblok en vul de 6 punten.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "Effect inschakelen";

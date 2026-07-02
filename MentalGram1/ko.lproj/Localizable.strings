@@ -1235,6 +1235,7 @@
 "limits.help.warning.step3" = "Vault에서 설정을 통해 로그아웃하고, 약 1분 기다린 후 다시 로그인하세요.";
 "limits.help.warning.step4" = "이제 계속 사용할 수 있습니다 — 계정은 안전합니다.";
 "limits.help.warning.reassure" = "계정은 정상적으로 작동합니다. 이는 Vault를 몇 분간 일시 중지시킬 뿐 그 이상은 없습니다.";
+"limits.help.warning.uploadblock" = "강한 차단 후에는 로그아웃했다가 다시 로그인해도 사진 업로드가 약 24시간 동안 일시 중지됩니다. 이는 플래그가 지정된 계정을 안전하게 보호합니다. 사진 공개와 라이브 Performance는 정상적으로 작동합니다.";
 
 "limits.help.show.title" = "공연 중";
 "limits.help.show.body" = "관객이 화면을 보고 있을 때 알림이 나타나면, Vault는 모든 기술적 세부 사항을 숨기고 일반적인 \"인터넷 연결 없음\" 화면을 표시합니다.";
@@ -1334,7 +1335,7 @@
 "guide.lockscreen.help.tricks.title" = "같은 비밀 번호 — 다양한 트릭";
 "guide.lockscreen.help.tricks.body" = "여기서 입력하는 번호는 그리드 입력과 다른 모든 마술 트릭에 사용되는 동일한 비밀 번호입니다:\n\n• 숫자 세트에서 사진 보관 해제\n• 카드 공개\n• 사용자 정의 이미지 표시\n• 카운터 글리치 활성화\n• 탐색에서 릴 강제 표시";
 "guide.lockscreen.help.cards.title" = "플레이잉 카드 코드";
-"guide.lockscreen.help.cards.body" = "카드를 공개하려면 비밀 번호로 해당 코드를 입력하세요:\n\n슈트:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nA–9 카드  →  [숫자][슈트]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\n10, J, Q, K 카드  →  [십의 자리][일의 자리][슈트]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\n예시: Q♥를 공개하려면 122를 입력하세요.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen은 Number Lockscreen과 동일하게 작동합니다:\n\n1. 카드 코드를 입력합니다 (2자리 또는 3자리)\n2. 키패드 외부를 탭하여 확인합니다\n3. 나머지 잠금 화면 점을 임의의 숫자로 채웁니다\n\n슈트:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nA–9 카드  →  [숫자][슈트]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\n10, J, Q, K 카드  →  [십의 자리][일의 자리][슈트]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\n예시: Q♥를 공개하려면 122를 입력하고 외부를 탭한 후 6개의 점을 완성하세요.";
 
 // MARK: - Amnesia Carousel
 "amnesia.toggle" = "효과 활성화";

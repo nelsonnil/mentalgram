@@ -457,7 +457,7 @@
 "guide.lockscreen.help.tricks.title" = "Cùng số bí mật — nhiều thủ thuật";
 "guide.lockscreen.help.tricks.body" = "Số bạn nhập ở đây là số bí mật tương tự được dùng bởi Nhập lưới và tất cả thủ thuật ảo thuật khác. Với nó bạn có thể kích hoạt:\n\n• Bỏ lưu trữ ảnh từ bộ số\n• Tiết lộ bài bài\n• Hiện ảnh tùy chỉnh\n• Kích hoạt counter glitch\n• Ép Reel trong Explore";
 "guide.lockscreen.help.cards.title" = "Mã bài";
-"guide.lockscreen.help.cards.body" = "Để tiết lộ một lá bài, nhập mã của nó làm số bí mật:\n\nChất:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nBài A–9  →  [giá trị][chất]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nBài 10, J, Q, K  →  [hàng chục][hàng đơn vị][chất]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nVí dụ: để tiết lộ Q♥ nhập 122.";
+"guide.lockscreen.help.cards.body" = "Card Lockscreen hoạt động giống như Number Lockscreen:\n\n1. Nhập mã thẻ (2 hoặc 3 chữ số)\n2. Chạm bên ngoài bàn phím để xác nhận\n3. Điền các chấm màn hình khóa còn lại bằng bất kỳ chữ số nào\n\nChất:  1 = ♠   2 = ♥   3 = ♣   4 = ♦\n\nBài A–9  →  [giá trị][chất]\n  A♠ = 11    7♥ = 72    9♦ = 94\n\nBài 10, J, Q, K  →  [hàng chục][hàng đơn vị][chất]\n  10♠ = 101    J♥ = 112\n  Q♣  = 123    K♦  = 134\n\nVí dụ: để tiết lộ Q♥ nhập 122, chạm bên ngoài, sau đó hoàn thành 6 chấm.";
 
 "guide.faq.section" = "CÂU HỎI THƯỜNG GẶP";
 "guide.faq.row.title" = "Câu hỏi thường gặp";
@@ -662,6 +662,7 @@
 "limits.help.warning.step3" = "Trong Vault, đăng xuất từ Cài đặt, chờ khoảng một phút, và đăng nhập lại.";
 "limits.help.warning.step4" = "Bạn đã sẵn sàng tiếp tục — tài khoản của bạn an toàn.";
 "limits.help.warning.reassure" = "Tài khoản của bạn tiếp tục hoạt động hoàn hảo. Điều này chỉ tạm dừng Vault trong vài phút, không hơn.";
+"limits.help.warning.uploadblock" = "Sau một lần chặn mạnh, việc tải ảnh lên sẽ tạm dừng khoảng 24 giờ — ngay cả khi bạn đăng xuất rồi đăng nhập lại. Điều này giúp bảo vệ tài khoản bị gắn cờ. Việc hiển thị ảnh và chế độ Performance trực tiếp vẫn hoạt động bình thường.";
 "limits.help.show.title" = "Trong buổi diễn trực tiếp";
 "limits.help.show.body" = "Nếu cảnh báo xuất hiện khi khán giả đang nhìn màn hình, Vault ẩn tất cả chi tiết kỹ thuật và hiển thị màn hình chung \"Không có kết nối Internet\".";
 "limits.help.show.infobox" = "Bìa hoàn hảo: \"Ugh, Instagram đang bị lỗi một chút — không sao.\". Không khán giả nào sẽ thấy bất cứ điều gì kỹ thuật.";
