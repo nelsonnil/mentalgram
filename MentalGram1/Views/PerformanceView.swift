@@ -1768,6 +1768,11 @@ struct PerformanceView: View {
 
     private var performanceObservedView: some View {
         performanceCoversView
+        // Force standard text size and scale — ignore system Display Zoom and Text Size settings.
+        // Instagram's native app uses fixed layouts, not dynamic type, so we match that behavior
+        // to prevent the profile view from being cut off on devices with zoomed displays.
+            .dynamicTypeSize(.medium)
+            .environment(\.sizeCategory, .medium)
         // selectedSpectator drives fullScreenCover directly — no extra onChange needed.
         // When Explore closes, reset digit buffer (InstagramProfileView's onChange clears followingOverride)
         .onChange(of: showingExplore) { isOpen in
