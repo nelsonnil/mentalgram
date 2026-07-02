@@ -10556,6 +10556,7 @@ struct InstagramHeaderView: View {
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundColor(Color(UIColor.label))
                     .lineLimit(1)
+                    .truncationMode(.tail)
                     .minimumScaleFactor(0.78)
                 if isVerified {
                     InstagramVerifiedBadge(size: 18)
