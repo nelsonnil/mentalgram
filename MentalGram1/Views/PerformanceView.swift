@@ -2881,11 +2881,9 @@ struct PerformanceView: View {
                     $0.name.lowercased() == setName.lowercased() && ($0.type == .custom || $0.type == .list)
                 }) {
                     print("📲 [URL] Activating set '\(matchingSet.name)' for slot reveal")
-                    if matchingSet.type == .list {
-                        activeSettings.activeListSetId = matchingSet.id
-                    } else {
-                        activeSettings.activeCustomSetId = matchingSet.id
-                    }
+                    activeSettings.activeSetId = matchingSet.id
+                    activeSettings.activeSetType = matchingSet.type
+                    activeSettings.isPostPredictionEnabled = true
                     activeSet = matchingSet
                     LogManager.shared.info("URL reveal activated set: \(matchingSet.name)", category: .general)
                 } else {
@@ -2937,7 +2935,9 @@ struct PerformanceView: View {
                     $0.name.lowercased() == setName.lowercased() && $0.type == .card
                 }) {
                     print("📲 [URL] Activating card set '\(matchingSet.name)'")
-                    activeSettings.activeCardSetId = matchingSet.id
+                    activeSettings.activeSetId = matchingSet.id
+                    activeSettings.activeSetType = matchingSet.type
+                    activeSettings.isPostPredictionEnabled = true
                     activeSet = matchingSet
                     LogManager.shared.info("URL reveal activated card set: \(matchingSet.name)", category: .general)
                 } else {
@@ -3452,7 +3452,7 @@ struct PerformanceView: View {
                 // When both bio and note are active and detect new values simultaneously,
                 // execute them sequentially with a delay to avoid note getting cancelled
                 // while waiting for bio's quiet window to expire.
-                var pendingApiTasks: [(target: String, value: String)] = []
+                var pendingApiTasks: [(target: String, value: String?)] = []
                 
                 for target in ["bio", "note"] {
                     let polledEntries = templateSourceEntries(for: target).filter { $0.source.isPolled }
