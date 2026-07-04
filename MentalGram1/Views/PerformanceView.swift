@@ -2837,6 +2837,23 @@ struct PerformanceView: View {
         if mode == "reveal" {
             let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !word.isEmpty else { return }
+            
+            // If a set name was provided, activate it first
+            if let setName = values["set"], !setName.isEmpty {
+                let dataManager = DataManager.shared
+                if let matchingSet = dataManager.sets.first(where: {
+                    $0.name.lowercased() == setName.lowercased() && ($0.type == .word || $0.type == .number)
+                }) {
+                    print("📲 [URL] Activating set '\(matchingSet.name)' for word reveal")
+                    ActiveSetSettings.shared.activeSetId = matchingSet.id
+                    ActiveSetSettings.shared.isPostPredictionEnabled = true
+                    LogManager.shared.info("URL reveal activated set: \(matchingSet.name)", category: .general)
+                } else {
+                    print("⚠️ [URL] Set '\(setName)' not found or not a word/number set")
+                    LogManager.shared.warning("URL reveal: set '\(setName)' not found", category: .general)
+                }
+            }
+            
             print("📲 [URL] Reveal word: \"\(word)\"")
             LogManager.shared.info("URL reveal → word: \"\(word)\"", category: .general)
             // Mark as URL-triggered so the OCR handler skips the ocrEnabled guard
@@ -2853,21 +2870,50 @@ struct PerformanceView: View {
                 print("⚠️ [URL] Invalid slot value: \"\(text)\"")
                 return
             }
+            
+            let dataManager = DataManager.shared
             let activeSettings = ActiveSetSettings.shared
-            guard let activeId = activeSettings.activeCustomSetId ?? activeSettings.activeListSetId,
-                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && ($0.type == .custom || $0.type == .list) }) else {
-                print("🚫 [URL] Slot reveal: no active custom/list set")
-                LogManager.shared.warning("URL slot reveal: no active custom/list set", category: .general)
-                return
+            var activeSet: PhotoSet?
+            
+            // If a set name was provided, find and activate it
+            if let setName = values["set"], !setName.isEmpty {
+                if let matchingSet = dataManager.sets.first(where: {
+                    $0.name.lowercased() == setName.lowercased() && ($0.type == .custom || $0.type == .list)
+                }) {
+                    print("📲 [URL] Activating set '\(matchingSet.name)' for slot reveal")
+                    if matchingSet.type == .list {
+                        activeSettings.activeListSetId = matchingSet.id
+                    } else {
+                        activeSettings.activeCustomSetId = matchingSet.id
+                    }
+                    activeSet = matchingSet
+                    LogManager.shared.info("URL reveal activated set: \(matchingSet.name)", category: .general)
+                } else {
+                    print("⚠️ [URL] Set '\(setName)' not found or not a custom/list set")
+                    LogManager.shared.warning("URL slot reveal: set '\(setName)' not found", category: .general)
+                    return
+                }
+            } else {
+                // Use currently active set
+                guard let activeId = activeSettings.activeCustomSetId ?? activeSettings.activeListSetId,
+                      let active = dataManager.sets.first(where: { $0.id == activeId && ($0.type == .custom || $0.type == .list) }) else {
+                    print("🚫 [URL] Slot reveal: no active custom/list set and no 'set' parameter provided")
+                    LogManager.shared.warning("URL slot reveal: no active custom/list set", category: .general)
+                    return
+                }
+                activeSet = active
             }
+            
+            guard let finalSet = activeSet else { return }
+            
             if !ppTestMode.isActive && UploadManager.shared.isActive && !didAutoPauseUpload {
                 print("⚠️ [URL] Custom slot reveal blocked: upload is active and not paused by Performance")
                 return
             }
-            print("📲 [URL] Slot reveal: slot=\(slot) from '\(activeSet.name)'")
-            LogManager.shared.info("URL reveal → slot \(slot) from '\(activeSet.name)'", category: .general)
+            print("📲 [URL] Slot reveal: slot=\(slot) from '\(finalSet.name)'")
+            LogManager.shared.info("URL reveal → slot \(slot) from '\(finalSet.name)'", category: .general)
             await MainActor.run {
-                if activeSet.type == .list {
+                if finalSet.type == .list {
                     pendingListReveal = slot
                 } else {
                     pendingSlotReveal = slot
@@ -2880,12 +2926,38 @@ struct PerformanceView: View {
         if mode == "reveal_card" {
             let rawSymbol = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !rawSymbol.isEmpty else { return }
-            guard let activeId = ActiveSetSettings.shared.activeCardSetId,
-                  let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) else {
-                print("🚫 [URL] Card reveal: no active card set")
-                LogManager.shared.warning("URL card reveal: no active card set", category: .general)
-                return
+            
+            let dataManager = DataManager.shared
+            let activeSettings = ActiveSetSettings.shared
+            var activeSet: PhotoSet?
+            
+            // If a set name was provided, find and activate it
+            if let setName = values["set"], !setName.isEmpty {
+                if let matchingSet = dataManager.sets.first(where: {
+                    $0.name.lowercased() == setName.lowercased() && $0.type == .card
+                }) {
+                    print("📲 [URL] Activating card set '\(matchingSet.name)'")
+                    activeSettings.activeCardSetId = matchingSet.id
+                    activeSet = matchingSet
+                    LogManager.shared.info("URL reveal activated card set: \(matchingSet.name)", category: .general)
+                } else {
+                    print("⚠️ [URL] Card set '\(setName)' not found")
+                    LogManager.shared.warning("URL card reveal: set '\(setName)' not found", category: .general)
+                    return
+                }
+            } else {
+                // Use currently active card set
+                guard let activeId = activeSettings.activeCardSetId,
+                      let active = dataManager.sets.first(where: { $0.id == activeId && $0.type == .card }) else {
+                    print("🚫 [URL] Card reveal: no active card set and no 'set' parameter provided")
+                    LogManager.shared.warning("URL card reveal: no active card set", category: .general)
+                    return
+                }
+                activeSet = active
             }
+            
+            guard let finalSet = activeSet else { return }
+            
             guard let symbol = normalizedURLCardSymbol(rawSymbol) else {
                 print("⚠️ [URL] Card reveal: '\(rawSymbol)' is not a valid card symbol")
                 LogManager.shared.warning("URL card reveal invalid code: \(rawSymbol)", category: .general)
@@ -2895,8 +2967,8 @@ struct PerformanceView: View {
                 print("⚠️ [URL] Card reveal blocked: upload is active and not paused by Performance")
                 return
             }
-            print("📲 [URL] Card reveal: \(symbol) from '\(activeSet.name)'")
-            LogManager.shared.info("URL reveal → card \(symbol) from '\(activeSet.name)'", category: .general)
+            print("📲 [URL] Card reveal: \(symbol) from '\(finalSet.name)'")
+            LogManager.shared.info("URL reveal → card \(symbol) from '\(finalSet.name)'", category: .general)
             await MainActor.run { pendingCardReveal = symbol }
             return
         }
@@ -3377,6 +3449,11 @@ struct PerformanceView: View {
                 guard !isCombinedBioPostPredictionGuardActive else { continue }
 
                 // ── bio / note ────────────────────────────────────────────────
+                // When both bio and note are active and detect new values simultaneously,
+                // execute them sequentially with a delay to avoid note getting cancelled
+                // while waiting for bio's quiet window to expire.
+                var pendingApiTasks: [(target: String, value: String)] = []
+                
                 for target in ["bio", "note"] {
                     let polledEntries = templateSourceEntries(for: target).filter { $0.source.isPolled }
                     guard !polledEntries.isEmpty else { continue }
@@ -3420,7 +3497,22 @@ struct PerformanceView: View {
                         lastApiPollTokens[tokenKey] = payload.changeToken
                         print("🔔 [API POLL] New value for \(target) text\(entry.slot): \"\(newValue.prefix(40))\"")
                         LogManager.shared.info("API poll detected new \(target) text\(entry.slot): \"\(newValue.prefix(40))\"", category: .general)
-                        await applyApiAutoMode(target: target, preloadedValue: entry.slot == 1 ? newValue : nil)
+                        
+                        // Queue the task instead of executing immediately
+                        pendingApiTasks.append((target: target, value: entry.slot == 1 ? newValue : nil))
+                    }
+                }
+                
+                // Execute queued tasks sequentially with appropriate delays
+                if !pendingApiTasks.isEmpty {
+                    for (index, task) in pendingApiTasks.enumerated() {
+                        await applyApiAutoMode(target: task.target, preloadedValue: task.value)
+                        // Add delay between bio and note to prevent note cancellation
+                        if index < pendingApiTasks.count - 1 {
+                            let delaySeconds = 4 // Brief anti-bot gap between consecutive API writes
+                            print("⏳ [API POLL] Waiting \(delaySeconds)s between \(task.target) and next API write")
+                            try? await Task.sleep(nanoseconds: UInt64(delaySeconds) * 1_000_000_000)
+                        }
                     }
                 }
 
@@ -10832,11 +10924,11 @@ struct AutoFollowedByView: View {
             HStack(spacing: 0) {
                 Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
-                    .lineLimit(1).fixedSize()
+                    .lineLimit(1).truncationMode(.tail)
                     .onTapGesture { openProfile(userId: visible[0].userId, username: visible[0].username) }
                 Text(", ").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visible[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
-                    .lineLimit(1).fixedSize()
+                    .lineLimit(1).truncationMode(.tail)
                     .onTapGesture { openProfile(userId: visible[1].userId, username: visible[1].username) }
                 Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visible[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
@@ -10848,7 +10940,7 @@ struct AutoFollowedByView: View {
             HStack(spacing: 0) {
                 Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visible[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
-                    .lineLimit(1).fixedSize()
+                    .lineLimit(1).truncationMode(.tail)
                     .onTapGesture { openProfile(userId: visible[0].userId, username: visible[0].username) }
                 Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visible[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
@@ -10895,10 +10987,10 @@ struct FollowedByView: View {
             HStack(spacing: 0) {
                 Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
-                    .lineLimit(1).fixedSize().onTapGesture { onFollowerTap?(visibleFollowers[0]) }
+                    .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[0]) }
                 Text(", ").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
-                    .lineLimit(1).fixedSize().onTapGesture { onFollowerTap?(visibleFollowers[1]) }
+                    .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[1]) }
                 Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visibleFollowers[2].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[2]) }
@@ -10908,7 +11000,7 @@ struct FollowedByView: View {
             HStack(spacing: 0) {
                 Text("ig.followed_by").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visibleFollowers[0].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
-                    .lineLimit(1).fixedSize().onTapGesture { onFollowerTap?(visibleFollowers[0]) }
+                    .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[0]) }
                 Text("ig.and").font(.system(size: 12)).foregroundColor(Color(UIColor.secondaryLabel)).fixedSize()
                 Text(visibleFollowers[1].username).font(.system(size: 12, weight: .semibold)).foregroundColor(Color(UIColor.label))
                     .lineLimit(1).truncationMode(.tail).onTapGesture { onFollowerTap?(visibleFollowers[1]) }

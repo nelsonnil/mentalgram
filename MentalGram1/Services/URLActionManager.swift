@@ -138,31 +138,50 @@ class URLActionManager: ObservableObject {
         // ── Reveal variants: word / custom slot / playing card ───────────────
         if host == "reveal" {
             let items = components?.queryItems ?? []
+            let setName = extractParam("set")  // Optional set name parameter
 
             // vault://reveal?word=COCHE  (Word Reveal)
+            // vault://reveal?word=COCHE&set=MySet  (Word Reveal with specific set)
             if let raw = items.first(where: { $0.name == "word" })?.value,
                !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("📲 [URL] vault://reveal?word received: \"\(word.prefix(40))\"")
-                DispatchQueue.main.async { self.pendingMode = "reveal";      self.pendingText = word }
+                let msg = setName.map { " from set '\($0)'" } ?? ""
+                print("📲 [URL] vault://reveal?word received: \"\(word.prefix(40))\"\(msg)")
+                DispatchQueue.main.async {
+                    self.pendingMode = "reveal"
+                    self.pendingText = word
+                    self.pendingValues = setName.map { ["set": $0] } ?? [:]
+                }
                 return true
             }
 
             // vault://reveal?slot=15  (Custom Set Reveal, slot 1–100)
+            // vault://reveal?slot=15&set=MySet  (Custom Set with specific set name)
             if let raw = items.first(where: { $0.name == "slot" })?.value,
                let slot = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
                (1...100).contains(slot) {
-                print("📲 [URL] vault://reveal?slot received: \(slot)")
-                DispatchQueue.main.async { self.pendingMode = "reveal_slot"; self.pendingText = "\(slot)" }
+                let msg = setName.map { " from set '\($0)'" } ?? ""
+                print("📲 [URL] vault://reveal?slot received: \(slot)\(msg)")
+                DispatchQueue.main.async {
+                    self.pendingMode = "reveal_slot"
+                    self.pendingText = "\(slot)"
+                    self.pendingValues = setName.map { ["set": $0] } ?? [:]
+                }
                 return true
             }
 
             // vault://reveal?card=3D  (Playing Card Reveal: S/H/C/D suits)
+            // vault://reveal?card=3D&set=MyCardSet  (Card with specific set name)
             if let raw = items.first(where: { $0.name == "card" })?.value,
                !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let symbol = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("📲 [URL] vault://reveal?card received: \"\(symbol)\"")
-                DispatchQueue.main.async { self.pendingMode = "reveal_card"; self.pendingText = symbol }
+                let msg = setName.map { " from set '\($0)'" } ?? ""
+                print("📲 [URL] vault://reveal?card received: \"\(symbol)\"\(msg)")
+                DispatchQueue.main.async {
+                    self.pendingMode = "reveal_card"
+                    self.pendingText = symbol
+                    self.pendingValues = setName.map { ["set": $0] } ?? [:]
+                }
                 return true
             }
 

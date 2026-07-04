@@ -1047,10 +1047,10 @@ private struct IMURLExamples: View {
 
     private let groups: [URLGroup] = [
         URLGroup(label: "Post Prediction", icon: "photo.on.rectangle", urls: [
-            ("vault://reveal?word=MAGIC",   "Word set — unarchives letter photos"),
-            ("vault://reveal?word=42",      "Number set — needs active number set"),
-            ("vault://reveal?slot=15",      "Custom/list set — unarchives slot 15"),
-            ("vault://reveal?card=J\u{2660}", "Card set — unarchives the J♠ slot")
+            ("vault://reveal?word=MAGIC&set=MySet",   "Word set — with specific set name"),
+            ("vault://reveal?word=42&set=Numbers",      "Number set — with specific set name"),
+            ("vault://reveal?slot=15&set=CustomSet",      "Custom/list set — with specific set name"),
+            ("vault://reveal?card=J\u{2660}&set=Cards", "Card set — with specific set name")
         ]),
         URLGroup(label: "Note & Bio", icon: "text.alignleft", urls: [
             ("vault://note?text=Well%20done", "Sends an Instagram Note"),

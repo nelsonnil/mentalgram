@@ -1446,24 +1446,25 @@ struct SetURLSchemeRow: View {
 
     private var urlScheme: String {
         guard let mode = set.type.revealURLTemplate else { return "" }
+        let setParam = "&set=\(set.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? set.name)"
         switch set.type {
-        case .word:           return "vault://reveal?\(mode)=<word>"
-        case .number:         return "vault://reveal?\(mode)=1"
-        case .custom, .list:  return "vault://reveal?\(mode)=<1-100>"
-        case .card:           return "vault://reveal?\(mode)=3D"
+        case .word:           return "vault://reveal?\(mode)=<word>\(setParam)"
+        case .number:         return "vault://reveal?\(mode)=1\(setParam)"
+        case .custom, .list:  return "vault://reveal?\(mode)=<1-100>\(setParam)"
+        case .card:           return "vault://reveal?\(mode)=3D\(setParam)"
         }
     }
 
     private var helperText: String {
         switch set.type {
         case .word:
-            return "Replace <word> with the word to reveal, for example: vault://reveal?word=MAGIC"
+            return "Replace <word> with the word to reveal. The set parameter ensures this specific set is used. Example: vault://reveal?word=MAGIC&set=\(set.name)"
         case .number:
-            return "Put the number after word=. Example: vault://reveal?word=7 reveals the digit 7. For multi-digit: vault://reveal?word=42"
+            return "Put the number after word=. The set parameter ensures this specific set is used. Example: vault://reveal?word=7&set=\(set.name)"
         case .custom, .list:
-            return "Put the value after slot=. Example: vault://reveal?slot=15 reveals item 15. Do not add value=."
+            return "Put the slot number after slot=. The set parameter ensures this specific set is used. Example: vault://reveal?slot=15&set=\(set.name)"
         case .card:
-            return "Use value + suit after card=. Example: vault://reveal?card=3D for 3 of Diamonds."
+            return "Use value + suit after card=. The set parameter ensures this specific set is used. Example: vault://reveal?card=3D&set=\(set.name)"
         }
     }
 
@@ -1879,9 +1880,20 @@ struct CooldownWarningBanner: View {
     @State private var blinkTimer: Timer?       = nil
     @State private var blink: Bool              = false
     @State private var refreshTick: Int         = 0
+    
+    // Emergency skip cooldown
+    @State private var showSkipConfirmation: Bool = false
+    @AppStorage("cooldown_skip_used_timestamp") private var skipUsedTimestamp: Double = 0
+    @AppStorage("cooldown_skip_count") private var skipCount: Int = 0
 
     // Interface-capture cooldown duration kept in sync with PerformanceView
     private let captureCooldown: TimeInterval = 90
+    
+    // Only allow skip button once per session
+    private var canShowSkipButton: Bool {
+        let hoursSinceLastSkip = (Date().timeIntervalSince1970 - skipUsedTimestamp) / 3600
+        return hoursSinceLastSkip > 1 // Allow skip once per hour
+    }
 
     private var activeCooldowns: [(icon: String, label: String, seconds: Int)] {
         var list: [(String, String, Int)] = []
@@ -1936,12 +1948,45 @@ struct CooldownWarningBanner: View {
                     .animation(.easeInOut(duration: 0.5), value: blink)
                     .padding(.top, 1)
                 cooldownList
+                
+                // Emergency Skip button - only for bio/note cooldowns
+                if (bioSeconds > 0 || noteSeconds > 0) && canShowSkipButton {
+                    Spacer(minLength: 4)
+                    Button {
+                        showSkipConfirmation = true
+                    } label: {
+                        VStack(spacing: 2) {
+                            Image(systemName: "forward.fill")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Skip")
+                                .font(.system(size: 8, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.25))
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                        )
+                    }
+                    .padding(.top, 1)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(bannerBackground)
             .padding(.horizontal, VaultTheme.Spacing.lg)
             .padding(.bottom, 8)
+        }
+        .alert("⚠️ Skip Cooldown?", isPresented: $showSkipConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Skip Once", role: .destructive) {
+                skipCooldown()
+            }
+        } message: {
+            Text("This will skip the cooldown ONCE. Use only for genuine errors.\n\nWARNING: Repeated use increases bot detection risk.")
         }
     }
 
@@ -2044,6 +2089,28 @@ struct CooldownWarningBanner: View {
         timer = nil
         blinkTimer?.invalidate()
         blinkTimer = nil
+    }
+    
+    private func skipCooldown() {
+        // Clear bio and note cooldowns
+        if bioSeconds > 0 {
+            UserDefaults.standard.removeObject(forKey: "biography_cooldown_until")
+            bioSeconds = 0
+        }
+        if noteSeconds > 0 {
+            UserDefaults.standard.removeObject(forKey: "note_cooldown_until")
+            noteSeconds = 0
+        }
+        
+        // Track usage
+        skipUsedTimestamp = Date().timeIntervalSince1970
+        skipCount += 1
+        
+        // Force refresh cooldown state
+        refresh()
+        
+        // Log the skip (for debugging/tracking)
+        print("⚠️ [COOLDOWN] Emergency skip used (count: \(skipCount))")
     }
 }
 
@@ -5918,7 +5985,7 @@ private struct PostPredictionCoverTypingView: View {
 
 
 private struct PostPredictionURLSchemeView: View {
-    private let templateURL = "vault://reveal?word=<your word>"
+    private let templateURL = "vault://reveal?word=<your word>&set=<set name>"
 
     var body: some View {
         VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
@@ -5930,7 +5997,7 @@ private struct PostPredictionURLSchemeView: View {
                     Text("URL Scheme")
                         .font(VaultTheme.Typography.bodyBold())
                         .foregroundColor(VaultTheme.Colors.textPrimary)
-                    Text("Open this URL to trigger a reveal directly when Performance opens")
+                    Text("Open this URL to trigger a reveal directly. The set parameter specifies which set to use.")
                         .font(VaultTheme.Typography.caption())
                                     .foregroundColor(VaultTheme.Colors.textSecondary)
                 }

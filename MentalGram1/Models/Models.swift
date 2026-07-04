@@ -407,7 +407,7 @@ enum AlphabetType: String, Codable, CaseIterable {
             return ["ก","ข","ค","ง","จ","ฉ","ช","ซ","ญ","ด","ต","ถ","ท","น","บ","ป","ผ","ฝ","พ","ฟ","ภ","ม","ย","ร","ล","ว","ศ","ส","ห","อ","ฮ"]
         case .vietnamese:
             // Consonants (no tonal variations)
-            return ["B","C","D","Đ","G","H","K","L","M","N","P","Q","R","S","T","V","X","Y",
+            return ["B","C","D","Đ","G","H","K","L","M","N","P","Q","R","S","T","V","X",
                     // Vowels with all 6 tones: neutral, sắc (´), huyền (`), hỏi (?), ngã (~), nặng (.)
                     // A family
                     "A","Á","À","Ả","Ã","Ạ",
