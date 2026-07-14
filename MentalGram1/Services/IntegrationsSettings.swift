@@ -29,6 +29,72 @@ enum ExploreSpyFormat: Int, CaseIterable {
     }
 }
 
+// MARK: - AI Screen Detection Mode
+
+enum AIScreenDetectionMode: String, CaseIterable {
+    case vision = "vision"
+    case likes = "likes"
+    case visualMatch = "visual_match"
+
+    var displayName: String {
+        switch self {
+        case .vision: return "AI Camera"
+        case .likes: return "Likes"
+        case .visualMatch: return "Visual Match"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .vision: return "Photo reads public profile name, then detect +1 like"
+        case .likes: return "Latest follower snapshot + detect +1 like"
+        case .visualMatch: return "Photo reads profile, then OpenAI matches against post thumbnails"
+        }
+    }
+}
+
+enum AIScreenRevealAnimationStyle: String, CaseIterable {
+    case energyLines = "energy_lines"
+    case signalGhost = "signal_ghost"
+    case gridPossession = "grid_possession"
+
+    var displayName: String {
+        switch self {
+        case .energyLines: return "Energy Lines"
+        case .signalGhost: return "Signal Ghost"
+        case .gridPossession: return "Grid Possession"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .energyLines: return "Fine electric lines and mysterious interference"
+        case .signalGhost: return "Analog TV distortion with spectral flashes"
+        case .gridPossession: return "The selected image invades the grid cell by cell"
+        }
+    }
+
+    var duration: TimeInterval {
+        switch self {
+        case .energyLines: return 1.55
+        case .signalGhost: return 1.75
+        case .gridPossession: return 2.35
+        }
+    }
+}
+
+enum TranspositionRevealMode: String, CaseIterable {
+    case grid = "grid"
+    case blackScreen = "black_screen"
+
+    var displayName: String {
+        switch self {
+        case .grid: return "Grid"
+        case .blackScreen: return "Black Screen"
+        }
+    }
+}
+
 // MARK: - Auto Input Mode
 
 enum AutoInputMode: String, CaseIterable {
@@ -150,6 +216,12 @@ struct ApiFetchedValue {
 final class IntegrationsSettings: ObservableObject {
     static let shared = IntegrationsSettings()
 
+    static let defaultAIScreenDetectionPrompt = """
+    Analiza esta foto de una pantalla de Instagram. Necesito identificar el PERFIL mostrado, no el post. Devuelve SOLO JSON válido:
+    {"platform":"instagram","isInstagramPost":true,"username":"","usernameCandidates":[],"displayName":"","dateText":"","relativeDate":"","visibleLikeText":"","visibleCommentText":"","visibleShareText":"","captionVisible":"","imageTextVisible":"","visualDescription":"","mainObjects":[],"peopleVisible":[],"locationText":"","postType":"image|carousel|video|reel|unknown","confidence":0.0,"missingOrUnclear":[]}
+    MUY IMPORTANTE: lee el username EXACTO del perfil mostrado. Presta especial atención a puntos, guiones bajos, números, letras repetidas y orden exacto de caracteres. El username tiene prioridad sobre cualquier otro texto visible. Para Reels/videos, lee también con máxima prioridad el título/caption visible justo debajo del username o en la parte inferior del video, porque ayuda a identificar el post exacto aunque la miniatura sea distinta. No inventes alternativas. Si no estás seguro del username exacto, deja username vacío, usa displayName si se ve claro y deja usernameCandidates vacío. La app buscará después el perfil más parecido.
+    """
+
     // Inject (receive — 11z.co)
     @Published var injectID: String {
         didSet { UserDefaults.standard.set(injectID, forKey: "integ_injectID") }
@@ -164,6 +236,50 @@ final class IntegrationsSettings: ObservableObject {
     }
     @Published var exploreSpyFormat: ExploreSpyFormat {
         didSet { UserDefaults.standard.set(exploreSpyFormat.rawValue, forKey: "integ_exploreSpyFormat") }
+    }
+
+    // AI screen detection — camera photo of spectator phone → OpenAI Vision → Instagram post match.
+    @Published var aiScreenDetectionEnabled: Bool {
+        didSet { UserDefaults.standard.set(aiScreenDetectionEnabled, forKey: "integ_aiScreenDetectionEnabled") }
+    }
+    @Published var aiScreenDetectionMode: AIScreenDetectionMode {
+        didSet { UserDefaults.standard.set(aiScreenDetectionMode.rawValue, forKey: "integ_aiScreenDetectionMode") }
+    }
+    @Published var openAIAPIKey: String {
+        didSet { UserDefaults.standard.set(openAIAPIKey, forKey: "integ_openAIAPIKey") }
+    }
+    @Published var openAIModel: String {
+        didSet { UserDefaults.standard.set(openAIModel, forKey: "integ_openAIModel") }
+    }
+    @Published var aiScreenDetectionPrompt: String {
+        didSet { UserDefaults.standard.set(aiScreenDetectionPrompt, forKey: "integ_aiScreenDetectionPrompt") }
+    }
+    @Published var aiScreenCandidateLimit: Int {
+        didSet { UserDefaults.standard.set(aiScreenCandidateLimit, forKey: "integ_aiScreenCandidateLimit") }
+    }
+    @Published var aiScreenCameraZoom: Double {
+        didSet { UserDefaults.standard.set(aiScreenCameraZoom, forKey: "integ_aiScreenCameraZoom") }
+    }
+    @Published var aiScreenVerifyLatestFollower: Bool {
+        didSet { UserDefaults.standard.set(aiScreenVerifyLatestFollower, forKey: "integ_aiScreenVerifyLatestFollower") }
+    }
+    @Published var aiScreenRevealAnimationEnabled: Bool {
+        didSet { UserDefaults.standard.set(aiScreenRevealAnimationEnabled, forKey: "integ_aiScreenRevealAnimationEnabled") }
+    }
+    @Published var aiScreenRevealAnimationStyle: AIScreenRevealAnimationStyle {
+        didSet { UserDefaults.standard.set(aiScreenRevealAnimationStyle.rawValue, forKey: "integ_aiScreenRevealAnimationStyle") }
+    }
+    @Published var transpositionRevealMode: TranspositionRevealMode {
+        didSet { UserDefaults.standard.set(transpositionRevealMode.rawValue, forKey: "integ_transpositionRevealMode") }
+    }
+    @Published var transpositionSaveSelectedCaptureToPhotos: Bool {
+        didSet { UserDefaults.standard.set(transpositionSaveSelectedCaptureToPhotos, forKey: "integ_transpositionSaveSelectedCaptureToPhotos") }
+    }
+    @Published var transpositionDimBlackScreenBrightness: Bool {
+        didSet { UserDefaults.standard.set(transpositionDimBlackScreenBrightness, forKey: "integ_transpositionDimBlackScreenBrightness") }
+    }
+    @Published var transpositionBlackScreenReadySoundEnabled: Bool {
+        didSet { UserDefaults.standard.set(transpositionBlackScreenReadySoundEnabled, forKey: "integ_transpositionBlackScreenReadySoundEnabled") }
     }
 
     // Custom API names (user-defined labels shown in pickers)
@@ -248,6 +364,21 @@ final class IntegrationsSettings: ObservableObject {
         exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
         exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
         exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
+        aiScreenDetectionEnabled = ud.bool(forKey: "integ_aiScreenDetectionEnabled")
+        aiScreenDetectionMode = .visualMatch
+        openAIAPIKey          = ud.string(forKey: "integ_openAIAPIKey") ?? ""
+        openAIModel           = ud.string(forKey: "integ_openAIModel") ?? "gpt-4o-mini"
+        aiScreenDetectionPrompt = ud.string(forKey: "integ_aiScreenDetectionPrompt") ?? Self.defaultAIScreenDetectionPrompt
+        aiScreenCandidateLimit = 12
+        let savedZoom = ud.double(forKey: "integ_aiScreenCameraZoom")
+        aiScreenCameraZoom = savedZoom == 0 ? 1.4 : min(max(savedZoom, 1.3), 1.5)
+        aiScreenVerifyLatestFollower = ud.object(forKey: "integ_aiScreenVerifyLatestFollower") as? Bool ?? true
+        aiScreenRevealAnimationEnabled = ud.object(forKey: "integ_aiScreenRevealAnimationEnabled") as? Bool ?? true
+        aiScreenRevealAnimationStyle = AIScreenRevealAnimationStyle(rawValue: ud.string(forKey: "integ_aiScreenRevealAnimationStyle") ?? "") ?? .energyLines
+        transpositionRevealMode = TranspositionRevealMode(rawValue: ud.string(forKey: "integ_transpositionRevealMode") ?? "") ?? .grid
+        transpositionSaveSelectedCaptureToPhotos = ud.bool(forKey: "integ_transpositionSaveSelectedCaptureToPhotos")
+        transpositionDimBlackScreenBrightness = ud.bool(forKey: "integ_transpositionDimBlackScreenBrightness")
+        transpositionBlackScreenReadySoundEnabled = ud.object(forKey: "integ_transpositionBlackScreenReadySoundEnabled") as? Bool ?? true
         customApi1Name  = ud.string(forKey: "integ_custom1Name")    ?? ""
         customApi2Name  = ud.string(forKey: "integ_custom2Name")    ?? ""
         customApi3Name  = ud.string(forKey: "integ_custom3Name")    ?? ""
@@ -285,6 +416,21 @@ final class IntegrationsSettings: ObservableObject {
         exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
         exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
         exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
+        aiScreenDetectionEnabled = ud.bool(forKey: "integ_aiScreenDetectionEnabled")
+        aiScreenDetectionMode = .visualMatch
+        openAIAPIKey          = ud.string(forKey: "integ_openAIAPIKey") ?? ""
+        openAIModel           = ud.string(forKey: "integ_openAIModel") ?? "gpt-4o-mini"
+        aiScreenDetectionPrompt = ud.string(forKey: "integ_aiScreenDetectionPrompt") ?? Self.defaultAIScreenDetectionPrompt
+        aiScreenCandidateLimit = 12
+        let savedZoom = ud.double(forKey: "integ_aiScreenCameraZoom")
+        aiScreenCameraZoom = savedZoom == 0 ? 1.4 : min(max(savedZoom, 1.3), 1.5)
+        aiScreenVerifyLatestFollower = ud.object(forKey: "integ_aiScreenVerifyLatestFollower") as? Bool ?? true
+        aiScreenRevealAnimationEnabled = ud.object(forKey: "integ_aiScreenRevealAnimationEnabled") as? Bool ?? true
+        aiScreenRevealAnimationStyle = AIScreenRevealAnimationStyle(rawValue: ud.string(forKey: "integ_aiScreenRevealAnimationStyle") ?? "") ?? .energyLines
+        transpositionRevealMode = TranspositionRevealMode(rawValue: ud.string(forKey: "integ_transpositionRevealMode") ?? "") ?? .grid
+        transpositionSaveSelectedCaptureToPhotos = ud.bool(forKey: "integ_transpositionSaveSelectedCaptureToPhotos")
+        transpositionDimBlackScreenBrightness = ud.bool(forKey: "integ_transpositionDimBlackScreenBrightness")
+        transpositionBlackScreenReadySoundEnabled = ud.object(forKey: "integ_transpositionBlackScreenReadySoundEnabled") as? Bool ?? true
         customApi1Name  = ud.string(forKey: "integ_custom1Name")    ?? ""
         customApi2Name  = ud.string(forKey: "integ_custom2Name")    ?? ""
         customApi3Name  = ud.string(forKey: "integ_custom3Name")    ?? ""

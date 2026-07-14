@@ -77,6 +77,11 @@ class CloudBackupService: ObservableObject {
         // Note template & settings
         "note_template", "note_feature_enabled", "noteTopInputMode",
         "note_duplicate_warning_text",
+        // Profile reset baselines
+        "reset_baseline_biography", "reset_baseline_bio_enabled",
+        "reset_baseline_note", "reset_baseline_note_enabled",
+        "reset_baseline_profile_pic_data", "reset_baseline_profile_pic_hash",
+        "reset_baseline_profile_pic_enabled",
         // Integrations / custom APIs (IntegrationsSettings)
         "integ_injectID",
         "integ_custom1Name", "integ_custom2Name", "integ_custom3Name",

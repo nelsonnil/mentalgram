@@ -362,7 +362,7 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .hiragana:
             return ["あ","い","う","え","お","か","き","く","け","こ","さ","し","す","せ","そ","た","ち","つ","て","と","な","に","ぬ","ね","の","は","ひ","ふ","へ","ほ","ま","み","む","め","も","や","ゆ","よ","ら","り","る","れ","ろ","わ","を","ん"]
         case .hiraganaFull:
-            return ["あ","い","う","え","お",
+            return ["あ","い","う","ゔ","え","お",
                     "か","き","く","け","こ",
                     "が","ぎ","ぐ","げ","ご",
                     "さ","し","す","せ","そ",
@@ -382,7 +382,7 @@ enum AlphabetType: String, Codable, CaseIterable {
         case .katakana:
             return ["ア","イ","ウ","エ","オ","カ","キ","ク","ケ","コ","サ","シ","ス","セ","ソ","タ","チ","ツ","テ","ト","ナ","ニ","ヌ","ネ","ノ","ハ","ヒ","フ","ヘ","ホ","マ","ミ","ム","メ","モ","ヤ","ユ","ヨ","ラ","リ","ル","レ","ロ","ワ","ヲ","ン"]
         case .katakanaFull:
-            return ["ア","イ","ウ","エ","オ",
+            return ["ア","イ","ウ","ヴ","エ","オ",
                     "カ","キ","ク","ケ","コ",
                     "ガ","ギ","グ","ゲ","ゴ",
                     "サ","シ","ス","セ","ソ",
@@ -996,6 +996,15 @@ class SecretInputSettings: ObservableObject {
             UserDefaults.standard.set(customUsername, forKey: "secretInputCustomUsername")
         }
     }
+
+    // MARK: Bio Cover Typing mask settings (independent from Post Prediction)
+    @Published var bioCoverTypingMode: MaskInputMode {
+        didSet { UserDefaults.standard.set(bioCoverTypingMode.rawValue, forKey: "bioCoverTypingMode") }
+    }
+
+    @Published var bioCoverTypingCustomUsername: String {
+        didSet { UserDefaults.standard.set(bioCoverTypingCustomUsername, forKey: "bioCoverTypingCustomUsername") }
+    }
     
     private init() {
         let savedEnabled = UserDefaults.standard.object(forKey: "secretInputEnabled") as? Bool
@@ -1009,6 +1018,15 @@ class SecretInputSettings: ObservableObject {
         }
         
         self.customUsername = UserDefaults.standard.string(forKey: "secretInputCustomUsername") ?? ""
+
+        if let savedBioMode = UserDefaults.standard.string(forKey: "bioCoverTypingMode"),
+           let bm = MaskInputMode(rawValue: savedBioMode) {
+            self.bioCoverTypingMode = bm
+        } else {
+            self.bioCoverTypingMode = .latestFollower
+        }
+
+        self.bioCoverTypingCustomUsername = UserDefaults.standard.string(forKey: "bioCoverTypingCustomUsername") ?? ""
     }
     
     /// Get the mask text based on current mode. Returns empty string when disabled.

@@ -39,6 +39,30 @@ class VolumeButtonMonitor: ObservableObject {
         hasPrepared = true
     }
 
+    func setVolumeToMiddle() {
+        activateSession()
+        if cachedSlider == nil { setupPersistentVolumeView() }
+        isResetting = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.setSystemVolume(0.5)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self?.isResetting = false
+            }
+        }
+    }
+
+    func setVolumeToMaximum() {
+        activateSession()
+        if cachedSlider == nil { setupPersistentVolumeView() }
+        isResetting = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.setSystemVolume(1.0)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self?.isResetting = false
+            }
+        }
+    }
+
     /// Starts listening for volume button presses (up or down).
     /// All audio-session and MPVolumeView setup happens here (deferred from prepareVolume)
     /// so we never touch the window hierarchy during PerformanceView's .onAppear.
@@ -55,7 +79,7 @@ class VolumeButtonMonitor: ObservableObject {
 
         // Set volume to 50% so both up and down are always detectable
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?.resetVolume()
+            self?.setSystemVolume(0.5)
         }
 
         volumeObservation = AVAudioSession.sharedInstance()
@@ -74,7 +98,7 @@ class VolumeButtonMonitor: ObservableObject {
                         print("🔊 [VOLUME] DOWN — trigger #\(self.triggerCount) (down #\(self.downCount))")
                     }
                     self.isResetting = true
-                    self.resetVolume()
+                    self.setSystemVolume(0.5)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         self.isResetting = false
                     }
@@ -132,14 +156,15 @@ class VolumeButtonMonitor: ObservableObject {
 
     /// Resets volume to 50% using the cached slider (fast, no view allocation).
     /// Falls back to creating a new view if the slider is not yet cached.
-    private func resetVolume() {
+    private func setSystemVolume(_ value: Float) {
+        let clamped = min(max(value, 0), 1)
         if let slider = cachedSlider {
-            slider.value = 0.5
+            slider.value = clamped
         } else {
             // Fallback: re-cache and retry once
             setupPersistentVolumeView()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.cachedSlider?.value = 0.5
+                self?.cachedSlider?.value = clamped
             }
         }
     }

@@ -66,7 +66,11 @@ struct LockscreenInputView: View {
             } else {
                 Color.black.ignoresSafeArea()
             }
-            Color.black.opacity(0.12).ignoresSafeArea()
+            // Native iOS darkens the wallpaper behind the passcode screen so white
+            // keypad text stays readable, while the keys themselves remain Liquid
+            // Glass and translucent. Keep this as a wallpaper veil, not a button
+            // treatment, so bright wallpapers still look like the real lock screen.
+            Color.black.opacity(0.18).ignoresSafeArea()
         }
     }
 
@@ -95,6 +99,20 @@ struct LockscreenInputView: View {
     // MARK: - Numpad
 
     private var numpadSection: some View {
+        Group {
+            if #available(iOS 26, *) {
+                // GlassEffectContainer agrupa todos los botones para compartir
+                // la región de muestreo GPU — más eficiente y visualmente coherente.
+                GlassEffectContainer(spacing: 16) {
+                    numpadGrid
+                }
+            } else {
+                numpadGrid
+            }
+        }
+    }
+
+    private var numpadGrid: some View {
         VStack(spacing: 16) {
             ForEach(0..<numpadLayout.count, id: \.self) { row in
                 HStack(spacing: 24) {
@@ -115,43 +133,72 @@ struct LockscreenInputView: View {
     private func numpadButton(digit: Int, letters: String) -> some View {
         let isPressed = pressedDigit == digit
 
-        return ZStack {
-            // Liquid-glass circle — matches iOS 26 native lock screen style
-            Circle()
-                .fill(Color.white.opacity(isPressed ? 0.38 : 0.20))
-                .overlay(
-                    // Subtle top-left specular highlight
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.white.opacity(isPressed ? 0.30 : 0.14),
-                                    Color.clear
-                                ],
-                                center: .init(x: 0.35, y: 0.28),
-                                startRadius: 0,
-                                endRadius: buttonSize * 0.52
-                            )
-                        )
-                )
-                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
-                .frame(width: buttonSize, height: buttonSize)
+        return Group {
+            if #available(iOS 26, *) {
+                // Liquid Glass nativo del sistema. Use `.clear.tint(...)` instead
+                // of a manual white overlay: it keeps the real refraction/fluid
+                // behavior while making the passcode buttons much brighter over
+                // wallpaper, like the native iOS lock screen.
+                VStack(spacing: 2) {
+                    Text("\(digit)")
+                        .font(.system(size: 34, weight: .light))
+                        .foregroundColor(.white)
 
-            VStack(spacing: 2) {
-                Text("\(digit)")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundColor(.white)
-
-                if !letters.isEmpty {
-                    Text(letters)
-                        .font(.system(size: 10, weight: .medium))
-                        .tracking(1.5)
-                        .foregroundColor(.white.opacity(0.9))
+                    if !letters.isEmpty {
+                        Text(letters)
+                            .font(.system(size: 10, weight: .medium))
+                            .tracking(1.5)
+                            .foregroundColor(.white.opacity(0.9))
+                    }
                 }
+                .frame(width: buttonSize, height: buttonSize)
+                .environment(\.colorScheme, .light)
+                .glassEffect(
+                    .clear
+                        .tint(Color.white.opacity(isPressed ? 0.58 : 0.42))
+                        .interactive(),
+                    in: .circle
+                )
+            } else {
+                // Fallback para iOS < 26: ultraThinMaterial + borde muy fino,
+                // replica el aspecto translúcido real de la lockscreen de iOS.
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .environment(\.colorScheme, .light)
+                        .background(
+                            Circle()
+                                .fill(Color.white.opacity(0.24))
+                        )
+                        .overlay(
+                            // Flash de press — igual que el highlight nativo
+                            Circle()
+                                .fill(Color.white.opacity(isPressed ? 0.32 : 0.16))
+                                .blendMode(.screen)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.45), lineWidth: 0.7)
+                        )
+                        .frame(width: buttonSize, height: buttonSize)
+
+                    VStack(spacing: 2) {
+                        Text("\(digit)")
+                            .font(.system(size: 34, weight: .light))
+                            .foregroundColor(.white)
+
+                        if !letters.isEmpty {
+                            Text(letters)
+                                .font(.system(size: 10, weight: .medium))
+                                .tracking(1.5)
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                    }
+                }
+                .scaleEffect(isPressed ? 1.06 : 1.0)
+                .animation(.spring(response: 0.2, dampingFraction: 0.65), value: isPressed)
             }
         }
-        .scaleEffect(isPressed ? 1.08 : 1.0)
-        .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isPressed)
         .contentShape(Circle())
         .onLongPressGesture(minimumDuration: 0, pressing: { pressing in
             if pressing {

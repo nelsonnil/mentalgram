@@ -26,6 +26,7 @@ struct UserGuideView: View {
         case postPrediction
         case counterGlitch
         case dateForce
+        case transposition
         case fakeHomeScreen
         case lockscreenInput
         case amnesiaCarousel
@@ -45,11 +46,12 @@ struct UserGuideView: View {
             case .postPrediction:  return 8
             case .counterGlitch:   return 9
             case .dateForce:       return 10
-            case .fakeHomeScreen:  return 11
-            case .lockscreenInput: return 12
-            case .amnesiaCarousel: return 13
-            case .faq:             return 14
-            case .inputMethods:    return 15
+            case .transposition:   return 11
+            case .fakeHomeScreen:  return 12
+            case .lockscreenInput: return 13
+            case .amnesiaCarousel: return 14
+            case .faq:             return 15
+            case .inputMethods:    return 16
             }
         }
     }
@@ -189,6 +191,16 @@ struct UserGuideView: View {
                             subtitle: "Force followers/following to reveal today's date",
                             isFirst: false, isLast: false
                         ) { activeSheet = .dateForce }
+
+                        guideDivider
+                        guideRow(
+                            icon: "camera.viewfinder",
+                            iconColor: colorTricks,
+                            title: "Transposition",
+                            subtitle: "Identify a spectator-selected public Instagram post with AI and reveal it",
+                            badge: "PRO",
+                            isFirst: false, isLast: false
+                        ) { activeSheet = .transposition }
 
                         guideDivider
                         guideRow(
@@ -468,6 +480,8 @@ struct UserGuideView: View {
             CounterGlitchHelpView(onClose: { activeSheet = nil })
         case .dateForce:
             DateForceHelpView(onClose: { activeSheet = nil })
+        case .transposition:
+            TranspositionHelpView(onClose: { activeSheet = nil })
         case .fakeHomeScreen:
             FakeHomeScreenGuideView(onClose: { activeSheet = nil })
         case .lockscreenInput:

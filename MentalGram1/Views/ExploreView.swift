@@ -39,6 +39,7 @@ struct ExploreView: View {
     @State private var revealTask: Task<Void, Never>?
     // Debounce duplicate space triggers (keyboard can fire onChange multiple times)
     @State private var lastSpaceTriggerTime: Date = .distantPast
+    @State private var lastCommittedSecretWord: String = ""
     /// Set to true right before secretInputBuffer is cleared after a space-reveal,
     /// so the safety-reset guard in handleSearchTextChange doesn't wipe the visible
     /// masked text that the magician still needs to tap into a profile.
@@ -139,11 +140,11 @@ struct ExploreView: View {
                                             .multilineTextAlignment(.center)
                                             .padding(.horizontal, 32)
                                     } else {
-                                        Image(systemName: "magnifyingglass")
-                                            .font(.system(size: 48))
-                                            .foregroundColor(.secondary)
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(.secondary)
                                         Text("explore.no_results")
-                                            .foregroundColor(.secondary)
+                                        .foregroundColor(.secondary)
                                     }
                                 }
                                 .padding(.top, 60)
@@ -163,13 +164,13 @@ struct ExploreView: View {
                         // Show skeleton UI (like Instagram real)
                         ExploreGridSkeleton()
                             .padding(.bottom, 65)
-                    } else if exploreManager.exploreMedia.isEmpty {
+                } else if exploreManager.exploreMedia.isEmpty {
                         // Failed to load — show retry option
                         if exploreManager.loadError != nil {
-                            VStack(spacing: 20) {
+                    VStack(spacing: 20) {
                                 Image(systemName: "wifi.exclamationmark")
                                     .font(.system(size: 44))
-                                    .foregroundColor(.secondary)
+                            .foregroundColor(.secondary)
                                 Text("explore.load_error")
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundColor(.secondary)
@@ -182,14 +183,14 @@ struct ExploreView: View {
                                         .background(Color.black)
                                         .cornerRadius(8)
                                 }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .padding(.bottom, 65)
                         } else {
                             ExploreGridSkeleton()
                                 .padding(.bottom, 65)
                         }
-                    } else {
+                } else {
                         ScrollView {
                             ExploreGridView(
                                 mediaItems: exploreManager.exploreMediaWithForce(),
@@ -256,7 +257,7 @@ struct ExploreView: View {
                 .transition(.move(edge: .bottom))
                 .zIndex(999)
             }
-
+            
             // User Profile overlay (full screen on top)
             if showingUserProfile, let profile = searchedProfile {
                 UserProfileView(profile: profile, onClose: {
@@ -363,16 +364,62 @@ struct ExploreView: View {
         }
     }
     
+    // MARK: - Mask cache search
+
+    /// Filtra los resultados del caché permanente de máscara por la query visible.
+    /// Orden: username exacto → username con prefijo → fullName contiene → resto.
+    private func filterMaskResults(_ results: [UserSearchResult], query: String) -> [UserSearchResult] {
+        let q = query.lowercased()
+        let filtered = results.filter {
+            $0.username.lowercased().hasPrefix(q)
+                || $0.username.lowercased().contains(q)
+                || $0.fullName.lowercased().contains(q)
+        }
+        return filtered.sorted {
+            let aExact = $0.username.lowercased() == q
+            let bExact = $1.username.lowercased() == q
+            if aExact != bExact { return aExact }
+            let aPrefix = $0.username.lowercased().hasPrefix(q)
+            let bPrefix = $1.username.lowercased().hasPrefix(q)
+            if aPrefix != bPrefix { return aPrefix }
+            return $0.username.count < $1.username.count
+        }
+    }
+
+    /// Si existe caché de máscara para el username activo, filtra en local (sin API).
+    /// Si no hay caché, cae al performSearch normal.
+    private func searchWithMaskCache(query: String) {
+        guard activeMaskMode == .customUsername else {
+            performSearch(query: query)
+            return
+        }
+        let username = activeMaskCustomUsername
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !username.isEmpty,
+              let cached = VisitedProfileCacheService.shared.loadMaskSearchResults(forUsername: username),
+              !cached.isEmpty else {
+            performSearch(query: query)
+            return
+        }
+        let filtered = filterMaskResults(cached, query: query)
+        searchResults = filtered
+        isSearching = false
+        print("🎯 [MASK CACHE] \(filtered.count)/\(cached.count) resultados para '\(query)' (sin API)")
+    }
+
+    // MARK: - Live search
+
     private func performSearch(query: String) {
         // Cancel previous search task immediately — the new one replaces it
         searchTask?.cancel()
-
+        
         guard !query.isEmpty else {
             searchResults = []
             isSearching = false
             return
         }
-
+        
         // ANTI-BOT: Minimum 3 characters before firing any request (mirrors Instagram)
         guard query.count >= 3 else {
             searchResults = []
@@ -416,7 +463,7 @@ struct ExploreView: View {
             // Record AFTER the response arrives, not before. This way a task that
             // gets cancelled mid-flight (user still typing) does NOT consume the
             // safety-gate slot, preventing the "20s lockout after typing" bug.
-
+            
             do {
                 let results = try await InstagramService.shared.searchUsers(query: query)
                 // Only stamp the timestamp when the request actually completed —
@@ -499,7 +546,7 @@ struct ExploreView: View {
             loadingProfileUserId = nil
             return
         }
-
+        
         print("🔍 [UI] Loading profile for user ID: \(userId)")
         
         Task {
@@ -580,17 +627,44 @@ struct ExploreView: View {
         return set
     }
 
+    private var isBioCoverTypingActive: Bool {
+        UserDefaults.standard.bool(forKey: "bio_feature_enabled")
+        && UserDefaults.standard.string(forKey: "bioTopInputMode") == "coverTyping"
+    }
+
+    private var hasCoverTypingDestination: Bool {
+        hasPostPredictionCoverTypingDestination || isBioCoverTypingActive
+    }
+
+    private var hasPostPredictionCoverTypingDestination: Bool {
+        if activeCoverTypingSet != nil { return true }
+        guard secretInputSettings.isEnabled else { return false }
+        return findActiveWordRevealSet() != nil
+    }
+
     private var shouldUseSecretMask: Bool {
-        secretInputSettings.isEnabled || activeCoverTypingSet != nil
+        secretInputSettings.isEnabled || hasCoverTypingDestination
+    }
+
+    /// Returns which mask settings to use based on which Cover Typing destination is active.
+    /// PP Cover Typing takes priority; Bio CT uses its own independent mask settings.
+    private var activeMaskMode: MaskInputMode {
+        hasPostPredictionCoverTypingDestination ? secretInputSettings.mode : secretInputSettings.bioCoverTypingMode
+    }
+
+    private var activeMaskCustomUsername: String {
+        hasPostPredictionCoverTypingDestination
+            ? secretInputSettings.customUsername
+            : secretInputSettings.bioCoverTypingCustomUsername
     }
 
     private func maskText(latestFollowerUsername: String?) -> String {
         guard shouldUseSecretMask else { return "" }
-        switch secretInputSettings.mode {
+        switch activeMaskMode {
         case .latestFollower:
             return latestFollowerUsername?.lowercased() ?? "user"
         case .customUsername:
-            let custom = secretInputSettings.customUsername
+            let custom = activeMaskCustomUsername
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
             return custom.isEmpty ? "user" : custom
@@ -599,7 +673,7 @@ struct ExploreView: View {
     
     private func updateMaskTextCache() {
         // Custom mode — no async needed.
-        guard secretInputSettings.mode == .latestFollower else {
+        guard activeMaskMode == .latestFollower else {
             maskTextCache = maskText(latestFollowerUsername: nil)
             return
         }
@@ -775,18 +849,25 @@ struct ExploreView: View {
             if hasSpace {
                 // SPACE = word complete → reveal + fire final search with the mask text
                 handleSpacePressed()
-                // handleSpacePressed calls performSearch internally
+                // handleSpacePressed llama a searchWithMaskCache internamente
             } else if masked.count >= 3 {
-                // Fire a debounced live-search on the masked text so the spectator sees
-                // Instagram-style results building up as the username is "typed".
-                // 500 ms debounce avoids a request on every single keystroke.
+                // Búsqueda progresiva: usa caché permanente si está disponible (sin API),
+                // o cae a performSearch con debounce si no hay caché.
                 searchDebounceTask?.cancel()
                 let query = masked
                 isSearching = true
-                searchDebounceTask = Task {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    guard !Task.isCancelled else { return }
-                    performSearch(query: query)
+                if activeMaskMode == .customUsername {
+                    // Caché → resultado instantáneo, sin debounce ni API
+                    searchDebounceTask = Task {
+                        guard !Task.isCancelled else { return }
+                        await MainActor.run { searchWithMaskCache(query: query) }
+                    }
+                } else {
+                    searchDebounceTask = Task {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        guard !Task.isCancelled else { return }
+                        performSearch(query: query)
+                    }
                 }
             }
 
@@ -808,13 +889,20 @@ struct ExploreView: View {
                 searchResults = []
                 isSearching = false
             } else if masked.count >= 3 {
-                // Re-search with the shorter masked text so results stay consistent
+                // Re-búsqueda al borrar: filtra caché si está disponible, si no usa API
                 let query = masked
                 isSearching = true
-                searchDebounceTask = Task {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    guard !Task.isCancelled else { return }
-                    performSearch(query: query)
+                if activeMaskMode == .customUsername {
+                    searchDebounceTask = Task {
+                        guard !Task.isCancelled else { return }
+                        await MainActor.run { searchWithMaskCache(query: query) }
+                    }
+                } else {
+                    searchDebounceTask = Task {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        guard !Task.isCancelled else { return }
+                        performSearch(query: query)
+                    }
                 }
             } else {
                 searchResults = []
@@ -842,7 +930,7 @@ struct ExploreView: View {
         return result
     }
     
-    /// Handle SPACE key → Transmit the secret word (trigger reveal in background)
+    /// Handle SPACE key → Transmit the secret word (trigger Bio and/or reveal in background)
     /// The search field keeps showing the mask text so the magician can tap into the profile
     private func handleSpacePressed() {
         // Debounce: keyboard/onChange can fire this twice in the same millisecond.
@@ -860,9 +948,9 @@ struct ExploreView: View {
         print("🎩 [SECRET] Search field keeps showing: '\(searchText)' (mask text stays)")
         LogManager.shared.info("Secret input SPACE triggered: '\(word)'", category: .general)
 
-        // Fire ONE search with the mask text so the spectator sees results appear naturally
+        // Búsqueda final con el texto de máscara visible — usa caché si está disponible
         if !searchText.isEmpty {
-            performSearch(query: searchText)
+            searchWithMaskCache(query: searchText)
         }
 
         guard !word.isEmpty else {
@@ -879,10 +967,39 @@ struct ExploreView: View {
         revealJustTriggered = true
         secretInputBuffer = ""
         
-        // Haptic feedback to confirm transmission (subtle, only magician feels it)
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-        
+        commitCoverTypingWord(word, trigger: "space")
+    }
+
+    private func commitCoverTypingWord(_ rawWord: String, trigger: String) {
+        let word = rawWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty else { return }
+        guard word != lastCommittedSecretWord else {
+            print("⚠️ [SECRET] Duplicate cover typing commit ignored (\(trigger)): \(word)")
+            return
+        }
+        lastCommittedSecretWord = word
+
+        // Strong system vibration: immediate confirmation that the word was captured.
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+
+        // Reset after Space commit so this confirmation can only fire once per typed word.
+        revealJustTriggered = true
+        secretInputBuffer = ""
+
+        NotificationCenter.default.post(
+            name: .coverTypingWordCommitted,
+            object: nil,
+            userInfo: [
+                "word": word,
+                "trigger": trigger,
+                "bioActive": isBioCoverTypingActive,
+                "postPredictionActive": hasPostPredictionCoverTypingDestination
+            ]
+        )
+
+        print("🎩 [SECRET] Cover Typing committed via \(trigger): '\(word)' bio=\(isBioCoverTypingActive) pp=\(hasPostPredictionCoverTypingDestination)")
+        LogManager.shared.info("Cover Typing committed via \(trigger): '\(word)'", category: .general)
+
         // Diagnostics: show all sets and their state
         print("🎩 [SECRET] Total sets in DataManager: \(dataManager.sets.count)")
         for (i, set) in dataManager.sets.enumerated() {
@@ -890,35 +1007,6 @@ struct ExploreView: View {
             let withMedia = set.photos.filter { $0.mediaId != nil }.count
             let archived = set.photos.filter { $0.isArchived }.count
             print("🎩 [SECRET]   Set[\(i)]: '\(set.name)' type=\(set.type.rawValue) status=\(set.status.rawValue) banks=\(set.banks.count) photos=\(set.photos.count) withMediaId=\(withMedia) archived=\(archived) archivedWithMedia=\(archivedWithMedia)")
-        }
-        
-        // Find active Word Reveal set with completed photos
-        guard let activeSet = findActiveWordRevealSet() else {
-            print("❌ [SECRET] NO ACTIVE WORD REVEAL SET FOUND!")
-            print("❌ [SECRET] Requirements: type=word, status=completed, banks>0, has photos with mediaId+isArchived")
-            LogManager.shared.error("No active Word Reveal set found for '\(word)'", category: .general)
-            
-            // Haptic error feedback for magician (no visual, spectator won't notice)
-            let errorGenerator = UINotificationFeedbackGenerator()
-            errorGenerator.notificationOccurred(.error)
-            return
-        }
-        
-        print("🎩 [SECRET] Using set: '\(activeSet.name)', banks: \(activeSet.banks.count)")
-        
-        // Validate we have enough banks for the word length
-        guard activeSet.banks.count >= word.count else {
-            print("⚠️ [SECRET] Not enough banks (\(activeSet.banks.count)) for word '\(word)' (\(word.count) letters)")
-            LogManager.shared.error("Not enough banks (\(activeSet.banks.count)) for word '\(word)' (\(word.count) letters)", category: .general)
-            return
-        }
-        
-        // Cancel any previous reveal task
-        revealTask?.cancel()
-        
-        // Auto-reveal each letter in background (completely silent, no UI changes)
-        revealTask = Task {
-            await revealWord(word, fromSet: activeSet)
         }
     }
     
@@ -1112,21 +1200,21 @@ struct ExploreGridView: View {
         GridItem(.flexible(), spacing: 2),
         GridItem(.flexible(), spacing: 2)
     ]
-
+    
     var body: some View {
         LazyVGrid(columns: columns, spacing: 2) {
             ForEach(Array(mediaItems.enumerated()), id: \.element.mediaId) { index, media in
-                ExploreMediaCell(
+                            ExploreMediaCell(
                     media: media,
                     cachedImage: cachedImages[media.imageURL]
-                )
+                            )
                 .onTapGesture {
                     onTapMedia(index)
-                }
+                        }
                 .onAppear {
                     exploreManager.loadMoreIfNeeded(currentItem: media)
+                    }
                 }
-            }
 
             if exploreManager.isLoadingMore {
                 ProgressView()
@@ -1144,7 +1232,7 @@ struct SearchResultRow: View {
     let isLoading: Bool
     let onTap: () -> Void
     @State private var profileImage: UIImage?
-
+    
     var body: some View {
         Button(action: {
             guard !isLoading else { return }
@@ -1167,28 +1255,28 @@ struct SearchResultRow: View {
                                 .foregroundColor(.gray)
                         )
                 }
-
+                
                 // User info
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(result.username)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.primary)
-
+                        
                         if result.isVerified {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.system(size: 12))
                                 .foregroundColor(.blue)
                         }
                     }
-
+                    
                     if !result.fullName.isEmpty {
                         Text(result.fullName)
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
                     }
                 }
-
+                
                 Spacer()
 
                 // Loading indicator appears immediately on tap while the profile loads
@@ -1207,11 +1295,11 @@ struct SearchResultRow: View {
             loadProfileImage()
         }
     }
-
+    
     private func loadProfileImage() {
         guard !result.profilePicURL.isEmpty,
               let url = URL(string: result.profilePicURL) else { return }
-
+        
         Task {
             if let (data, _) = try? await URLSession.shared.data(from: url),
                let image = UIImage(data: data) {
@@ -1237,18 +1325,18 @@ struct ExploreMediaCell: View {
         Color.clear
             .aspectRatio(4/5, contentMode: .fit)
             .overlay(
-                ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .topTrailing) {
                     if media.mediaType == .video, let videoURL = media.videoURL, !videoURL.isEmpty {
                         GridVideoPlayer(
                             videoURL: videoURL,
                             muted: true,
                             posterImage: cachedImage
                         )
-                    } else if let image = cachedImage {
-                        Image(uiImage: image)
-                            .resizable()
+                } else if let image = cachedImage {
+                    Image(uiImage: image)
+                        .resizable()
                             .scaledToFill()
-                    } else {
+                } else {
                         SkeletonGridItem()
                     }
 
@@ -1270,16 +1358,16 @@ struct ExploreMediaCell: View {
                     }
 
                     // Carousel indicator
-                    if media.mediaType == .carousel {
-                        Image(systemName: "square.on.square")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white)
-                            .padding(4)
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(4)
-                            .padding(6)
-                    }
+                if media.mediaType == .carousel {
+                    Image(systemName: "square.on.square")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white)
+                        .padding(4)
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(4)
+                        .padding(6)
                 }
+            }
             )
             .clipped()
     }
@@ -1288,6 +1376,12 @@ struct ExploreMediaCell: View {
 // MARK: - Notification name
 
 extension Notification.Name {
+    /// Posted by ExploreView when Cover Typing is confirmed by pressing Space.
+    /// userInfo["word"] -> String
+    /// userInfo["bioActive"] -> Bool
+    /// userInfo["postPredictionActive"] -> Bool
+    static let coverTypingWordCommitted = Notification.Name("com.vault.coverTypingWordCommitted")
+
     /// Posted by ExploreView when a secret-input word reveal finishes successfully.
     /// userInfo["mediaIds"] → [String]  (the unarchived media IDs)
     static let exploreWordRevealComplete = Notification.Name("com.vault.exploreWordRevealComplete")
@@ -1319,6 +1413,10 @@ extension Notification.Name {
     /// Posted by PerformanceView after a manual remote refresh finishes.
     /// userInfo["success"] -> Bool
     static let performanceManualRefreshResult = Notification.Name("com.vault.performanceManualRefreshResult")
+
+    /// Posted by PerformanceView while a manual refresh is running.
+    /// userInfo["message"] -> String
+    static let performanceManualRefreshProgress = Notification.Name("com.vault.performanceManualRefreshProgress")
 
     /// Posted by PerformanceView the instant it receives `.performanceManualRefresh`,
     /// to acknowledge that a live listener exists. If `InstagramSyncCard` does not

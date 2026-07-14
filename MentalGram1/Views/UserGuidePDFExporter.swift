@@ -393,6 +393,43 @@ private enum UserGuidePDFPages {
             ),
 
             UserGuidePDFPageData(
+                chapter: "TRICKS",
+                title: "Transposition",
+                subtitle: "AI-assisted spectator post detection",
+                color: purple,
+                blocks: [
+                    .paragraph("On the spectator's own phone, they search any public Instagram profile, enter posts or reels, scroll, and choose one of the first 10-12 posts. While you casually bring your phone out and place it on the table, Vault captures their screen, identifies the profile and selected post, then prepares the reveal."),
+                    .heading("Handling"),
+                    .bullets([
+                        "After pressing volume, keep the phone still until the strong vibration confirms capture. This takes about 1 second.",
+                        "The profile username must be visible. For Reels/videos, the title or caption line below the username is especially important.",
+                        "Use the Camera & Zoom test view to choose the best zoom for your device and performance distance. The spectator's iPhone screen should fill most of the frame without cropping the username/title area.",
+                        "Enable Save selected capture during testing to save the exact frame sent to OpenAI into the gallery."
+                    ]),
+                    .callout("Practice distance and angle before performing. Vault is reading small text from another phone screen, not a large simple image. Too close can crop the username/title; too far makes the text unreadable. Aim as square to the spectator's screen as possible, ideally slightly from above, and avoid strong side perspective, glare and reflections."),
+                    .heading("Reveal modes"),
+                    .bullets([
+                        "Grid: the orange ring confirms the post is ready; trigger the animation, then Vault opens the real Instagram post.",
+                        "The open-hand gesture works with either hand, but only after the orange ring appears. Repeating it after it fires will not start a second animation.",
+                        "Black Screen: the phone appears off. When ready, swipe up and the selected post opens large in real Instagram.",
+                        "Black Screen shows a tiny lower-right white dot as a discreet ready cue.",
+                        "Ready Sound can be enabled or disabled for Black Screen mode.",
+                        "Dim Black Screen lowers brightness while the camera is active to help hide the green camera indicator, then restores brightness before Instagram opens."
+                    ]),
+                    .heading("Magician feedback"),
+                    .bullets([
+                        "Strong vibration = capture burst finished.",
+                        "Recognized profile may briefly appear in the following area.",
+                        "Orange ring = post ready to reveal.",
+                        "Gesture before orange ring = ignored because the post is not ready.",
+                        "Black Screen can play a message-like ready sound if Ready Sound is enabled.",
+                        "Repeated error haptics = press volume again and recapture."
+                    ]),
+                    .callout("Keep the choice within the first 10-12 posts, avoid glare and very high screen brightness, and make sure the username/title area is legible.")
+                ]
+            ),
+
+            UserGuidePDFPageData(
                 chapter: "VISUAL SETUP",
                 title: "Post Prediction Setup",
                 subtitle: "Upload, archive, activate, reveal",
@@ -1179,7 +1216,7 @@ private struct UserGuidePrintDocument: View {
                     .label(String(localized: "guide.amnesia.trigger.title", defaultValue: "The trigger — correct order")),
                     .body("1. Ask the spectator to open Instagram, enter your profile and tap the carousel.\n2. While they are inside the carousel, have them look at the 4 images and notice the date.\n3. Close the carousel in Vault — Vault adds the extra image on real Instagram.\n4. IMPORTANT: do not leave Vault or close the app. Wait for the archive/unarchive process to finish.\n5. When the spectator finishes memorizing, ask them to fully close Instagram. Or take their phone, make a natural small scroll, and leave it on the table.\n❌ Do not close the carousel in Vault before the spectator has entered and seen the initial 4 images."),
                     .label(String(localized: "guide.amnesia.hidden.title", defaultValue: "Hidden image")),
-                    .body(String(localized: "guide.amnesia.hidden.body", defaultValue: "The 5th image (marked with an orange border in the app) is the one that appears at the end. In the ESP template it is usually the star: the spectator remembers circle, cross, waves and square, but not the star.")),
+                    .body(String(localized: "guide.amnesia.hidden.body", defaultValue: "The hidden image (marked with an orange border in the app) is inserted as the 3rd image in the revealed carousel. In the ESP template it is usually the star: the spectator remembers circle, cross, waves and square, but not the star.")),
                     .label("Two ways to activate"),
                     .body("A — Hand passes (more theatrical): close the carousel in Vault and say 'I'll close mine too' as part of the ritual. Ask them to close Instagram completely.\nB — Discreet scrolling (more invisible): take their phone for a second, make a natural small scroll while talking and leave it on the table. This justifies the refresh without looking technical."),
                     .label("Performance Script"),

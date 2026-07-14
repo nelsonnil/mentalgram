@@ -5413,6 +5413,45 @@ class InstagramService: ObservableObject {
         LogManager.shared.success("Search profile rebuilt — @\(rebuilt.username) id:\(rebuilt.userId) followers:\(rebuilt.followerCount) following:\(rebuilt.followingCount) pic:\(rebuilt.profilePicURL.isEmpty ? "EMPTY" : "OK")", category: .profile)
         return rebuilt
     }
+
+    func getMediaLikers(mediaId: String, maxId: String? = nil) async throws -> ([InstagramFollower], String?) {
+        let mediaPk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "can_support_threading", value: "true")
+        ]
+        if let maxId, !maxId.isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "max_id", value: maxId))
+        }
+        let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+        let path = "/media/\(mediaPk)/likers/\(query)"
+        let data = try await apiRequest(method: "GET", path: path)
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return ([], nil)
+        }
+        let rawUsers = (json["users"] as? [[String: Any]])
+            ?? (json["likers"] as? [[String: Any]])
+            ?? []
+        let users = rawUsers.compactMap { user -> InstagramFollower? in
+            let userId: String
+            if let s = user["pk"] as? String { userId = s }
+            else if let n = user["pk"] as? NSNumber { userId = n.stringValue }
+            else if let i = user["pk"] as? Int { userId = String(i) }
+            else { return nil }
+
+            return InstagramFollower(
+                userId: userId,
+                username: user["username"] as? String ?? "",
+                fullName: user["full_name"] as? String ?? "",
+                profilePicURL: user["profile_pic_url"] as? String,
+                isPrivate: user["is_private"] as? Bool ?? false
+            )
+        }
+        let next = json["next_max_id"] as? String
+        print("❤️ [LIKERS] media=\(mediaPk) users=\(users.count) next=\(next ?? "nil")")
+        return (users, next)
+    }
     
     // MARK: - Amnesia Carousel (sidecar upload)
 
@@ -5785,16 +5824,25 @@ class InstagramService: ObservableObject {
         // Anti-bot: 5-8s before starting carousel B
         try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...8_000_000_000))
 
-        // ── Carousel B (all 5 images) — will be archived immediately ────────────
+        // ── Carousel B (5 images) — will be archived immediately ────────────────
+        // Display order is 1, 2, hidden, 3, 4.  The hidden image used to be last,
+        // but placing it third makes the reveal feel embedded in the remembered set
+        // instead of appended at the end.
         print("🎭 [AMNESIA] Phase 2: uploading full carousel (5 images)…")
         var uploadIdsB: [String] = []
-        for i in 0..<5 {
-            let imgData = try jpeg(images[i], index: i)
+        let fullCarouselOrder = [0, 1, 4, 2, 3]
+        for (position, sourceIndex) in fullCarouselOrder.enumerated() {
+            let imgData = try jpeg(images[sourceIndex], index: sourceIndex)
             let sidecarId = uploadIdsB.first ?? ""
-            let id = try await uploadPhotoForSidecar(imageData: imgData, stepLabel: "B-\(i+1)/5", clientSidecarId: sidecarId)
+            let labelSuffix = sourceIndex == 4 ? "hidden" : "image\(sourceIndex + 1)"
+            let id = try await uploadPhotoForSidecar(
+                imageData: imgData,
+                stepLabel: "B-\(position + 1)/5 \(labelSuffix)",
+                clientSidecarId: sidecarId
+            )
             uploadIdsB.append(id)
             advance()
-            if i < 4 {
+            if position < fullCarouselOrder.count - 1 {
                 let gap = UInt64.random(in: 2_000_000_000...4_000_000_000)
                 try await Task.sleep(nanoseconds: gap)
             }
@@ -6369,7 +6417,11 @@ class InstagramService: ObservableObject {
 
     /// Updates the Instagram biography text via /accounts/edit_profile/.
     /// Preserves all existing profile fields — only `biography` is modified.
-    func changeBiography(text: String, userInitiated: Bool = false) async throws -> Bool {
+    /// - bypassCooldown: Pass `true` only for explicit user-initiated profile restores
+    ///   (e.g. "Profile not restored" banner). Skips the anti-bot cooldown and safety-gate
+    ///   checks so the user can always recover their real bio, even immediately after a
+    ///   performance session. Lockdown is still respected.
+    func changeBiography(text: String, userInitiated: Bool = false, bypassCooldown: Bool = false) async throws -> Bool {
         print("📝 [BIO] Changing biography to: \"\(text)\"")
 
         guard text.count <= 150 else {
@@ -6392,17 +6444,25 @@ class InstagramService: ObservableObject {
             LogManager.shared.info("Bio duplicate memory matched last Vault-sent text; allowing POST (\(cacheState))", category: .api)
         }
 
-        // ANTI-BOT: Cooldown between consecutive edits (120 s)
-        if let cooldownUntil = UserDefaults.standard.object(forKey: "biography_cooldown_until") as? Date,
-           cooldownUntil > Date() {
-            let remaining = Int(cooldownUntil.timeIntervalSinceNow)
-            throw InstagramError.apiError("Please wait \(remaining)s before editing biography again.")
-        }
+        if bypassCooldown {
+            // Explicit profile restore — clear stored cooldown so the POST is not blocked
+            // and log the bypass for audit purposes.
+            UserDefaults.standard.removeObject(forKey: "biography_cooldown_until")
+            print("⚡ [BIO] Cooldown bypassed — explicit profile restore")
+            LogManager.shared.info("Biography cooldown bypassed for explicit profile restore", category: .api)
+        } else {
+            // ANTI-BOT: Cooldown between consecutive edits (120 s)
+            if let cooldownUntil = UserDefaults.standard.object(forKey: "biography_cooldown_until") as? Date,
+               cooldownUntil > Date() {
+                let remaining = Int(cooldownUntil.timeIntervalSinceNow)
+                throw InstagramError.apiError("Please wait \(remaining)s before editing biography again.")
+            }
 
-        let bioSafety = InstagramSafetyGate.shared.decision(for: .biography)
-        guard bioSafety.allowed else {
-            LogManager.shared.warning("SAFETY BLOCK — biography: \(bioSafety.reason)", category: .api)
-            throw InstagramError.apiError("Safety pause: \(bioSafety.reason). Wait \(bioSafety.waitSeconds)s.")
+            let bioSafety = InstagramSafetyGate.shared.decision(for: .biography)
+            guard bioSafety.allowed else {
+                LogManager.shared.warning("SAFETY BLOCK — biography: \(bioSafety.reason)", category: .api)
+                throw InstagramError.apiError("Safety pause: \(bioSafety.reason). Wait \(bioSafety.waitSeconds)s.")
+            }
         }
 
         // ANTI-BOT: Cold-start / warm-resume protection.
@@ -8535,6 +8595,8 @@ final class InstagramSafetyGate {
         if path.contains("/notes/delete_note/") { return .noteDelete }
         if path.contains("/undo_only_me/") { return .unarchive }
         if path.contains("/only_me/") { return .archive }
+        // Profile picture change is a write mutation like upload — do NOT arm pre-upload quiet window.
+        if path.contains("/change_profile_picture/") { return .upload }
         if path.contains("upload") || path.contains("configure") || path.contains("sidecar") { return .upload }
         return .apiWrite
     }

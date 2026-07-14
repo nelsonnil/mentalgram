@@ -2,6 +2,7 @@ import SwiftUI
 import Photos
 import AVFoundation
 import AudioToolbox
+import Combine
 
 enum InstagramGridMetrics {
     /// Instagram's modern profile grids use portrait thumbnails rather than
@@ -19,6 +20,221 @@ private func safeNumber(fromDigits digits: [Int]) -> Int? {
         value = value * 10 + digit
     }
     return value
+}
+
+/// Lowercases only for Latin alphabets; CJK and other scripts keep original form.
+private func normalizeWordForReveal(_ word: String, alphabet: AlphabetType) -> String {
+    let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        .precomposedStringWithCanonicalMapping
+    switch alphabet {
+    case .latin, .spanish, .german, .french, .portuguese, .italian, .swedish,
+         .polish, .turkish, .icelandic, .vietnamese:
+        return trimmed.lowercased()
+    default:
+        return trimmed
+    }
+}
+
+private struct AIScreenPostViewerPayload: Identifiable {
+    let id = UUID()
+    let profile: InstagramProfile
+    let mediaItems: [InstagramMediaItem]
+    let initialIndex: Int
+    let cachedImages: [String: UIImage]
+}
+
+struct TranspositionGridEffectPayload {
+    let sourceImages: [UIImage]
+    let targetImages: [UIImage]
+    let matchedItem: InstagramMediaItem
+    let duration: TimeInterval
+}
+
+struct AIScreenRevealAnimationPayload: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let style: AIScreenRevealAnimationStyle
+}
+
+private enum AIScreenRevealPhase {
+    case idle
+    case armed
+    case matched
+}
+
+struct AIScreenRevealAnimationView: View {
+    let payload: AIScreenRevealAnimationPayload
+    @State private var phase: CGFloat = 0
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.94).ignoresSafeArea()
+            switch payload.style {
+            case .energyLines:
+                energyLines
+            case .signalGhost:
+                signalGhost
+            case .gridPossession:
+                gridPossession
+            }
+            scanlineVeil
+        }
+        .allowsHitTesting(false)
+        .onAppear {
+            withAnimation(.linear(duration: payload.style.duration)) { phase = 1 }
+            withAnimation(.easeInOut(duration: 0.18).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+    }
+
+    private var energyLines: some View {
+        GeometryReader { geo in
+            ZStack {
+                Image(uiImage: payload.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: geo.size.width * 0.82)
+                    .opacity(0.18 + phase * 0.62)
+                    .blur(radius: (1 - phase) * 12)
+                    .scaleEffect(0.86 + phase * 0.18)
+                    .offset(x: pulse ? 1.5 : -1.5)
+
+                ForEach(0..<32, id: \.self) { i in
+                    let y = geo.size.height * CGFloat(i) / 31
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, Color.cyan.opacity(0.1 + phase * 0.45), .white.opacity(0.25), .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: i % 5 == 0 ? CGFloat(1.4) : CGFloat(0.65))
+                        .offset(
+                            x: (phase * geo.size.width * CGFloat(1.4))
+                                - geo.size.width * CGFloat(0.75)
+                                + CGFloat((i % 4) * 22),
+                            y: y
+                        )
+                        .opacity(Double(phase < CGFloat(0.92) ? CGFloat(1) : CGFloat(1) - (phase - CGFloat(0.92)) * CGFloat(12)))
+                }
+
+                Circle()
+                    .stroke(Color.cyan.opacity(0.55), lineWidth: 1)
+                    .frame(width: geo.size.width * (CGFloat(0.2) + phase * CGFloat(1.15)))
+                    .blur(radius: 1.5)
+                    .opacity(Double(CGFloat(1) - phase))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var signalGhost: some View {
+        GeometryReader { geo in
+            ZStack {
+                ForEach(0..<3, id: \.self) { layer in
+                    Image(uiImage: payload.image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geo.size.width * 0.72, height: geo.size.height * 0.62)
+                        .clipped()
+                        .opacity(layer == 0 ? 0.72 : 0.18)
+                        .offset(x: CGFloat(layer - 1) * (pulse ? 10 : -10), y: CGFloat(layer - 1) * 3)
+                        .blendMode(layer == 0 ? .normal : (layer == 1 ? .screen : .plusLighter))
+                        .saturation(layer == 0 ? 0.7 : 1.8)
+                        .contrast(1.1 + phase * 0.45)
+                        .blur(radius: layer == 0 ? 0 : 1.6)
+                }
+
+                ForEach(0..<14, id: \.self) { i in
+                    Rectangle()
+                        .fill(i % 2 == 0 ? Color.white.opacity(0.38) : Color.cyan.opacity(0.32))
+                        .frame(width: geo.size.width, height: CGFloat((i % 3) + 1))
+                        .offset(y: -geo.size.height / 2 + CGFloat(i * 58) + phase * 180)
+                        .opacity(phase < 0.9 ? 1 : 0)
+                }
+
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.white.opacity(0.25 + (pulse ? 0.22 : 0.0)), lineWidth: 1)
+                    .frame(width: geo.size.width * 0.76, height: geo.size.height * 0.65)
+                    .blur(radius: 0.5)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var gridPossession: some View {
+        GeometryReader { geo in
+            let columns = 3
+            let rows = 5
+            let spacing: CGFloat = 2
+            let cellW = (geo.size.width - spacing * CGFloat(columns - 1)) / CGFloat(columns)
+            let cellH = cellW / InstagramGridMetrics.profileCellAspectRatio
+            let startY = (geo.size.height - CGFloat(rows) * cellH - CGFloat(rows - 1) * spacing) / 2
+            let order = [0, 4, 2, 6, 8, 1, 3, 5, 7, 10, 9, 11, 12, 13, 14]
+
+            ZStack {
+                ForEach(0..<(columns * rows), id: \.self) { index in
+                    let col = index % columns
+                    let row = index / columns
+                    let rank = order.firstIndex(of: index) ?? index
+                    let visible = phase > CGFloat(rank) / CGFloat(columns * rows + 2)
+
+                    ZStack {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.04))
+                        Image(uiImage: payload.image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: cellW, height: cellH)
+                            .clipped()
+                            .opacity(visible ? 0.78 : 0)
+                            .saturation(1.15)
+                            .contrast(1.08)
+                        Rectangle()
+                            .stroke(visible ? Color.cyan.opacity(0.55) : Color.white.opacity(0.08), lineWidth: 0.7)
+                    }
+                    .frame(width: cellW, height: cellH)
+                    .scaleEffect(visible ? 1 : 0.94)
+                    .position(
+                        x: CGFloat(col) * (cellW + spacing) + cellW / 2,
+                        y: startY + CGFloat(row) * (cellH + spacing) + cellH / 2
+                    )
+                    .animation(.spring(response: 0.24, dampingFraction: 0.74), value: visible)
+                }
+
+                Image(uiImage: payload.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: geo.size.width * 0.88)
+                    .opacity(max(0, (phase - 0.72) * 3.5))
+                    .blur(radius: max(0, 6 - phase * 6))
+                    .blendMode(.screen)
+            }
+        }
+    }
+
+    private var scanlineVeil: some View {
+        GeometryReader { geo in
+            ZStack {
+                ForEach(0..<80, id: \.self) { i in
+                    Rectangle()
+                        .fill(Color.white.opacity(i % 2 == 0 ? 0.045 : 0.018))
+                        .frame(height: 1)
+                        .offset(y: CGFloat(i) * geo.size.height / 80)
+                }
+                RadialGradient(
+                    colors: [.clear, Color.black.opacity(0.25), Color.black.opacity(0.72)],
+                    center: .center,
+                    startRadius: 40,
+                    endRadius: max(geo.size.width, geo.size.height) * 0.72
+                )
+            }
+            .ignoresSafeArea()
+        }
+    }
 }
 
 // MARK: - Performance View (Instagram Profile Replica)
@@ -76,6 +292,27 @@ struct PerformanceView: View {
     @ObservedObject private var amnesiaSettings = AmnesiaCarouselSettings.shared
     @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
     @StateObject private var ocrCoordinator = OCRCoordinator()
+    @State private var isAIScreenDetectionRunning = false
+    @State private var aiScreenLastTriggerTime: Date = .distantPast
+    @State private var aiScreenPostViewer: AIScreenPostViewerPayload? = nil
+    @State private var aiScreenRevealAnimation: AIScreenRevealAnimationPayload? = nil
+    @State private var aiScreenRevealPhase: AIScreenRevealPhase = .idle
+    @State private var aiScreenPendingViewerPayload: AIScreenPostViewerPayload? = nil
+    @State private var aiScreenPendingRevealImage: UIImage? = nil
+    @State private var aiScreenFollowingOverride: String? = nil
+    @State private var aiScreenFollowingLabelOverride: String? = nil
+    @State private var aiScreenProfileNameOverride: String? = nil
+    @State private var transpositionGridEffect: TranspositionGridEffectPayload? = nil
+    @State private var pendingTranspositionGridEffect: TranspositionGridEffectPayload? = nil
+    @State private var transpositionScrollToken = 0
+    @State private var transpositionBlackScreenVisible = false
+    @State private var transpositionBlackScreenPendingItem: InstagramMediaItem? = nil
+    @State private var transpositionErrorHapticsActive = false
+    @State private var transpositionOriginalBrightness: CGFloat? = nil
+    @State private var transpositionLastProfileFeedback: String = ""
+    @State private var transpositionLastProfileFeedbackAt: Date = .distantPast
+    @AppStorage("transposition_last_profile_username") private var transpositionLastProfileUsername = ""
+    @AppStorage("transposition_cooldown_until") private var transpositionCooldownUntil: Double = 0
     /// Set by OCR result handler; observed by InstagramProfileView to trigger post-prediction reveal.
     @State private var pendingOCRWord: String? = nil
     /// Set by URL scheme handler; observed by InstagramProfileView to trigger custom-set slot reveal.
@@ -446,6 +683,7 @@ struct PerformanceView: View {
             || ppTopInputMode == "ocr"
             || activePostPredictionInputMethod == .ocr
             || hasPlaceholderOCR
+            || integrations.aiScreenDetectionEnabled
         if needsVolume {
             VolumeButtonMonitor.shared.prepareVolume()
             VolumeButtonMonitor.shared.startMonitoring()
@@ -609,6 +847,7 @@ struct PerformanceView: View {
     /// and restored once both local (60 s) and SafetyGate (120 s) cooldowns expire,
     /// so the pull gesture bounces without showing the spinner when blocked.
     @State private var isRefreshEnabled: Bool = true
+    @State private var scrollLayoutFixToken = 0
 
     // MARK: - API Polling (continuous watch mode)
     /// Background task that polls the Inject/Custom API every 4–6 s while the view is visible.
@@ -953,8 +1192,15 @@ struct PerformanceView: View {
                 await handlePerformancePullToRefresh()
             },
             isRefreshEnabled: isRefreshEnabled && !ppTestMode.isActive,
+            scrollLayoutFixToken: scrollLayoutFixToken,
+            initialContentLift: (bioFeatureEnabled && bioTopInputMode == "coverTyping") ? 290 : 0,
             onPlusPress: { selectedTab = 1 },
             highlightsLoadedOnce: $highlightsLoadedOnce,
+            aiScreenFollowingOverride: aiScreenFollowingOverride,
+            aiScreenFollowingLabelOverride: aiScreenFollowingLabelOverride,
+            aiScreenProfileNameOverride: aiScreenProfileNameOverride,
+            transpositionGridEffect: transpositionGridEffect,
+            transpositionScrollToken: transpositionScrollToken,
             mediaURLs: allMediaURLs,
             onMediaAppear: { url in
                 guard !ppTestMode.isActive else { return }
@@ -1553,12 +1799,807 @@ struct PerformanceView: View {
 
     // MARK: - OCR modifiers (split out to reduce body complexity for the Swift type-checker)
 
+    @MainActor
+    private func advanceAIScreenRevealFlow() async {
+        if integrations.transpositionRevealMode == .blackScreen,
+           transpositionBlackScreenPendingItem != nil {
+            print("🤖 [BLACK SCREEN] Post ready — waiting for swipe up")
+            return
+        }
+
+        if integrations.aiScreenDetectionMode == .visualMatch,
+           pendingTranspositionGridEffect != nil {
+            triggerPendingVisualTransposition(reason: "volume")
+            return
+        }
+
+        switch aiScreenRevealPhase {
+        case .idle:
+            switch integrations.aiScreenDetectionMode {
+            case .vision:
+                await armAIScreenVisionProfile()
+            case .likes:
+                await armAIScreenLatestFollower()
+            case .visualMatch:
+                await runAIScreenVisualMatch()
+            }
+        case .armed:
+            await detectAIScreenLikeIncrease()
+        case .matched:
+            revealPendingAIScreenPost()
+        }
+    }
+
+    @MainActor
+    private func runAIScreenVisualMatch() async {
+        isAIScreenDetectionRunning = true
+        defer { isAIScreenDetectionRunning = false }
+
+        do {
+            print("🤖 [VISUAL MATCH] Capturing spectator screen")
+            let screenPhoto = try await AIScreenCameraCaptureService.shared.capturePhoto(
+                zoom: CGFloat(integrations.aiScreenCameraZoom)
+            )
+            signalTranspositionPhotoCaptured()
+
+            async let localOCRTask = AIScreenPostDetectionService.shared.recognizeLocalText(in: screenPhoto)
+            let analysis = try await AIScreenPostDetectionService.shared.analyzeScreenPhoto(screenPhoto, allowMissingUsername: true)
+            let localOCRText = await localOCRTask
+            let localQueries = AIScreenPostDetectionService.shared.localUsernameCandidates(from: localOCRText)
+            let profileQueries = mergedTranspositionQueries(openAI: analysis.profileSearchQueries, localOCR: localQueries)
+            guard !profileQueries.isEmpty else { throw AIScreenDetectionError.noUsername }
+
+            print("🤖 [VISUAL MATCH] OpenAI profile queries=\(analysis.profileSearchQueries) localQueries=\(localQueries) confidence=\(analysis.confidence) caption='\(analysis.captionVisible ?? "")' imageText='\(analysis.imageTextVisible ?? "")' localOCR='\(localOCRText)'")
+            LogManager.shared.info(
+                "Visual match OpenAI queries: \(analysis.profileSearchQueries.joined(separator: ", ")) localQueries: \(localQueries.joined(separator: ", ")) confidence=\(analysis.confidence) caption='\(analysis.captionVisible ?? "")' imageText='\(analysis.imageTextVisible ?? "")' localOCR='\(localOCRText)'",
+                category: .general
+            )
+            if let detected = profileQueries.first {
+                guard !isTranspositionDuplicateProfile(detected) else {
+                    print("🚫 [TRANSPOSITION] Duplicate profile @\(detected) blocked by cooldown")
+                    LogManager.shared.warning("Transposition duplicate profile blocked: @\(detected)", category: .general)
+                    showAIScreenErrorFeedback()
+                    return
+                }
+            }
+
+            let (selectedProfile, candidates) = try await resolveAIScreenProfileAndCandidates(
+                analysis: analysis,
+                profileQueries: profileQueries
+            )
+            markTranspositionProfileUsed(selectedProfile.username)
+            showAIScreenDetectedProfileFeedback(selectedProfile.username)
+            let match: AIScreenResolvedPostMatch
+            do {
+                match = try await AIScreenPostDetectionService.shared.matchPostHybrid(
+                    screenPhoto: screenPhoto,
+                    analysis: analysis,
+                    candidates: candidates,
+                    localOCRText: localOCRText
+                )
+                if match.isLowConfidence {
+                    showAIScreenErrorFeedback()
+                }
+            } catch {
+                print("⚠️ [VISUAL MATCH] Hybrid match failed, using fallback: \(error.localizedDescription)")
+                LogManager.shared.warning("Visual match fallback used: \(error.localizedDescription)", category: .general)
+                showAIScreenErrorFeedback()
+                match = try await makeVisualMatchFallback(from: candidates)
+            }
+            if integrations.transpositionRevealMode == .blackScreen {
+                prepareBlackScreenTranspositionReveal(item: match.candidate.item)
+            } else {
+                await prepareVisualTranspositionGridEffect(matched: match.candidate, candidates: candidates)
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            print("✅ [VISUAL MATCH] Matched @\(selectedProfile.username) mediaId=\(match.candidate.item.mediaId) confidence=\(match.confidence) low=\(match.isLowConfidence) reason=\(match.reason)")
+            LogManager.shared.success("Visual match selected @\(selectedProfile.username) mediaId=\(match.candidate.item.mediaId) confidence=\(match.confidence) low=\(match.isLowConfidence)", category: .general)
+        } catch {
+            print("❌ [VISUAL MATCH] Failed: \(error.localizedDescription)")
+            LogManager.shared.error("Visual match failed: \(error.localizedDescription)", category: .general)
+            handleTranspositionDetectionError(error)
+        }
+    }
+
+    private func makeVisualMatchFallback(from candidates: [InstagramMediaItem]) async throws -> AIScreenResolvedPostMatch {
+        guard !candidates.isEmpty else { throw AIScreenDetectionError.noCandidates }
+        let fallbackIndex = min(max(candidates.count / 2, 0), candidates.count - 1)
+        let item = candidates[fallbackIndex]
+        let image = await downloadImage(from: item.imageURL) ?? UIImage()
+        return AIScreenResolvedPostMatch(
+            candidate: AIScreenCandidateImage(item: item, image: image),
+            confidence: 0,
+            reason: "fallback_center_candidate",
+            isLowConfidence: true
+        )
+    }
+
+    private func normalizedTranspositionUsername(_ username: String) -> String {
+        username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+            .lowercased()
+    }
+
+    private func isTranspositionDuplicateProfile(_ username: String) -> Bool {
+        let clean = normalizedTranspositionUsername(username)
+        guard !clean.isEmpty else { return false }
+        guard Date().timeIntervalSince1970 < transpositionCooldownUntil else { return false }
+        return clean == normalizedTranspositionUsername(transpositionLastProfileUsername)
+    }
+
+    private func markTranspositionProfileUsed(_ username: String) {
+        let clean = normalizedTranspositionUsername(username)
+        guard !clean.isEmpty else { return }
+        transpositionLastProfileUsername = clean
+        transpositionCooldownUntil = Date().addingTimeInterval(120).timeIntervalSince1970
+    }
+
+    private func mergedTranspositionQueries(openAI: [String], localOCR: [String]) -> [String] {
+        var seen = Set<String>()
+        return (openAI + localOCR)
+            .map { normalizedTranspositionUsername($0) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    @MainActor
+    private func handleTranspositionDetectionError(_ error: Error) {
+        showAIScreenErrorFeedback()
+        startTranspositionErrorHaptics()
+        prewarmTranspositionCameraIfNeeded()
+    }
+
+    @MainActor
+    private func startTranspositionErrorHaptics() {
+        guard !transpositionErrorHapticsActive else { return }
+        transpositionErrorHapticsActive = true
+        pulseTranspositionErrorHaptic()
+    }
+
+    @MainActor
+    private func stopTranspositionErrorHaptics() {
+        transpositionErrorHapticsActive = false
+    }
+
+    @MainActor
+    private func pulseTranspositionErrorHaptic() {
+        guard transpositionErrorHapticsActive else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        AudioServicesPlaySystemSound(1519)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            Task { @MainActor in
+                pulseTranspositionErrorHaptic()
+            }
+        }
+    }
+
+    @MainActor
+    private func configureTranspositionBlackScreenForEntry() {
+        guard integrations.aiScreenDetectionEnabled,
+              integrations.aiScreenDetectionMode == .visualMatch,
+              integrations.transpositionRevealMode == .blackScreen else {
+            resetTranspositionBlackScreen()
+            return
+        }
+        transpositionBlackScreenVisible = true
+        transpositionBlackScreenPendingItem = nil
+        dimBlackScreenBrightnessIfNeeded()
+    }
+
+    @MainActor
+    private func resetTranspositionBlackScreen() {
+        transpositionBlackScreenVisible = false
+        transpositionBlackScreenPendingItem = nil
+        restoreTranspositionBrightnessIfNeeded(maximum: false)
+    }
+
+    @MainActor
+    private func prewarmTranspositionCameraIfNeeded() {
+        guard integrations.aiScreenDetectionEnabled else { return }
+        guard integrations.aiScreenDetectionMode == .visualMatch
+                || integrations.aiScreenDetectionMode == .vision else { return }
+        let zoom = CGFloat(integrations.aiScreenCameraZoom)
+        Task {
+            await AIScreenCameraCaptureService.shared.prewarm(zoom: zoom)
+        }
+    }
+
+    @MainActor
+    private func configureTranspositionVolumeForEntry() {
+        guard integrations.aiScreenDetectionEnabled else { return }
+        VolumeButtonMonitor.shared.setVolumeToMiddle()
+    }
+
+    @MainActor
+    private func markTranspositionReadyForReveal() {
+        postPredRevealRingActive = true
+        VolumeButtonMonitor.shared.setVolumeToMaximum()
+        if integrations.transpositionRevealMode == .blackScreen {
+            restoreTranspositionBrightnessIfNeeded(maximum: integrations.transpositionDimBlackScreenBrightness)
+        }
+        if integrations.transpositionRevealMode == .blackScreen,
+           integrations.transpositionBlackScreenReadySoundEnabled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                AudioServicesPlaySystemSound(1007)
+            }
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    @MainActor
+    private func dimBlackScreenBrightnessIfNeeded() {
+        guard integrations.transpositionDimBlackScreenBrightness,
+              integrations.transpositionRevealMode == .blackScreen else { return }
+        if transpositionOriginalBrightness == nil {
+            transpositionOriginalBrightness = UIScreen.main.brightness
+        }
+        UIScreen.main.brightness = 0.02
+    }
+
+    @MainActor
+    private func restoreTranspositionBrightnessIfNeeded(maximum: Bool) {
+        guard let original = transpositionOriginalBrightness else { return }
+        UIScreen.main.brightness = maximum ? 1.0 : original
+        transpositionOriginalBrightness = nil
+    }
+
+    @MainActor
+    private func signalTranspositionPhotoCaptured() {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+    }
+
+    @MainActor
+    private func prepareBlackScreenTranspositionReveal(item: InstagramMediaItem) {
+        transpositionBlackScreenPendingItem = item
+        markTranspositionReadyForReveal()
+        TranspositionHandGestureService.shared.stop()
+    }
+
+    @MainActor
+    private func revealBlackScreenTranspositionPost() {
+        guard let item = transpositionBlackScreenPendingItem else { return }
+        transpositionBlackScreenPendingItem = nil
+        withAnimation(.easeInOut(duration: 0.32)) {
+            transpositionBlackScreenVisible = false
+        }
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        openInstagramPost(item)
+    }
+
+    @MainActor
+    private func prepareVisualTranspositionGridEffect(
+        matched: AIScreenCandidateImage,
+        candidates: [InstagramMediaItem]
+    ) async {
+        let sourceImages = currentVisibleGridImages(limit: 12)
+        var targetImages: [UIImage] = []
+        for item in candidates.prefix(12) {
+            if let image = await downloadImage(from: item.imageURL) {
+                targetImages.append(image)
+            }
+        }
+        if targetImages.isEmpty {
+            targetImages = [matched.image]
+        }
+
+        pendingTranspositionGridEffect = TranspositionGridEffectPayload(
+            sourceImages: sourceImages,
+            targetImages: targetImages,
+            matchedItem: matched.item,
+            duration: 4.0
+        )
+        startTranspositionHandDetection()
+        markTranspositionReadyForReveal()
+    }
+
+    @MainActor
+    private func triggerPendingVisualTransposition(reason: String) {
+        guard let payload = pendingTranspositionGridEffect else { return }
+        pendingTranspositionGridEffect = nil
+        TranspositionHandGestureService.shared.stop()
+        transpositionGridEffect = payload
+        transpositionScrollToken += 1
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+
+        let item = payload.matchedItem
+        let openDelay = max(0.1, payload.duration - 0.45)
+        DispatchQueue.main.asyncAfter(deadline: .now() + openDelay) {
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            openInstagramPost(item)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + payload.duration) {
+            transpositionGridEffect = nil
+        }
+    }
+
+    @MainActor
+    private func startTranspositionHandDetection() {
+        TranspositionHandGestureService.shared.start {
+            Task { @MainActor in
+                guard pendingTranspositionGridEffect != nil,
+                      integrations.aiScreenDetectionMode == .visualMatch else {
+                    print("🖐️ [TRANSPOSITION] Hand ignored — transposition not ready")
+                    return
+                }
+                triggerPendingVisualTransposition(reason: "hand")
+            }
+        }
+    }
+
+    private func currentVisibleGridImages(limit: Int) -> [UIImage] {
+        var images: [UIImage] = []
+        for url in allMediaURLs.prefix(limit) {
+            if let image = cachedImages[url] ?? ProfileCacheService.shared.loadImage(forURL: url) {
+                images.append(image)
+            }
+        }
+        return images
+    }
+
+    private func openInstagramPost(_ item: InstagramMediaItem) {
+        let mediaPk = mediaIdKey(item.mediaId)
+        if let appURL = URL(string: "instagram://media?id=\(mediaPk)") {
+            UIApplication.shared.open(appURL) { success in
+                if !success {
+                    openInstagramPostWebFallback(mediaPk: mediaPk)
+                }
+            }
+        } else {
+            openInstagramPostWebFallback(mediaPk: mediaPk)
+        }
+    }
+
+    private func openInstagramPostWebFallback(mediaPk: String) {
+        guard let shortcode = shortcode(fromMediaPk: mediaPk),
+              let url = URL(string: "https://www.instagram.com/p/\(shortcode)/") else {
+            if let fallback = URL(string: "https://www.instagram.com/") {
+                UIApplication.shared.open(fallback)
+            }
+            return
+        }
+        UIApplication.shared.open(url)
+    }
+
+    private func shortcode(fromMediaPk mediaPk: String) -> String? {
+        guard var value = UInt64(mediaPk) else { return nil }
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        var chars: [Character] = []
+        repeat {
+            chars.insert(alphabet[Int(value % 64)], at: 0)
+            value /= 64
+        } while value > 0
+        return String(chars)
+    }
+
+    @MainActor
+    private func armAIScreenVisionProfile() async {
+        isAIScreenDetectionRunning = true
+        defer { isAIScreenDetectionRunning = false }
+
+        do {
+            print("🤖 [AI SCREEN] Capturing spectator profile screen")
+            let screenPhoto = try await AIScreenCameraCaptureService.shared.capturePhoto(
+                zoom: CGFloat(integrations.aiScreenCameraZoom)
+            )
+
+            showAIScreenConfirmation("Foto...")
+            showAIScreenConfirmation("AI...")
+            let analysis = try await AIScreenPostDetectionService.shared.analyzeScreenPhoto(screenPhoto)
+            print("🤖 [AI SCREEN] OpenAI profile queries=\(analysis.profileSearchQueries) confidence=\(analysis.confidence)")
+            LogManager.shared.info("AI screen profile queries: \(analysis.profileSearchQueries.joined(separator: ", "))", category: .general)
+            if let detected = analysis.profileSearchQueries.first {
+                showAIScreenConfirmation("@\(detected)")
+                showAIScreenDetectedProfileFeedback(detected)
+            }
+
+            showAIScreenConfirmation("IG...")
+            let armed: String
+            let expectedLikerUsername: String?
+            if integrations.aiScreenVerifyLatestFollower {
+                guard let spectator = try await InstagramService.shared.getLatestFollower() else {
+                    throw AIScreenLikeDetectionError.noLatestFollower
+                }
+                armed = try await armAIScreenProfileFromQueries(
+                    analysis.profileSearchQueries,
+                    expectedLiker: spectator
+                )
+                expectedLikerUsername = spectator.username
+            } else {
+                armed = try await armAIScreenProfileFromQueries(analysis.profileSearchQueries)
+                expectedLikerUsername = nil
+            }
+            showAIScreenConfirmation("@\(armed)")
+            showAIScreenDetectedProfileFeedback(armed)
+            aiScreenRevealPhase = .armed
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            if let expectedLikerUsername {
+                print("✅ [AI SCREEN] Armed target @\(armed); expected liker @\(expectedLikerUsername)")
+                LogManager.shared.success("AI screen armed target @\(armed), expected liker @\(expectedLikerUsername)", category: .general)
+            } else {
+                print("✅ [AI SCREEN] Armed target @\(armed); liker verification disabled")
+                LogManager.shared.success("AI screen armed target @\(armed), liker verification disabled", category: .general)
+            }
+        } catch {
+            print("❌ [AI SCREEN] Arm failed: \(error.localizedDescription)")
+            LogManager.shared.error("AI screen arm failed: \(error.localizedDescription)", category: .general)
+            handleTranspositionDetectionError(error)
+        }
+    }
+
+    private func armAIScreenProfileFromQueries(_ queries: [String], expectedLiker: InstagramFollower) async throws -> String {
+        var lastError: Error?
+        for query in queries.prefix(6) {
+            do {
+                return try await AIScreenLikeDetectionService.shared.armTargetUsername(
+                    query,
+                    expectedLiker: expectedLiker,
+                    limit: integrations.aiScreenCandidateLimit
+                )
+            } catch {
+                lastError = error
+                print("🤖 [AI SCREEN] Arm query '\(query)' failed: \(error.localizedDescription)")
+                if let likeError = error as? AIScreenLikeDetectionError,
+                   case .privateProfile = likeError {
+                    await MainActor.run { showAIScreenConfirmation("Privado") }
+                }
+            }
+        }
+        if let lastError { throw lastError }
+        throw AIScreenDetectionError.noUsername
+    }
+
+    private func armAIScreenProfileFromQueries(_ queries: [String]) async throws -> String {
+        var lastError: Error?
+        for query in queries.prefix(6) {
+            do {
+                return try await AIScreenLikeDetectionService.shared.armUsername(
+                    query,
+                    limit: integrations.aiScreenCandidateLimit
+                )
+            } catch {
+                lastError = error
+                print("🤖 [AI SCREEN] Arm query '\(query)' failed: \(error.localizedDescription)")
+                if let likeError = error as? AIScreenLikeDetectionError,
+                   case .privateProfile = likeError {
+                    await MainActor.run { showAIScreenConfirmation("Privado") }
+                }
+            }
+        }
+        if let lastError { throw lastError }
+        throw AIScreenDetectionError.noUsername
+    }
+
+    @MainActor
+    private func armAIScreenLatestFollower() async {
+        isAIScreenDetectionRunning = true
+        defer { isAIScreenDetectionRunning = false }
+
+        do {
+            print("❤️ [LIKE DETECT] Arming latest follower")
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            let username = try await AIScreenLikeDetectionService.shared.armLatestFollower(
+                limit: integrations.aiScreenCandidateLimit
+            )
+            showAIScreenConfirmation("@\(username)")
+            aiScreenRevealPhase = .armed
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            LogManager.shared.success("Like detection armed @\(username)", category: .general)
+        } catch {
+            print("❌ [LIKE DETECT] Arm failed: \(error.localizedDescription)")
+            LogManager.shared.error("Like detection arm failed: \(error.localizedDescription)", category: .general)
+            showAIScreenErrorFeedback()
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    @MainActor
+    private func detectAIScreenLikeIncrease() async {
+        isAIScreenDetectionRunning = true
+        defer { isAIScreenDetectionRunning = false }
+
+        do {
+            print("❤️ [LIKE DETECT] Checking armed profile for +1 like")
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            let result = try await AIScreenLikeDetectionService.shared.detectLikeIncrease(
+                limit: integrations.aiScreenCandidateLimit
+            )
+            let revealImage = await downloadImage(from: result.matchedItem.imageURL)
+            let payload = makeAIScreenLikePayload(result, revealImage: revealImage)
+            aiScreenPendingViewerPayload = payload
+            aiScreenPendingRevealImage = revealImage
+            aiScreenRevealPhase = .matched
+            showAIScreenConfirmation("OK @\(result.profile.username)")
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            LogManager.shared.success("Like detection matched @\(result.profile.username) mediaId=\(result.matchedItem.mediaId)", category: .general)
+        } catch {
+            print("❌ [LIKE DETECT] Match failed: \(error.localizedDescription)")
+            LogManager.shared.error("Like detection match failed: \(error.localizedDescription)", category: .general)
+            showAIScreenErrorFeedback()
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
+
+    @MainActor
+    private func revealPendingAIScreenPost() {
+        guard let payload = aiScreenPendingViewerPayload else {
+            aiScreenRevealPhase = .idle
+            return
+        }
+        presentAIScreenResult(payload, revealImage: aiScreenPendingRevealImage)
+        aiScreenPendingViewerPayload = nil
+        aiScreenPendingRevealImage = nil
+        aiScreenRevealPhase = .idle
+    }
+
+    @MainActor
+    private func resetAIScreenRevealFlow() {
+        aiScreenRevealPhase = .idle
+        aiScreenPendingViewerPayload = nil
+        aiScreenPendingRevealImage = nil
+        aiScreenFollowingOverride = nil
+        aiScreenFollowingLabelOverride = nil
+        aiScreenProfileNameOverride = nil
+        pendingTranspositionGridEffect = nil
+        transpositionGridEffect = nil
+        stopTranspositionErrorHaptics()
+        resetTranspositionBlackScreen()
+        AIScreenCameraCaptureService.shared.stop()
+        TranspositionHandGestureService.shared.stop()
+    }
+
+    @MainActor
+    private func showAIScreenErrorFeedback() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            aiScreenFollowingLabelOverride = "ERROR"
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                if aiScreenFollowingLabelOverride == "ERROR" {
+                    aiScreenFollowingLabelOverride = nil
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func showAIScreenConfirmation(_ text: String) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            aiScreenFollowingOverride = text
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                if aiScreenFollowingOverride == text {
+                    aiScreenFollowingOverride = nil
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func showAIScreenDetectedProfileFeedback(_ username: String) {
+        let clean = username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+        guard !clean.isEmpty else { return }
+        let text = "@\(clean)"
+        if text == transpositionLastProfileFeedback,
+           Date().timeIntervalSince(transpositionLastProfileFeedbackAt) < 4.0 {
+            return
+        }
+        transpositionLastProfileFeedback = text
+        transpositionLastProfileFeedbackAt = Date()
+        withAnimation(.easeInOut(duration: 0.16)) {
+            aiScreenProfileNameOverride = text
+        }
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                if aiScreenProfileNameOverride == text {
+                    aiScreenProfileNameOverride = nil
+                }
+            }
+        }
+    }
+
+    private func resolveAIScreenProfileAndCandidates(
+        analysis: AIScreenPostAnalysis,
+        profileQueries: [String]? = nil
+    ) async throws -> (InstagramProfile, [InstagramMediaItem]) {
+        var lastError: Error?
+        var triedUserIds = Set<String>()
+        let queries = profileQueries ?? analysis.profileSearchQueries
+        for query in queries.prefix(6) {
+            do {
+                print("🤖 [VISUAL MATCH] Searching Instagram for query='\(query)'")
+                let results = try await instagram.searchUsers(query: query)
+                print("🤖 [VISUAL MATCH] Search query='\(query)' returned \(results.count) result(s): \(results.prefix(4).map { "@\($0.username)" }.joined(separator: ", "))")
+                LogManager.shared.info(
+                    "Visual match search '\(query)' returned \(results.count): \(results.prefix(4).map { "@\($0.username)" }.joined(separator: ", "))",
+                    category: .general
+                )
+                let ordered = results.sorted { left, right in
+                    let exactLeft = left.username.lowercased() == query.lowercased()
+                    let exactRight = right.username.lowercased() == query.lowercased()
+                    return exactLeft && !exactRight
+                }
+
+                for result in ordered.prefix(4) {
+                    guard triedUserIds.insert(result.userId).inserted else { continue }
+                    guard let profile = try await instagram.getProfileInfo(
+                        userId: result.userId,
+                        usernameHint: result.username,
+                        fullNameHint: result.fullName,
+                        profilePicURLHint: result.profilePicURL,
+                        isVerifiedHint: result.isVerified
+                    ) else {
+                        continue
+                    }
+                    guard !profile.isPrivate || profile.isFollowing else {
+                        print("🤖 [AI SCREEN] Skipping @\(profile.username) — private/unavailable")
+                        continue
+                    }
+                    let candidates = try await loadAIScreenCandidates(from: profile)
+                    if !candidates.isEmpty {
+                        print("🤖 [AI SCREEN] Using @\(profile.username) with \(candidates.count) candidates")
+                        LogManager.shared.info("Visual match using @\(profile.username) with \(candidates.count) candidates", category: .general)
+                        return (profile, candidates)
+                    }
+                    print("🤖 [AI SCREEN] @\(profile.username) has no candidate posts, trying next result")
+                    LogManager.shared.warning("Visual match @\(profile.username) had no candidate posts", category: .general)
+                }
+            } catch {
+                lastError = error
+                print("🤖 [AI SCREEN] Query '\(query)' failed: \(error.localizedDescription)")
+                LogManager.shared.warning("Visual match query '\(query)' failed: \(error.localizedDescription)", category: .general)
+            }
+        }
+
+        if let lastError { throw lastError }
+        LogManager.shared.error(
+            "Visual match no candidates after queries: \(queries.joined(separator: ", "))",
+            category: .general
+        )
+        throw AIScreenDetectionError.noCandidates
+    }
+
+    private func loadAIScreenCandidates(from selectedProfile: InstagramProfile) async throws -> [InstagramMediaItem] {
+        let limit = integrations.aiScreenDetectionMode == .visualMatch ? 12 : min(max(integrations.aiScreenCandidateLimit, 12), 48)
+        var candidates = selectedProfile.cachedMediaItems
+        var next = selectedProfile.cachedNextMaxId
+        var pages = 0
+
+        while integrations.aiScreenDetectionMode != .visualMatch,
+              candidates.count < limit,
+              let cursor = next,
+              !cursor.isEmpty,
+              pages < 2 {
+            let (items, nextCursor) = try await instagram.getUserMediaItems(
+                userId: selectedProfile.userId,
+                amount: 18,
+                maxId: cursor
+            )
+            candidates.append(contentsOf: items)
+            next = nextCursor
+            pages += 1
+        }
+
+        var seen = Set<String>()
+        let deduped = candidates.filter { item in
+            guard !item.imageURL.isEmpty else { return false }
+            let key = item.mediaId.isEmpty ? item.imageURL : mediaIdKey(item.mediaId)
+            return seen.insert(key).inserted
+        }
+        return Array(deduped.prefix(limit))
+    }
+
+    @MainActor
+    private func openAIScreenMatchedPost(
+        _ matched: AIScreenCandidateImage,
+        in selectedProfile: InstagramProfile,
+        candidates: [InstagramMediaItem]
+    ) {
+        var mediaItems = candidates
+        if !mediaItems.contains(where: { mediaIdKey($0.mediaId) == mediaIdKey(matched.item.mediaId) }) {
+            mediaItems.insert(matched.item, at: 0)
+        }
+
+        let initialIndex = mediaItems.firstIndex {
+            mediaIdKey($0.mediaId) == mediaIdKey(matched.item.mediaId)
+        } ?? 0
+
+        var imageMap: [String: UIImage] = [:]
+        imageMap[matched.item.imageURL] = matched.image
+        if let profileImage = cachedImages[selectedProfile.profilePicURL] {
+            imageMap[selectedProfile.profilePicURL] = profileImage
+        }
+
+        let payload = AIScreenPostViewerPayload(
+            profile: selectedProfile,
+            mediaItems: mediaItems,
+            initialIndex: initialIndex,
+            cachedImages: imageMap
+        )
+        presentAIScreenResult(payload, revealImage: matched.image)
+        print("⚡️ [AI SCREEN] Matched post ready at index \(initialIndex)")
+    }
+
+    @MainActor
+    private func openAIScreenLikeMatchedPost(_ result: AIScreenLikeDetectionResult, revealImage: UIImage?) {
+        let payload = makeAIScreenLikePayload(result, revealImage: revealImage)
+        presentAIScreenResult(payload, revealImage: revealImage)
+        print("⚡️ [LIKE DETECT] Matched post ready at index \(payload.initialIndex)")
+    }
+
+    @MainActor
+    private func makeAIScreenLikePayload(_ result: AIScreenLikeDetectionResult, revealImage: UIImage?) -> AIScreenPostViewerPayload {
+        let initialIndex = result.mediaItems.firstIndex {
+            mediaIdKey($0.mediaId) == mediaIdKey(result.matchedItem.mediaId)
+        } ?? 0
+
+        var imageMap: [String: UIImage] = [:]
+        if let revealImage {
+            imageMap[result.matchedItem.imageURL] = revealImage
+        }
+        if let profileImage = cachedImages[result.profile.profilePicURL] {
+            imageMap[result.profile.profilePicURL] = profileImage
+        }
+
+        return AIScreenPostViewerPayload(
+            profile: result.profile,
+            mediaItems: result.mediaItems,
+            initialIndex: initialIndex,
+            cachedImages: imageMap
+        )
+    }
+
+    @MainActor
+    private func presentAIScreenResult(_ payload: AIScreenPostViewerPayload, revealImage: UIImage?) {
+        guard integrations.aiScreenRevealAnimationEnabled,
+              let revealImage else {
+            aiScreenPostViewer = payload
+            return
+        }
+
+        let style = integrations.aiScreenRevealAnimationStyle
+        aiScreenRevealAnimation = AIScreenRevealAnimationPayload(
+            image: revealImage,
+            style: style
+        )
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + style.duration) {
+            aiScreenRevealAnimation = nil
+            aiScreenPostViewer = payload
+        }
+    }
+
     private var ocrModifiers: some View {
         ZStack {
             performanceRoot
             spectatorOverlay
         }
             .onChange(of: volumeMonitor.upCount) { _ in
+                if integrations.aiScreenDetectionEnabled {
+                    if transpositionErrorHapticsActive {
+                        stopTranspositionErrorHaptics()
+                        aiScreenLastTriggerTime = .distantPast
+                    }
+                    guard !isAIScreenDetectionRunning else {
+                        print("🤖 [AI SCREEN] Ignored — detection already running")
+                        return
+                    }
+                    guard Date().timeIntervalSince(aiScreenLastTriggerTime) > 2.0 else {
+                        print("🤖 [AI SCREEN] Ignored — debounce")
+                        return
+                    }
+                    aiScreenLastTriggerTime = Date()
+                    Task { await advanceAIScreenRevealFlow() }
+                    return
+                }
+
                 guard spectatorProfile == nil else {
                     print("📷 [OCR] Blocked — spectator profile is visible")
                     return
@@ -1701,12 +2742,48 @@ struct PerformanceView: View {
 
     private var performanceCoversView: some View {
         performanceChromeAndAlerts
+            .overlay {
+                if let animation = aiScreenRevealAnimation {
+                    AIScreenRevealAnimationView(payload: animation)
+                        .transition(.opacity)
+                        .zIndex(50_000)
+                }
+            }
+            .overlay {
+                if transpositionBlackScreenVisible,
+                   integrations.aiScreenDetectionEnabled,
+                   integrations.transpositionRevealMode == .blackScreen {
+                    TranspositionBlackScreenOverlay(
+                        isReady: transpositionBlackScreenPendingItem != nil,
+                        onSwipeUp: revealBlackScreenTranspositionPost
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(60_000)
+                }
+            }
+            .statusBarHidden(transpositionBlackScreenVisible && integrations.transpositionRevealMode == .blackScreen)
+            .persistentSystemOverlays((transpositionBlackScreenVisible && integrations.transpositionRevealMode == .blackScreen) ? .hidden : .automatic)
             // Spectator profile: bound to selectedSpectator to avoid the nil→item race
             // condition that caused stale profiles when tapping a second follower.
             .fullScreenCover(item: $selectedSpectator) { follower in
                 SpectatorProfileCover(follower: follower, onClose: {
                     selectedSpectator = nil
                 })
+            }
+            .fullScreenCover(item: $aiScreenPostViewer) { payload in
+                let mediaURLs = payload.mediaItems.map { $0.imageURL }
+                let itemsByURL = payload.mediaItems.reduce(into: [String: InstagramMediaItem]()) { dict, item in
+                    dict[item.imageURL] = item
+                }
+                PostScrollView(
+                    mediaURLs: mediaURLs,
+                    mediaItemsByURL: itemsByURL,
+                    cachedImages: payload.cachedImages,
+                    initialIndex: payload.initialIndex,
+                    username: payload.profile.username,
+                    profileImage: payload.cachedImages[payload.profile.profilePicURL],
+                    userId: payload.profile.userId
+                )
             }
             .fullScreenCover(isPresented: $showingScreenOffCover) {
                 ScreenOffCoverView {
@@ -1843,6 +2920,7 @@ struct PerformanceView: View {
     var body: some View {
         performanceObservedView
         .onAppear {
+            scrollLayoutFixToken += 1
             CrashLoggerService.shared.recordScreen("Performance")
             ppTestMode.restorePendingSessionIfNeeded(availableSets: DataManager.shared.sets)
 
@@ -1864,6 +2942,10 @@ struct PerformanceView: View {
             // The ring from the previous trick is cleared so the magician can see
             // a fresh confirmation for the current trick.
             postPredRevealRingActive = false
+
+            configureTranspositionVolumeForEntry()
+            configureTranspositionBlackScreenForEntry()
+            prewarmTranspositionCameraIfNeeded()
 
             // Screen always on — managed globally by MentalGram1App
             // Show fake lockscreen for secret digit entry (one-shot per session).
@@ -1942,6 +3024,14 @@ struct PerformanceView: View {
             }
             ocrUsedInSession = false
 
+        }
+        .onChange(of: integrations.transpositionRevealMode) { mode in
+            guard mode != .blackScreen else { return }
+            resetTranspositionBlackScreen()
+        }
+        .onChange(of: integrations.aiScreenDetectionEnabled) { enabled in
+            guard !enabled else { return }
+            resetTranspositionBlackScreen()
         }
         .onChange(of: scenePhase) { phase in
             // Pause / resume full-profile pre-loader with app lifecycle.
@@ -2251,8 +3341,45 @@ struct PerformanceView: View {
                 print("🔄 [PERF] Silent CDN refresh after Explore word reveal")
             }
         }
+        // Cover Typing confirmation comes ONLY from pressing Space in Explore.
+        // If both Biography and Post Prediction use Cover Typing, sequence is:
+        // 1) update biography, 2) wait a short anti-bot gap, 3) reveal posts.
+        .onReceive(NotificationCenter.default.publisher(for: .coverTypingWordCommitted)) { note in
+            guard let rawWord = note.userInfo?["word"] as? String else { return }
+            let word = rawWord.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !word.isEmpty else { return }
+
+            let bioActive = ((note.userInfo?["bioActive"] as? Bool) ?? false)
+                && bioFeatureEnabled
+                && bioTopInputMode == "coverTyping"
+            let ppActive = ((note.userInfo?["postPredictionActive"] as? Bool) ?? false)
+                || activePostPredictionInputMethod == .coverTyping
+
+            print("⌨️ [COVER] Word committed: '\(word)' bio=\(bioActive) pp=\(ppActive)")
+            LogManager.shared.info("Cover Typing committed: '\(word)' bio=\(bioActive) pp=\(ppActive)", category: .general)
+
+            Task { @MainActor in
+                if bioActive {
+                    await applyCoverTypingToBiography(word: word)
+                }
+
+                if bioActive && ppActive {
+                    let delaySeconds: UInt64 = 4
+                    print("⏳ [COVER] Waiting \(delaySeconds)s between Biography and Post Prediction")
+                    try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
+                }
+
+                if ppActive {
+                    // Route through the existing Post Prediction reveal pipeline.
+                    // urlRevealActive intentionally bypasses OCR-only gating while still
+                    // preserving reveal cooldowns, upload guards and safety checks.
+                    ForceNumberRevealSettings.shared.urlRevealActive = true
+                    pendingOCRWord = word
+                }
+            }
+        }
         // Refresh triggered from Settings / Set screen via InstagramSyncCard button.
-        .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefresh)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefresh)) { note in
             // Acknowledge immediately so the sync button knows a live listener exists.
             // Without this, if Performance is not mounted the button would time out and
             // nothing would sync. The ACK lets the button fall back to a headless refresh.
@@ -2279,8 +3406,10 @@ struct PerformanceView: View {
                 print("🛑 [PERF] Upload cancelled — manual Instagram refresh requested")
                 LogManager.shared.warning("Upload cancelled before manual Instagram refresh", category: .upload)
             }
-            print("🔄 [PERF] Manual refresh requested from Settings/Set — starting loadProfileSync")
-            loadProfileSync(source: "manual_remote")
+            let postPages = (note.userInfo?["postPages"] as? Int).map { max(1, $0) } ?? 1
+            let repairMode = (note.userInfo?["repairMode"] as? Bool) ?? false
+            print("🔄 [PERF] Manual refresh requested from Settings/Set — starting loadProfileSync (pages=\(postPages), repair=\(repairMode))")
+            loadProfileSync(source: "manual_remote", postPages: postPages, repairMode: repairMode)
         }
         .onReceive(NotificationCenter.default.publisher(for: .performanceContinuePreload)) { _ in
             // Safety net: if onAppear didn't fire (TabView kept the view alive), make sure
@@ -2317,6 +3446,7 @@ struct PerformanceView: View {
             print("🎩 [TRANSFER] PerformanceView.onDisappear — stopping monitoring (transferOffset:\(FollowingMagicSettings.shared.transferOffset))")
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
+            resetAIScreenRevealFlow()
             stopApiPolling()
             cancelCombinedBioPostPredictionQueue(reason: "left Performance")
             clearPostPredictionTestModeIfNeeded()
@@ -2360,6 +3490,7 @@ struct PerformanceView: View {
             print("🎩 [TRANSFER] Performance tab changed — stopping monitoring (transferOffset:\(FollowingMagicSettings.shared.transferOffset))")
             VolumeButtonMonitor.shared.stopMonitoring()
             ocrCoordinator.stop()
+            resetAIScreenRevealFlow()
             stopApiPolling()
             cancelCombinedBioPostPredictionQueue(reason: "Performance tab changed")
             clearPostPredictionTestModeIfNeeded()
@@ -2790,6 +3921,12 @@ struct PerformanceView: View {
                 pendingCardReveal = card
                 print("🔗 [COMBO] Queued Post Prediction card: \(card)")
             } else if let word = revealWord, !word.isEmpty {
+                if let setName = values["set"], !setName.isEmpty {
+                    guard activateURLWordSet(named: setName) else {
+                        LogManager.shared.warning("Combined Bio + PP blocked: set '\(setName)' not found", category: .general)
+                        return
+                    }
+                }
                 ForceNumberRevealSettings.shared.urlRevealActive = true
                 pendingOCRWord = word
                 print("🔗 [COMBO] Queued Post Prediction word: \(word)")
@@ -2820,6 +3957,23 @@ struct PerformanceView: View {
         LogManager.shared.info("Combined Bio + PP queue cancelled: \(reason)", category: .general)
     }
 
+    /// Activates a Word/Number set by name for URL-scheme reveals.
+    @discardableResult
+    private func activateURLWordSet(named setName: String) -> Bool {
+        let normalized = setName.precomposedStringWithCanonicalMapping
+        guard let matchingSet = DataManager.shared.sets.first(where: {
+            $0.name.precomposedStringWithCanonicalMapping.compare(
+                normalized, options: .caseInsensitive, range: nil, locale: .current
+            ) == .orderedSame && ($0.type == .word || $0.type == .number)
+        }) else {
+            return false
+        }
+        print("📲 [URL] Activating set '\(matchingSet.name)' for word reveal")
+        ActiveSetSettings.shared.setActive(matchingSet)
+        LogManager.shared.info("URL reveal activated set: \(matchingSet.name)", category: .general)
+        return true
+    }
+
     private func applyURLAction(mode: String, text: String, values: [String: String] = [:]) async {
         guard ppTestMode.isActive || !instagram.isLocked else {
             print("🚫 [URL] Lockdown active — skipping URL action")
@@ -2836,21 +3990,15 @@ struct PerformanceView: View {
         // ── Word reveal via vault://reveal?word= ─────────────────────────────
         if mode == "reveal" {
             let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .precomposedStringWithCanonicalMapping
             guard !word.isEmpty else { return }
             
             // If a set name was provided, activate it first
             if let setName = values["set"], !setName.isEmpty {
-                let dataManager = DataManager.shared
-                if let matchingSet = dataManager.sets.first(where: {
-                    $0.name.lowercased() == setName.lowercased() && ($0.type == .word || $0.type == .number)
-                }) {
-                    print("📲 [URL] Activating set '\(matchingSet.name)' for word reveal")
-                    ActiveSetSettings.shared.activeSetId = matchingSet.id
-                    ActiveSetSettings.shared.isPostPredictionEnabled = true
-                    LogManager.shared.info("URL reveal activated set: \(matchingSet.name)", category: .general)
-                } else {
-                    print("⚠️ [URL] Set '\(setName)' not found or not a word/number set")
+                if !activateURLWordSet(named: setName) {
+                    print("⚠️ [URL] Set '\(setName)' not found — aborting word reveal")
                     LogManager.shared.warning("URL reveal: set '\(setName)' not found", category: .general)
+                    return
                 }
             }
             
@@ -3720,6 +4868,86 @@ struct PerformanceView: View {
         }
     }
 
+    // MARK: - Cover Typing → Biography
+
+    @MainActor
+    private func applyCoverTypingToBiography(word: String) async {
+        guard bioFeatureEnabled, bioTopInputMode == "coverTyping" else { return }
+
+        let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let ud = UserDefaults.standard
+        let lastKey = "last_biography_text"
+        let dateKey = "last_biography_sent_date"
+
+        // Match OCR/API dedup policy: avoid reposting the same captured word within 2h.
+        if !ppTestMode.isActive, let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
+            let sentDate = ud.object(forKey: dateKey) as? Date ?? .distantPast
+            let hoursSince = Date().timeIntervalSince(sentDate) / 3600
+            if hoursSince < 2 {
+                print("⏭️ [COVER] Bio dedup: same word sent \(String(format: "%.0f", hoursSince * 60))m ago")
+                return
+            }
+            ud.removeObject(forKey: lastKey)
+        }
+
+        // Use Cover Typing as text1/word. Other API-polled slots can still resolve.
+        var resolvedValues = await integrations.fetchTemplatePlaceholders(for: "bio")
+        resolvedValues["text1"] = trimmed
+        let composed = bioTemplate.isEmpty ? trimmed : applyTemplate(resolvedValues, template: bioTemplate)
+        let inputForBio = bioAcrosticEnabled ? trimmed : composed
+        let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
+        let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
+
+        if ppTestMode.isActive {
+            applyTestBiography(final)
+            LogManager.shared.info("TEST MODE — Cover Typing bio painted locally", category: .general)
+            return
+        }
+
+        guard instagram.isLoggedIn && !instagram.isLocked else {
+            print("⏭️ [COVER] Bio skipped: not logged in or locked")
+            return
+        }
+        guard !UploadManager.shared.isActive else {
+            print("⏭️ [COVER] Bio skipped: upload active")
+            LogManager.shared.warning("Cover Typing bio skipped: upload active", category: .general)
+            return
+        }
+
+        let cooldownKey = "last_cover_typing_bio_sent"
+        let lastSentTime = ud.double(forKey: cooldownKey)
+        let timeSinceLast = Date().timeIntervalSince1970 - lastSentTime
+        if lastSentTime > 0, timeSinceLast < interfaceCaptureCooldown {
+            let remaining = Int(interfaceCaptureCooldown - timeSinceLast)
+            print("⏭️ [COVER] Bio cooldown: \(remaining)s remaining")
+            LogManager.shared.warning("Cover Typing bio blocked: cooldown \(remaining)s remaining", category: .general)
+            return
+        }
+
+        pinLocalBiography(final)
+        beginLocalBioPostPredictionBioSend(source: "cover-typing-bio")
+        ud.set(Date().timeIntervalSince1970, forKey: cooldownKey)
+
+        do {
+            let ok = try await instagram.changeBiography(text: final, userInitiated: true)
+            pendingBioText = nil
+            completeLocalBioPostPredictionBioSend(success: ok, source: "cover-typing-bio")
+            if ok {
+                ud.set(trimmed, forKey: lastKey)
+                ud.set(Date(), forKey: dateKey)
+                print("✅ [COVER] Biography updated: \"\(final)\"")
+                fireDoubleConfirmationVibration()
+            }
+        } catch {
+            pendingBioText = nil
+            completeLocalBioPostPredictionBioSend(success: false, source: "cover-typing-bio")
+            LogManager.shared.warning("Cover Typing bio failed: \(error.localizedDescription)", category: .general)
+            print("⚠️ [COVER] Bio failed: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Interface capture → bio/note injection
 
     /// Routes a value captured by a secret input interface (Lockscreen / Number Clock /
@@ -4192,8 +5420,9 @@ struct PerformanceView: View {
         let oppositeMediaId = revealed ? amnesiaSettings.shortCarouselMediaId : amnesiaSettings.fullCarouselMediaId
         guard let mediaId, !mediaId.isEmpty else { return }
 
-        let imageCount = revealed ? 5 : 4
-        let images = Array(amnesiaSettings.images.prefix(imageCount))
+        let imageIndices = revealed ? [0, 1, 4, 2, 3] : [0, 1, 2, 3]
+        let imageCount = imageIndices.count
+        let images = imageIndices.map { amnesiaSettings.images[$0] }
         guard images.count == imageCount, images.allSatisfy({ $0 != nil }) else { return }
 
         let oppositeURL = oppositeMediaId.flatMap { id in
@@ -4898,7 +6127,10 @@ struct PerformanceView: View {
                 withAnimation(.easeOut(duration: 0.3)) { isFirstTimePreloading = false }
                 print("✅ [PRELOAD] Optional-only continue finished for \(userId)")
             } else {
-                UserDefaults.standard.set(false, forKey: "perf_fully_preloaded_\(userId)")
+                // Posts are already complete. Optional tabs can be lazy-loaded when
+                // opened, so do not flip the whole profile back to "incomplete" and
+                // show a red Continue button that may appear to do nothing.
+                UserDefaults.standard.set(true, forKey: "perf_fully_preloaded_\(userId)")
                 preloadProgress = ""
                 withAnimation(.easeIn(duration: 0.2)) { preloadFailed = true }
                 print("⚠️ [PRELOAD] Optional-only continue incomplete for \(userId)")
@@ -5550,7 +6782,7 @@ struct PerformanceView: View {
 
     @MainActor
     @discardableResult
-    private func loadProfile(source: String) async -> Bool {
+    private func loadProfile(source: String, postPages: Int = 1, repairMode: Bool = false) async -> Bool {
         guard instagram.isLoggedIn else { return false }
         if source == "manual_remote" {
             lastManualRefreshFailureMessage = nil
@@ -5617,20 +6849,35 @@ struct PerformanceView: View {
         lastRefreshTimestamp = now
         lastAutoRefreshTimestamp = now
 
-        print("🔄 [PERF] loadProfile starting — full profile refresh")
-        LogManager.shared.info("Profile refresh started", category: .general)
+        print("🔄 [PERF] loadProfile starting — full profile refresh (repair=\(repairMode))")
+        LogManager.shared.info("Profile refresh started repair=\(repairMode)", category: .general)
 
         isLoading = true
 
         do {
             // ANTI-BOT: Wait if network changed recently
             try await instagram.waitForNetworkStability()
+
+            if repairMode {
+                postManualRefreshProgress("Repairing replica")
+                let userId = currentSessionUserId()
+                ProfileCacheService.shared.preparePublicReplicaRebuild(userId: userId.isEmpty ? nil : userId)
+                mediaItemsByURL.removeAll()
+                revealDates.removeAll()
+                allMediaURLs.removeAll()
+                nextMaxId = nil
+                hasMorePages = true
+            } else {
+                postManualRefreshProgress(postPages > 1 ? "Syncing page 1/\(postPages)" : "Syncing recent posts")
+            }
             
                 let fetchedProfile = try await instagram.getProfileInfo()
                 
                     if let fetchedProfile = fetchedProfile {
                 var mergedProfile = fetchedProfile
-                let preservedProfile = self.profile ?? ProfileCacheService.shared.loadProfile()
+                let preservedProfile: InstagramProfile? = repairMode
+                    ? nil
+                    : (self.profile ?? ProfileCacheService.shared.loadProfile())
                 if let preservedProfile {
                     // getProfileInfo() intentionally refreshes only the visible profile
                     // surface (header/followers/posts). Preserve secondary tabs so a
@@ -5695,26 +6942,30 @@ struct PerformanceView: View {
                 let manualRevealIdsBeforeRefresh: Set<String> = isAuthoritativeRefresh
                     ? Set(allMediaURLs.compactMap { revealMediaId(from: $0) })
                     : []
+                let refreshedFirstPageMediaIds = Set(mergedProfile.cachedMediaItems.map { $0.mediaId })
 
                 if isAuthoritativeRefresh {
                     let firstPageItems = mergedProfile.cachedMediaItems
-                    let firstPageIds = Set(firstPageItems.map { mediaIdKey($0.mediaId) })
-                    let preservedTailItems = previousGridURLsForRefresh.compactMap { previousItemsByURLForRefresh[$0] }.filter { item in
-                        !item.mediaId.isEmpty && !firstPageIds.contains(mediaIdKey(item.mediaId))
-                    }
-                    var seenAuthoritativeIds = Set<String>()
-                    let authoritativeItems = (firstPageItems + preservedTailItems).filter { item in
-                        let key = item.mediaId.isEmpty ? item.imageURL : mediaIdKey(item.mediaId)
-                        return seenAuthoritativeIds.insert(key).inserted
-                    }
-                    let authoritativeCursor = preservedTailItems.isEmpty
-                        ? mergedProfile.cachedNextMaxId
-                        : (previousProfileBeforeRefresh?.cachedNextMaxId ?? mergedProfile.cachedNextMaxId)
+                    let page1Result = ProfileMediaReconciler.applyAuthoritativePageRange(
+                        currentURLs: previousGridURLsForRefresh,
+                        currentItemsByURL: previousItemsByURLForRefresh,
+                        freshItems: firstPageItems,
+                        startCursor: nil,
+                        endCursor: mergedProfile.cachedNextMaxId,
+                        protectedMediaIds: refreshedFirstPageMediaIds
+                    )
+                    let authoritativeItems = page1Result.urls.compactMap { page1Result.itemsByURL[$0] }
+                    let authoritativeCursor = mergedProfile.cachedNextMaxId
 
                     mergedProfile.cachedMediaItems = authoritativeItems
                     mergedProfile.cachedMediaURLs = authoritativeItems.map(\.imageURL)
                     mergedProfile.cachedNextMaxId = authoritativeCursor
                     self.profile = mergedProfile
+
+                    if page1Result.removedCount > 0 || page1Result.replacedURLCount > 0 {
+                        print("🧭 [GRID AUTH] Page 1 reconciled — +\(page1Result.appendedCount), -\(page1Result.removedCount), url↻\(page1Result.replacedURLCount), protected:\(page1Result.protectedCount)")
+                        LogManager.shared.info("Page 1 reconciled: +\(page1Result.appendedCount), -\(page1Result.removedCount), replaced=\(page1Result.replacedURLCount)", category: .general)
+                    }
 
                     let previousGridURLsBeforeAuthoritative = previousGridURLsForRefresh
 
@@ -5909,8 +7160,51 @@ struct PerformanceView: View {
                 // fetchTaggedIfNeeded that tab-swipe uses, so the logic is
                 // identical: skip if already cached, respect anti-bot budget.
                 // Delay 5s to avoid competing with the posts download burst.
-                scheduleBackgroundReelsTaggedPreload(for: mergedProfile)
+                if repairMode {
+                    print("🧹 [REPAIR] Secondary tabs deferred until user opens them")
+                    LogManager.shared.info("Repair deferred reels/tagged/highlights to avoid API burst", category: .general)
+                } else {
+                    scheduleBackgroundReelsTaggedPreload(for: mergedProfile)
+                }
+
+                // Release the loading spinner after page 1 so the UI is usable
+                // while extra pages are being fetched in the background.
                 isLoading = false
+
+                // ── Extra-page deep refresh (postPages > 1) ──────────────────────
+                // Fetch pages 2…postPages using the stored cursor.  Each extra page
+                // is paced with a human-speed delay to avoid bot signals.  The safety
+                // gate (.ownProfilePagination) applies to every page independently.
+                // Pass page-1 mediaIds so pinned posts (which have small pks even
+                // though they appear first) are never removed by the range check.
+                if postPages > 1 {
+                    await fetchExtraRefreshPages(
+                        postPages: postPages,
+                        userId: mergedProfile.userId,
+                        page1MediaIds: refreshedFirstPageMediaIds,
+                        repairMode: repairMode
+                    )
+                }
+
+                if repairMode {
+                    let required = ProfileCacheService.shared.requiredPerformancePreloadPosts(
+                        for: profile ?? mergedProfile,
+                        targetPosts: preloadTargetPosts,
+                        maxPosts: maxPhotosOwnProfile
+                    )
+                    let complete = allMediaURLs.count >= required || nextMaxId == nil
+                    UserDefaults.standard.set(complete, forKey: "perf_fully_preloaded_\(mergedProfile.userId)")
+                    ProfileCacheService.shared.recordPerformancePreloadExit(
+                        reason: complete ? "repair_complete" : "repair_partial",
+                        userId: mergedProfile.userId,
+                        cachedCount: allMediaURLs.count,
+                        requiredCount: required,
+                        context: "manual_repair"
+                    )
+                } else if source == "manual_remote" {
+                    UserDefaults.standard.set(true, forKey: "perf_manual_depth_synced_\(mergedProfile.userId)")
+                }
+
                 return true
                     } else {
                         print("⚠️ [PERF] getProfileInfo returned nil — profile data unavailable")
@@ -5963,13 +7257,131 @@ struct PerformanceView: View {
             }
     
     // Sync wrapper for non-async call sites (onRefresh button, header "@" button)
+    /// Fetches post pages 2…postPages and applies them authoritatively to the grid.
+    ///
+    /// **Authoritative range replacement**: each extra page is the Instagram source
+    /// of truth for posts whose pk falls in the half-open range
+    /// `(cursorPkEnd, cursorPkStart)` — that is, newer than the new page cursor
+    /// and older than the previous page cursor.  Items with pk ≤ cursorPkEnd belong
+    /// to later pages and are left untouched.
+    ///
+    /// **Pinned-post protection**: Instagram places pinned posts at the top of
+    /// page 1 even though their pks are much smaller (they are chronologically
+    /// older).  `page1MediaIds` guards these items from being incorrectly removed
+    /// by the range check.
+    ///
+    /// If the safety gate is briefly blocking right after the first-page refresh,
+    /// the function waits up to 30 s for it to clear instead of failing immediately.
+    @MainActor
+    private func fetchExtraRefreshPages(
+        postPages: Int,
+        userId: String,
+        page1MediaIds: Set<String>,
+        repairMode: Bool = false
+    ) async {
+        guard postPages > 1, !userId.isEmpty else { return }
+
+        let pagesNeeded = postPages - 1   // page 1 already fetched by getProfileInfo
+        var fetchedCount = 0
+
+        for _ in 0..<pagesNeeded {
+            postManualRefreshProgress(repairMode ? "Repairing page \(fetchedCount + 2)/\(postPages)" : "Syncing page \(fetchedCount + 2)/\(postPages)")
+            // Use the cursor that the previous page returned.
+            guard let cursor = nextMaxId, !cursor.isEmpty else {
+                print("📄 [EXTRA PAGES] No cursor — stopping at page \(fetchedCount + 1)")
+                break
+            }
+
+            // ── Safety gate with patient wait ────────────────────────────────────
+            // The gate may be briefly blocked right after the first-page refresh
+            // (e.g. "recent feed refresh — 14s"). Wait up to 30 s for it to clear
+            // instead of giving up immediately, since the user explicitly asked for
+            // deeper pagination.
+            let gateMaxWaitNs: UInt64 = 30_000_000_000
+            var gateWaited: UInt64 = 0
+            var gate = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+            while !gate.allowed, gateWaited < gateMaxWaitNs {
+                let sliceNs: UInt64 = 2_000_000_000
+                print("⏳ [EXTRA PAGES] Gate blocked (\(gate.reason), \(gate.waitSeconds)s) — waiting 2s…")
+                postManualRefreshProgress("Waiting anti-bot gate \(max(gate.waitSeconds, 1))s")
+                try? await Task.sleep(nanoseconds: sliceNs)
+                gateWaited += sliceNs
+                gate = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+            }
+            guard gate.allowed else {
+                print("🛡️ [EXTRA PAGES] Timed out waiting for gate — stopping after \(fetchedCount) page(s)")
+                LogManager.shared.warning("Extra-page refresh gate timed out after \(Int(gateWaited / 1_000_000_000))s", category: .general)
+                break
+            }
+            InstagramSafetyGate.shared.record(.ownProfilePagination)
+
+            // Human-pacing delay (1.4–2.6 s) before every extra page.
+            let humanDelay = UInt64.random(in: 1_400_000_000...2_600_000_000)
+            try? await Task.sleep(nanoseconds: humanDelay)
+
+            do {
+                let (newItems, newCursor) = try await instagram.getUserMediaItems(
+                    userId: userId,
+                    amount: 18,
+                    maxId: cursor
+                )
+                guard !newItems.isEmpty else {
+                    print("📄 [EXTRA PAGES] Empty page — no more posts")
+                    hasMorePages = false
+                    break
+                }
+
+                fetchedCount += 1
+                print("📄 [EXTRA PAGES] Page \(fetchedCount + 1): fetched \(newItems.count) items (cursor: \(newCursor ?? "nil"))")
+                LogManager.shared.info("Extra refresh page \(fetchedCount + 1): \(newItems.count) items", category: .general)
+
+                let pageResult = ProfileMediaReconciler.applyAuthoritativePageRange(
+                    currentURLs: allMediaURLs,
+                    currentItemsByURL: mediaItemsByURL,
+                    freshItems: newItems,
+                    startCursor: cursor,
+                    endCursor: newCursor,
+                    protectedMediaIds: page1MediaIds
+                )
+                allMediaURLs = pageResult.urls
+                mediaItemsByURL = pageResult.itemsByURL
+
+                if pageResult.removedCount > 0 {
+                    print("🗑️ [EXTRA PAGES] Removed \(pageResult.removedCount) deleted/archived post(s) from page \(fetchedCount + 1) range")
+                    LogManager.shared.info("Deep refresh removed \(pageResult.removedCount) deleted post(s) at page \(fetchedCount + 1)", category: .general)
+                }
+
+                nextMaxId = newCursor
+                hasMorePages = newCursor != nil && allMediaURLs.count < maxPhotosOwnProfile
+
+                // Persist authoritative grid after each page.
+                if var cached = ProfileCacheService.shared.loadProfile(), cached.userId == userId {
+                    let visibleURLs = allMediaURLs.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("amnesia://") }
+                    let visibleItems = visibleURLs.compactMap { mediaItemsByURL[$0] }
+                    cached.cachedMediaURLs = visibleURLs
+                    cached.cachedMediaItems = visibleItems
+                    cached.cachedNextMaxId = newCursor
+                    ProfileCacheService.shared.saveProfileAuthoritative(cached)
+                }
+
+                print("📄 [EXTRA PAGES] Page \(fetchedCount + 1) applied — +\(pageResult.appendedCount) new, -\(pageResult.removedCount) deleted, url↻\(pageResult.replacedURLCount), protected:\(pageResult.protectedCount), grid=\(allMediaURLs.count)")
+            } catch {
+                print("⚠️ [EXTRA PAGES] Fetch failed: \(error.localizedDescription)")
+                LogManager.shared.warning("Extra refresh page fetch failed: \(error.localizedDescription)", category: .general)
+                break
+            }
+        }
+
+        print("📄 [EXTRA PAGES] Done — fetched \(fetchedCount) extra page(s), grid now \(allMediaURLs.count) items")
+    }
+
     private func loadProfileSync() {
         loadProfileSync(source: "manual")
     }
 
-    private func loadProfileSync(source: String) {
+    private func loadProfileSync(source: String, postPages: Int = 1, repairMode: Bool = false) {
         Task {
-            let success = await loadProfile(source: source)
+            let success = await loadProfile(source: source, postPages: postPages, repairMode: repairMode)
             if success, source.hasPrefix("manual") {
                 await syncCurrentNoteFromInstagramAfterManualRefresh()
             }
@@ -5993,6 +7405,14 @@ struct PerformanceView: View {
             name: .performanceManualRefreshResult,
             object: nil,
             userInfo: userInfo
+        )
+    }
+
+    private func postManualRefreshProgress(_ message: String) {
+        NotificationCenter.default.post(
+            name: .performanceManualRefreshProgress,
+            object: nil,
+            userInfo: ["message": message]
         )
     }
 
@@ -7804,6 +9224,45 @@ private struct ScreenOffCoverView: View {
     }
 }
 
+private struct TranspositionBlackScreenOverlay: View {
+    let isReady: Bool
+    let onSwipeUp: () -> Void
+    @State private var isDismissing = false
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Color.black
+                    .ignoresSafeArea(.all)
+                if isReady {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 5, height: 5)
+                        .position(x: geo.size.width - 16, y: geo.size.height - 34)
+                }
+            }
+            .offset(y: isDismissing ? -geo.size.height * 0.18 : 0)
+            .opacity(isDismissing ? 0 : 1)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 24, coordinateSpace: .local)
+                    .onEnded { value in
+                        guard isReady,
+                              value.translation.height < -44,
+                              abs(value.translation.height) > abs(value.translation.width) else { return }
+                        withAnimation(.easeInOut(duration: 0.32)) {
+                            isDismissing = true
+                        }
+                        onSwipeUp()
+                    }
+            )
+        }
+        .background(Color.black.ignoresSafeArea(.all))
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+    }
+}
+
 // MARK: - List Set Input View
 
 struct ListSetInputView: View {
@@ -7989,69 +9448,140 @@ struct ListSetInputView: View {
 
 // MARK: - Refresh control enabler
 
-/// Invisible UIViewRepresentable placed INSIDE the ScrollView content.
-/// Walks UP the UIKit superview chain from inside the UIScrollView's content
-/// area to reach the UIScrollView itself, then sets
-/// `refreshControl?.isEnabled = isEnabled`.
-/// This avoids recreating the view tree (which would reset scroll position).
-/// Invisible UIViewRepresentable placed INSIDE the ScrollView content.
+/// Invisible UIViewRepresentable attached to the ScrollView content tree.
 /// Walks UP the UIKit superview chain to reach the UIScrollView, then sets
 /// both `isEnabled` and `isHidden` on its `refreshControl` so the spinner
 /// never appears when refresh is on cooldown.
+///
+/// Also repairs a layout glitch on Performance entry (especially cold launch with
+/// "Launch directly to Performance"): the scroll view can rest at y=0 instead of
+/// the correct negative inset offset, making the profile appear shifted upward.
 private struct RefreshControlEnabler: UIViewRepresentable {
     let isEnabled: Bool
+    /// Incremented on each InstagramProfileView.onAppear to re-run layout repair.
+    let fixToken: Int
+    /// Positive points to lift the initial Performance scroll. Used only for
+    /// Bio Cover Typing so the biography is hidden when the magician enters.
+    let initialContentLift: CGFloat
 
-    class Coordinator {
+    class Coordinator: NSObject {
         weak var scrollView: UIScrollView?
+        weak var observedRefreshControl: UIRefreshControl?
+        var lastFixToken: Int = -1
+        var lastInitialContentLift: CGFloat = -1
+
+        @objc func refreshControlDidBegin(_ sender: UIRefreshControl) {
+            sender.alpha = 1
+            sender.isHidden = false
+        }
     }
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> UIView {
         let v = UIView()
-        // Non-zero size so SwiftUI does NOT optimize the view out of the UIKit tree.
-        v.frame                = CGRect(x: 0, y: 0, width: 1, height: 1)
+        v.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
         v.isUserInteractionEnabled = false
-        v.backgroundColor      = .clear
-        v.alpha                = 0
+        v.backgroundColor = .clear
+        v.alpha = 0
         return v
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        applyEnabled(isEnabled, uiView: uiView, coordinator: context.coordinator)
-
-        // Retry after one layout pass: SwiftUI may add the UIRefreshControl lazily.
-        let enabled = isEnabled
         let coordinator = context.coordinator
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            applyEnabled(enabled, uiView: uiView, coordinator: coordinator)
+        if coordinator.lastFixToken != fixToken || coordinator.lastInitialContentLift != initialContentLift {
+            coordinator.lastFixToken = fixToken
+            coordinator.lastInitialContentLift = initialContentLift
+        }
+
+        apply(isEnabled, uiView: uiView, coordinator: coordinator, forceLayoutFix: true)
+
+        let enabled = isEnabled
+        let token = fixToken
+        for delay in [0.05, 0.15, 0.35, 0.7, 1.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard coordinator.lastFixToken == token else { return }
+                apply(enabled, uiView: uiView, coordinator: coordinator, forceLayoutFix: true)
+            }
         }
     }
 
-    private func applyEnabled(_ enabled: Bool,
-                               uiView: UIView,
-                               coordinator: Coordinator) {
-        func apply(_ scroll: UIScrollView) {
-            guard let rc = scroll.refreshControl else { return }
+    private func apply(_ enabled: Bool,
+                       uiView: UIView,
+                       coordinator: Coordinator,
+                       forceLayoutFix: Bool) {
+        guard let scroll = resolveScrollView(from: uiView, coordinator: coordinator) else { return }
+
+        if let rc = scroll.refreshControl {
             rc.isEnabled = enabled
             rc.isHidden  = !enabled
+            if coordinator.observedRefreshControl !== rc {
+                coordinator.observedRefreshControl?.removeTarget(
+                    coordinator,
+                    action: #selector(Coordinator.refreshControlDidBegin(_:)),
+                    for: .valueChanged
+                )
+                rc.addTarget(
+                    coordinator,
+                    action: #selector(Coordinator.refreshControlDidBegin(_:)),
+                    for: .valueChanged
+                )
+                coordinator.observedRefreshControl = rc
+            }
+            if initialContentLift > 0, !rc.isRefreshing {
+                rc.alpha = 0
+            } else {
+                rc.isHidden = !enabled
+                rc.alpha = 1
+            }
         }
 
-        if let cached = coordinator.scrollView {
-            apply(cached)
-            return
+        if forceLayoutFix {
+            fixPerformanceScrollLayoutIfNeeded(on: scroll)
         }
+    }
 
-        // Walk up the UIKit superview chain to find the first UIScrollView.
+    private func resolveScrollView(from uiView: UIView,
+                                   coordinator: Coordinator) -> UIScrollView? {
+        if let cached = coordinator.scrollView { return cached }
+
         var current: UIView? = uiView
         for _ in 0..<30 {
             guard let view = current else { break }
             if let scroll = view as? UIScrollView {
                 coordinator.scrollView = scroll
-                apply(scroll)
-                return
+                return scroll
             }
             current = view.superview
         }
+        return nil
+    }
+
+    private func fixPerformanceScrollLayoutIfNeeded(on scroll: UIScrollView) {
+        guard !scroll.isDragging, !scroll.isTracking, !scroll.isDecelerating else { return }
+
+        let refreshControl = scroll.refreshControl
+        if refreshControl?.isRefreshing == true {
+            refreshControl?.endRefreshing()
+        }
+        if initialContentLift > 0, refreshControl?.isRefreshing != true {
+            refreshControl?.alpha = 0
+        }
+
+        scroll.layoutIfNeeded()
+
+        // With UIRefreshControl the natural resting offset is NEGATIVE, not zero.
+        // Resting at y=0 makes the profile header sit too high on screen.
+        let restingTop = -scroll.adjustedContentInset.top
+        let maxScrollableY = max(restingTop, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+        let expectedTop = min(restingTop + max(0, initialContentLift), maxScrollableY)
+        let currentY = scroll.contentOffset.y
+        let tooHigh = currentY > expectedTop + 1
+        let tooPulledDown = currentY < expectedTop - 12
+
+        guard tooHigh || tooPulledDown else { return }
+
+        scroll.setContentOffset(CGPoint(x: 0, y: expectedTop), animated: false)
+        print("🔄 [SCROLL] Corrected Performance scroll offset \(String(format: "%.1f", currentY)) → \(String(format: "%.1f", expectedTop)) lift:\(String(format: "%.1f", initialContentLift))")
     }
 }
 
@@ -8065,8 +9595,15 @@ struct InstagramProfileView: View {
     /// When false, the UIRefreshControl is disabled at UIKit level so the pull
     /// gesture produces no spinner.  Changed via RefreshControlEnabler background.
     var isRefreshEnabled: Bool = true
+    var scrollLayoutFixToken: Int = 0
+    var initialContentLift: CGFloat = 0
     let onPlusPress: () -> Void
     @Binding var highlightsLoadedOnce: Bool
+    var aiScreenFollowingOverride: String? = nil
+    var aiScreenFollowingLabelOverride: String? = nil
+    var aiScreenProfileNameOverride: String? = nil
+    var transpositionGridEffect: TranspositionGridEffectPayload? = nil
+    var transpositionScrollToken: Int = 0
     @State private var selectedTab = 0
     @State private var measuredSecretGridWidth: CGFloat = 0
 
@@ -8699,31 +10236,43 @@ struct InstagramProfileView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Must be inside the ScrollView content so its UIView is a UIKit
-                // descendant of UIScrollView.  1 pt high, alpha 0 — invisible but
-                // NOT removed from the hierarchy (zero-size views can be pruned).
-                RefreshControlEnabler(isEnabled: isRefreshEnabled)
-                    .frame(width: 1, height: 1)
-                    .opacity(0)
-                    .allowsHitTesting(false)
-
-                InstagramHeaderView(
-                    username: profile.username,
-                    isVerified: profile.isVerified,
-                    onRefresh: onRefresh,
-                    onPlusPress: onPlusPress
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    InstagramHeaderView(
+                        username: aiScreenProfileNameOverride ?? profile.username,
+                        isVerified: profile.isVerified,
+                        onRefresh: onRefresh,
+                        onPlusPress: onPlusPress
+                    )
+                    profileInfoSection
+                        .padding(.top, 12)
+                    tabBarSection
+                    Divider()
+                    tabTapSafetySpacer
+                    tabContentSection
+                        .id("profile-grid")
+                    // Bottom spacer so the last row of the grid can always be scrolled
+                    // fully above the floating pill (~54 pt pill height + 8 pt bottom gap + 32 pt margin).
+                    Color.clear.frame(height: 94)
+                }
+                .background(
+                    RefreshControlEnabler(
+                        isEnabled: isRefreshEnabled,
+                        fixToken: scrollLayoutFixToken,
+                        initialContentLift: initialContentLift
+                    )
+                        .frame(width: 1, height: 1)
+                        .opacity(0)
+                        .allowsHitTesting(false)
                 )
-                profileInfoSection
-                    .padding(.top, 12)
-                tabBarSection
-                Divider()
-                tabTapSafetySpacer
-                tabContentSection
-                // Bottom spacer so the last row of the grid can always be scrolled
-                // fully above the floating pill (~54 pt pill height + 8 pt bottom gap + 32 pt margin).
-                Color.clear.frame(height: 94)
+            }
+            .onChange(of: transpositionScrollToken) { token in
+                guard token > 0 else { return }
+                selectedTab = 0
+                withAnimation(.easeInOut(duration: 0.55)) {
+                    proxy.scrollTo("profile-grid", anchor: .top)
+                }
             }
         }
         .onAppear {
@@ -8969,11 +10518,12 @@ struct InstagramProfileView: View {
             return
         }
 
-        let cleaned = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if cleaned.allSatisfy({ $0.isNumber }) {
-            handleNumericOCRPostPrediction(cleaned)
+        let cleaned = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = cleaned.precomposedStringWithCanonicalMapping
+        if normalized.allSatisfy({ $0.isNumber }) {
+            handleNumericOCRPostPrediction(normalized)
         } else {
-            handleWordOCRPostPrediction(cleaned)
+            handleWordOCRPostPrediction(normalized)
         }
     }
 
@@ -9252,8 +10802,8 @@ struct InstagramProfileView: View {
                             showFollowingList = true
                         } label: {
                             StatView(number: profile.followingCount, label: String(localized: "ig.stat.following"),
-                                     overrideText: postsOCRNumberOverride ?? effectiveFollowingOverride,
-                                     overrideLabel: postsOCRLabelOverride)
+                                     overrideText: postsOCRNumberOverride ?? aiScreenFollowingOverride ?? effectiveFollowingOverride,
+                                     overrideLabel: postsOCRLabelOverride ?? aiScreenFollowingLabelOverride)
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
@@ -9385,6 +10935,7 @@ struct InstagramProfileView: View {
                     mediaURLs: urlsToShow,
                     cachedImages: cachedImages,
                     mediaItemsByURL: mediaItemsByURL,
+                    transpositionGridEffect: transpositionGridEffect,
                     onMediaAppear: onMediaAppear,
                     onTapIndex: { index in
                         guard !isSecretGridInputActive || isAmnesiaCarouselIndex(index) else { return }
@@ -10347,7 +11898,7 @@ struct InstagramProfileView: View {
         let dm          = DataManager.shared
         let instagram   = InstagramService.shared
         let alphabet    = set.selectedAlphabet ?? .latin
-        let normalizedWord = word.lowercased()
+        let normalizedWord = normalizeWordForReveal(word, alphabet: alphabet)
         let letters: [String] = alphabet.isRightToLeft
             ? normalizedWord.map { String($0) }
             : normalizedWord.reversed().map { String($0) }
@@ -11096,6 +12647,7 @@ struct PhotosGridView: View {
     let cachedImages: [String: UIImage]
     /// Optional: used to detect horizontal-video cells and letterbox them instead of crop.
     var mediaItemsByURL: [String: InstagramMediaItem] = [:]
+    var transpositionGridEffect: TranspositionGridEffectPayload? = nil
     var onMediaAppear: ((String) -> Void)? = nil
     var onTapIndex: ((Int) -> Void)? = nil
     /// Always render at least this many cells so swipe digit-detection works
@@ -11161,7 +12713,19 @@ struct PhotosGridView: View {
             ForEach(renderCells, id: \.id) { cell in
                 Color.clear
                     .aspectRatio(InstagramGridMetrics.profileCellAspectRatio, contentMode: .fit)
-                    .overlay(gridCell(for: cell.url, mediaIdImages: mediaIdImages))
+                    .overlay(
+                        ZStack {
+                            gridCell(for: cell.url, mediaIdImages: mediaIdImages)
+                            if let effect = transpositionGridEffect, cell.index < 12 {
+                                TranspositionGridCellEffectView(
+                                    index: cell.index,
+                                    sourceImages: effect.sourceImages,
+                                    targetImages: effect.targetImages,
+                                    duration: effect.duration
+                                )
+                            }
+                        }
+                    )
                     .clipped()
                     .onAppear { onMediaAppear?(cell.url) }
                     .onTapGesture { onTapIndex?(cell.index) }
@@ -11210,6 +12774,112 @@ struct PhotosGridView: View {
             }
         } else {
             Rectangle().fill(Color.gray.opacity(0.3))
+        }
+    }
+}
+
+struct TranspositionGridCellEffectView: View {
+    let index: Int
+    let sourceImages: [UIImage]
+    let targetImages: [UIImage]
+    let duration: TimeInterval
+
+    @State private var startedAt = Date()
+    @State private var tick = 0
+    @State private var progress: CGFloat = 0
+    private let timer = Timer.publish(every: 0.16, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        ZStack {
+            if let image = currentImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .saturation(isSettled ? 1.0 : 1.2 + Double(1 - progress) * 1.1)
+                    .contrast(isSettled ? 1.0 : 1.08 + Double(1 - progress) * 0.35)
+                    .offset(x: jitterX, y: jitterY)
+                    .scaleEffect(isSettled ? 1.0 : 1.04 + CGFloat((tick + index) % 3) * 0.012)
+            }
+
+            Rectangle()
+                .fill(scanColor)
+                .blendMode(.screen)
+                .opacity(isSettled ? 0 : Double((1 - progress) * 0.34))
+
+            VStack(spacing: 7) {
+                ForEach(0..<5, id: \.self) { line in
+                    Rectangle()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(height: line % 2 == 0 ? 1.0 : 0.55)
+                        .offset(x: CGFloat(((tick + line * 7 + index) % 18) - 9) * 3)
+                }
+            }
+            .opacity(isSettled ? 0 : Double((1 - progress) * 0.65))
+
+            if progress > settleStartProgress, let finalImage = targetImage {
+                Image(uiImage: finalImage)
+                    .resizable()
+                    .scaledToFill()
+                    .opacity(Double(min(1, (progress - settleStartProgress) / 0.12)))
+            }
+        }
+        .clipped()
+        .onReceive(timer) { _ in
+            let elapsed = Date().timeIntervalSince(startedAt)
+            progress = min(1, CGFloat(elapsed / max(duration, 0.1)))
+            tick += 1
+        }
+        .onAppear {
+            startedAt = Date()
+            tick = index * 3
+            progress = 0
+        }
+    }
+
+    private var targetImage: UIImage? {
+        guard !targetImages.isEmpty else { return nil }
+        return targetImages[index % targetImages.count]
+    }
+
+    private var currentImage: UIImage? {
+        guard !sourceImages.isEmpty || !targetImages.isEmpty else { return nil }
+        if isSettled { return targetImage }
+
+        let localProgress = min(1, progress / max(settleStartProgress, 0.01))
+        let targetBias = Int(pow(Double(localProgress), 1.35) * 10)
+        let shouldUseTarget = ((tick + index * 5) % 10) < targetBias
+        let pool = shouldUseTarget || sourceImages.isEmpty ? targetImages : sourceImages
+        guard !pool.isEmpty else { return targetImage }
+        let scrambled = abs((tick * 7) + (index * 11) + ((tick + index) % 5) * 13)
+        return pool[scrambled % pool.count]
+    }
+
+    private var settleStartProgress: CGFloat {
+        // Cell-by-cell resolution: 12 visible cells complete across the effect.
+        let visibleIndex = CGFloat(min(index, 11))
+        return 0.24 + visibleIndex * 0.055
+    }
+
+    private var isSettled: Bool {
+        progress >= settleStartProgress + 0.12
+    }
+
+    private var jitterX: CGFloat {
+        guard !isSettled, progress < 0.82 else { return 0 }
+        return CGFloat(((tick + index * 3) % 7) - 3) * (1 - progress) * 1.8
+    }
+
+    private var jitterY: CGFloat {
+        guard !isSettled, progress < 0.82 else { return 0 }
+        return CGFloat(((tick * 2 + index) % 5) - 2) * (1 - progress) * 1.2
+    }
+
+    private var scanColor: Color {
+        switch (tick + index) % 4 {
+        case 0: return .cyan
+        case 1: return .purple
+        case 2: return .white
+        default: return .blue
         }
     }
 }

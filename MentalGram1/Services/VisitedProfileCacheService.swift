@@ -15,6 +15,8 @@ final class VisitedProfileCacheService {
     private let profilesDirectory: URL
     private let imagesDirectory: URL
     private let searchesDirectory: URL
+    // Caché permanente para la máscara de cover typing (sin TTL — se invalida manualmente)
+    private let maskSearchesDirectory: URL
     private let maxSearchAge: TimeInterval = 10 * 60
 
     /// Max cache age for visited profile data before we refuse to serve it.
@@ -30,7 +32,8 @@ final class VisitedProfileCacheService {
         profilesDirectory = rootDirectory.appendingPathComponent("Profiles", isDirectory: true)
         imagesDirectory = rootDirectory.appendingPathComponent("Images", isDirectory: true)
         searchesDirectory = rootDirectory.appendingPathComponent("Searches", isDirectory: true)
-        [rootDirectory, profilesDirectory, imagesDirectory, searchesDirectory].forEach {
+        maskSearchesDirectory = rootDirectory.appendingPathComponent("MaskSearches", isDirectory: true)
+        [rootDirectory, profilesDirectory, imagesDirectory, searchesDirectory, maskSearchesDirectory].forEach {
             try? fileManager.createDirectory(at: $0, withIntermediateDirectories: true)
         }
     }
@@ -89,6 +92,115 @@ final class VisitedProfileCacheService {
         print("📦 [SEARCH CACHE] Loaded \(entry.results.count) result(s) for \(normalized)")
         return entry.results
     }
+
+    // MARK: - Mask Search Cache (permanente, sin TTL)
+
+    /// Guarda los resultados de búsqueda para el nombre de máscara configurado.
+    /// Sin expiración — dura indefinidamente hasta que el usuario refresca manualmente
+    /// o cambia el nombre.
+    func saveMaskSearchResults(_ results: [UserSearchResult], forUsername username: String) {
+        let normalized = normalize(username)
+        guard !normalized.isEmpty else { return }
+        let entry = SearchCacheEntry(query: normalized, cachedAt: Date(), results: results)
+        guard let data = try? JSONEncoder().encode(entry) else { return }
+        try? data.write(to: maskSearchURL(for: normalized), options: .atomic)
+        print("💾 [MASK CACHE] Guardados \(results.count) perfiles para '\(normalized)'")
+    }
+
+    /// Carga los resultados de máscara desde disco. Sin comprobación de TTL.
+    func loadMaskSearchResults(forUsername username: String) -> [UserSearchResult]? {
+        let normalized = normalize(username)
+        guard !normalized.isEmpty,
+              let data = try? Data(contentsOf: maskSearchURL(for: normalized)),
+              let entry = try? JSONDecoder().decode(SearchCacheEntry.self, from: data),
+              !entry.results.isEmpty else { return nil }
+        print("📦 [MASK CACHE] Cargados \(entry.results.count) perfiles para '\(normalized)'")
+        return entry.results
+    }
+
+    /// Número de perfiles guardados para un username. 0 si no hay caché.
+    func maskSearchResultsCount(forUsername username: String) -> Int {
+        loadMaskSearchResults(forUsername: username)?.count ?? 0
+    }
+
+    /// Elimina el caché de máscara para un username concreto.
+    func clearMaskSearchResults(forUsername username: String) {
+        let normalized = normalize(username)
+        try? fileManager.removeItem(at: maskSearchURL(for: normalized))
+        print("🗑️ [MASK CACHE] Eliminado caché para '\(normalized)'")
+    }
+
+    /// Hace 2-3 llamadas API según la longitud del nombre, fusiona los resultados
+    /// con los exactos al principio, y guarda en disco de forma permanente.
+    /// Devuelve el número total de perfiles guardados.
+    @discardableResult
+    func prefetchAndCacheMaskResults(username: String) async -> Int {
+        let clean = normalize(username)
+        guard !clean.isEmpty else { return 0 }
+
+        let prefixes = maskSearchPrefixes(for: clean)
+        print("🔍 [MASK CACHE] Pre-fetch '\(clean)' con prefijos: \(prefixes)")
+
+        // Resultado del nombre completo primero (para garantizar el perfil exacto)
+        var fullNameResults: [UserSearchResult] = []
+        var prefixResults:   [UserSearchResult] = []
+
+        for (idx, prefix) in prefixes.enumerated() {
+            guard let results = try? await InstagramService.shared.searchUsers(query: prefix) else {
+                print("⚠️ [MASK CACHE] Fallo al buscar '\(prefix)'")
+                continue
+            }
+            if prefix == clean {
+                fullNameResults = results
+            } else {
+                prefixResults.append(contentsOf: results)
+            }
+            if idx < prefixes.count - 1 {
+                // Pausa anti-bot entre llamadas
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
+
+        // Fusionar: nombre completo primero, luego prefijos sin duplicar
+        var seenIds: Set<String> = []
+        var merged:  [UserSearchResult] = []
+        for r in fullNameResults  where seenIds.insert(r.userId).inserted { merged.append(r) }
+        for r in prefixResults    where seenIds.insert(r.userId).inserted { merged.append(r) }
+
+        saveMaskSearchResults(merged, forUsername: clean)
+        print("✅ [MASK CACHE] '\(clean)': \(merged.count) perfiles guardados (\(prefixes.count) llamadas)")
+        return merged.count
+    }
+
+    /// Devuelve los prefijos a buscar según la longitud del nombre:
+    /// ≤5 chars → [nombre]  (ya es corto, 1 llamada)
+    /// 6-8 chars → [prefix3, nombre]  (2 llamadas)
+    /// ≥9 chars  → [prefix3, prefijomedio, nombre]  (3 llamadas)
+    private func maskSearchPrefixes(for username: String) -> [String] {
+        guard !username.isEmpty else { return [] }
+        if username.count <= 2 { return [username] }
+
+        let prefix3 = String(username.prefix(3))
+
+        if username.count <= 5 {
+            return username == prefix3 ? [username] : [prefix3, username]
+        }
+        if username.count <= 8 {
+            return [prefix3, username]
+        }
+        // ≥9 chars: añadir punto medio
+        let midCount  = username.count / 2
+        let midPrefix = String(username.prefix(midCount))
+        return [prefix3, midPrefix, username].reduce(into: [String]()) { acc, p in
+            if !acc.contains(p) { acc.append(p) }
+        }
+    }
+
+    private func maskSearchURL(for username: String) -> URL {
+        maskSearchesDirectory.appendingPathComponent("\(safeFilename(username))_mask.json")
+    }
+
+    // MARK: - Image cache
 
     func saveImage(_ image: UIImage, forURL urlString: String) {
         guard let data = image.jpegData(compressionQuality: 0.85) else { return }

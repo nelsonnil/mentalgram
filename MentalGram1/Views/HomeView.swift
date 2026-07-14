@@ -366,8 +366,9 @@ struct HomeView: View {
 
         // Let TabView finish its first layout pass before switching tabs. Repeated
         // quick launches were able to re-enter the Performance gate while the root
-        // view was still settling, which could stack startup tasks.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+        // view was still settling, which could stack startup tasks and leave the
+        // Performance pull-to-refresh spinner stuck on the first cold launch.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             if !limitsGuideRead {
                 showLimitsGate = true
             } else {
@@ -937,6 +938,7 @@ struct SetsListView: View {
                             .padding(.horizontal, VaultTheme.Spacing.lg)
                             .padding(.bottom, 10)
                         CooldownWarningBanner()
+                        ProfileDriftWarningBanner()
                         ProfileCacheIncompleteBanner(onContinue: onContinuePreload)
                         PostRevealArchiveBanner()
 
@@ -1539,6 +1541,184 @@ struct ActivityLogView: View {
 /// Shows the last time the profile was synced from Instagram and provides a
 /// one-tap Refresh button for when the user has made changes on real Instagram
 /// (new post, bio edit, new highlight, etc.).
+// MARK: - Refresh Depth Picker
+
+private struct RefreshDepthPickerSheet: View {
+    let onSelect: (Int) -> Void
+
+    private struct DepthOption {
+        let pages: Int
+        let posts: String
+        let apiCalls: Int
+        let title: String
+        let detail: String
+        let icon: String
+        let color: Color
+    }
+
+    private let options: [DepthOption] = [
+        DepthOption(
+            pages: 1, posts: "~12", apiCalls: 1,
+            title: "Recent posts only",
+            detail: "Best when you've only added or deleted posts recently. Fastest — 1 API call, no extra delay.",
+            icon: "bolt.fill", color: Color(hex: "4ADE80")
+        ),
+        DepthOption(
+            pages: 2, posts: "~24", apiCalls: 2,
+            title: "Last two pages",
+            detail: "Use if changes happened in the last 24 posts. Adds 1 extra API call with a short anti-bot pause between reads.",
+            icon: "arrow.down.circle.fill", color: Color(hex: "60A5FA")
+        ),
+        DepthOption(
+            pages: 3, posts: "~36", apiCalls: 3,
+            title: "Deep refresh",
+            detail: "Use when you've added or removed older posts. 3 API calls total with 2 anti-bot pacing delays (~12 s each).",
+            icon: "arrow.down.to.line.alt", color: Color(hex: "C084FC")
+        )
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Refresh from Instagram")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.white)
+                Text("Choose how many post pages to fetch. Each page is ~12 posts.")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color(hex: "A1A1AA"))
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+
+            Divider().background(Color.white.opacity(0.10))
+
+            VStack(spacing: 0) {
+                ForEach(options, id: \.pages) { opt in
+                    Button { onSelect(opt.pages) } label: {
+                        HStack(alignment: .top, spacing: 14) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(opt.color.opacity(0.15))
+                                    .frame(width: 36, height: 36)
+                                Image(systemName: opt.icon)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(opt.color)
+                            }
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text(opt.title)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    Text("\(opt.posts) posts")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(opt.color)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(opt.color.opacity(0.15))
+                                        .cornerRadius(4)
+                                }
+                                Text(opt.detail)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Color(hex: "A1A1AA"))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.system(size: 10))
+                                    Text("\(opt.apiCalls) API call\(opt.apiCalls > 1 ? "s" : "")")
+                                    if opt.pages > 1 {
+                                        Text("·")
+                                        Image(systemName: "timer")
+                                            .font(.system(size: 10))
+                                        Text("\(opt.pages - 1) anti-bot delay\(opt.pages > 2 ? "s" : "")")
+                                    }
+                                }
+                                .font(.system(size: 11))
+                                .foregroundColor(Color(hex: "71717A"))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(Color(hex: "52525B"))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.plain)
+
+                    if opt.pages < 3 {
+                        Divider()
+                            .background(Color.white.opacity(0.07))
+                            .padding(.leading, 70)
+                    }
+                }
+
+                Divider()
+                    .background(Color.orange.opacity(0.25))
+                    .padding(.leading, 70)
+
+                Button { onSelect(-1) } label: {
+                    HStack(alignment: .top, spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.orange.opacity(0.15))
+                                .frame(width: 36, height: 36)
+                            Image(systemName: "wrench.and.screwdriver.fill")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.orange)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Text("Repair Local Replica")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.white)
+                                Text("Advanced")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.orange)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Color.orange.opacity(0.15))
+                                    .cornerRadius(4)
+                            }
+                            Text("Use only if deleted posts still appear, pinned posts are missing, carousels look wrong, or the grid order does not match Instagram. This rebuilds the local profile cache and uses more API calls.")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(hex: "A1A1AA"))
+                                .fixedSize(horizontal: false, vertical: true)
+                            HStack(spacing: 4) {
+                                Image(systemName: "shield")
+                                    .font(.system(size: 10))
+                                Text("Preserves Post Prediction sets and local set photos")
+                            }
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(hex: "71717A"))
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Color(hex: "52525B"))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Divider().background(Color.white.opacity(0.10))
+
+            Button { onSelect(0) } label: {
+                Text("Cancel")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(Color(hex: "A1A1AA"))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+        }
+        .background(Color(hex: "#1C1C1E"))
+    }
+}
+
 struct InstagramSyncCard: View {
     @ObservedObject private var instagram = InstagramService.shared
     @ObservedObject private var uploadManager = UploadManager.shared
@@ -1559,6 +1739,8 @@ struct InstagramSyncCard: View {
     /// Post-success "ready" countdown — gives Instagram propagation and the grid a
     /// few seconds to settle before the magician relies on the sync.
     @State private var readyCountdown = 0
+    /// Shows the depth picker sheet before triggering a refresh.
+    @State private var showDepthPicker = false
 
     private var lastSyncText: String {
         guard lastRefreshTimestamp > 0 else {
@@ -1571,72 +1753,10 @@ struct InstagramSyncCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // ── Header row ────────────────────────────────────────────────
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(VaultTheme.Colors.primary)
-                Text(String(localized: "sync.title"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                Spacer()
-                // Last sync badge
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 10))
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                    Text(lastSyncText)
-                        .font(.system(size: 11).monospacedDigit())
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                }
-            }
-
-            // ── Info line ─────────────────────────────────────────────────
-            Text(String(localized: "sync.info"))
-                .font(.system(size: 12))
-                .foregroundColor(VaultTheme.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // ── Refresh button ────────────────────────────────────────────
+        HStack(alignment: .center, spacing: 12) {
             Button {
                 guard !isRefreshing else { return }
-                showSyncComplete = false
-                syncFailed = false
-                syncStatusMessage = nil
-                readyCountdown = 0
-                if uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive {
-                    uploadManager.resetAllState()
-                    LogManager.shared.warning("Upload cancelled before manual Instagram refresh", category: .upload)
-                }
-                refreshGeneration += 1
-                let gen = refreshGeneration
-                isRefreshing = true
-                awaitingListenerAck = true
-                // Ask the live PerformanceView (if mounted) to run its rich, reveal-aware
-                // refresh. It ACKs immediately so we know a listener exists.
-                NotificationCenter.default.post(name: .performanceManualRefresh, object: nil)
-
-                // No ACK within the window → Performance tab isn't mounted/subscribed.
-                // Run a headless refresh so the button is never a silent no-op.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
-                    guard gen == refreshGeneration, awaitingListenerAck, isRefreshing else { return }
-                    awaitingListenerAck = false
-                    LogManager.shared.info("Manual refresh: no live listener — running headless refresh", category: .general)
-                    Task { @MainActor in
-                        let result = await ManualInstagramRefresh.run()
-                        guard gen == refreshGeneration else { return }
-                        applyRefreshResult(success: result.success, message: result.message, retrySeconds: result.retrySeconds)
-                    }
-                }
-
-                // Safety timeout — only fires if a listener ACKed but never returned a
-                // result (e.g. a long anti-bot wait). Headless path applies its own result.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 40) {
-                    guard gen == refreshGeneration, isRefreshing, !awaitingListenerAck else { return }
-                    LogManager.shared.warning("Instagram sync timed out waiting for result", category: .general)
-                    applyRefreshResult(success: false, message: "Taking too long — open Performance once and retry", retrySeconds: nil)
-                }
+                showDepthPicker = true
             } label: {
                 HStack(spacing: 6) {
                     if showSyncComplete {
@@ -1657,9 +1777,12 @@ struct InstagramSyncCard: View {
                     }
                     Text(syncButtonText)
                         .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+                .padding(.horizontal, 10)
                 .background(
                     isRefreshing
                     ? Color.white.opacity(0.08)
@@ -1677,8 +1800,29 @@ struct InstagramSyncCard: View {
                 .animation(.easeInOut(duration: 0.2), value: showSyncComplete)
             }
             .disabled(isRefreshing || !instagram.isLoggedIn)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(VaultTheme.Colors.primary)
+                    Text(String(localized: "sync.title"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 10))
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                    Text(lastSyncText)
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(14)
+        .padding(12)
         .background(Color.white.opacity(0.04))
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(VaultTheme.Colors.primary.opacity(0.18), lineWidth: 1))
@@ -1696,6 +1840,68 @@ struct InstagramSyncCard: View {
             let message = notification.userInfo?["message"] as? String
             applyRefreshResult(success: success, message: message, retrySeconds: retrySeconds)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefreshProgress)) { notification in
+            guard isRefreshing, let message = notification.userInfo?["message"] as? String else { return }
+            syncStatusMessage = message
+        }
+        .sheet(isPresented: $showDepthPicker) {
+            RefreshDepthPickerSheet { pages in
+                showDepthPicker = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    triggerRefresh(postPages: pages)
+                }
+            }
+            .presentationDetents([.large])
+        }
+    }
+
+    private func triggerRefresh(postPages: Int) {
+        guard postPages != 0 else { return } // cancelled
+        let repairMode = postPages < 0
+        let requestedPages = repairMode ? 4 : postPages
+        showSyncComplete = false
+        syncFailed = false
+        syncStatusMessage = repairMode ? "Repairing replica" : nil
+        readyCountdown = 0
+        if uploadManager.activeTask != nil || uploadManager.isUploading || uploadManager.isActive {
+            uploadManager.resetAllState()
+            LogManager.shared.warning("Upload cancelled before manual Instagram refresh", category: .upload)
+        }
+        refreshGeneration += 1
+        let gen = refreshGeneration
+        isRefreshing = true
+        awaitingListenerAck = true
+        NotificationCenter.default.post(
+            name: .performanceManualRefresh,
+            object: nil,
+            userInfo: [
+                "postPages": requestedPages,
+                "repairMode": repairMode
+            ]
+        )
+
+        // Timeout scales with the number of pages: each extra page needs ~15 s for
+        // the anti-bot pacing delay plus the API round-trip.
+        let timeout: Double = repairMode
+            ? 150
+            : 35 + Double(max(0, requestedPages - 1)) * 18
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            guard gen == refreshGeneration, awaitingListenerAck, isRefreshing else { return }
+            awaitingListenerAck = false
+            LogManager.shared.info("Manual refresh: no live listener — running headless refresh (pages=\(requestedPages), repair=\(repairMode))", category: .general)
+            Task { @MainActor in
+                let result = await ManualInstagramRefresh.run(postPages: requestedPages, repairMode: repairMode)
+                guard gen == refreshGeneration else { return }
+                applyRefreshResult(success: result.success, message: result.message, retrySeconds: result.retrySeconds)
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+            guard gen == refreshGeneration, isRefreshing, !awaitingListenerAck else { return }
+            LogManager.shared.warning("Instagram sync timed out waiting for result", category: .general)
+            applyRefreshResult(success: false, message: "Taking too long — open Performance once and retry", retrySeconds: nil)
+        }
     }
 
     /// Text shown on the sync button across its states.
@@ -1706,7 +1912,7 @@ struct InstagramSyncCard: View {
             return "Synced"
         }
         return isRefreshing
-            ? String(localized: "sync.refreshing")
+            ? (syncStatusMessage ?? String(localized: "sync.refreshing"))
             : String(localized: "sync.refresh_button")
     }
 
@@ -2114,6 +2320,244 @@ struct CooldownWarningBanner: View {
     }
 }
 
+// MARK: - Profile Drift Warning Banner
+
+/// Warns when Instagram bio or profile picture differs from the user's saved
+/// reset baseline (e.g. after a prediction). Offers one-tap restore with safety checks.
+struct ProfileDriftWarningBanner: View {
+    @ObservedObject private var resetSettings = ProfileResetSettings.shared
+    @ObservedObject private var instagram = InstagramService.shared
+    @ObservedObject private var uploadManager = UploadManager.shared
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var tick = 0
+    @State private var blink = false
+    @State private var blinkTimer: Timer? = nil
+    @State private var showBioConfirm = false
+    @State private var showPicConfirm = false
+    @State private var showNoteConfirm = false
+    @State private var isResettingBio = false
+    @State private var isResettingPic = false
+    @State private var isResettingNote = false
+    @State private var alertMessage: String? = nil
+    @State private var showAlert = false
+
+    private var activeItems: [(icon: String, label: String, kind: String)] {
+        var list: [(String, String, String)] = []
+        if resetSettings.hasBaselineBio && resetSettings.needsBioReset {
+            list.append(("person.text.rectangle.fill", "Biography changed", "bio"))
+        }
+        if resetSettings.hasBaselineNote && resetSettings.needsNoteReset {
+            list.append(("bubble.left.fill", "Note changed", "note"))
+        }
+        if resetSettings.hasBaselineProfilePic && resetSettings.needsProfilePicReset {
+            list.append(("person.crop.circle.fill", "Profile picture changed", "pic"))
+        }
+        return list
+    }
+
+    private var hasActive: Bool { !activeItems.isEmpty }
+
+    var body: some View {
+        ZStack {
+            if hasActive {
+                bannerContent
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: hasActive)
+            }
+        }
+        .onAppear {
+            resetSettings.refreshDriftState()
+            startBlink()
+            tick += 1
+        }
+        .onDisappear { blinkTimer?.invalidate(); blinkTimer = nil }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                resetSettings.refreshDriftState()
+                tick += 1
+            }
+        }
+        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
+            resetSettings.refreshDriftState()
+            tick += 1
+        }
+        .alert("Reset biography?", isPresented: $showBioConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) { performBioReset() }
+        } message: {
+            Text("This will restore your saved real biography on Instagram. Cooldowns and safety limits still apply.")
+        }
+        .alert("Reset profile picture?", isPresented: $showPicConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) { performPicReset() }
+        } message: {
+            Text("This will restore your saved profile photo on Instagram. Cooldowns and safety limits still apply.")
+        }
+        .alert("Reset note?", isPresented: $showNoteConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) { performNoteReset() }
+        } message: {
+            Text("This will restore your saved note on Instagram. Cooldowns and safety limits still apply.")
+        }
+        .alert(alertMessage ?? "", isPresented: $showAlert) {
+            Button("OK") { alertMessage = nil }
+        }
+    }
+
+    @ViewBuilder
+    private var bannerContent: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundColor(blink ? .red : Color.red.opacity(0.45))
+                    .scaleEffect(blink ? 1.12 : 1.0)
+                    .animation(.easeInOut(duration: 0.5), value: blink)
+                    .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Profile not restored")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundColor(blink ? .red : Color.red.opacity(0.55))
+
+                    Text("Your Instagram profile may still show prediction changes. Reset before your next performance.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color.red.opacity(0.78))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(activeItems, id: \.kind) { item in
+                        HStack(spacing: 8) {
+                            Image(systemName: item.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.9))
+                            Text(item.label)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                            Spacer(minLength: 4)
+                            Button {
+                                if item.kind == "bio" { showBioConfirm = true }
+                                else if item.kind == "note" { showNoteConfirm = true }
+                                else { showPicConfirm = true }
+                            } label: {
+                                Text(item.kind == "bio"
+                                     ? (isResettingBio ? "…" : "Reset")
+                                     : item.kind == "note"
+                                       ? (isResettingNote ? "…" : "Reset")
+                                       : (isResettingPic ? "…" : "Reset"))
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.red.opacity(0.75))
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isResettingBio || isResettingPic || isResettingNote || instagram.isLocked
+                                      || uploadManager.isActive || uploadManager.isSyncArchiveActive)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.red.opacity(blink ? 0.14 : 0.08))
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.red.opacity(blink ? 0.55 : 0.3), lineWidth: 1))
+            )
+            .padding(.horizontal, VaultTheme.Spacing.lg)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private func startBlink() {
+        guard blinkTimer == nil else { return }
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { t in
+            if hasActive { blink.toggle() }
+            else { blink = false; t.invalidate(); blinkTimer = nil }
+        }
+    }
+
+    private func performBioReset() {
+        guard !isResettingBio else { return }
+        isResettingBio = true
+        Task {
+            do {
+                let ok = try await resetSettings.resetBiographyToBaseline()
+                await MainActor.run {
+                    isResettingBio = false
+                    if ok {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        alertMessage = "✅ Biography restored to your saved reset text."
+                    } else {
+                        alertMessage = "❌ Could not restore biography. Try again from Settings."
+                    }
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isResettingBio = false
+                    alertMessage = "❌ \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
+    }
+
+    private func performPicReset() {
+        guard !isResettingPic else { return }
+        isResettingPic = true
+        Task {
+            do {
+                let ok = try await resetSettings.resetProfilePicToBaseline()
+                await MainActor.run {
+                    isResettingPic = false
+                    if ok {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        alertMessage = "✅ Profile picture restored to your saved reset photo."
+                    } else {
+                        alertMessage = "❌ Could not restore profile picture. Try again from Settings."
+                    }
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isResettingPic = false
+                    alertMessage = "❌ \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
+    }
+    private func performNoteReset() {
+        guard !isResettingNote else { return }
+        isResettingNote = true
+        Task {
+            do {
+                let ok = try await resetSettings.resetNoteToBaseline()
+                await MainActor.run {
+                    isResettingNote = false
+                    if ok {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        alertMessage = "✅ Note restored to your saved reset text."
+                    } else {
+                        alertMessage = "❌ Could not restore note. Try again from Settings."
+                    }
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isResettingNote = false
+                    alertMessage = "❌ \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Profile Cache Incomplete Banner
 
 /// Fixed pre-performance warning shown when the first-time Performance cache was
@@ -2150,9 +2594,21 @@ struct ProfileCacheIncompleteBanner: View {
         let noMoreKey = "perf_no_more_pages_\(currentUserId)"
         let fullKey = "perf_fully_preloaded_\(currentUserId)"
         let optionalKey = "perf_optional_preloaded_\(currentUserId)"
+        let manualDepthKey = "perf_manual_depth_synced_\(currentUserId)"
+        guard !UserDefaults.standard.bool(forKey: manualDepthKey) else { return nil }
         let noMore = UserDefaults.standard.bool(forKey: noMoreKey) && cached.cachedNextMaxId == nil
         let required = min(targetPosts, cached.mediaCount > 0 ? cached.mediaCount : targetPosts)
         let postsComplete = noMore || (cached.cachedMediaURLs.count >= required && cached.cachedMediaItems.count >= required)
+
+        // Instagram's profile counter can include posts that /feed/user/ no longer
+        // returns (archived/deleted media, pinned quirks, carousel/count drift, or
+        // server-side visibility differences). If the API cursor is exhausted, there
+        // is no next page for "Continue loading" to fetch. Treat this as complete
+        // and avoid showing a scary red banner with a no-op button.
+        if noMore {
+            return nil
+        }
+
         let optionalWasTracked = UserDefaults.standard.object(forKey: optionalKey) != nil
         let optionalDone = !optionalWasTracked || UserDefaults.standard.bool(forKey: optionalKey)
         let optionalIncomplete = optionalWasTracked && !optionalDone
@@ -2732,6 +3188,7 @@ struct BudgetWarningSheet: View {
 // MARK: - Settings View
 
 struct SettingsView: View {
+    @ObservedObject private var resetSettings = ProfileResetSettings.shared
     @ObservedObject var instagram      = InstagramService.shared
     @ObservedObject var backup         = CloudBackupService.shared
     @ObservedObject private var uploadManager = UploadManager.shared
@@ -2741,6 +3198,7 @@ struct SettingsView: View {
     @ObservedObject private var profileCache = ProfileCacheService.shared
     @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
     @ObservedObject private var license = LicenseManager.shared
+    @ObservedObject private var secretSettings = SecretInputSettings.shared
     var onContinuePreload: () -> Void = {}
     @State private var settingsProfilePic: UIImage? = nil
     @State private var showingLogoutAlert = false
@@ -2816,6 +3274,8 @@ struct SettingsView: View {
     @State private var showingBioAlert = false
     @FocusState private var bioFieldFocused:  Bool
     @FocusState private var noteFieldFocused: Bool
+    @FocusState private var baselineBioFieldFocused: Bool
+    @FocusState private var baselineNoteFieldFocused: Bool
     
     // Hidden Login (easter egg)
     @State private var showingLogin = false
@@ -2834,6 +3294,19 @@ struct SettingsView: View {
     @State private var showProfilePicHelp = false
     @State private var showNoteHelp = false
     @State private var showBioHelp = false
+    // Profile reset baselines
+    @State private var baselineBioDraft = ""
+    @State private var baselineNoteDraft = ""
+    @State private var showingBaselineImagePicker = false
+    @State private var baselineImageData: Data?
+    @State private var isResettingBaselineBio = false
+    @State private var isResettingBaselinePic = false
+    @State private var isResettingBaselineNote = false
+    @State private var showBaselineBioResetConfirm = false
+    @State private var showBaselinePicResetConfirm = false
+    @State private var showBaselineNoteResetConfirm = false
+    @State private var resetBaselineMessage: String?
+    @State private var showResetBaselineAlert = false
     // License activation
     @State private var showLicenseInput = false
     @State private var licenseInputCode = ""
@@ -2864,8 +3337,32 @@ struct SettingsView: View {
         .alert(bioMessage ?? "", isPresented: $showingBioAlert) {
             Button("OK") { bioMessage = nil }
         } message: { Text(bioMessage ?? "") }
+        .alert(resetBaselineMessage ?? "", isPresented: $showResetBaselineAlert) {
+            Button("OK") { resetBaselineMessage = nil }
+        } message: { Text(resetBaselineMessage ?? "") }
+        .alert("Reset biography to saved text?", isPresented: $showBaselineBioResetConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) { performBaselineBioReset() }
+        } message: {
+            Text("Restores your real biography on Instagram. Cooldowns and safety limits still apply.")
+        }
+        .alert("Reset profile picture to saved photo?", isPresented: $showBaselinePicResetConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) { performBaselinePicReset() }
+        } message: {
+            Text("Restores your real profile photo on Instagram. Cooldowns and safety limits still apply.")
+        }
+        .alert("Reset note to saved text?", isPresented: $showBaselineNoteResetConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) { performBaselineNoteReset() }
+        } message: {
+            Text("Restores your real note on Instagram. Cooldowns and safety limits still apply.")
+        }
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(selectedImageData: $selectedImageData)
+        }
+        .sheet(isPresented: $showingBaselineImagePicker) {
+            ImagePicker(selectedImageData: $baselineImageData)
         }
         .sheet(isPresented: $showingHomeScreenPicker) {
             HomeScreenImagePicker { image in
@@ -2931,6 +3428,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     @ViewBuilder private var loggedInSections: some View {
@@ -3198,6 +3696,7 @@ struct SettingsView: View {
             FollowingMagicSettingsCard()
             DateForceSettingsCard()
             AmnesiaCarouselSettingsCard()
+            AIScreenDetectionSettingsCard()
         }
         Spacer().frame(height: 28)
     }
@@ -3467,6 +3966,8 @@ struct SettingsView: View {
             }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
+            profilePicResetSection
+            modernDivider()
             profilePicURLSchemesContent
         })
     }
@@ -3554,6 +4055,8 @@ struct SettingsView: View {
             }
             if let msg = getNoteCooldownMessage() { modernStatusRow(msg, color: VaultTheme.Colors.warning, icon: "clock.fill") }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
+            modernDivider()
+            noteResetSection
             modernDivider()
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to send a note when Performance opens",
@@ -3697,6 +4200,8 @@ struct SettingsView: View {
                     bioTemplateSlot: bioActiveSlot
                 )
 
+                bioCoverTypingInputRow
+
                 // ── Acrostic mode toggle ───────────────────────────────────────
                 acrosticToggleRow
             }
@@ -3710,12 +4215,381 @@ struct SettingsView: View {
             }
             if instagram.isLocked { modernStatusRow("Lockdown active", color: VaultTheme.Colors.error, icon: "exclamationmark.triangle.fill") }
             modernDivider()
+            biographyResetSection
+            modernDivider()
             urlSchemeRow(icon: "link", title: "URL Scheme",
                          detail: "Open this URL to update biography when Performance opens",
                          url: urlSchemeExample(mode: "bio", template: bioTemplate))
         })
     }
 
+
+    // MARK: - Bio Cover Typing Input
+
+    /// True when both Bio CT and PP CT are active but their mask configs differ.
+    private var bioCoverTypingMaskConflict: Bool {
+        guard bioTopInputMode == "coverTyping", secretSettings.isEnabled else { return false }
+        if secretSettings.bioCoverTypingMode != secretSettings.mode { return true }
+        if secretSettings.bioCoverTypingMode == .customUsername,
+           secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+           != secretSettings.customUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() { return true }
+        return false
+    }
+
+    private var bioCoverTypingInputRow: some View {
+        let isOn = bioTopInputMode == "coverTyping"
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(isOn ? Self.colorProfile : VaultTheme.Colors.textSecondary)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text("Cover Typing")
+                            .font(VaultTheme.Typography.captionBold())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Text("PRO")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.yellow)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.yellow.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                    Text("Type the secret word in Explore. Press Space once to update Biography.")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Toggle("", isOn: Binding(
+                    get: { isOn },
+                    set: { enabled in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            bioTopInputMode = enabled ? "coverTyping" : "off"
+                        }
+                    }
+                ))
+                .toggleStyle(SwitchToggleStyle(tint: Self.colorProfile))
+                .labelsHidden()
+            }
+
+            if isOn {
+                BioCoverTypingExpandedPanel(
+                    secretSettings: secretSettings,
+                    accentColor: Self.colorProfile,
+                    maskConflict: bioCoverTypingMaskConflict
+                )
+            }
+        }
+        .padding(.horizontal, VaultTheme.Spacing.md)
+        .padding(.vertical, VaultTheme.Spacing.sm)
+        .background(Color(hex: isOn ? "#1C1C1E" : "#2C2C2E"))
+        .cornerRadius(VaultTheme.CornerRadius.sm)
+    }
+
+
+    // MARK: - Profile Reset Sections
+
+    private var profilePicResetSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.counterclockwise.circle.fill")
+                    .foregroundColor(Color.red.opacity(0.85))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reset photo")
+                        .font(VaultTheme.Typography.captionBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Save your real profile photo. After a prediction changes it, tap Reset to restore.")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if let saved = resetSettings.baselineProfilePic {
+                HStack { Spacer()
+                    VStack(spacing: 6) {
+                        Image(uiImage: saved).resizable().scaledToFill()
+                            .frame(width: 72, height: 72).clipShape(Circle())
+                            .overlay(Circle().stroke(Color.red.opacity(0.6), lineWidth: 2))
+                        Text("Saved reset photo").font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                }
+            }
+
+            if let data = baselineImageData, let preview = UIImage(data: data) {
+                HStack { Spacer()
+                    VStack(spacing: 6) {
+                        Image(uiImage: preview).resizable().scaledToFill()
+                            .frame(width: 72, height: 72).clipShape(Circle())
+                            .overlay(Circle().stroke(VaultTheme.Colors.primary, lineWidth: 2))
+                        Text("New selection").font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                }
+            }
+
+            modernActionButton(title: "Choose reset photo", icon: "photo.on.rectangle.angled",
+                               loading: false, enabled: true) {
+                showingBaselineImagePicker = true
+            }
+
+            if baselineImageData != nil {
+                modernActionButton(title: "Save as reset photo", icon: "square.and.arrow.down.fill",
+                                   loading: false, enabled: true) {
+                    if let data = baselineImageData {
+                        resetSettings.saveBaselineProfilePic(data)
+                        baselineImageData = nil
+                        resetBaselineMessage = "✅ Reset photo saved. Vault will warn you if your profile picture changes."
+                        showResetBaselineAlert = true
+                    }
+                }
+            }
+
+            if resetSettings.hasBaselineProfilePic {
+                modernActionButton(
+                    title: isResettingBaselinePic ? "Resetting…" : "Reset to saved photo",
+                    icon: "arrow.counterclockwise",
+                    loading: isResettingBaselinePic,
+                    enabled: canResetProfilePicUpload() && !isResettingBaselinePic
+                ) {
+                    showBaselinePicResetConfirm = true
+                }
+            }
+
+            if resetSettings.hasBaselineProfilePic && resetSettings.needsProfilePicReset {
+                modernStatusRow("Profile picture differs from your reset photo", color: .red, icon: "exclamationmark.triangle.fill")
+            }
+        }
+        .onAppear { resetSettings.refreshDriftState() }
+    }
+
+    private var biographyResetSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.counterclockwise.circle.fill")
+                    .foregroundColor(Color.red.opacity(0.85))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reset biography")
+                        .font(VaultTheme.Typography.captionBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Your real biography text. After a prediction changes it, tap Reset to restore.")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            TextEditor(text: $baselineBioDraft)
+                .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
+                .frame(minHeight: 72, maxHeight: 110)
+                .padding(.horizontal, VaultTheme.Spacing.sm).padding(.vertical, 4)
+                .scrollContentBackground(.hidden).background(Color.clear)
+                .focused($baselineBioFieldFocused)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        if baselineBioFieldFocused {
+                            Spacer()
+                            Button("Done") { baselineBioFieldFocused = false }
+                                .fontWeight(.semibold)
+                        }
+                    }
+                }
+                .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
+                .onChange(of: baselineBioDraft) { if $0.count > 150 { baselineBioDraft = String($0.prefix(150)) } }
+
+            HStack {
+                if baselineBioFieldFocused {
+                    Button("Done") { baselineBioFieldFocused = false }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Self.colorProfile)
+                }
+                Spacer()
+                Text("\(baselineBioDraft.count)/150")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(baselineBioDraft.count > 130 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+            }
+
+            modernActionButton(title: "Save as reset biography", icon: "square.and.arrow.down.fill",
+                               loading: false,
+                               enabled: !baselineBioDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+                baselineBioFieldFocused = false
+                resetSettings.saveBaselineBiography(baselineBioDraft)
+                resetBaselineMessage = "✅ Reset biography saved. Vault will warn you if your bio changes."
+                showResetBaselineAlert = true
+            }
+
+            if resetSettings.hasBaselineBio {
+                modernActionButton(
+                    title: isResettingBaselineBio ? "Resetting…" : "Reset to saved biography",
+                    icon: "arrow.counterclockwise",
+                    loading: isResettingBaselineBio,
+                    enabled: bioFeatureEnabled && !isResettingBaselineBio && !instagram.isLocked
+                        && !uploadManager.isActive && !uploadManager.isSyncArchiveActive
+                ) {
+                    showBaselineBioResetConfirm = true
+                }
+            }
+
+            if resetSettings.hasBaselineBio && resetSettings.needsBioReset {
+                modernStatusRow("Biography differs from your reset text", color: .red, icon: "exclamationmark.triangle.fill")
+            }
+        }
+        .onAppear {
+            if baselineBioDraft.isEmpty { baselineBioDraft = resetSettings.baselineBiography }
+            resetSettings.refreshDriftState()
+        }
+    }
+
+    private var noteResetSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.counterclockwise.circle.fill")
+                    .foregroundColor(Color.red.opacity(0.85))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reset note")
+                        .font(VaultTheme.Typography.captionBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Your real note text. After a prediction changes it, tap Reset to restore.")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            TextField("Your real note (max 60 chars)", text: $baselineNoteDraft)
+                .font(VaultTheme.Typography.body()).foregroundColor(VaultTheme.Colors.textPrimary)
+                .padding(VaultTheme.Spacing.md)
+                .background(Color(hex: "#2C2C2E")).cornerRadius(VaultTheme.CornerRadius.sm)
+                .focused($baselineNoteFieldFocused)
+                .submitLabel(.done)
+                .onSubmit { baselineNoteFieldFocused = false }
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        if baselineNoteFieldFocused {
+                            Spacer()
+                            Button("Done") { baselineNoteFieldFocused = false }
+                                .fontWeight(.semibold)
+                        }
+                    }
+                }
+                .onChange(of: baselineNoteDraft) { if $0.count > 60 { baselineNoteDraft = String($0.prefix(60)) } }
+
+            HStack {
+                Spacer()
+                Text("\(baselineNoteDraft.count)/60")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(baselineNoteDraft.count > 50 ? VaultTheme.Colors.warning : VaultTheme.Colors.textSecondary)
+            }
+
+            modernActionButton(title: "Save as reset note", icon: "square.and.arrow.down.fill",
+                               loading: false,
+                               enabled: !baselineNoteDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+                baselineNoteFieldFocused = false
+                resetSettings.saveBaselineNote(baselineNoteDraft)
+                resetBaselineMessage = "✅ Reset note saved. Vault will warn you if your note changes."
+                showResetBaselineAlert = true
+            }
+
+            if resetSettings.hasBaselineNote {
+                modernActionButton(
+                    title: isResettingBaselineNote ? "Resetting…" : "Reset to saved note",
+                    icon: "arrow.counterclockwise",
+                    loading: isResettingBaselineNote,
+                    enabled: noteFeatureEnabled && !isResettingBaselineNote && !instagram.isLocked
+                        && getNoteCooldownSeconds() == 0
+                        && !uploadManager.isActive && !uploadManager.isSyncArchiveActive
+                ) {
+                    showBaselineNoteResetConfirm = true
+                }
+            }
+
+            if resetSettings.hasBaselineNote && resetSettings.needsNoteReset {
+                modernStatusRow("Note differs from your reset text", color: .red, icon: "exclamationmark.triangle.fill")
+            }
+        }
+        .onAppear {
+            if baselineNoteDraft.isEmpty { baselineNoteDraft = resetSettings.baselineNote }
+            resetSettings.refreshDriftState()
+        }
+    }
+
+    private func performBaselineBioReset() {
+        guard !isResettingBaselineBio else { return }
+        isResettingBaselineBio = true
+        Task {
+            do {
+                let ok = try await resetSettings.resetBiographyToBaseline()
+                await MainActor.run {
+                    isResettingBaselineBio = false
+                    resetBaselineMessage = ok
+                        ? "✅ Biography restored to your saved reset text."
+                        : "❌ Could not restore biography."
+                    showResetBaselineAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isResettingBaselineBio = false
+                    resetBaselineMessage = "❌ \(error.localizedDescription)"
+                    showResetBaselineAlert = true
+                }
+            }
+        }
+    }
+
+    private func performBaselinePicReset() {
+        guard !isResettingBaselinePic else { return }
+        isResettingBaselinePic = true
+        Task {
+            do {
+                let ok = try await resetSettings.resetProfilePicToBaseline()
+                await MainActor.run {
+                    isResettingBaselinePic = false
+                    resetBaselineMessage = ok
+                        ? "✅ Profile picture restored to your saved reset photo."
+                        : "❌ Could not restore profile picture."
+                    showResetBaselineAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isResettingBaselinePic = false
+                    resetBaselineMessage = "❌ \(error.localizedDescription)"
+                    showResetBaselineAlert = true
+                }
+            }
+        }
+    }
+
+    private func performBaselineNoteReset() {
+        guard !isResettingBaselineNote else { return }
+        isResettingBaselineNote = true
+        Task {
+            do {
+                let ok = try await resetSettings.resetNoteToBaseline()
+                await MainActor.run {
+                    isResettingBaselineNote = false
+                    resetBaselineMessage = ok
+                        ? "✅ Note restored to your saved reset text."
+                        : "❌ Could not restore note."
+                    showResetBaselineAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isResettingBaselineNote = false
+                    resetBaselineMessage = "❌ \(error.localizedDescription)"
+                    showResetBaselineAlert = true
+                }
+            }
+        }
+    }
 
     // MARK: - Acrostic Toggle Row
 
@@ -3788,6 +4662,7 @@ struct SettingsView: View {
         case "hi": return "JAL"
         case "th": return "FAH"
         case "vi": return "SONG"
+        case "sv": return "MÅNE"
         default:   return "STAR"
         }
     }
@@ -4347,6 +5222,15 @@ struct SettingsView: View {
         print("✅ [PP-CHECK] Can upload: all conditions passed")
         LogManager.shared.info("Profile pic upload ready: all conditions passed", category: .general)
         return true
+    }
+
+    /// Instagram upload guards for restoring the saved reset photo (no local picker required).
+    private func canResetProfilePicUpload() -> Bool {
+        guard !uploadManager.isActive && !uploadManager.isSyncArchiveActive else { return false }
+        guard !instagram.isLocked else { return false }
+        guard !instagram.isNetworkStabilizing else { return false }
+        let (onCooldown, _) = instagram.isProfilePicOnCooldown()
+        return !onCooldown
     }
     
     private func getCooldownMessage() -> String? {
@@ -5575,6 +6459,498 @@ struct ForceReelSettingsCard: View {
 
 // MARK: - Force Number Reveal Settings Card
 
+struct AIScreenDetectionSettingsCard: View {
+    @ObservedObject private var integrations = IntegrationsSettings.shared
+    @ObservedObject private var likeDetection = AIScreenLikeDetectionService.shared
+    @State private var isArmingLikes = false
+    @State private var isTestingAnimation = false
+    @State private var testUsername = ""
+    @State private var testPayload: AIScreenAnimationTestPayload? = nil
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    @State private var isExpanded = false
+    @State private var isCheckingOpenAI = false
+    @State private var showCameraTest = false
+    @State private var cooldownNow = Date()
+    @AppStorage("transposition_last_profile_username") private var transpositionLastProfileUsername = ""
+    @AppStorage("transposition_cooldown_until") private var transpositionCooldownUntil: Double = 0
+    private let cooldownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var isConfigured: Bool {
+        !integrations.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        CollapsibleCard(icon: "camera.viewfinder",
+                        iconColor: SettingsView.colorTricks,
+                        title: "Transposition",
+                        subtitle: "Arm, match, and reveal a spectator-selected public post",
+                        badge: "PRO",
+                        badgeColor: .yellow,
+                        isExpanded: $isExpanded) {
+            VStack(spacing: VaultTheme.Spacing.md) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Enable Transposition")
+                            .font(VaultTheme.Typography.captionBold())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Text("Uses Visual Match with the grid transposition animation.")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $integrations.aiScreenDetectionEnabled)
+                        .labelsHidden()
+                        .tint(SettingsView.colorTricks)
+                }
+
+                Divider()
+
+                HStack(spacing: VaultTheme.Spacing.sm) {
+                    let ready = isConfigured
+                    Image(systemName: ready ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(ready ? .green : .orange)
+
+                    Text(statusText)
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    Spacer()
+                }
+
+                if transpositionCooldownRemaining > 0 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "timer")
+                            .font(.system(size: 12, weight: .semibold))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Transposition cooldown")
+                                .font(VaultTheme.Typography.captionBold())
+                            Text("@\(transpositionLastProfileUsername) can be repeated in \(formatTranspositionCooldown(transpositionCooldownRemaining))")
+                                .font(VaultTheme.Typography.captionSmall())
+                        }
+                        Spacer()
+                        Text(formatTranspositionCooldown(transpositionCooldownRemaining))
+                            .font(VaultTheme.Typography.captionBold())
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
+                    .background(Color.red.opacity(0.82))
+                    .cornerRadius(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Reveal Mode")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                    HStack(spacing: 8) {
+                        ForEach(TranspositionRevealMode.allCases, id: \.rawValue) { mode in
+                            Button {
+                                integrations.transpositionRevealMode = mode
+                            } label: {
+                                Text(mode.displayName)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(integrations.transpositionRevealMode == mode ? .white : VaultTheme.Colors.textSecondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(integrations.transpositionRevealMode == mode ? SettingsView.colorTricks : Color(hex: "#2C2C2E"))
+                                    .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if integrations.transpositionRevealMode == .blackScreen {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Black Screen Options")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+
+                        Toggle(isOn: $integrations.transpositionBlackScreenReadySoundEnabled) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ready Sound")
+                                    .font(VaultTheme.Typography.captionBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("Plays a subtle message-like sound when the post is ready.")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                        }
+                        .tint(SettingsView.colorTricks)
+
+                        Toggle(isOn: $integrations.transpositionDimBlackScreenBrightness) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Dim Black Screen")
+                                    .font(VaultTheme.Typography.captionBold())
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                Text("Lowers brightness to help hide the green camera dot, then restores it before Instagram opens.")
+                                    .font(VaultTheme.Typography.captionSmall())
+                                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                            }
+                        }
+                        .tint(SettingsView.colorTricks)
+                    }
+                    .padding(10)
+                    .background(Color(hex: "#1C1C1E"))
+                    .cornerRadius(10)
+                }
+
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("OpenAI")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                    SecureField("OpenAI API key", text: $integrations.openAIAPIKey)
+                        .font(VaultTheme.Typography.caption())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 9)
+                        .background(Color(hex: "#2C2C2E"))
+                        .cornerRadius(8)
+
+                    Button {
+                        testOpenAIConnection()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isCheckingOpenAI {
+                                ProgressView()
+                                    .scaleEffect(0.75)
+                            } else {
+                                Image(systemName: "checkmark.seal")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            Text(isCheckingOpenAI ? "Checking OpenAI..." : "Check API Key")
+                                .font(VaultTheme.Typography.captionBold())
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(SettingsView.colorTricks)
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isCheckingOpenAI || integrations.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(integrations.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+                }
+
+                Divider()
+                Button {
+                    showCameraTest = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "camera.metering.center.weighted")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Test Camera & Zoom")
+                            .font(VaultTheme.Typography.captionBold())
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(Color(hex: "#2C2C2E"))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                Divider()
+                Toggle(isOn: $integrations.transpositionSaveSelectedCaptureToPhotos) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Save selected capture")
+                            .font(VaultTheme.Typography.captionBold())
+                            .foregroundColor(VaultTheme.Colors.textPrimary)
+                        Text("Debug only: saves the exact frame sent to OpenAI.")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                }
+                .tint(SettingsView.colorTricks)
+            }
+        }
+        .onAppear {
+            integrations.aiScreenDetectionMode = .visualMatch
+            cooldownNow = Date()
+        }
+        .onReceive(cooldownTimer) { date in
+            cooldownNow = date
+        }
+        .alert("Transposition", isPresented: $showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
+        }
+        .fullScreenCover(item: $testPayload) { payload in
+            AIScreenAnimationTestPreview(payload: payload)
+        }
+        .fullScreenCover(isPresented: $showCameraTest) {
+            TranspositionCameraTestView()
+        }
+    }
+
+    private var statusText: String {
+        switch integrations.aiScreenDetectionMode {
+        case .vision:
+            return isConfigured ? "OpenAI key configured" : "OpenAI key required"
+        case .visualMatch:
+            return isConfigured
+                ? "OpenAI visual match ready · \(integrations.transpositionRevealMode.displayName)"
+                : "OpenAI key required"
+        case .likes:
+            if likeDetection.armedUsername.isEmpty {
+                return "Likes not armed"
+            }
+            return "Armed @\(likeDetection.armedUsername) (\(likeDetection.armedPostCount) posts)"
+        }
+    }
+
+    private var transpositionCooldownRemaining: Int {
+        max(0, Int(ceil(transpositionCooldownUntil - cooldownNow.timeIntervalSince1970)))
+    }
+
+    private func formatTranspositionCooldown(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return minutes > 0 ? "\(minutes):\(String(format: "%02d", secs))" : "\(secs)s"
+    }
+
+    private func testOpenAIConnection() {
+        guard !isCheckingOpenAI else { return }
+        isCheckingOpenAI = true
+        Task {
+            do {
+                let message = try await AIScreenPostDetectionService.shared.testOpenAIConnection()
+                await MainActor.run {
+                    isCheckingOpenAI = false
+                    alertMessage = message
+                    showAlert = true
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    isCheckingOpenAI = false
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                }
+            }
+        }
+    }
+
+    private func armLikes() {
+        guard !isArmingLikes else { return }
+        isArmingLikes = true
+        Task {
+            do {
+                let username = try await AIScreenLikeDetectionService.shared.armLatestFollower(
+                    limit: integrations.aiScreenCandidateLimit
+                )
+                await MainActor.run {
+                    isArmingLikes = false
+                    alertMessage = "Armed @\(username). Now ask them to like one of the captured posts, then press volume up in Performance."
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isArmingLikes = false
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                }
+            }
+        }
+    }
+
+    private func testAnimation() {
+        let username = testUsername
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+        guard !username.isEmpty else {
+            alertMessage = "Enter a public username to test the animation."
+            showAlert = true
+            return
+        }
+
+        isTestingAnimation = true
+        Task {
+            do {
+                let profile = try await InstagramService.shared.searchAndLoadUserProfile(username: username)
+                guard !profile.isPrivate || profile.isFollowing else {
+                    throw AIScreenLikeDetectionError.privateProfile(profile.username)
+                }
+                let media = try await loadAnimationTestMedia(for: profile)
+                guard let first = media.first else {
+                    throw AIScreenLikeDetectionError.noPosts(profile.username)
+                }
+                let image = try await loadAnimationTestImage(from: first.imageURL)
+                let payload = AIScreenAnimationTestPayload(
+                    profile: profile,
+                    mediaItems: media,
+                    revealImage: image,
+                    style: integrations.aiScreenRevealAnimationStyle
+                )
+                await MainActor.run {
+                    isTestingAnimation = false
+                    testPayload = payload
+                }
+            } catch {
+                await MainActor.run {
+                    isTestingAnimation = false
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                }
+            }
+        }
+    }
+
+    private func loadAnimationTestMedia(for profile: InstagramProfile) async throws -> [InstagramMediaItem] {
+        if !profile.cachedMediaItems.isEmpty {
+            return Array(profile.cachedMediaItems.prefix(15))
+        }
+        let page = try await InstagramService.shared.getUserMediaItems(userId: profile.userId, amount: 15)
+        return page.0
+    }
+
+    private func loadAnimationTestImage(from urlString: String) async throws -> UIImage {
+        guard let url = URL(string: urlString) else { throw AIScreenDetectionError.invalidImage }
+        let (data, _) = try await URLSession.shared.data(from: url)
+        guard let image = UIImage(data: data) else { throw AIScreenDetectionError.invalidImage }
+        return image
+    }
+}
+
+private struct AIScreenAnimationTestPayload: Identifiable {
+    let id = UUID()
+    let profile: InstagramProfile
+    let mediaItems: [InstagramMediaItem]
+    let revealImage: UIImage
+    let style: AIScreenRevealAnimationStyle
+}
+
+private struct AIScreenAnimationTestPreview: View {
+    let payload: AIScreenAnimationTestPayload
+    @Environment(\.dismiss) private var dismiss
+    @State private var showAnimation = true
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 1), count: 3)
+
+    var body: some View {
+        ZStack {
+            Color(UIColor.systemBackground).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(Color(UIColor.label))
+                            .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("@\(payload.profile.username)")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Color(UIColor.label))
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Text(payload.style.displayName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+
+                ScrollView {
+                    VStack(spacing: 14) {
+                        profileHeader
+                        LazyVGrid(columns: columns, spacing: 1) {
+                            ForEach(payload.mediaItems.prefix(15), id: \.mediaId) { item in
+                                AsyncImage(url: URL(string: item.imageURL)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    default:
+                                        Color(UIColor.secondarySystemBackground)
+                                    }
+                                }
+                                .frame(height: UIScreen.main.bounds.width / 3 / InstagramGridMetrics.profileCellAspectRatio)
+                                .clipped()
+                            }
+                        }
+                    }
+                    .padding(.bottom, 32)
+                }
+            }
+
+            if showAnimation {
+                AIScreenRevealAnimationView(
+                    payload: AIScreenRevealAnimationPayload(
+                        image: payload.revealImage,
+                        style: payload.style
+                    )
+                )
+                .transition(.opacity)
+                .zIndex(10)
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + payload.style.duration) {
+                withAnimation(.easeOut(duration: 0.22)) {
+                    showAnimation = false
+                }
+            }
+        }
+    }
+
+    private var profileHeader: some View {
+        HStack(spacing: 18) {
+            AsyncImage(url: URL(string: payload.profile.profilePicURL)) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                default:
+                    Color(UIColor.secondarySystemBackground)
+                }
+            }
+            .frame(width: 78, height: 78)
+            .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(payload.profile.fullName.isEmpty ? payload.profile.username : payload.profile.fullName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Color(UIColor.label))
+                    .lineLimit(1)
+                HStack(spacing: 16) {
+                    testStat(payload.profile.mediaCount, "posts")
+                    testStat(payload.profile.followerCount, "followers")
+                    testStat(payload.profile.followingCount, "following")
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func testStat(_ value: Int, _ label: String) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(Color(UIColor.label))
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(Color(UIColor.secondaryLabel))
+        }
+    }
+}
+
 struct ForceNumberRevealSettingsCard: View {
     @State private var showingHelp = false
 
@@ -5912,6 +7288,194 @@ private struct PostPredictionActiveSetView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Bio Cover Typing expanded panel (extracted to avoid SwiftUI type-complexity crash)
+
+private struct BioCoverTypingExpandedPanel: View {
+    @ObservedObject var secretSettings: SecretInputSettings
+    let accentColor: Color
+    let maskConflict: Bool
+
+    @State private var isCachingResults = false
+    @State private var cachedCount: Int = 0
+
+    private func triggerPrefetch() {
+        let username = secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else { return }
+        isCachingResults = true
+        Task {
+            let count = await VisitedProfileCacheService.shared.prefetchAndCacheMaskResults(username: username)
+            await MainActor.run {
+                cachedCount = count
+                isCachingResults = false
+            }
+        }
+    }
+
+    private func refreshCachedCount() {
+        let username = secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        cachedCount = VisitedProfileCacheService.shared.maskSearchResultsCount(forUsername: username)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.sm) {
+            maskModePicker
+            if secretSettings.bioCoverTypingMode == .customUsername {
+                customUsernameSection
+            }
+            if maskConflict {
+                conflictBanner
+            }
+            infoBanner
+        }
+        .padding(VaultTheme.Spacing.sm)
+        .background(Color(hex: "#2C2C2E"))
+        .cornerRadius(8)
+        .onAppear { refreshCachedCount() }
+    }
+
+    private var maskModePicker: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.xs) {
+            Text("Mask Mode")
+                .font(VaultTheme.Typography.captionBold())
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+            ForEach(MaskInputMode.allCases, id: \.self) { mode in
+                maskModeRow(mode: mode)
+            }
+        }
+    }
+
+    private func maskModeRow(mode: MaskInputMode) -> some View {
+        let selected = secretSettings.bioCoverTypingMode == mode
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) { secretSettings.bioCoverTypingMode = mode }
+        } label: {
+            HStack(spacing: VaultTheme.Spacing.md) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(selected ? accentColor : VaultTheme.Colors.textSecondary)
+                Image(systemName: mode.icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                Text(mode.displayName)
+                    .font(VaultTheme.Typography.body())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var customUsernameSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                TextField("Custom username", text: Binding(
+                    get: { secretSettings.bioCoverTypingCustomUsername },
+                    set: { secretSettings.bioCoverTypingCustomUsername = $0 }
+                ))
+                .font(VaultTheme.Typography.body())
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+                .padding(VaultTheme.Spacing.md)
+                .background(Color(hex: "#3A3A3C"))
+                .cornerRadius(VaultTheme.CornerRadius.sm)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+                .onSubmit { triggerPrefetch() }
+                .onChange(of: secretSettings.bioCoverTypingCustomUsername) { _ in refreshCachedCount() }
+
+                Button(action: { triggerPrefetch() }) {
+                    Group {
+                        if isCachingResults {
+                            ProgressView()
+                                .scaleEffect(0.75)
+                                .frame(width: 22, height: 22)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(cachedCount > 0 ? accentColor : .gray)
+                        }
+                    }
+                }
+                .disabled(isCachingResults || secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            if isCachingResults {
+                Label("Guardando perfiles…", systemImage: "ellipsis.circle")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+            } else if cachedCount > 0 {
+                Label("\(cachedCount) perfiles guardados", systemImage: "checkmark.circle.fill")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(.green)
+            } else if !secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Label("Sin caché — pulsa ↺ para guardar", systemImage: "exclamationmark.circle")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+
+    private var conflictBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13))
+                .foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Mask mismatch")
+                    .font(VaultTheme.Typography.captionBold())
+                    .foregroundColor(.orange)
+                Text("Bio Cover Typing and Post Prediction Cover Typing are both active but use different mask settings. Only one mask is shown in Explore — Post Prediction's mask takes priority. Make them equal to avoid confusion.")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        secretSettings.bioCoverTypingMode = secretSettings.mode
+                        secretSettings.bioCoverTypingCustomUsername = secretSettings.customUsername
+                    }
+                } label: {
+                    Text("Sync to Post Prediction settings")
+                        .font(VaultTheme.Typography.captionBold())
+                        .foregroundColor(.orange)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.10))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.40), lineWidth: 1))
+        .cornerRadius(8)
+    }
+
+    private var infoBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12))
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Designed to hide the bio first")
+                    .font(VaultTheme.Typography.captionBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Text("When this is enabled, Performance opens slightly scrolled up on purpose so the spectator sees the posts first, not the biography. You can manually scroll back down at any time.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("This works alongside OCR, API, Notes Input and other biography inputs as a backup. If another input just changed the bio, Cover Typing waits about 6 seconds before sending the real Instagram update; if not, it sends immediately. The fake profile still updates instantly.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("If Post Prediction also uses Cover Typing, Vault sends Biography first, waits briefly, then reveals the posts.")
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(Color(hex: "#1C1C1E"))
+        .cornerRadius(8)
     }
 }
 

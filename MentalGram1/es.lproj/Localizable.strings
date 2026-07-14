@@ -1565,7 +1565,7 @@
 "amnesia.toggle" = "Activar efecto";
 "amnesia.esp_template" = "Plantilla ESP";
 "amnesia.images_title" = "Imágenes del carrusel";
-"amnesia.slot5_hint" = "Imagen oculta — no aparece al inicio. Se revela al cerrar el carrusel.";
+"amnesia.slot5_hint" = "Imagen oculta — no aparece al inicio. Se revela como 3ª imagen al cerrar el carrusel.";
 "amnesia.slot_hidden" = "OCULTA";
 "amnesia.slot_n" = "Imagen %d";
 "amnesia.btn_upload" = "Subir carruseles";
@@ -1603,7 +1603,7 @@
 "guide.amnesia.trigger.title" = "El disparador";
 "guide.amnesia.trigger.body" = "El disparador se activa cuando tú cierras el carrusel dentro de Performance. El orden correcto es:\n\n1. Pide al espectador que abra Instagram, entre en tu perfil y toque el carrusel.\n2. Mientras está dentro del carrusel en su móvil, que mire las 4 imágenes y se fije en la fecha.\n3. En ese momento tú ya puedes cerrar el carrusel en Vault. Vault añade la imagen extra en Instagram real, pero el espectador no la verá hasta que refresque o cierre y abra Instagram.\n\nIMPORTANTE: después de cerrar el carrusel en Vault, no salgas de Vault ni cierres la app. El proceso de archivar/desarchivar tarda unos segundos y debe terminar en segundo plano. Si sales demasiado pronto, el cambio puede cortarse.\n\n4. Espera a que Vault termine el estado de revelado. Después, cuando el espectador termine de memorizar, haz que cierre Instagram completamente. También puedes coger su móvil, hacer un pequeño scroll natural y dejarlo sobre la mesa.\n5. Al volver a abrir Instagram, verá 5 imágenes con la misma fecha y hora.\n\n❌ No cierres el carrusel en Vault antes de que el espectador haya entrado y visto las 4 imágenes iniciales.";
 "guide.amnesia.hidden.title" = "Imagen oculta";
-"guide.amnesia.hidden.body" = "La 5ª imagen (marcada con borde naranja en la app) es la que se añadirá al final. En el template ESP suele ser la estrella: el espectador recuerda círculo, cruz, ondas y cuadrado, pero no la estrella. Cuando le dices \"¿seguro que no recuerdas la estrella?\" no te creerá. Al abrir Instagram y comprobar que la estrella está en el mismo carrusel, con la misma fecha y hora, el recuerdo se rompe.";
+"guide.amnesia.hidden.body" = "La imagen oculta (marcada con borde naranja en la app) se inserta como 3ª imagen en el carrusel revelado. En el template ESP suele ser la estrella: el espectador recuerda círculo, cruz, ondas y cuadrado, pero no la estrella. Cuando le dices \"¿seguro que no recuerdas la estrella?\" no te creerá. Al abrir Instagram y comprobar que la estrella está en el mismo carrusel, con la misma fecha y hora, el recuerdo se rompe.";
 "guide.amnesia.options.title" = "Dos formas de activar el disparador";
 "guide.amnesia.optionA.title" = "Pase de manos (más teatral)";
 "guide.amnesia.optionA.body" = "El espectador ya está dentro del carrusel en su móvil. Cuando haya visto las 4 imágenes, tú cierras el carrusel en Vault y dices \"yo también lo cierro\" como si fuera parte del ritual. Después le pides que cierre Instagram completamente para que las imágenes queden solo en su memoria.";

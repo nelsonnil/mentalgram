@@ -4134,7 +4134,7 @@ struct SetDetailView: View {
         }
 
         let rate = instagram.checkRateLimit()
-        if rate.actionsUsed >= 25 {
+        if rate.actionsUsed >= 40 {
             let message = uploadStartSafetyMessage(rateUsed: rate.actionsUsed)
             print("🛡️ [UPLOAD] Start blocked — too many recent API calls (\(rate.actionsUsed)/55)")
             LogManager.shared.warning("SAFETY BLOCK — upload start blocked: \(rate.actionsUsed)/55 recent API actions", category: .upload)
@@ -4199,7 +4199,7 @@ struct SetDetailView: View {
         }
 
         let rate = instagram.checkRateLimit()
-        if rate.actionsUsed >= 25 {
+        if rate.actionsUsed >= 40 {
             let message = uploadStartSafetyMessage(rateUsed: rate.actionsUsed)
             LogManager.shared.warning("SAFETY BLOCK — single upload start blocked: \(rate.actionsUsed)/55 recent API actions", category: .upload)
             uploadManager.safetyBlockMessage = message
@@ -4387,7 +4387,7 @@ struct SetDetailView: View {
         uploadManager.requiresManualResumeAfterChallenge = false
 
         let rate = instagram.checkRateLimit()
-        if rate.actionsUsed >= 25 {
+        if rate.actionsUsed >= 40 {
             let message = uploadStartSafetyMessage(rateUsed: rate.actionsUsed)
             print("🛡️ [UPLOAD] Resume blocked — too many recent API calls (\(rate.actionsUsed)/55)")
             LogManager.shared.warning("SAFETY BLOCK — upload resume blocked: \(rate.actionsUsed)/55 recent API actions", category: .upload)

@@ -8,7 +8,7 @@ import Foundation
 // the three options so the same word never appears twice.
 //
 // Languages: en, es, fr, de, it, nl, pl, pt, pt-BR, ru, ja, ko,
-//            zh-Hans, zh-Hant, hi, th, vi
+//            zh-Hans, zh-Hant, hi, th, vi, sv
 
 enum AcrosticWordBank {
 
@@ -553,6 +553,40 @@ enum AcrosticWordBank {
             "Y": ["Yên bình", "Yêu thương", "Ý nghĩa"],
             "Z": ["Dấu ấn", "Dòng đời", "Đất nước"],
             "_": ["Từ", "Dấu", "Vết"]
+        ],
+
+        // ── Swedish ───────────────────────────────────────────────────────────
+        "sv": [
+            "A": ["Afton", "Apelsin", "Arkitekt"],
+            "B": ["Bok", "Björk", "Brev"],
+            "C": ["Cirkel", "Citron", "Café"],
+            "D": ["Dröm", "Dans", "Dagg"],
+            "E": ["Eld", "Enkel", "Ek"],
+            "F": ["Flod", "Frost", "Framtid"],
+            "G": ["Guld", "Glas", "Grön"],
+            "H": ["Hav", "Himmel", "Hjort"],
+            "I": ["Is", "Idé", "Iris"],
+            "J": ["Jul", "Jord", "Jägare"],
+            "K": ["Kärlek", "Kust", "Klar"],
+            "L": ["Ljus", "Liv", "Längtan"],
+            "M": ["Måne", "Morgon", "Magi"],
+            "N": ["Natt", "Nord", "Natur"],
+            "O": ["Orkidé", "Ovan", "Ombra"],
+            "P": ["Pärla", "Poesi", "Parad"],
+            "Q": ["Quiz", "Quinoa", "Quest"],
+            "R": ["Regn", "Ros", "Rum"],
+            "S": ["Sol", "Stjärna", "Spegel"],
+            "T": ["Träd", "Tid", "Tålamod"],
+            "U": ["Universum", "Utsikt", "Ursprung"],
+            "V": ["Vind", "Vatten", "Vision"],
+            "W": ["Whisky", "Web", "Watt"],
+            "X": ["Xenon", "Xylofon", "Xerox"],
+            "Y": ["Yoga", "Yrke", "Yta"],
+            "Z": ["Zon", "Zink", "Zenit"],
+            "Å": ["Åska", "Ålder", "Årstid"],
+            "Ä": ["Äpple", "Ängel", "Äventyr"],
+            "Ö": ["Öde", "Önskan", "Ögon"],
+            "_": ["Ord", "Tecken", "Spår"]
         ]
     ]
 }

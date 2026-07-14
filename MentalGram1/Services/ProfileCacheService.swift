@@ -663,6 +663,51 @@ class ProfileCacheService: ObservableObject {
         DispatchQueue.main.async { self.cachedProfile = nil }
         print("🗑️ Profile cache cleared for userId=\(userId)")
     }
+
+    /// Clears only the rebuildable public Instagram replica.
+    ///
+    /// This intentionally does NOT touch Post Prediction data:
+    /// - `PhotoSet` / `SetPhoto` metadata in UserDefaults
+    /// - `Documents/photos/<setId>/*.jpg`
+    /// - set `mediaId`, `isArchived`, or `uploadStatus`
+    /// - stable `mid_<mediaId>.jpg` thumbnails, which are useful reveal fallbacks
+    func preparePublicReplicaRebuild(userId: String? = nil, clearRevealState: Bool = true) {
+        let resolvedUserId = userId ?? activeUserId()
+        guard let resolvedUserId, !resolvedUserId.isEmpty else { return }
+
+        let profileURL = userProfileDirectory(for: resolvedUserId).appendingPathComponent("profile.json")
+        try? fileManager.removeItem(at: profileURL)
+        if clearRevealState {
+            self.clearRevealState(userId: resolvedUserId)
+        }
+
+        let ud = UserDefaults.standard
+        [
+            "perf_fully_preloaded_\(resolvedUserId)",
+            "perf_optional_preloaded_\(resolvedUserId)",
+            "perf_no_more_pages_\(resolvedUserId)",
+            "perf_manual_depth_synced_\(resolvedUserId)",
+            "perf_last_preload_exit_reason_\(resolvedUserId)",
+            "highlights_checked_at_\(resolvedUserId)",
+            "reels_checked_at_\(resolvedUserId)",
+            "tagged_checked_at_\(resolvedUserId)",
+            "reels_paginated_\(resolvedUserId)",
+            "tagged_paginated_\(resolvedUserId)"
+        ].forEach { ud.removeObject(forKey: $0) }
+
+        let clearInMemory = {
+            if self.cachedProfile?.userId == resolvedUserId {
+                self.cachedProfile = nil
+            }
+        }
+        if Thread.isMainThread {
+            clearInMemory()
+        } else {
+            DispatchQueue.main.async { clearInMemory() }
+        }
+        print("🧹 [REPAIR] Public profile replica cleared for userId=\(resolvedUserId); sets and local set photos preserved")
+        LogManager.shared.info("Repair cleared public profile replica for userId=\(resolvedUserId)", category: .cache)
+    }
     
     // MARK: - Image Cache
     

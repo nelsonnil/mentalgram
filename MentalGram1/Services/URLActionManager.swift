@@ -79,16 +79,20 @@ class URLActionManager: ObservableObject {
 
         // Helper: extract a named param from URLComponents or raw query string
         func extractParam(_ name: String) -> String? {
-            if let v = components?.queryItems?.first(where: { $0.name == name })?.value,
-               !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return v.trimmingCharacters(in: .whitespacesAndNewlines)
+            func normalize(_ value: String) -> String {
+                value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .precomposedStringWithCanonicalMapping
+            }
+            if let v = components?.queryItems?.first(where: { $0.name == name })?.value {
+                let trimmed = normalize(v)
+                return trimmed.isEmpty ? nil : trimmed
             }
             guard let rawQuery = url.query ?? url.absoluteString.components(separatedBy: "?").dropFirst().first else { return nil }
             for param in rawQuery.components(separatedBy: "&") {
                 guard param.hasPrefix("\(name)=") else { continue }
                 let raw = String(param.dropFirst(name.count + 1))
                 let decoded = raw.removingPercentEncoding ?? raw
-                let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = normalize(decoded)
                 return trimmed.isEmpty ? nil : trimmed
             }
             return nil
@@ -125,6 +129,9 @@ class URLActionManager: ObservableObject {
                 print("⚠️ [URL] vault://perform missing 'reveal', 'slot', or 'card' parameter")
                 return false
             }
+            if let setName = extractParam("set") {
+                values["set"] = setName
+            }
 
             print("📲 [URL] vault://perform received (bio + queued reveal)")
             DispatchQueue.main.async {
@@ -142,15 +149,16 @@ class URLActionManager: ObservableObject {
 
             // vault://reveal?word=COCHE  (Word Reveal)
             // vault://reveal?word=COCHE&set=MySet  (Word Reveal with specific set)
-            if let raw = items.first(where: { $0.name == "word" })?.value,
-               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let raw = extractParam("word"), !raw.isEmpty {
+                let word = raw
                 let msg = setName.map { " from set '\($0)'" } ?? ""
                 print("📲 [URL] vault://reveal?word received: \"\(word.prefix(40))\"\(msg)")
                 DispatchQueue.main.async {
                     self.pendingMode = "reveal"
                     self.pendingText = word
-                    self.pendingValues = setName.map { ["set": $0] } ?? [:]
+                    var pending: [String: String] = [:]
+                    if let setName { pending["set"] = setName }
+                    self.pendingValues = pending
                 }
                 return true
             }
@@ -259,10 +267,12 @@ class URLActionManager: ObservableObject {
 
     // MARK: - Reveal URL builders
 
-    /// vault://reveal?word=COCHE  — Word Reveal: unarchive letter photos for `word`.
-    static func revealURL(word: String) -> String {
+    /// Builds a vault://reveal URL with optional set name.
+    static func revealURL(word: String, set: String? = nil) -> String {
         var c = URLComponents(); c.scheme = "vault"; c.host = "reveal"
-        c.queryItems = [URLQueryItem(name: "word", value: word)]
+        var items = [URLQueryItem(name: "word", value: word)]
+        if let set, !set.isEmpty { items.append(URLQueryItem(name: "set", value: set)) }
+        c.queryItems = items
         return c.url?.absoluteString ?? "vault://reveal?word=\(word)"
     }
 

@@ -961,7 +961,7 @@
 "amnesia.toggle" = "Enable effect";
 "amnesia.esp_template" = "ESP Template";
 "amnesia.images_title" = "Carousel images";
-"amnesia.slot5_hint" = "Hidden image — not shown at first. Revealed when you close the carousel.";
+"amnesia.slot5_hint" = "Hidden image — not shown at first. Revealed as the 3rd image when you close the carousel.";
 "amnesia.slot_hidden" = "HIDDEN";
 "amnesia.slot_n" = "Image %d";
 "amnesia.btn_upload" = "Upload Carousels";
@@ -999,7 +999,7 @@
 "guide.amnesia.trigger.title" = "The trigger";
 "guide.amnesia.trigger.body" = "The trigger activates when you close the carousel inside Performance. Correct order:\n\n1. Ask the spectator to open Instagram, enter your profile and tap the carousel.\n2. While they are inside the carousel on their phone, have them look at the 4 images and notice the date.\n3. At that moment you can close the carousel in Vault. Vault adds the extra image on real Instagram, but the spectator will not see it until they refresh or close and reopen Instagram.\n\nIMPORTANT: after closing the carousel in Vault, do not leave Vault or close the app. The archive/unarchive process takes a few seconds and must finish in the background. If you leave too early, the change can be interrupted.\n\n4. Wait until Vault finishes the revealing state. Then, when the spectator finishes memorizing, ask them to fully close Instagram. You can also take their phone, make a natural small scroll and leave it on the table.\n5. When Instagram opens again, they see 5 images with the same date and time.\n\n❌ Do not close the carousel in Vault before the spectator has entered and seen the initial 4 images.";
 "guide.amnesia.hidden.title" = "Hidden image";
-"guide.amnesia.hidden.body" = "The 5th image (marked with an orange border in the app) is the one that appears at the end. In the ESP template it is usually the star: the spectator remembers circle, cross, waves and square, but not the star. When you ask \"Are you sure you don't remember the star?\" they will not believe you. When they open Instagram and see the star in the same carousel, with the same date and time, the memory breaks.";
+"guide.amnesia.hidden.body" = "The hidden image (marked with an orange border in the app) is inserted as the 3rd image in the revealed carousel. In the ESP template it is usually the star: the spectator remembers circle, cross, waves and square, but not the star. When you ask \"Are you sure you don't remember the star?\" they will not believe you. When they open Instagram and see the star in the same carousel, with the same date and time, the memory breaks.";
 "guide.amnesia.options.title" = "Two ways to activate the trigger";
 "guide.amnesia.optionA.title" = "Hand passes (more theatrical)";
 "guide.amnesia.optionA.body" = "The spectator is already inside the carousel on their phone. Once they have seen the 4 images, you close the carousel in Vault and say \"I'll close mine too\" as if it were part of the ritual. Then ask them to close Instagram completely so the images exist only in their memory.";

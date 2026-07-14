@@ -247,6 +247,8 @@ private struct FakeNotesInputConfig: View {
 
 private struct CoverTypingConfig: View {
     @ObservedObject private var secret = SecretInputSettings.shared
+    @State private var isCachingResults = false
+    @State private var cachedCount: Int = 0
 
     private var preview: String {
         let word = "car"
@@ -258,6 +260,24 @@ private struct CoverTypingConfig: View {
             result.append(mask[idx])
         }
         return result
+    }
+
+    private func triggerPrefetch() {
+        let username = secret.customUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !username.isEmpty else { return }
+        isCachingResults = true
+        Task {
+            let count = await VisitedProfileCacheService.shared.prefetchAndCacheMaskResults(username: username)
+            await MainActor.run {
+                cachedCount = count
+                isCachingResults = false
+            }
+        }
+    }
+
+    private func refreshCachedCount() {
+        let username = secret.customUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        cachedCount = VisitedProfileCacheService.shared.maskSearchResultsCount(forUsername: username)
     }
 
     var body: some View {
@@ -288,14 +308,48 @@ private struct CoverTypingConfig: View {
             }
 
             if secret.mode == .customUsername {
-                TextField("Custom username", text: $secret.customUsername)
-                    .font(VaultTheme.Typography.body())
-                    .foregroundColor(VaultTheme.Colors.textPrimary)
-                    .padding(VaultTheme.Spacing.md)
-                    .background(Color(hex: "#2C2C2E"))
-                    .cornerRadius(VaultTheme.CornerRadius.sm)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
+                HStack(spacing: 8) {
+                    TextField("Custom username", text: $secret.customUsername)
+                        .font(VaultTheme.Typography.body())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                        .padding(VaultTheme.Spacing.md)
+                        .background(Color(hex: "#2C2C2E"))
+                        .cornerRadius(VaultTheme.CornerRadius.sm)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .onSubmit { triggerPrefetch() }
+                        .onChange(of: secret.customUsername) { _ in refreshCachedCount() }
+
+                    Button(action: { triggerPrefetch() }) {
+                        Group {
+                            if isCachingResults {
+                                ProgressView()
+                                    .scaleEffect(0.75)
+                                    .frame(width: 22, height: 22)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(cachedCount > 0 ? VaultTheme.Colors.primary : .gray)
+                            }
+                        }
+                    }
+                    .disabled(isCachingResults || secret.customUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                // Estado del caché
+                if isCachingResults {
+                    Label("Guardando perfiles…", systemImage: "ellipsis.circle")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                } else if cachedCount > 0 {
+                    Label("\(cachedCount) perfiles guardados", systemImage: "checkmark.circle.fill")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(.green)
+                } else if !secret.customUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Label("Sin caché — pulsa ↺ para guardar", systemImage: "exclamationmark.circle")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(.orange)
+                }
             }
 
             HStack(spacing: 4) {
@@ -307,6 +361,7 @@ private struct CoverTypingConfig: View {
                     .foregroundColor(VaultTheme.Colors.primary)
             }
         }
+        .onAppear { refreshCachedCount() }
     }
 }
 

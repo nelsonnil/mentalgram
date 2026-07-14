@@ -24,6 +24,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Se necesita acceso a la cámara para reconocer texto durante el performance.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Se necesita guardar collages de prueba en Fotos para revisar la comparación visual.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>instagram</string>
