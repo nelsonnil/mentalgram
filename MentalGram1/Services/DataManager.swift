@@ -47,6 +47,7 @@ class DataManager: ObservableObject {
                 // account (the Amnesia Carousel posts live on the previous account). Guarded
                 // so it never wipes a same-account re-login/restore.
                 AmnesiaCarouselSettings.shared.resetForAccountChange(to: newUserId)
+                InstapickSettings.shared.resetForAccountChange(to: newUserId)
             }
             .store(in: &cancellables)
     }
@@ -286,6 +287,34 @@ class DataManager: ObservableObject {
         objectWillChange.send()
         iCloudDriveSync.shared.syncSetPhotos(setId: setId)
         print("✅ [INSERT] Photo inserted at position \(position) with symbol '\(symbol)'")
+    }
+
+    /// Insert a photo into a specific slot in a specific bank only.
+    /// Used when filling individual slots to maintain bank independence.
+    func insertPhotoInBank(setId: UUID, bankId: UUID?, symbol: String, filename: String, imageData: Data) {
+        guard let setIndex = sets.firstIndex(where: { $0.id == setId }) else { return }
+        
+        let photoId = UUID()
+        let setPhoto = SetPhoto(
+            id: photoId,
+            setId: setId,
+            bankId: bankId,
+            symbol: symbol,
+            filename: filename,
+            imageData: imageData,
+            mediaId: nil,
+            isArchived: false,
+            uploadDate: nil,
+            lastCommentId: nil,
+            uploadStatus: .pending,
+            errorMessage: nil
+        )
+        sets[setIndex].photos.append(setPhoto)
+        
+        saveSets()
+        objectWillChange.send()
+        iCloudDriveSync.shared.syncSetPhotos(setId: setId)
+        print("✅ [INSERT] Photo inserted in bank \(bankId?.uuidString ?? "none") with symbol '\(symbol)'")
     }
     
     // MARK: - Replace Photo at Position
@@ -846,6 +875,7 @@ class DataManager: ObservableObject {
             FollowingMagicSettings.shared.reloadFromUserDefaults()
             DateForceSettings.shared.reloadFromUserDefaults()
             AmnesiaCarouselSettings.shared.reloadFromUserDefaults()
+            InstapickSettings.shared.reloadFromUserDefaults()
             BackupRoutineManager.shared.reloadFromUserDefaults()
 
             // Mark that a restore just completed — HomeView will show a blocking overlay

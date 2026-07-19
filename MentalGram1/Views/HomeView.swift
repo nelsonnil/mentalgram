@@ -891,6 +891,7 @@ struct SetsListView: View {
     var onContinuePreload: () -> Void = {}
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
     @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
+    @ObservedObject private var instapick = InstapickSettings.shared
     @State private var showingCreateSet = false
     @State private var newlyCreatedSet: PhotoSet? = nil
     @State private var navigateToNewSet = false
@@ -1092,8 +1093,12 @@ struct SetsListView: View {
         amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
     }
 
+    private var hasInstapickPendingReset: Bool {
+        instapick.needsRestore
+    }
+
     private var hasPendingPrePerformanceActions: Bool {
-        visibleSetPhotosCount > 0 || hasAmnesiaPendingReset
+        visibleSetPhotosCount > 0 || hasAmnesiaPendingReset || hasInstapickPendingReset
     }
 
     private var activeSetName: String? {
@@ -2516,7 +2521,7 @@ struct ProfileDriftWarningBanner: View {
                     isResettingPic = false
                     if ok {
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        alertMessage = "✅ Profile picture restored to your saved reset photo."
+                        alertMessage = "✅ Profile picture ready (already on Instagram or restored). Performance display refreshed."
                     } else {
                         alertMessage = "❌ Could not restore profile picture. Try again from Settings."
                     }
@@ -2700,6 +2705,7 @@ struct PostRevealArchiveBanner: View {
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var uploadManager = UploadManager.shared
     @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
+    @ObservedObject private var instapick = InstapickSettings.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isArchiving      = false
@@ -2712,6 +2718,7 @@ struct PostRevealArchiveBanner: View {
     @State private var blinkTimer: Timer?   = nil
     @State private var blink: Bool          = false
     @State private var refreshTick: Int     = 0
+    @State private var isRestoringInstapick = false
 
     // Photos that are locally known as visible on Instagram and should be
     // re-archived before performance. Do not require `.completed`: interrupted
@@ -2729,7 +2736,8 @@ struct PostRevealArchiveBanner: View {
     private var hasAmnesiaPendingReset: Bool {
         amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
     }
-    private var hasPhotos: Bool { count > 0 || hasAmnesiaPendingReset }
+    private var hasInstapickPendingReset: Bool { instapick.needsRestore }
+    private var hasPhotos: Bool { count > 0 || hasAmnesiaPendingReset || hasInstapickPendingReset }
 
     var body: some View {
         ZStack {
@@ -2762,7 +2770,9 @@ struct PostRevealArchiveBanner: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(isArchiving
                      ? String(format: String(localized: "post_reveal_archive.archiving"), doneSoFar, totalToArchive)
-                     : bannerTitle)
+                     : (isRestoringInstapick
+                        ? String(localized: "home.preperformance.instapick_reset.restoring")
+                        : bannerTitle))
                     .font(.system(size: 15, weight: .black))
                     .foregroundColor(blink ? .red : Color.red.opacity(0.45))
                     .scaleEffect(blink ? 1.03 : 1.0, anchor: .leading)
@@ -2773,7 +2783,7 @@ struct PostRevealArchiveBanner: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.red)
                         .fixedSize(horizontal: false, vertical: true)
-                } else if isArchiving, let archiveStatus {
+                } else if (isArchiving || isRestoringInstapick), let archiveStatus {
                     Text(archiveStatus)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Color.red.opacity(0.8))
@@ -2795,7 +2805,7 @@ struct PostRevealArchiveBanner: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if !isArchiving && count > 0 {
+                if !isArchiving && !isRestoringInstapick && count > 0 {
                     Button(action: {
                         archiveError = nil
                         Task { await runArchive() }
@@ -2812,6 +2822,31 @@ struct PostRevealArchiveBanner: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!archiveButtonEnabled)
+                    .padding(.top, 2)
+                }
+
+                if !isArchiving && hasInstapickPendingReset {
+                    Button(action: {
+                        archiveError = nil
+                        Task { await runInstapickRestore() }
+                    }) {
+                        Label(
+                            isRestoringInstapick
+                                ? String(localized: "home.preperformance.instapick_reset.restoring")
+                                : String(localized: "home.preperformance.instapick_reset.button"),
+                            systemImage: "arrow.counterclockwise.circle.fill"
+                        )
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(instapickRestoreEnabled ? Color.red : Color.red.opacity(0.35))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!instapickRestoreEnabled)
                     .padding(.top, 2)
                 }
             }
@@ -2834,7 +2869,10 @@ struct PostRevealArchiveBanner: View {
         if count > 0 {
             return String(format: String(localized: "home.preperformance.visible_photos.title"), count)
         }
-        return String(localized: "home.preperformance.amnesia_reset.title")
+        if hasAmnesiaPendingReset {
+            return String(localized: "home.preperformance.amnesia_reset.title")
+        }
+        return String(localized: "home.preperformance.instapick_reset.title")
     }
 
     private var bannerDescription: String {
@@ -2845,13 +2883,26 @@ struct PostRevealArchiveBanner: View {
         if hasAmnesiaPendingReset {
             parts.append(String(localized: "home.preperformance.amnesia_reset.description"))
         }
+        if hasInstapickPendingReset {
+            parts.append(String(localized: "home.preperformance.instapick_reset.description"))
+        }
         return parts.joined(separator: " ")
     }
 
     private var archiveButtonEnabled: Bool {
         !isArchiving
+        && !isRestoringInstapick
         && postRevealLeft == 0
         && !uploadManager.isSyncArchiveActive
+        && !instagram.isLocked
+        && !instagram.isSessionChallenged
+        && !instagram.isSessionExpired
+    }
+
+    private var instapickRestoreEnabled: Bool {
+        !isRestoringInstapick
+        && !isArchiving
+        && postRevealLeft == 0
         && !instagram.isLocked
         && !instagram.isSessionChallenged
         && !instagram.isSessionExpired
@@ -2922,6 +2973,35 @@ struct PostRevealArchiveBanner: View {
         }
 
         await MainActor.run { isArchiving = false }
+    }
+
+    private func runInstapickRestore() async {
+        guard hasInstapickPendingReset else { return }
+        await MainActor.run {
+            isRestoringInstapick = true
+            archiveError = nil
+            archiveStatus = String(localized: "home.preperformance.instapick_reset.restoring")
+        }
+        do {
+            try await InstagramService.shared.restoreInstapickSlots { step, total in
+                Task { @MainActor in
+                    archiveStatus = String(
+                        format: String(localized: "home.preperformance.instapick_reset.progress"),
+                        step, total
+                    )
+                }
+            }
+            await MainActor.run {
+                isRestoringInstapick = false
+                archiveStatus = nil
+            }
+        } catch {
+            await MainActor.run {
+                archiveError = error.localizedDescription
+                isRestoringInstapick = false
+                archiveStatus = nil
+            }
+        }
     }
 
     @MainActor
@@ -3194,6 +3274,7 @@ struct SettingsView: View {
     @ObservedObject private var uploadManager = UploadManager.shared
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var amnesia = AmnesiaCarouselSettings.shared
+    @ObservedObject private var instapick = InstapickSettings.shared
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @ObservedObject private var profileCache = ProfileCacheService.shared
     @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
@@ -3463,8 +3544,12 @@ struct SettingsView: View {
         amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
     }
 
+    private var hasInstapickPendingReset: Bool {
+        instapick.needsRestore
+    }
+
     private var hasPendingPrePerformanceActions: Bool {
-        visibleSetPhotosCount > 0 || hasAmnesiaPendingReset
+        visibleSetPhotosCount > 0 || hasAmnesiaPendingReset || hasInstapickPendingReset
     }
 
     @ViewBuilder
@@ -3486,6 +3571,12 @@ struct SettingsView: View {
                 if hasAmnesiaPendingReset {
                     Text("Amnesia Carousel is revealed. Open Amnesia Carousel and press Reset before the next show.")
                                         .font(VaultTheme.Typography.body())
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if hasInstapickPendingReset {
+                    Text(String(localized: "home.preperformance.instapick_reset.description"))
+                        .font(VaultTheme.Typography.body())
                         .foregroundColor(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -3696,7 +3787,11 @@ struct SettingsView: View {
             FollowingMagicSettingsCard()
             DateForceSettingsCard()
             AmnesiaCarouselSettingsCard()
-            AIScreenDetectionSettingsCard()
+            InstapickSettingsCard()
+            // PROVISIONAL: Transposition (PRO) hidden until ready to ship.
+            if IntegrationsSettings.transpositionFeatureEnabled {
+                AIScreenDetectionSettingsCard()
+            }
         }
         Spacer().frame(height: 28)
     }
@@ -4363,6 +4458,11 @@ struct SettingsView: View {
                 ) {
                     showBaselinePicResetConfirm = true
                 }
+
+                Text("If Instagram already has this photo, Reset refreshes the local Performance display instead of uploading again.")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if resetSettings.hasBaselineProfilePic && resetSettings.needsProfilePicReset {
@@ -4554,7 +4654,7 @@ struct SettingsView: View {
                 await MainActor.run {
                     isResettingBaselinePic = false
                     resetBaselineMessage = ok
-                        ? "✅ Profile picture restored to your saved reset photo."
+                        ? "✅ Profile picture ready (already on Instagram or restored). Performance display refreshed."
                         : "❌ Could not restore profile picture."
                     showResetBaselineAlert = true
                 }
@@ -6673,6 +6773,8 @@ struct AIScreenDetectionSettingsCard: View {
         }
         .onAppear {
             integrations.aiScreenDetectionMode = .visualMatch
+            // Hybrid still burst uses shutter clicks — keep Video-only capture for performance.
+            integrations.transpositionCaptureMode = .videoFrames
             cooldownNow = Date()
         }
         .onReceive(cooldownTimer) { date in
@@ -9253,6 +9355,568 @@ struct AmnesiaCarouselSettingsCard: View {
             .cornerRadius(VaultTheme.CornerRadius.md)
         }
         .disabled(!enabled || loading)
+    }
+}
+
+// MARK: - Instapick Settings Card
+
+struct InstapickSettingsCard: View {
+    @ObservedObject private var settings = InstapickSettings.shared
+    @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
+    @ObservedObject private var instagram = InstagramService.shared
+    @State private var isExpanded = false
+    @State private var showingError = false
+    @State private var uploadError: String?
+
+    private let accent = SettingsView.colorTricks
+
+    var body: some View {
+        CollapsibleCard(
+            icon: "rectangle.stack.fill.badge.plus",
+            iconColor: accent,
+            title: "Instapick",
+            subtitle: settings.isLiveReady
+                ? "Ready on Instagram"
+                : (settings.hasLiveMediaIds && !settings.areBSlidesArchived
+                   ? "Archives pending on Instagram"
+                   : (ppTestMode.isActive ? "Test Mode — local carousel" : "Test Mode or Upload to Instagram")),
+            isExpanded: $isExpanded
+        ) {
+            HStack {
+                Text("Enable Instapick")
+                    .font(VaultTheme.Typography.body())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                Spacer()
+                Toggle("", isOn: $settings.isEnabled)
+                    .labelsHidden()
+                    .tint(accent)
+            }
+
+            if settings.isEnabled {
+                Divider().background(Color(hex: "#3A3A3C"))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Fixed pack: o → 1a/1b → 2a/2b → 3a/3b → 4a/4b")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    Text(settings.bundledAssetsAvailable
+                          ? "Assets loaded from InstapickAssets"
+                          : "Missing InstapickAssets in the app bundle")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(settings.bundledAssetsAvailable ? .green : .orange)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: ppTestMode.isActive ? "checkmark.shield.fill" : "photo.on.rectangle")
+                            .foregroundColor(ppTestMode.isActive ? .green : accent)
+                        Text(ppTestMode.isActive
+                              ? "Test Mode ON — local carousel in Performance (no Instagram)"
+                              : "Test Mode OFF — use Upload for a real Instagram carousel")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+
+                    if settings.isLiveReady {
+                        Text("Instagram carousel ready · Sync Performance after upload")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(.green)
+                    } else if settings.hasLiveMediaIds && !settings.areBSlidesArchived {
+                        Text("IDs saved, but b slides are NOT verified archived — Instagram may still show all 9. Tap Continue archive b.")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if settings.isReadyForPerformance {
+                        let swappedLabel = settings.swappedSlots.sorted().map(String.init).joined(separator: ", ")
+                        Text("Ready · swapped slots: \(swappedLabel.isEmpty ? "none" : swappedLabel)")
+                            .font(VaultTheme.Typography.caption())
+                            .foregroundColor(VaultTheme.Colors.textSecondary)
+                    }
+                }
+
+                Divider().background(Color(hex: "#3A3A3C"))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Card overlay")
+                        .font(VaultTheme.Typography.captionBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+
+                    Picker("Card art", selection: $settings.cardArt) {
+                        ForEach(InstapickCardArt.allCases) { art in
+                            Text(art.title).tag(art)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(accent)
+
+                    Text(settings.cardArt.detail)
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    if let preview = settings.cardOverlay() {
+                        Image(uiImage: preview)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 88)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+
+                    Divider().background(Color(hex: "#3A3A3C"))
+
+                    Text("Card motion (try & pick)")
+                        .font(VaultTheme.Typography.captionBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+
+                    Picker("Tilt style", selection: $settings.tiltStyle) {
+                        ForEach(InstapickTiltStyle.allCases) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(accent)
+
+                    Text(settings.tiltStyle.detail)
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    Picker("Volume DOWN effect", selection: $settings.volumeFx) {
+                        ForEach(InstapickVolumeFx.allCases) { fx in
+                            Text(fx.title).tag(fx)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(accent)
+
+                    Text(settings.volumeFx.detail)
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                    Text("Tip: arm the card with volume DOWN, then press again to replay the impulse. Drag off-screen still finishes the reveal.")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary.opacity(0.9))
+                }
+
+                // Real Instagram upload (when not practising in Test Mode)
+                if !ppTestMode.isActive {
+                    Divider().background(Color(hex: "#3A3A3C"))
+                    Button {
+                        startUpload(forceRestart: false)
+                    } label: {
+                        HStack(spacing: VaultTheme.Spacing.sm) {
+                            if settings.uploadState.isUploading {
+                                ProgressView().scaleEffect(0.8).tint(.white)
+                            } else {
+                                Image(systemName: settings.hasResumableCheckpoint
+                                      ? "play.fill"
+                                      : (settings.isLiveReady ? "arrow.clockwise.circle.fill" : "arrow.up.circle.fill"))
+                            }
+                            Text(uploadButtonTitle)
+                                .font(VaultTheme.Typography.bodyBold())
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, VaultTheme.Spacing.md)
+                        .background(canUpload ? VaultTheme.Colors.primary : VaultTheme.Colors.textDisabled)
+                        .cornerRadius(VaultTheme.CornerRadius.md)
+                    }
+                    .disabled(!canUpload)
+                    .buttonStyle(.plain)
+
+                    if settings.hasResumableCheckpoint, !settings.uploadState.isUploading {
+                        Text(resumeHint)
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Button {
+                            startUpload(forceRestart: true)
+                        } label: {
+                            Text("Start over (clears partial progress)")
+                                .font(VaultTheme.Typography.captionBold())
+                                .foregroundColor(.red.opacity(0.85))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(settings.uploadState.isUploading || instagram.isLocked)
+                    }
+
+                    if settings.uploadState.isUploading || !settings.uploadChecklist.isEmpty {
+                        instapickUploadChecklist
+                    }
+
+                    if case .error(let msg) = settings.uploadState {
+                        Text(msg)
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(.red.opacity(0.9))
+                            .fixedSize(horizontal: false, vertical: true)
+                        if settings.resumeKind == .archive || settings.carouselMediaId != nil {
+                            Button {
+                                startRetryArchiveB()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "archivebox.fill")
+                                    Text("Retry archive b")
+                                        .font(VaultTheme.Typography.captionBold())
+                                }
+                                .foregroundColor(accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(settings.uploadState.isUploading || instagram.isLocked)
+                        }
+                    }
+
+                    if instagram.isLocked {
+                        Text("Lockdown active — wait for the timer before Continue.")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(.orange)
+                    } else if instagram.isSessionChallenged {
+                        Text("Instagram asks for verification — complete it in IG, then Continue.")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(.orange)
+                    }
+
+                    Text("Uploads o+1a/1b…4a/4b, then archives all b so IG shows o,1a,2a,3a,4a. If you close the app, you can Continue upload.")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
+                }
+
+                if !settings.uploadState.isUploading,
+                   (settings.isReadyForPerformance || settings.isLiveReady || settings.hasLiveMediaIds || settings.needsRestore) {
+                    Divider().background(Color(hex: "#3A3A3C"))
+
+                    if settings.needsRestore {
+                        Button {
+                            startRestore()
+                        } label: {
+                            HStack(spacing: VaultTheme.Spacing.sm) {
+                                if settings.uploadState == .swapping {
+                                    ProgressView().scaleEffect(0.8).tint(accent)
+                                } else {
+                                    Image(systemName: "arrow.counterclockwise.circle.fill")
+                                }
+                                Text(settings.uploadState == .swapping
+                                      ? String(localized: "home.preperformance.instapick_reset.restoring")
+                                      : String(localized: "home.preperformance.instapick_reset.button"))
+                                    .font(VaultTheme.Typography.captionBold())
+                            }
+                            .foregroundColor(accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(settings.uploadState == .swapping || instagram.isLocked)
+                    } else {
+                        Button {
+                            settings.resetSwaps()
+                        } label: {
+                            Text("Reset swaps")
+                                .font(VaultTheme.Typography.captionBold())
+                                .foregroundColor(accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if settings.hasLiveMediaIds {
+                        Button {
+                            startRetryArchiveB()
+                        } label: {
+                            Text(settings.areBSlidesArchived
+                                 ? "Re-check archive b slides"
+                                 : "Retry archive b slides")
+                                .font(VaultTheme.Typography.captionBold())
+                                .foregroundColor(accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(settings.uploadState.isUploading || settings.uploadState == .swapping || instagram.isLocked)
+
+                        Button {
+                            settings.clearLiveUpload()
+                        } label: {
+                            Text("Clear Instagram link")
+                                .font(VaultTheme.Typography.captionBold())
+                                .foregroundColor(.red.opacity(0.85))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(settings.uploadState.isUploading || settings.uploadState == .swapping)
+                    }
+                }
+
+                Text("Performance → open Instapick post → swipe color → volume DOWN → drag card off.")
+                    .font(VaultTheme.Typography.captionSmall())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+            }
+        }
+        .alert("Instapick", isPresented: $showingError) {
+            Button("OK") {}
+        } message: {
+            Text(uploadError ?? "")
+        }
+    }
+
+    private var canUpload: Bool {
+        settings.bundledAssetsAvailable
+            && !settings.uploadState.isUploading
+            && !instagram.isLocked
+            && !ppTestMode.isActive
+            && !instagram.isSessionExpired
+    }
+
+    private var uploadButtonTitle: String {
+        if settings.uploadState.isUploading {
+            return settings.uploadState.label
+        }
+        if settings.hasResumableCheckpoint {
+            switch settings.resumeKind {
+            case .rupload: return "Continue upload (\(settings.checkpointUploadIds.count)/9)"
+            case .published: return "Continue upload (publish / archive)"
+            case .archive: return "Continue archive b"
+            case .none: return "Continue upload"
+            }
+        }
+        return settings.isLiveReady ? "Re-upload to Instagram" : "Upload to Instagram"
+    }
+
+    private var resumeHint: String {
+        let detail = settings.checkpointDetail
+        switch settings.resumeKind {
+        case .rupload:
+            return detail.isEmpty
+                ? "\(settings.checkpointUploadIds.count)/9 images already uploaded. Continue skips repeating them."
+                : detail
+        case .published:
+            return detail.isEmpty
+                ? "Carousel was published (or almost). Continue fetches children and archives the b slides."
+                : detail
+        case .archive:
+            return detail.isEmpty
+                ? "b slides still need to be archived. Continue / Retry archive b."
+                : detail
+        case .none:
+            return detail
+        }
+    }
+
+    @ViewBuilder
+    private var instapickUploadChecklist: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if case .uploading(let step, let total, _) = settings.uploadState {
+                Text("Progress \(step)/\(total)")
+                    .font(VaultTheme.Typography.captionBold())
+                    .foregroundColor(VaultTheme.Colors.textPrimary)
+            }
+            ForEach(settings.uploadChecklist) { item in
+                HStack(spacing: 8) {
+                    Image(systemName: checklistIcon(item.status))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(checklistColor(item.status))
+                        .frame(width: 16)
+                    Text(item.title)
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(
+                            item.status == .pending
+                                ? VaultTheme.Colors.textSecondary
+                                : VaultTheme.Colors.textPrimary
+                        )
+                    Spacer(minLength: 0)
+                    if item.status == .active {
+                        ProgressView().scaleEffect(0.6)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(Color(hex: "#2C2C2E"))
+        .cornerRadius(VaultTheme.CornerRadius.md)
+    }
+
+    private func checklistIcon(_ status: InstapickUploadStepItem.Status) -> String {
+        switch status {
+        case .pending: return "circle"
+        case .active: return "circle.dotted"
+        case .done: return "checkmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        }
+    }
+
+    private func checklistColor(_ status: InstapickUploadStepItem.Status) -> Color {
+        switch status {
+        case .pending: return VaultTheme.Colors.textSecondary
+        case .active: return accent
+        case .done: return .green
+        case .failed: return .red
+        }
+    }
+
+    private func startUpload(forceRestart: Bool) {
+        guard let images = settings.uploadOrderedImages(), images.count == 9 else {
+            uploadError = "Missing Instapick assets in the bundle"
+            showingError = true
+            return
+        }
+        if instagram.isLocked {
+            uploadError = "Lockdown active. Wait for the timer, then tap Continue."
+            showingError = true
+            return
+        }
+        if instagram.isSessionChallenged {
+            uploadError = "Instagram asks for verification. Complete it in IG, then Continue."
+            showingError = true
+            return
+        }
+        if forceRestart {
+            settings.clearUploadCheckpoint()
+            settings.clearBVerifiedArchives()
+        }
+        settings.beginUploadChecklist()
+        let startStep: Int = {
+            switch settings.resumeKind {
+            case .rupload: return settings.checkpointUploadIds.count
+            case .published, .archive: return 9
+            case .none: return 0
+            }
+        }()
+        settings.updateUploadChecklist(completed: startStep)
+        settings.uploadState = .uploading(
+            step: startStep,
+            total: 14,
+            detail: forceRestart ? "Starting…" : "Resuming…"
+        )
+        Task {
+            do {
+                try await InstagramService.shared.uploadInstapickCarousel(
+                    images: images,
+                    forceRestart: forceRestart
+                ) { step, total, detail in
+                    Task { @MainActor in
+                        // Do not promote failed archive rows to green checkmarks.
+                        settings.updateUploadChecklist(completed: step)
+                        let shown = detail.isEmpty
+                            ? (step >= total ? "Ready" : settings.uploadChecklist[safe: step]?.title ?? "Working…")
+                            : detail
+                        settings.uploadState = .uploading(step: step, total: total, detail: shown)
+                    }
+                }
+                await MainActor.run {
+                    if !settings.isLiveReady {
+                        settings.uploadState = .error(
+                            settings.checkpointDetail.isEmpty
+                                ? "Upload finished without verified b archives. Tap Continue archive b."
+                                : settings.checkpointDetail
+                        )
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    if let idx = settings.uploadChecklist.firstIndex(where: { $0.status == .active }) {
+                        settings.markUploadChecklistFailed(atIndex: idx)
+                    } else if case .uploading(let step, _, _) = settings.uploadState {
+                        settings.markUploadChecklistFailed(atIndex: min(step, max(0, settings.uploadChecklist.count - 1)))
+                    }
+                    let recovery: (text: String, keepCheckpoint: Bool)
+                    if let ig = error as? InstagramError {
+                        recovery = ig.instapickRecoveryMessage
+                    } else {
+                        recovery = (error.localizedDescription, true)
+                    }
+                    if recovery.keepCheckpoint {
+                        settings.markUploadInterrupted(detail: recovery.text)
+                    }
+                    settings.uploadState = .error(recovery.text)
+                    uploadError = recovery.text
+                    showingError = true
+                }
+            }
+        }
+    }
+
+    private func startRetryArchiveB() {
+        guard settings.carouselMediaId != nil,
+              (1...4).allSatisfy({ settings.childMediaIds["\($0)b"] != nil }) else {
+            uploadError = "No Instapick IDs saved. Upload the carousel again."
+            showingError = true
+            return
+        }
+        settings.beginUploadChecklist()
+        var items = settings.uploadChecklist
+        for i in items.indices {
+            let id = items[i].id
+            if i < 10 {
+                items[i].status = .done
+            } else if settings.verifiedArchivedBLabels.contains(id.replacingOccurrences(of: "arch-", with: "")) {
+                items[i].status = .done
+            } else {
+                items[i].status = .pending
+            }
+        }
+        settings.uploadChecklist = items
+        settings.updateUploadChecklist(completed: 10)
+        settings.uploadState = .uploading(step: 10, total: 14, detail: "Archiving 1b…")
+        Task {
+            do {
+                try await InstagramService.shared.retryInstapickArchiveBSlides { step, total, detail in
+                    Task { @MainActor in
+                        // `step` is completed archives (0…4). Keep current row active while waiting.
+                        let checklistIndex = min(10 + step, 13)
+                        settings.updateUploadChecklist(completed: checklistIndex)
+                        settings.uploadState = .uploading(
+                            step: min(10 + step, 14),
+                            total: 14,
+                            detail: detail
+                        )
+                    }
+                }
+                await MainActor.run {
+                    if settings.isLiveReady {
+                        settings.uploadState = .ready
+                        settings.uploadChecklist = []
+                    } else {
+                        settings.uploadState = .error(
+                            "Archive retry finished, but b slides are still not verified on Instagram."
+                        )
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    settings.uploadState = .error(error.localizedDescription)
+                    uploadError = error.localizedDescription
+                    showingError = true
+                }
+            }
+        }
+    }
+
+    private func startRestore() {
+        guard settings.needsRestore else { return }
+        settings.uploadState = .swapping
+        Task {
+            do {
+                try await InstagramService.shared.restoreInstapickSlots()
+            } catch {
+                await MainActor.run {
+                    settings.uploadState = .ready
+                    uploadError = error.localizedDescription
+                    showingError = true
+                }
+            }
+        }
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 

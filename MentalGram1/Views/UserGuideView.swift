@@ -192,15 +192,18 @@ struct UserGuideView: View {
                             isFirst: false, isLast: false
                         ) { activeSheet = .dateForce }
 
-                        guideDivider
-                        guideRow(
-                            icon: "camera.viewfinder",
-                            iconColor: colorTricks,
-                            title: "Transposition",
-                            subtitle: "Identify a spectator-selected public Instagram post with AI and reveal it",
-                            badge: "PRO",
-                            isFirst: false, isLast: false
-                        ) { activeSheet = .transposition }
+                        // PROVISIONAL: Transposition (PRO) hidden until ready to ship.
+                        if IntegrationsSettings.transpositionFeatureEnabled {
+                            guideDivider
+                            guideRow(
+                                icon: "camera.viewfinder",
+                                iconColor: colorTricks,
+                                title: "Transposition",
+                                subtitle: "Identify a spectator-selected public Instagram post with AI and reveal it",
+                                badge: "PRO",
+                                isFirst: false, isLast: false
+                            ) { activeSheet = .transposition }
+                        }
 
                         guideDivider
                         guideRow(

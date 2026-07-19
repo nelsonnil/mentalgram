@@ -290,6 +290,7 @@ struct PerformanceView: View {
     @ObservedObject private var followingMagic = FollowingMagicSettings.shared
     @ObservedObject private var volumeMonitor  = VolumeButtonMonitor.shared
     @ObservedObject private var amnesiaSettings = AmnesiaCarouselSettings.shared
+    @ObservedObject private var instapickSettings = InstapickSettings.shared
     @ObservedObject private var ppTestMode = PostPredictionTestMode.shared
     @StateObject private var ocrCoordinator = OCRCoordinator()
     @State private var isAIScreenDetectionRunning = false
@@ -519,9 +520,14 @@ struct PerformanceView: View {
             var initialImages: [String: UIImage] = [:]
             if let image = ProfileCacheService.shared.pendingProfilePic {
                 initialImages[cached.profilePicURL] = image
-            } else if let image = ProfileCacheService.shared.loadImage(forURL: cached.profilePicURL) {
+                ProfileCacheService.shared.saveOwnProfilePic(image, cdnURL: cached.profilePicURL)
+            } else if let image = ProfileCacheService.shared.loadOwnProfilePic(forURL: cached.profilePicURL) {
+                // URL key OR stable own_profile_pic.jpg (same CDN asset only — token rotation).
                 initialImages[cached.profilePicURL] = image
             }
+            // Do NOT fall back to Settings reset-photo here: if the user changed their
+            // pic in the real Instagram app, last_profile_pic_hash can still match the
+            // baseline and we'd paint the wrong face until the next download.
 
             for url in cached.cachedMediaURLs.prefix(12) {
                 if let image = ProfileCacheService.shared.loadImage(forURL: url) {
@@ -675,6 +681,9 @@ struct PerformanceView: View {
             LogManager.shared.warning("Upload cancelled: Performance view opened", category: .general)
         }
 
+        // Test Instapick always starts with a clean slot list (no leftover live swaps).
+        instapickSettings.preparePerformanceSession()
+
         // Activate volume button detection for FollowingMagic and/or OCR.
         let hasPlaceholderOCR = integrations.interfaceKindsInUse().contains(.ocr)
         let needsVolume = FollowingMagicSettings.shared.isEnabled
@@ -684,6 +693,7 @@ struct PerformanceView: View {
             || activePostPredictionInputMethod == .ocr
             || hasPlaceholderOCR
             || integrations.aiScreenDetectionEnabled
+            || instapickSettings.isReadyForPerformance
         if needsVolume {
             VolumeButtonMonitor.shared.prepareVolume()
             VolumeButtonMonitor.shared.startMonitoring()
@@ -865,7 +875,13 @@ struct PerformanceView: View {
     @AppStorage("combined_pp_cooldown_bypass_until") private var combinedPPCooldownBypassUntil: Double = 0
     @AppStorage("local_combo_earliest_pp_reveal_at") private var localComboEarliestRevealAt: Double = 0
     @AppStorage("local_combo_bio_pending_until") private var localComboBioPendingUntil: Double = 0
-    private let combinedBioPostPredictionDelay: UInt64 = 5
+    /// True after Cover Typing biography is confirmed in this Performance session.
+    /// Lets Lockscreen PP wait when digits arrive first, then proceed after bio.
+    @AppStorage("local_combo_cover_typing_bio_ready") private var coverTypingBioReadyForPP: Bool = false
+    /// Seconds to wait after Instagram confirms the biography POST before starting
+    /// Post Prediction unarchives. Spectator apps often cache bio longer than the grid,
+    /// so a short gap makes posts appear first while bio still looks stale until refresh.
+    private let combinedBioPostPredictionDelay: UInt64 = 12
 
     // MARK: - Auto-refresh on Performance entry
     /// Persisted timestamp of the last full profile refresh. Used to decide whether
@@ -914,7 +930,7 @@ struct PerformanceView: View {
     private func logPerformanceVisualState(_ reason: String) {
         let visibleURLs = Array(allMediaURLs.prefix(12))
         let missingVisible = visibleURLs.filter { url in
-            guard !url.hasPrefix("reveal://"), !url.hasPrefix("amnesia://carousel/") else { return false }
+            guard !ProfileMediaReconciler.isOverlayURL(url) else { return false }
             if cachedImages[url] != nil { return false }
             if let mediaId = mediaItemsByURL[url]?.mediaId,
                ProfileCacheService.shared.loadImage(forMediaId: mediaId) != nil { return false }
@@ -1842,32 +1858,52 @@ struct PerformanceView: View {
             )
             signalTranspositionPhotoCaptured()
 
-            async let localOCRTask = AIScreenPostDetectionService.shared.recognizeLocalText(in: screenPhoto)
+            async let authorOCRTask = AIScreenPostDetectionService.shared.extractAuthorOCR(from: screenPhoto)
             let analysis = try await AIScreenPostDetectionService.shared.analyzeScreenPhoto(screenPhoto, allowMissingUsername: true)
-            let localOCRText = await localOCRTask
-            let localQueries = AIScreenPostDetectionService.shared.localUsernameCandidates(from: localOCRText)
-            let profileQueries = mergedTranspositionQueries(openAI: analysis.profileSearchQueries, localOCR: localQueries)
-            guard !profileQueries.isEmpty else { throw AIScreenDetectionError.noUsername }
+            let authorOCR = await authorOCRTask
+            // Smart-capture OCR helps caption/post matching only — never author username selection.
+            let smartCaptureOCRText = AIScreenCameraCaptureService.shared.lastSmartCaptureOCRText
+            let localOCRText = [authorOCR.matchingText, smartCaptureOCRText]
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: " ")
 
-            print("🤖 [VISUAL MATCH] OpenAI profile queries=\(analysis.profileSearchQueries) localQueries=\(localQueries) confidence=\(analysis.confidence) caption='\(analysis.captionVisible ?? "")' imageText='\(analysis.imageTextVisible ?? "")' localOCR='\(localOCRText)'")
+            print("🤖 [VISUAL MATCH] GPT screen fields username='\(analysis.username)' candidates=\(analysis.usernameCandidates ?? []) likes='\(analysis.visibleLikeText ?? "")' comments='\(analysis.visibleCommentText ?? "")' shares='\(analysis.visibleShareText ?? "")' caption='\(analysis.captionVisible ?? "")' imageText='\(analysis.imageTextVisible ?? "")' postType=\(analysis.postType ?? "") confidence=\(analysis.confidence)")
             LogManager.shared.info(
-                "Visual match OpenAI queries: \(analysis.profileSearchQueries.joined(separator: ", ")) localQueries: \(localQueries.joined(separator: ", ")) confidence=\(analysis.confidence) caption='\(analysis.captionVisible ?? "")' imageText='\(analysis.imageTextVisible ?? "")' localOCR='\(localOCRText)'",
+                "Visual match GPT fields username=\(analysis.username) likes=\(analysis.visibleLikeText ?? "") comments=\(analysis.visibleCommentText ?? "") shares=\(analysis.visibleShareText ?? "") caption=\(analysis.captionVisible ?? "") postType=\(analysis.postType ?? "")",
                 category: .general
             )
-            if let detected = profileQueries.first {
-                guard !isTranspositionDuplicateProfile(detected) else {
-                    print("🚫 [TRANSPOSITION] Duplicate profile @\(detected) blocked by cooldown")
-                    LogManager.shared.warning("Transposition duplicate profile blocked: @\(detected)", category: .general)
-                    showAIScreenErrorFeedback()
-                    return
-                }
+
+            var openAIQueries = analysis.profileSearchQueries
+                .filter { AIScreenPostDetectionService.shared.isPlausibleAuthorUsername($0) }
+            if openAIQueries.isEmpty, let displayFallback = analysis.displayNameSearchQuery,
+               AIScreenPostDetectionService.shared.isPlausibleAuthorUsername(displayFallback) {
+                openAIQueries = [displayFallback]
             }
+            let localAuthorQueries = authorOCR.authorCandidates
+            let profileQueries = AIScreenPostDetectionService.shared.rankedAuthorSearchQueries(
+                openAI: openAIQueries,
+                localTop: localAuthorQueries
+            )
+            guard !profileQueries.isEmpty else { throw AIScreenDetectionError.noUsername }
+
+            print("🤖 [VISUAL MATCH] Author resolve openAI=\(openAIQueries) localTop=\(localAuthorQueries) ranked=\(profileQueries)")
+            LogManager.shared.info(
+                "Visual match authors openAI=\(openAIQueries.joined(separator: ", ")) localTop=\(localAuthorQueries.joined(separator: ", ")) ranked=\(profileQueries.joined(separator: ", "))",
+                category: .general
+            )
 
             let (selectedProfile, candidates) = try await resolveAIScreenProfileAndCandidates(
                 analysis: analysis,
                 profileQueries: profileQueries
             )
+            guard !isTranspositionDuplicateProfile(selectedProfile.username) else {
+                print("🚫 [TRANSPOSITION] Duplicate profile @\(selectedProfile.username) blocked by cooldown")
+                LogManager.shared.warning("Transposition duplicate profile blocked: @\(selectedProfile.username)", category: .general)
+                showAIScreenErrorFeedback()
+                return
+            }
             markTranspositionProfileUsed(selectedProfile.username)
+            // Feedback only after validated Instagram resolve.
             showAIScreenDetectedProfileFeedback(selectedProfile.username)
             let match: AIScreenResolvedPostMatch
             do {
@@ -1903,7 +1939,9 @@ struct PerformanceView: View {
 
     private func makeVisualMatchFallback(from candidates: [InstagramMediaItem]) async throws -> AIScreenResolvedPostMatch {
         guard !candidates.isEmpty else { throw AIScreenDetectionError.noCandidates }
-        let fallbackIndex = min(max(candidates.count / 2, 0), candidates.count - 1)
+        let fallbackIndex = candidates.contains(where: { $0.isPinned == true })
+            ? 0
+            : min(max(candidates.count / 2, 0), candidates.count - 1)
         let item = candidates[fallbackIndex]
         let image = await downloadImage(from: item.imageURL) ?? UIImage()
         return AIScreenResolvedPostMatch(
@@ -1935,13 +1973,37 @@ struct PerformanceView: View {
         transpositionCooldownUntil = Date().addingTimeInterval(120).timeIntervalSince1970
     }
 
-    private func mergedTranspositionQueries(openAI: [String], localOCR: [String]) -> [String] {
-        var seen = Set<String>()
-        return (openAI + localOCR)
-            .map { normalizedTranspositionUsername($0) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-            .prefix(8)
-            .map { $0 }
+    private func transpositionUsernameSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        let a = normalizedTranspositionUsername(lhs)
+        let b = normalizedTranspositionUsername(rhs)
+        guard !a.isEmpty, !b.isEmpty else { return 0 }
+        if a == b { return 1 }
+        if a.hasPrefix(b) || b.hasPrefix(a) {
+            let shorter = Double(min(a.count, b.count))
+            let longer = Double(max(a.count, b.count))
+            return shorter / longer
+        }
+        let distance = transpositionLevenshtein(a, b)
+        let longer = Double(max(a.count, b.count))
+        return max(0, 1 - (Double(distance) / longer))
+    }
+
+    private func transpositionLevenshtein(_ lhs: String, _ rhs: String) -> Int {
+        let a = Array(lhs)
+        let b = Array(rhs)
+        guard !a.isEmpty else { return b.count }
+        guard !b.isEmpty else { return a.count }
+        var previous = Array(0...b.count)
+        var current = Array(repeating: 0, count: b.count + 1)
+        for i in 1...a.count {
+            current[0] = i
+            for j in 1...b.count {
+                let cost = a[i - 1] == b[j - 1] ? 0 : 1
+                current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+            }
+            swap(&previous, &current)
+        }
+        return previous[b.count]
     }
 
     @MainActor
@@ -2183,6 +2245,7 @@ struct PerformanceView: View {
             let screenPhoto = try await AIScreenCameraCaptureService.shared.capturePhoto(
                 zoom: CGFloat(integrations.aiScreenCameraZoom)
             )
+            signalTranspositionPhotoCaptured()
 
             showAIScreenConfirmation("Foto...")
             showAIScreenConfirmation("AI...")
@@ -2411,23 +2474,48 @@ struct PerformanceView: View {
     ) async throws -> (InstagramProfile, [InstagramMediaItem]) {
         var lastError: Error?
         var triedUserIds = Set<String>()
-        let queries = profileQueries ?? analysis.profileSearchQueries
+        let queries = (profileQueries ?? analysis.profileSearchQueries)
+            .map { normalizedTranspositionUsername($0) }
+            .filter { AIScreenPostDetectionService.shared.isPlausibleAuthorUsername($0) }
+        guard !queries.isEmpty else { throw AIScreenDetectionError.noUsername }
+
         for query in queries.prefix(6) {
             do {
                 print("🤖 [VISUAL MATCH] Searching Instagram for query='\(query)'")
                 let results = try await instagram.searchUsers(query: query)
-                print("🤖 [VISUAL MATCH] Search query='\(query)' returned \(results.count) result(s): \(results.prefix(4).map { "@\($0.username)" }.joined(separator: ", "))")
+                print("🤖 [VISUAL MATCH] Search query='\(query)' returned \(results.count) result(s): \(results.prefix(6).map { "@\($0.username)" }.joined(separator: ", "))")
                 LogManager.shared.info(
-                    "Visual match search '\(query)' returned \(results.count): \(results.prefix(4).map { "@\($0.username)" }.joined(separator: ", "))",
+                    "Visual match search '\(query)' returned \(results.count): \(results.prefix(6).map { "@\($0.username)" }.joined(separator: ", "))",
                     category: .general
                 )
-                let ordered = results.sorted { left, right in
-                    let exactLeft = left.username.lowercased() == query.lowercased()
-                    let exactRight = right.username.lowercased() == query.lowercased()
-                    return exactLeft && !exactRight
+
+                let requireExact = query.count < 8
+                let accepted = results
+                    .map { result -> (result: UserSearchResult, score: Double, exact: Bool)? in
+                        let username = normalizedTranspositionUsername(result.username)
+                        let exact = username == query
+                        let score = transpositionUsernameSimilarity(query, username)
+                        if requireExact {
+                            guard exact else { return nil }
+                        } else {
+                            // Long queries may allow one high-similarity fuzzy, never weak fuzzy.
+                            guard exact || score >= 0.9 else { return nil }
+                        }
+                        return (result, score, exact)
+                    }
+                    .compactMap { $0 }
+                    .sorted { lhs, rhs in
+                        if lhs.exact != rhs.exact { return lhs.exact && !rhs.exact }
+                        return lhs.score > rhs.score
+                    }
+
+                if accepted.isEmpty {
+                    print("🤖 [VISUAL MATCH] No exact/high-confidence username match for query='\(query)'")
+                    continue
                 }
 
-                for result in ordered.prefix(4) {
+                for entry in accepted.prefix(3) {
+                    let result = entry.result
                     guard triedUserIds.insert(result.userId).inserted else { continue }
                     guard let profile = try await instagram.getProfileInfo(
                         userId: result.userId,
@@ -2444,8 +2532,11 @@ struct PerformanceView: View {
                     }
                     let candidates = try await loadAIScreenCandidates(from: profile)
                     if !candidates.isEmpty {
-                        print("🤖 [AI SCREEN] Using @\(profile.username) with \(candidates.count) candidates")
-                        LogManager.shared.info("Visual match using @\(profile.username) with \(candidates.count) candidates", category: .general)
+                        print("🤖 [AI SCREEN] Using @\(profile.username) exact=\(entry.exact) score=\(String(format: "%.2f", entry.score)) with \(candidates.count) candidates")
+                        LogManager.shared.info(
+                            "Visual match using @\(profile.username) exact=\(entry.exact) score=\(String(format: "%.2f", entry.score)) with \(candidates.count) candidates",
+                            category: .general
+                        )
                         return (profile, candidates)
                     }
                     print("🤖 [AI SCREEN] @\(profile.username) has no candidate posts, trying next result")
@@ -2467,16 +2558,18 @@ struct PerformanceView: View {
     }
 
     private func loadAIScreenCandidates(from selectedProfile: InstagramProfile) async throws -> [InstagramMediaItem] {
-        let limit = integrations.aiScreenDetectionMode == .visualMatch ? 12 : min(max(integrations.aiScreenCandidateLimit, 12), 48)
+        // Visual Match: keep first grid page only (12) to limit private-API pagination.
+        let isVisualMatch = integrations.aiScreenDetectionMode == .visualMatch
+        let limit = isVisualMatch ? 12 : min(max(integrations.aiScreenCandidateLimit, 12), 48)
         var candidates = selectedProfile.cachedMediaItems
         var next = selectedProfile.cachedNextMaxId
         var pages = 0
+        let maxPages = isVisualMatch ? 0 : 2
 
-        while integrations.aiScreenDetectionMode != .visualMatch,
-              candidates.count < limit,
+        while candidates.count < limit,
               let cursor = next,
               !cursor.isEmpty,
-              pages < 2 {
+              pages < maxPages {
             let (items, nextCursor) = try await instagram.getUserMediaItems(
                 userId: selectedProfile.userId,
                 amount: 18,
@@ -2493,7 +2586,25 @@ struct PerformanceView: View {
             let key = item.mediaId.isEmpty ? item.imageURL : mediaIdKey(item.mediaId)
             return seen.insert(key).inserted
         }
-        return Array(deduped.prefix(limit))
+        // Keep Instagram feed order for Visual Match so grid position matches the profile.
+        // (Feed already returns real pins first; forced re-sort scrambled positions before.)
+        if isVisualMatch {
+            return Array(deduped.prefix(limit))
+        }
+        return Array(pinnedFirstAIScreenCandidates(deduped).prefix(limit))
+    }
+
+    private func pinnedFirstAIScreenCandidates(_ items: [InstagramMediaItem]) -> [InstagramMediaItem] {
+        items.enumerated()
+            .sorted { lhs, rhs in
+                let leftPinned = lhs.element.isPinned == true
+                let rightPinned = rhs.element.isPinned == true
+                if leftPinned != rightPinned {
+                    return leftPinned && !rightPinned
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
     }
 
     @MainActor
@@ -2580,56 +2691,15 @@ struct PerformanceView: View {
         ZStack {
             performanceRoot
             spectatorOverlay
+            // Instapick floating card mounts inside PostScrollView (above the IG chrome),
+            // not here — a PerformanceView overlay would cover/replace the feed.
         }
             .onChange(of: volumeMonitor.upCount) { _ in
-                if integrations.aiScreenDetectionEnabled {
-                    if transpositionErrorHapticsActive {
-                        stopTranspositionErrorHaptics()
-                        aiScreenLastTriggerTime = .distantPast
-                    }
-                    guard !isAIScreenDetectionRunning else {
-                        print("🤖 [AI SCREEN] Ignored — detection already running")
-                        return
-                    }
-                    guard Date().timeIntervalSince(aiScreenLastTriggerTime) > 2.0 else {
-                        print("🤖 [AI SCREEN] Ignored — debounce")
-                        return
-                    }
-                    aiScreenLastTriggerTime = Date()
-                    Task { await advanceAIScreenRevealFlow() }
-                    return
-                }
-
-                guard spectatorProfile == nil else {
-                    print("📷 [OCR] Blocked — spectator profile is visible")
-                    return
-                }
-                guard !showingExplore else {
-                    print("📷 [OCR] Blocked — Explore is open")
-                    return
-                }
-                guard !followingMagic.transferEnabled || followingMagic.transferOffset == 0 else {
-                    print("📷 [OCR] Blocked — Transfer offset saved, volume UP reserved for inflation")
-                    return
-                }
-                guard !ocrUsedInSession else {
-                    print("📷 [OCR] Blocked — already used once in this Performance session")
-                    return
-                }
-                // OCR is active when any slot has .ocr as its source, the legacy
-                // top-level mode is set, OR the active Post Prediction set uses OCR.
-                let noteOcr     = noteFeatureEnabled && (integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr")
-                let bioOcr      = bioFeatureEnabled && (integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr")
-                let postPredOcr = ppTopInputMode == "ocr" || activePostPredictionInputMethod == .ocr
-                guard noteOcr || bioOcr || postPredOcr else { return }
-                if ocrCoordinator.isRunning {
-                    ocrCoordinator.stop()
-                    print("📷 [OCR] Stopped by volume UP (toggle off)")
-                } else {
-                    let config = OCRConfiguration.fromUserDefaults()
-                    ocrCoordinator.start(config: config)
-                    print("📷 [OCR] Started by volume UP — note=\(noteOcr) bio=\(bioOcr) postPrediction=\(postPredOcr)")
-                }
+                handleVolumeUpForOCRAndAIScreen()
+            }
+            .onChange(of: volumeMonitor.downCount) { _ in
+                // Instapick: volume DOWN while on a color page arms the card overlay.
+                _ = instapickSettings.tryBeginOverlayFromVolume()
             }
             .onChange(of: ocrCoordinator.recognizedText) { text in
                 guard let text = text, !text.isEmpty else { return }
@@ -2683,6 +2753,55 @@ struct PerformanceView: View {
                     }
                 }
             }
+    }
+
+    private func handleVolumeUpForOCRAndAIScreen() {
+        if integrations.aiScreenDetectionEnabled {
+            if transpositionErrorHapticsActive {
+                stopTranspositionErrorHaptics()
+                aiScreenLastTriggerTime = .distantPast
+            }
+            guard !isAIScreenDetectionRunning else {
+                print("🤖 [AI SCREEN] Ignored — detection already running")
+                return
+            }
+            guard Date().timeIntervalSince(aiScreenLastTriggerTime) > 2.0 else {
+                print("🤖 [AI SCREEN] Ignored — debounce")
+                return
+            }
+            aiScreenLastTriggerTime = Date()
+            Task { await advanceAIScreenRevealFlow() }
+            return
+        }
+
+        guard spectatorProfile == nil else {
+            print("📷 [OCR] Blocked — spectator profile is visible")
+            return
+        }
+        guard !showingExplore else {
+            print("📷 [OCR] Blocked — Explore is open")
+            return
+        }
+        guard !followingMagic.transferEnabled || followingMagic.transferOffset == 0 else {
+            print("📷 [OCR] Blocked — Transfer offset saved, volume UP reserved for inflation")
+            return
+        }
+        guard !ocrUsedInSession else {
+            print("📷 [OCR] Blocked — already used once in this Performance session")
+            return
+        }
+        let noteOcr     = noteFeatureEnabled && (integrations.ocrSlot(for: "note") != nil || noteTopInputMode == "ocr")
+        let bioOcr      = bioFeatureEnabled && (integrations.ocrSlot(for: "bio")  != nil || bioTopInputMode  == "ocr")
+        let postPredOcr = ppTopInputMode == "ocr" || activePostPredictionInputMethod == .ocr
+        guard noteOcr || bioOcr || postPredOcr else { return }
+        if ocrCoordinator.isRunning {
+            ocrCoordinator.stop()
+            print("📷 [OCR] Stopped by volume UP (toggle off)")
+        } else {
+            let config = OCRConfiguration.fromUserDefaults()
+            ocrCoordinator.start(config: config)
+            print("📷 [OCR] Started by volume UP — note=\(noteOcr) bio=\(bioOcr) postPrediction=\(postPredOcr)")
+        }
     }
 
     @ViewBuilder
@@ -2942,6 +3061,9 @@ struct PerformanceView: View {
             // The ring from the previous trick is cleared so the magician can see
             // a fresh confirmation for the current trick.
             postPredRevealRingActive = false
+            coverTypingBioReadyForPP = false
+            localComboBioPendingUntil = 0
+            localComboEarliestRevealAt = 0
 
             configureTranspositionVolumeForEntry()
             configureTranspositionBlackScreenForEntry()
@@ -3032,6 +3154,31 @@ struct PerformanceView: View {
         .onChange(of: integrations.aiScreenDetectionEnabled) { enabled in
             guard !enabled else { return }
             resetTranspositionBlackScreen()
+        }
+        .onChange(of: ppTestMode.isEnabled) { enabled in
+            // Instapick local carousel follows the app-wide Performance Test Mode.
+            if enabled && instapickSettings.isEnabled {
+                instapickSettings.preparePerformanceSession()
+                paintInstapickCarouselLocally()
+            } else if !enabled {
+                removeInstapickCarouselLocally()
+                if instapickSettings.isLiveReady {
+                    paintInstapickCarouselLocally()
+                }
+            }
+        }
+        .onChange(of: instapickSettings.isEnabled) { enabled in
+            if enabled && (ppTestMode.isActive || instapickSettings.isLiveReady) {
+                paintInstapickCarouselLocally()
+            } else if !enabled {
+                removeInstapickCarouselLocally()
+            }
+        }
+        .onChange(of: instapickSettings.swappedSlots) { _ in
+            paintInstapickCarouselLocally()
+        }
+        .onChange(of: instapickSettings.carouselMediaId) { _ in
+            paintInstapickCarouselLocally()
         }
         .onChange(of: scenePhase) { phase in
             // Pause / resume full-profile pre-loader with app lifecycle.
@@ -3193,7 +3340,7 @@ struct PerformanceView: View {
                 newMediaIds.insert(mediaIdKey(item.mediaId))
             }
             let existingTail = allMediaURLs.filter { url -> Bool in
-                guard !url.hasPrefix("reveal://"), !url.hasPrefix("amnesia://carousel/") else { return false }
+                guard !ProfileMediaReconciler.isOverlayURL(url) else { return false }
                 guard let item = mediaItemsByURL[url] else { return false }
                 return !newMediaIds.contains(item.mediaId) && !newMediaIds.contains(mediaIdKey(item.mediaId))
             }
@@ -3364,7 +3511,9 @@ struct PerformanceView: View {
                 }
 
                 if bioActive && ppActive {
-                    let delaySeconds: UInt64 = 4
+                    // Same settle window as Local Bio + PP combo: give Instagram time to
+                    // push the new biography before unarchives make the grid change.
+                    let delaySeconds = combinedBioPostPredictionDelay
                     print("⏳ [COVER] Waiting \(delaySeconds)s between Biography and Post Prediction")
                     try? await Task.sleep(nanoseconds: delaySeconds * 1_000_000_000)
                 }
@@ -3450,6 +3599,7 @@ struct PerformanceView: View {
             stopApiPolling()
             cancelCombinedBioPostPredictionQueue(reason: "left Performance")
             clearPostPredictionTestModeIfNeeded()
+            instapickSettings.endPerformanceSession()
 
             // Clear the performance-context pause flag regardless of how we got here.
             uploadManager.isPausedByPerformance = false
@@ -3494,6 +3644,7 @@ struct PerformanceView: View {
             stopApiPolling()
             cancelCombinedBioPostPredictionQueue(reason: "Performance tab changed")
             clearPostPredictionTestModeIfNeeded()
+            instapickSettings.endPerformanceSession()
             uploadManager.isPausedByPerformance = false
             if didAutoPauseUpload && uploadManager.isPaused {
                 uploadManager.autoResumePending = true
@@ -3508,6 +3659,8 @@ struct PerformanceView: View {
         if let pic = newPic {
             guard let url = profile?.profilePicURL, !url.isEmpty else { return }
             cachedImages[url] = pic
+            ProfileCacheService.shared.saveImage(pic, forURL: url)
+            ProfileCacheService.shared.saveOwnProfilePic(pic, cdnURL: url)
             print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
             LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
         } else {
@@ -3582,12 +3735,19 @@ struct PerformanceView: View {
         }
         let urlsToKeep = Set(allMediaURLs)
         mediaItemsByURL = mediaItemsByURL.filter { key, _ in
-            urlsToKeep.contains(key) || key.hasPrefix("reveal://") || key.hasPrefix("amnesia://carousel/")
+            urlsToKeep.contains(key)
+                || key.hasPrefix("reveal://")
+                || key.hasPrefix("amnesia://carousel/")
+                || key.hasPrefix("instapick://")
         }
         revealDates = revealDates.filter { key, _ in urlsToKeep.contains(key) }
         paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
+        paintInstapickCarouselLocally()
         let missing = mergedURLs.filter {
-            cachedImages[$0] == nil && !$0.hasPrefix("reveal://") && !$0.hasPrefix("amnesia://carousel/")
+            cachedImages[$0] == nil
+                && !$0.hasPrefix("reveal://")
+                && !$0.hasPrefix("amnesia://carousel/")
+                && !$0.hasPrefix("instapick://")
         }
         if !missing.isEmpty { downloadImagesForURLs(missing) }
         print("🔄 [PERF] Grid updated locally — \(mergedURLs.count) items (no API call)")
@@ -4221,8 +4381,17 @@ struct PerformanceView: View {
     private func completeLocalBioPostPredictionBioSend(success: Bool, source: String) {
         if success {
             armLocalBioPostPredictionCombo(source: source)
+            if source.contains("cover-typing") {
+                coverTypingBioReadyForPP = true
+                UserDefaults.standard.set(true, forKey: "local_combo_cover_typing_bio_ready")
+                print("🔗 [LOCAL COMBO] Cover Typing bio ready — Lockscreen PP may proceed after settle")
+            }
         } else {
             localComboEarliestRevealAt = 0
+            if source.contains("cover-typing") {
+                coverTypingBioReadyForPP = false
+                UserDefaults.standard.set(false, forKey: "local_combo_cover_typing_bio_ready")
+            }
             print("🔗 [LOCAL COMBO] Bio update failed by \(source) — PP combo not armed")
             LogManager.shared.warning("Local Bio + PP not armed because bio update failed by \(source)", category: .general)
         }
@@ -4881,17 +5050,6 @@ struct PerformanceView: View {
         let lastKey = "last_biography_text"
         let dateKey = "last_biography_sent_date"
 
-        // Match OCR/API dedup policy: avoid reposting the same captured word within 2h.
-        if !ppTestMode.isActive, let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
-            let sentDate = ud.object(forKey: dateKey) as? Date ?? .distantPast
-            let hoursSince = Date().timeIntervalSince(sentDate) / 3600
-            if hoursSince < 2 {
-                print("⏭️ [COVER] Bio dedup: same word sent \(String(format: "%.0f", hoursSince * 60))m ago")
-                return
-            }
-            ud.removeObject(forKey: lastKey)
-        }
-
         // Use Cover Typing as text1/word. Other API-polled slots can still resolve.
         var resolvedValues = await integrations.fetchTemplatePlaceholders(for: "bio")
         resolvedValues["text1"] = trimmed
@@ -4900,19 +5058,37 @@ struct PerformanceView: View {
         let acrosticComposed = applyAcrosticIfNeeded(inputForBio)
         let final = truncateAtWordBoundary(acrosticComposed, limit: 150)
 
+        // Match OCR/API dedup policy: avoid reposting the same captured word within 2h.
+        // If Lockscreen PP is waiting on this bio, still release it (bio already on Instagram).
+        if !ppTestMode.isActive, let lastSent = ud.string(forKey: lastKey), lastSent == trimmed {
+            let sentDate = ud.object(forKey: dateKey) as? Date ?? .distantPast
+            let hoursSince = Date().timeIntervalSince(sentDate) / 3600
+            if hoursSince < 2 {
+                print("⏭️ [COVER] Bio dedup: same word sent \(String(format: "%.0f", hoursSince * 60))m ago")
+                pinLocalBiography(final)
+                // Release any Lockscreen PP that is waiting on this Cover Typing bio.
+                completeLocalBioPostPredictionBioSend(success: true, source: "cover-typing-bio")
+                return
+            }
+            ud.removeObject(forKey: lastKey)
+        }
+
         if ppTestMode.isActive {
             applyTestBiography(final)
+            completeLocalBioPostPredictionBioSend(success: true, source: "cover-typing-bio")
             LogManager.shared.info("TEST MODE — Cover Typing bio painted locally", category: .general)
             return
         }
 
         guard instagram.isLoggedIn && !instagram.isLocked else {
             print("⏭️ [COVER] Bio skipped: not logged in or locked")
+            completeLocalBioPostPredictionBioSend(success: false, source: "cover-typing-bio")
             return
         }
         guard !UploadManager.shared.isActive else {
             print("⏭️ [COVER] Bio skipped: upload active")
             LogManager.shared.warning("Cover Typing bio skipped: upload active", category: .general)
+            completeLocalBioPostPredictionBioSend(success: false, source: "cover-typing-bio")
             return
         }
 
@@ -4923,6 +5099,9 @@ struct PerformanceView: View {
             let remaining = Int(interfaceCaptureCooldown - timeSinceLast)
             print("⏭️ [COVER] Bio cooldown: \(remaining)s remaining")
             LogManager.shared.warning("Cover Typing bio blocked: cooldown \(remaining)s remaining", category: .general)
+            // Previous bio POST is recent — unblock Lockscreen PP instead of leaving it hung.
+            pinLocalBiography(final)
+            completeLocalBioPostPredictionBioSend(success: true, source: "cover-typing-bio")
             return
         }
 
@@ -5480,12 +5659,103 @@ struct PerformanceView: View {
         print("🎭 [AMNESIA] Painted local \(revealed ? "full" : "short") carousel (\(imageCount) image(s))")
     }
 
+    /// Paints Instapick into the grid (test `instapick://` or live parent mediaId).
+    /// Re-pins across Instagram refresh so new posts don't shove the carousel away.
+    @MainActor
+    private func paintInstapickCarouselLocally() {
+        guard instapickSettings.isEnabled, instapickSettings.bundledAssetsAvailable else { return }
+        let useTest = instapickSettings.isUsingLocalTestCarousel
+        let useLive = instapickSettings.isLiveReady && !useTest
+        guard useTest || useLive else { return }
+
+        let images = instapickSettings.visibleCarouselImages()
+        guard images.count == 5 else {
+            print("🃏 [INSTAPICK] Paint skipped — expected 5 images, got \(images.count)")
+            return
+        }
+
+        let mediaId = useLive
+            ? (instapickSettings.visibleLiveMediaId ?? InstapickSettings.testMediaId)
+            : InstapickSettings.testMediaId
+        let fallbackURL = "instapick://carousel/\(mediaId)/cover"
+        let existingURL = allMediaURLs.first { url in
+            mediaItemsByURL[url]?.mediaId == mediaId
+                || url.contains(mediaId)
+                || url.hasPrefix("instapick://carousel/")
+        }
+        let gridURL = existingURL ?? fallbackURL
+        // Prefer persisted pin so newer Instagram posts don't bury Instapick.
+        if instapickSettings.gridPinIndex == nil,
+           let idx = existingURL.flatMap({ allMediaURLs.firstIndex(of: $0) }) {
+            instapickSettings.rememberGridPinIndex(idx)
+        }
+        let insertIndex = instapickSettings.gridPinIndex
+            ?? existingURL.flatMap { allMediaURLs.firstIndex(of: $0) }
+            ?? amnesiaLocalInsertionIndex()
+
+        // Drop stale synthetic overlays but keep a real CDN URL if sync already found it.
+        allMediaURLs.removeAll { $0.hasPrefix("instapick://carousel/") && $0 != gridURL }
+
+        let childURLs = (0..<images.count).map { "instapick://carousel/\(mediaId)/\($0)" }
+        for (index, url) in childURLs.enumerated() {
+            cachedImages[url] = images[index]
+        }
+        cachedImages[gridURL] = images[0]
+
+        let existingItem = mediaItemsByURL[gridURL]
+        mediaItemsByURL[gridURL] = InstagramMediaItem(
+            id: mediaId,
+            mediaId: mediaId,
+            imageURL: gridURL,
+            videoURL: nil,
+            caption: existingItem?.caption ?? "Instapick",
+            takenAt: existingItem?.takenAt ?? Date(),
+            likeCount: existingItem?.likeCount,
+            commentCount: existingItem?.commentCount,
+            mediaType: .carousel,
+            carouselImageURLs: childURLs,
+            ownerUsername: existingItem?.ownerUsername ?? profile?.username
+        )
+
+        if let idx = allMediaURLs.firstIndex(of: gridURL) {
+            if idx != insertIndex {
+                allMediaURLs.remove(at: idx)
+                allMediaURLs.insert(gridURL, at: min(insertIndex, allMediaURLs.count))
+            }
+            instapickSettings.rememberGridPinIndex(min(insertIndex, allMediaURLs.count - 1))
+        } else {
+            let clamped = min(insertIndex, allMediaURLs.count)
+            allMediaURLs.insert(gridURL, at: clamped)
+            instapickSettings.rememberGridPinIndex(clamped)
+        }
+
+        print("🃏 [INSTAPICK] Painted \(useLive ? "live" : "test") carousel @\(instapickSettings.gridPinIndex ?? -1) (swapped: \(instapickSettings.swappedSlots.sorted()))")
+    }
+
+    @MainActor
+    private func removeInstapickCarouselLocally() {
+        instapickSettings.activeOverlaySlot = nil
+        // Only strip synthetic overlays — keep the real Instagram CDN post when live.
+        let removed = allMediaURLs.filter { $0.hasPrefix("instapick://") }
+        allMediaURLs.removeAll { $0.hasPrefix("instapick://") }
+        for url in removed {
+            mediaItemsByURL.removeValue(forKey: url)
+            cachedImages.removeValue(forKey: url)
+        }
+        mediaItemsByURL = mediaItemsByURL.filter { $0.value.mediaId != InstapickSettings.testMediaId }
+        if !removed.isEmpty {
+            print("🃏 [INSTAPICK] Removed local test carousel overlay")
+        }
+    }
+
     private func amnesiaLocalInsertionIndex() -> Int {
         var maxDate: Date = .distantPast
         var maxDateIndex = 0
 
         for (index, url) in allMediaURLs.enumerated() {
+            // Skip synthetic carousel overlays; reveal:// placeholders still count for dating.
             guard !url.hasPrefix("amnesia://carousel/"),
+                  !url.hasPrefix("instapick://"),
                   let date = url.hasPrefix("reveal://") ? revealDates[url] : mediaItemsByURL[url]?.takenAt else {
                 continue
             }
@@ -5514,7 +5784,8 @@ struct PerformanceView: View {
 
     private func mediaIdForGridURL(_ url: String) -> String? {
         if let revealId = revealMediaId(from: url) { return revealId }
-        guard !url.hasPrefix("amnesia://carousel/") else { return nil }
+        guard !url.hasPrefix("amnesia://carousel/"),
+              !url.hasPrefix("instapick://") else { return nil }
         return mediaItemsByURL[url]?.mediaId
     }
 
@@ -5616,7 +5887,7 @@ struct PerformanceView: View {
            let maxRevealDate = positionedRevealURLs.compactMap({ dateByURL[$0] }).max(),
            minRevealDate < maxRevealDate {
             let realPostInside = baseURLs.contains { url in
-                guard !url.hasPrefix("reveal://"), !url.hasPrefix("amnesia://"),
+                guard !ProfileMediaReconciler.isOverlayURL(url),
                       let d = mediaItemsByURL[url]?.takenAt else { return false }
                 return d > minRevealDate && d < maxRevealDate
             }
@@ -5961,11 +6232,15 @@ struct PerformanceView: View {
             // Drop stale CDN entries; preserve reveal:// (local-only placeholders).
             let activeURLs = Set(cached.cachedMediaURLs)
             mediaItemsByURL = mediaItemsByURL.filter { key, _ in
-                activeURLs.contains(key) || key.hasPrefix("reveal://") || key.hasPrefix("amnesia://carousel/")
+                activeURLs.contains(key)
+                    || key.hasPrefix("reveal://")
+                    || key.hasPrefix("amnesia://carousel/")
+                    || key.hasPrefix("instapick://")
             }
             for item in cached.cachedMediaItems + cached.cachedTaggedItems { mediaItemsByURL[item.imageURL] = item }
             persistExistingImagesByMediaId(cached.cachedMediaItems + cached.cachedReelItems + cached.cachedTaggedItems)
             paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
+            paintInstapickCarouselLocally()
 
             loadCachedImages()
             warmSecondaryTabImagesFromDisk(for: cached)
@@ -6414,6 +6689,7 @@ struct PerformanceView: View {
                let pic = await downloadImage(from: working.profilePicURL) {
                 cachedImages[working.profilePicURL] = pic
                 ProfileCacheService.shared.saveImage(pic, forURL: working.profilePicURL)
+                ProfileCacheService.shared.saveOwnProfilePic(pic, cdnURL: working.profilePicURL)
             }
 
             // Remember whether all pages are already loaded so pagination won't
@@ -6917,16 +7193,33 @@ struct PerformanceView: View {
 
                 // ── Bridge CDN URL rotation for the profile pic ────────────────────
                 // Instagram rotates CDN query-string tokens on every profile fetch.
-                // Copy the cached image to the new URL key BEFORE updating self.profile
-                // so the header never flashes a blank/placeholder between the two URLs.
+                // Only bridge when the CDN *asset path* is unchanged (token rotation) or
+                // we have a pending local upload. If the path changed, the user (or IG)
+                // replaced the photo — do NOT reuse own_profile_pic or we'd show a stale face.
                 let oldPicURL = self.profile?.profilePicURL ?? ""
                 let newPicURL = mergedProfile.profilePicURL
                 if !newPicURL.isEmpty, newPicURL != oldPicURL {
-                    let bridged = cachedImages[oldPicURL]
-                        ?? ProfileCacheService.shared.loadImage(forURL: oldPicURL)
-                    if let img = bridged {
-                        cachedImages[newPicURL] = img
-                        print("⚡️ [PERF] Profile pic bridged old→new CDN URL — no blank frame")
+                    let oldId = ProfileCacheService.profilePicCDNIdentity(for: oldPicURL)
+                    let newId = ProfileCacheService.profilePicCDNIdentity(for: newPicURL)
+                    let sameCDNAsset = !oldId.isEmpty && oldId == newId
+                    let hasPendingUpload = ProfileCacheService.shared.pendingProfilePic != nil
+                    if sameCDNAsset || hasPendingUpload {
+                        let bridged = cachedImages[oldPicURL]
+                            ?? ProfileCacheService.shared.loadImage(forURL: oldPicURL)
+                            ?? (sameCDNAsset ? ProfileCacheService.shared.loadOwnProfilePic() : nil)
+                            ?? ProfileCacheService.shared.pendingProfilePic
+                        if let img = bridged {
+                            cachedImages[newPicURL] = img
+                            ProfileCacheService.shared.saveImage(img, forURL: newPicURL)
+                            ProfileCacheService.shared.saveOwnProfilePic(img, cdnURL: newPicURL)
+                            print("⚡️ [PERF] Profile pic bridged old→new CDN URL — no blank frame (sameAsset=\(sameCDNAsset) pending=\(hasPendingUpload))")
+                        }
+                    } else {
+                        // Real photo change (e.g. edited in Instagram app). Drop any stale
+                        // mapping under the new URL and force a fresh CDN download below.
+                        cachedImages.removeValue(forKey: newPicURL)
+                        print("🔄 [PERF] Profile pic CDN asset changed — will re-download (not bridging stale own pic)")
+                        LogManager.shared.info("Profile pic CDN asset changed; forcing fresh download", category: .cache)
                     }
                 }
 
@@ -6935,36 +7228,34 @@ struct PerformanceView: View {
                     mergedProfile = profileByReplacingBiography(mergedProfile, biography: localBio)
                 }
 
-                let previousProfileBeforeRefresh = self.profile
-                        self.profile = mergedProfile
+                self.profile = mergedProfile
                 let isManualRefresh = source.hasPrefix("manual")
                 let isAuthoritativeRefresh = isManualRefresh || source == "authoritative_after_archive"
                 let manualRevealIdsBeforeRefresh: Set<String> = isAuthoritativeRefresh
                     ? Set(allMediaURLs.compactMap { revealMediaId(from: $0) })
                     : []
-                let refreshedFirstPageMediaIds = Set(mergedProfile.cachedMediaItems.map { $0.mediaId })
+                // Capture Instagram page-1 payload BEFORE local reconcile mutates the grid.
+                let page1APIItems = mergedProfile.cachedMediaItems
+                let page1EndCursor = mergedProfile.cachedNextMaxId
 
                 if isAuthoritativeRefresh {
-                    let firstPageItems = mergedProfile.cachedMediaItems
-                    let page1Result = ProfileMediaReconciler.applyAuthoritativePageRange(
+                    // Exact Instagram page-1 prefix — ghosts in the first slots drop here.
+                    let page1Result = ProfileMediaReconciler.applyExactFetchedPrefix(
                         currentURLs: previousGridURLsForRefresh,
                         currentItemsByURL: previousItemsByURLForRefresh,
-                        freshItems: firstPageItems,
-                        startCursor: nil,
-                        endCursor: mergedProfile.cachedNextMaxId,
-                        protectedMediaIds: refreshedFirstPageMediaIds
+                        freshItems: page1APIItems,
+                        endCursor: page1EndCursor
                     )
                     let authoritativeItems = page1Result.urls.compactMap { page1Result.itemsByURL[$0] }
-                    let authoritativeCursor = mergedProfile.cachedNextMaxId
 
                     mergedProfile.cachedMediaItems = authoritativeItems
                     mergedProfile.cachedMediaURLs = authoritativeItems.map(\.imageURL)
-                    mergedProfile.cachedNextMaxId = authoritativeCursor
+                    mergedProfile.cachedNextMaxId = page1EndCursor
                     self.profile = mergedProfile
 
-                    if page1Result.removedCount > 0 || page1Result.replacedURLCount > 0 {
-                        print("🧭 [GRID AUTH] Page 1 reconciled — +\(page1Result.appendedCount), -\(page1Result.removedCount), url↻\(page1Result.replacedURLCount), protected:\(page1Result.protectedCount)")
-                        LogManager.shared.info("Page 1 reconciled: +\(page1Result.appendedCount), -\(page1Result.removedCount), replaced=\(page1Result.replacedURLCount)", category: .general)
+                    if page1Result.removedCount > 0 || page1Result.replacedURLCount > 0 || page1Result.appendedCount > 0 {
+                        print("🧭 [GRID AUTH] Page 1 exact prefix — +\(page1Result.appendedCount), -\(page1Result.removedCount), url↻\(page1Result.replacedURLCount)")
+                        LogManager.shared.info("Page 1 exact prefix: +\(page1Result.appendedCount), -\(page1Result.removedCount), replaced=\(page1Result.replacedURLCount)", category: .general)
                     }
 
                     let previousGridURLsBeforeAuthoritative = previousGridURLsForRefresh
@@ -6974,7 +7265,9 @@ struct PerformanceView: View {
                     // preserved — Instagram hasn't indexed them yet (CDN propagation delay).
                     // applyAuthoritativeMediaSnapshot wipes allMediaURLs, so capture dates
                     // and URLs before calling it, then re-insert afterwards.
-                    let authIds = Set(authoritativeItems.flatMap { [$0.mediaId, mediaIdKey($0.mediaId)] })
+                    // Confirm reveals only against Instagram's fresh page-1 payload,
+                    // not the older local tail kept after exact-prefix reconcile.
+                    let authIds = Set(page1APIItems.flatMap { [$0.mediaId, mediaIdKey($0.mediaId)] })
                     let confirmedRevealIds   = manualRevealIdsBeforeRefresh.filter {
                         authIds.contains($0) || authIds.contains(mediaIdKey($0))
                     }
@@ -6991,7 +7284,7 @@ struct PerformanceView: View {
                                   !revealURL.hasPrefix("reveal://test-"),
                                   let mediaId = revealMediaId(from: revealURL),
                                   confirmedRevealIds.contains(mediaId) || confirmedRevealIds.contains(mediaIdKey(mediaId)),
-                                  let item = authoritativeItems.first(where: {
+                                  let item = page1APIItems.first(where: {
                                       $0.mediaId == mediaId || mediaIdKey($0.mediaId) == mediaIdKey(mediaId)
                                   }) else { return nil }
                             return (index: index, revealURL: revealURL, item: item)
@@ -6999,7 +7292,7 @@ struct PerformanceView: View {
 
                     applyAuthoritativeMediaSnapshot(
                         items: authoritativeItems,
-                        nextCursor: authoritativeCursor,
+                        nextCursor: page1EndCursor,
                         source: source,
                         clearRevealState: unconfirmedRevealIds.isEmpty
                     )
@@ -7102,6 +7395,7 @@ struct PerformanceView: View {
                 }
                 persistExistingImagesByMediaId(mergedProfile.cachedMediaItems + mergedProfile.cachedReelItems + mergedProfile.cachedTaggedItems)
                 paintAmnesiaCarouselLocally(revealed: amnesiaSettings.isRevealed)
+                paintInstapickCarouselLocally()
                 // If the full refresh already brought reels/tagged, mark them as loaded
                 // so the lazy-tab loader doesn't make redundant API calls.
                 // For reels we also require the full items (with videoURL); without
@@ -7116,7 +7410,7 @@ struct PerformanceView: View {
                 if isAuthoritativeRefresh {
                     var authoritativeProfile = mergedProfile
                     let remoteURLs = allMediaURLs.filter {
-                        !$0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") && !$0.hasPrefix("amnesia://")
+                        !ProfileMediaReconciler.isOverlayURL($0)
                     }
                     let remoteItems = remoteURLs.compactMap { mediaItemsByURL[$0] }
                     authoritativeProfile.cachedMediaURLs = remoteURLs
@@ -7148,6 +7442,7 @@ struct PerformanceView: View {
                    !mergedProfile.profilePicURL.isEmpty {
                     cachedImages[mergedProfile.profilePicURL] = pendingPic
                     ProfileCacheService.shared.saveImage(pendingPic, forURL: mergedProfile.profilePicURL)
+                    ProfileCacheService.shared.saveOwnProfilePic(pendingPic, cdnURL: mergedProfile.profilePicURL)
                     print("⚡️ [PERF] Pending profile pic migrated to new CDN URL — no flash on transition")
                 }
                 // New CDN URL is now in fetchedProfile.profilePicURL → pending override no longer needed.
@@ -7172,17 +7467,32 @@ struct PerformanceView: View {
                 isLoading = false
 
                 // ── Extra-page deep refresh (postPages > 1) ──────────────────────
-                // Fetch pages 2…postPages using the stored cursor.  Each extra page
-                // is paced with a human-speed delay to avoid bot signals.  The safety
-                // gate (.ownProfilePagination) applies to every page independently.
-                // Pass page-1 mediaIds so pinned posts (which have small pks even
-                // though they appear first) are never removed by the range check.
+                // Fetch pages 2…postPages; each page extends the exact Instagram prefix.
+                var syncedFetchedItems = page1APIItems
+                var syncedEndCursor = page1EndCursor
                 if postPages > 1 {
-                    await fetchExtraRefreshPages(
+                    let extra = await fetchExtraRefreshPages(
                         postPages: postPages,
                         userId: mergedProfile.userId,
-                        page1MediaIds: refreshedFirstPageMediaIds,
+                        page1Items: page1APIItems,
                         repairMode: repairMode
+                    )
+                    syncedFetchedItems = extra.accumulatedItems
+                    syncedEndCursor = extra.endCursor
+                }
+
+                // Set photos inside the synced window but absent from Instagram → archived.
+                // Protect pending reveal:// mediaIds (Instagram may not have indexed them yet).
+                if isAuthoritativeRefresh {
+                    let pendingRevealKeys = Set(allMediaURLs.compactMap { url -> String? in
+                        guard url.hasPrefix("reveal://"), !url.hasPrefix("reveal://test-") else { return nil }
+                        return revealMediaId(from: url)
+                    })
+                    ProfileMediaReconciler.reconcileSetPhotosMissingFromSyncedFeed(
+                        fetchedKeys: ProfileMediaReconciler.mediaKeys(from: syncedFetchedItems),
+                        syncedWindowEndPk: ProfileMediaReconciler.cursorPK(syncedEndCursor),
+                        userId: mergedProfile.userId,
+                        protectedMediaIds: pendingRevealKeys
                     )
                 }
 
@@ -7257,46 +7567,38 @@ struct PerformanceView: View {
             }
     
     // Sync wrapper for non-async call sites (onRefresh button, header "@" button)
-    /// Fetches post pages 2…postPages and applies them authoritatively to the grid.
-    ///
-    /// **Authoritative range replacement**: each extra page is the Instagram source
-    /// of truth for posts whose pk falls in the half-open range
-    /// `(cursorPkEnd, cursorPkStart)` — that is, newer than the new page cursor
-    /// and older than the previous page cursor.  Items with pk ≤ cursorPkEnd belong
-    /// to later pages and are left untouched.
-    ///
-    /// **Pinned-post protection**: Instagram places pinned posts at the top of
-    /// page 1 even though their pks are much smaller (they are chronologically
-    /// older).  `page1MediaIds` guards these items from being incorrectly removed
-    /// by the range check.
-    ///
-    /// If the safety gate is briefly blocking right after the first-page refresh,
-    /// the function waits up to 30 s for it to clear instead of failing immediately.
+    private struct ExtraRefreshPagesResult {
+        let accumulatedItems: [InstagramMediaItem]
+        let endCursor: String?
+    }
+
+    /// Fetches post pages 2…postPages and applies the accumulated Instagram window
+    /// as an exact grid prefix (same rule as page 1). Older local tail past the
+    /// deepest endCursor is preserved; anything inside the window but missing from
+    /// Instagram is dropped (deleted/archived).
     @MainActor
     private func fetchExtraRefreshPages(
         postPages: Int,
         userId: String,
-        page1MediaIds: Set<String>,
+        page1Items: [InstagramMediaItem],
         repairMode: Bool = false
-    ) async {
-        guard postPages > 1, !userId.isEmpty else { return }
+    ) async -> ExtraRefreshPagesResult {
+        guard postPages > 1, !userId.isEmpty else {
+            return ExtraRefreshPagesResult(accumulatedItems: page1Items, endCursor: nextMaxId)
+        }
 
         let pagesNeeded = postPages - 1   // page 1 already fetched by getProfileInfo
         var fetchedCount = 0
+        var accumulatedItems = page1Items
+        var endCursor = nextMaxId
 
         for _ in 0..<pagesNeeded {
             postManualRefreshProgress(repairMode ? "Repairing page \(fetchedCount + 2)/\(postPages)" : "Syncing page \(fetchedCount + 2)/\(postPages)")
-            // Use the cursor that the previous page returned.
             guard let cursor = nextMaxId, !cursor.isEmpty else {
                 print("📄 [EXTRA PAGES] No cursor — stopping at page \(fetchedCount + 1)")
                 break
             }
 
-            // ── Safety gate with patient wait ────────────────────────────────────
-            // The gate may be briefly blocked right after the first-page refresh
-            // (e.g. "recent feed refresh — 14s"). Wait up to 30 s for it to clear
-            // instead of giving up immediately, since the user explicitly asked for
-            // deeper pagination.
             let gateMaxWaitNs: UInt64 = 30_000_000_000
             var gateWaited: UInt64 = 0
             var gate = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
@@ -7315,7 +7617,6 @@ struct PerformanceView: View {
             }
             InstagramSafetyGate.shared.record(.ownProfilePagination)
 
-            // Human-pacing delay (1.4–2.6 s) before every extra page.
             let humanDelay = UInt64.random(in: 1_400_000_000...2_600_000_000)
             try? await Task.sleep(nanoseconds: humanDelay)
 
@@ -7332,31 +7633,30 @@ struct PerformanceView: View {
                 }
 
                 fetchedCount += 1
+                accumulatedItems.append(contentsOf: newItems)
+                endCursor = newCursor
                 print("📄 [EXTRA PAGES] Page \(fetchedCount + 1): fetched \(newItems.count) items (cursor: \(newCursor ?? "nil"))")
                 LogManager.shared.info("Extra refresh page \(fetchedCount + 1): \(newItems.count) items", category: .general)
 
-                let pageResult = ProfileMediaReconciler.applyAuthoritativePageRange(
+                let pageResult = ProfileMediaReconciler.applyExactFetchedPrefix(
                     currentURLs: allMediaURLs,
                     currentItemsByURL: mediaItemsByURL,
-                    freshItems: newItems,
-                    startCursor: cursor,
-                    endCursor: newCursor,
-                    protectedMediaIds: page1MediaIds
+                    freshItems: accumulatedItems,
+                    endCursor: newCursor
                 )
                 allMediaURLs = pageResult.urls
                 mediaItemsByURL = pageResult.itemsByURL
 
                 if pageResult.removedCount > 0 {
-                    print("🗑️ [EXTRA PAGES] Removed \(pageResult.removedCount) deleted/archived post(s) from page \(fetchedCount + 1) range")
+                    print("🗑️ [EXTRA PAGES] Removed \(pageResult.removedCount) deleted/archived post(s) from synced window")
                     LogManager.shared.info("Deep refresh removed \(pageResult.removedCount) deleted post(s) at page \(fetchedCount + 1)", category: .general)
                 }
 
                 nextMaxId = newCursor
                 hasMorePages = newCursor != nil && allMediaURLs.count < maxPhotosOwnProfile
 
-                // Persist authoritative grid after each page.
                 if var cached = ProfileCacheService.shared.loadProfile(), cached.userId == userId {
-                    let visibleURLs = allMediaURLs.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("amnesia://") }
+                    let visibleURLs = allMediaURLs.filter { !ProfileMediaReconciler.isOverlayURL($0) }
                     let visibleItems = visibleURLs.compactMap { mediaItemsByURL[$0] }
                     cached.cachedMediaURLs = visibleURLs
                     cached.cachedMediaItems = visibleItems
@@ -7364,7 +7664,7 @@ struct PerformanceView: View {
                     ProfileCacheService.shared.saveProfileAuthoritative(cached)
                 }
 
-                print("📄 [EXTRA PAGES] Page \(fetchedCount + 1) applied — +\(pageResult.appendedCount) new, -\(pageResult.removedCount) deleted, url↻\(pageResult.replacedURLCount), protected:\(pageResult.protectedCount), grid=\(allMediaURLs.count)")
+                print("📄 [EXTRA PAGES] Page \(fetchedCount + 1) exact window — +\(pageResult.appendedCount) new, -\(pageResult.removedCount) deleted, url↻\(pageResult.replacedURLCount), grid=\(allMediaURLs.count)")
             } catch {
                 print("⚠️ [EXTRA PAGES] Fetch failed: \(error.localizedDescription)")
                 LogManager.shared.warning("Extra refresh page fetch failed: \(error.localizedDescription)", category: .general)
@@ -7373,6 +7673,7 @@ struct PerformanceView: View {
         }
 
         print("📄 [EXTRA PAGES] Done — fetched \(fetchedCount) extra page(s), grid now \(allMediaURLs.count) items")
+        return ExtraRefreshPagesResult(accumulatedItems: accumulatedItems, endCursor: endCursor)
     }
 
     private func loadProfileSync() {
@@ -7614,7 +7915,8 @@ struct PerformanceView: View {
         // ── 1. Serve everything that is already on disk (synchronous, free) ──────
         if let pending = ProfileCacheService.shared.pendingProfilePic {
             cachedImages[profile.profilePicURL] = pending
-        } else if let image = ProfileCacheService.shared.loadImage(forURL: profile.profilePicURL) {
+            ProfileCacheService.shared.saveOwnProfilePic(pending, cdnURL: profile.profilePicURL)
+        } else if let image = ProfileCacheService.shared.loadOwnProfilePic(forURL: profile.profilePicURL) {
             cachedImages[profile.profilePicURL] = image
         }
 
@@ -7735,18 +8037,38 @@ struct PerformanceView: View {
     
     private func downloadAndCacheImages(profile: InstagramProfile) {
         Task {
-            // Profile pic — skip if already in memory (bridged from old CDN URL or
-            // loaded from disk). The bridge in loadProfile covers CDN-URL-rotation;
-            // the download below is only needed when the actual image changed.
-            let picAlreadyCached = await MainActor.run { cachedImages[profile.profilePicURL] != nil }
-            if picAlreadyCached {
+            // Profile pic — skip only when memory already has THIS CDN asset.
+            // After a real Instagram-side photo change the bridge leaves the slot empty
+            // (or identity mismatches) so we re-download. Token rotation bridges
+            // same-asset bytes and skips the GET.
+            let picURL = profile.profilePicURL
+            let (picAlreadyCached, mustRedownload) = await MainActor.run { () -> (Bool, Bool) in
+                let has = !picURL.isEmpty && cachedImages[picURL] != nil
+                let savedIdentity = ProfileCacheService.shared.savedOwnProfilePicCDNIdentity()
+                let identityMatches = ProfileCacheService.shared.ownProfilePicMatchesCDNIdentity(of: picURL)
+                let pending = ProfileCacheService.shared.pendingProfilePic != nil
+                // Force CDN GET only when we previously knew an asset and Instagram
+                // replaced it (path changed). Nil identity = first run / legacy — don't
+                // clear last_profile_pic_hash or spam a redundant GET.
+                let force = !picURL.isEmpty && savedIdentity != nil && !identityMatches && !pending
+                return (has, force)
+            }
+            if picAlreadyCached && !mustRedownload {
                 print("✅ [CACHE] Profile pic already in memory — download skipped")
             } else {
-                print("🖼️ [CACHE] Downloading profile pic: \(String(profile.profilePicURL.prefix(80)))...")
-                if let image = await downloadImage(from: profile.profilePicURL) {
+                print("🖼️ [CACHE] Downloading profile pic: \(String(picURL.prefix(80)))...")
+                if let image = await downloadImage(from: picURL) {
                     await MainActor.run {
-                        cachedImages[profile.profilePicURL] = image
-                        ProfileCacheService.shared.saveImage(image, forURL: profile.profilePicURL)
+                        cachedImages[picURL] = image
+                        ProfileCacheService.shared.saveImage(image, forURL: picURL)
+                        ProfileCacheService.shared.saveOwnProfilePic(image, cdnURL: picURL)
+                        // External IG change: hash of last Vault upload is still valid for
+                        // anti-bot duplicate checks, but display/reset drift must warn.
+                        if mustRedownload {
+                            UserDefaults.standard.set(true, forKey: "profile_pic_external_change")
+                            ProfileResetSettings.shared.refreshDriftState()
+                            print("🔄 [CACHE] Marked external profile-pic change (IG app) for reset drift")
+                        }
                         print("✅ [CACHE] Profile pic downloaded and cached")
                     }
                 } else {
@@ -8277,7 +8599,7 @@ struct PerformanceView: View {
         let batchDates = photos.compactMap { revealDates[$0.pseudoURL] }
         if let minBatch = batchDates.min(), let maxBatch = batchDates.max(), minBatch < maxBatch {
             let realPostInside = allMediaURLs.contains { url in
-                guard !url.hasPrefix("reveal://"), !url.hasPrefix("amnesia://"),
+                guard !ProfileMediaReconciler.isOverlayURL(url),
                       let d = mediaItemsByURL[url]?.takenAt else { return false }
                 return d > minBatch && d < maxBatch
             }
@@ -9638,7 +9960,12 @@ struct InstagramProfileView: View {
     @AppStorage("combined_pp_cooldown_bypass_until") private var combinedPPCooldownBypassUntil: Double = 0
     @AppStorage("local_combo_earliest_pp_reveal_at") private var localComboEarliestRevealAt: Double = 0
     @AppStorage("local_combo_bio_pending_until") private var localComboBioPendingUntil: Double = 0
-    private let localComboPostPredictionDelay: TimeInterval = 5
+    @AppStorage("local_combo_cover_typing_bio_ready") private var coverTypingBioReadyForPP: Bool = false
+    /// Must stay in sync with `combinedBioPostPredictionDelay` above.
+    /// Used when Bio (Cover Typing / OCR / API) and PP (Lockscreen) are separate inputs.
+    private let localComboPostPredictionDelay: TimeInterval = 12
+    /// Max time Lockscreen PP will wait for a later Cover Typing bio confirmation.
+    private let coverTypingBioAwaitTimeout: TimeInterval = 120
 
     // Error alert for when reveal fails (e.g. set not uploaded)
     @State private var revealErrorTitle: String = ""
@@ -9827,6 +10154,41 @@ struct InstagramProfileView: View {
             || followingMagic.isEnabled
             || isForceReelGridInputActive
             || (ForceNumberRevealSettings.shared.isEnabled && ForceNumberRevealSettings.shared.gridSwipeEnabled)
+    }
+
+    /// Bio uses Cover Typing and PP uses Lockscreen: hold unarchives until bio is confirmed.
+    private var expectsCoverTypingBioBeforePostPrediction: Bool {
+        guard !PostPredictionTestMode.shared.isActive else { return false }
+        guard ActiveSetSettings.shared.isPostPredictionEnabled,
+              ActiveSetSettings.shared.activeSetId != nil else { return false }
+        let bioEnabled = UserDefaults.standard.object(forKey: "bio_feature_enabled") == nil
+            || UserDefaults.standard.bool(forKey: "bio_feature_enabled")
+        guard bioEnabled else { return false }
+        let bioMode = UserDefaults.standard.string(forKey: "bioTopInputMode") ?? "off"
+        return bioMode == "coverTyping"
+    }
+
+    /// When Lockscreen commits first, park PP until Cover Typing confirms the bio.
+    /// Skipped if Cover Typing already succeeded earlier in this Performance session.
+    private func beginAwaitingCoverTypingBioBeforePostPredictionIfNeeded() {
+        guard expectsCoverTypingBioBeforePostPrediction else { return }
+        if coverTypingBioReadyForPP {
+            print("🔗 [LOCAL COMBO] Cover Typing bio already ready — Lockscreen PP not held")
+            return
+        }
+        let now = Date().timeIntervalSince1970
+        if localComboBioPendingUntil > now {
+            print("🔗 [LOCAL COMBO] Bio already in-flight — Lockscreen PP will wait")
+            return
+        }
+        localComboBioPendingUntil = now + coverTypingBioAwaitTimeout
+        localComboEarliestRevealAt = 0
+        combinedPPCooldownBypassUntil = now + coverTypingBioAwaitTimeout + 90
+        UserDefaults.standard.set(localComboBioPendingUntil, forKey: "local_combo_bio_pending_until")
+        UserDefaults.standard.set(localComboEarliestRevealAt, forKey: "local_combo_earliest_pp_reveal_at")
+        UserDefaults.standard.set(combinedPPCooldownBypassUntil, forKey: "combined_pp_cooldown_bypass_until")
+        print("🔗 [LOCAL COMBO] Lockscreen held — waiting up to \(Int(coverTypingBioAwaitTimeout))s for Cover Typing bio before unarchive")
+        LogManager.shared.info("Local Bio + PP: Lockscreen waiting for Cover Typing bio", category: .general)
     }
 
     private func waitForLocalBioPostPredictionComboIfNeeded() async -> Bool {
@@ -10234,6 +10596,22 @@ struct InstagramProfileView: View {
         return url.hasPrefix("amnesia://carousel/")
             || ids.contains { id in item?.mediaId == id || url.contains(id) }
     }
+
+    private func isInstapickCarouselIndex(_ index: Int) -> Bool {
+        guard InstapickSettings.shared.isReadyForPerformance else { return false }
+        let urlsToShow = mediaURLs ?? profile.cachedMediaURLs
+        guard urlsToShow.indices.contains(index) else { return false }
+
+        let url = urlsToShow[index]
+        let item = mediaItemsByURL[url]
+        if url.hasPrefix("instapick://") { return true }
+        if item?.mediaId == InstapickSettings.testMediaId { return true }
+        if let liveId = InstapickSettings.shared.carouselMediaId,
+           item?.mediaId == liveId || url.contains(liveId) {
+            return true
+        }
+        return false
+    }
     
     var body: some View {
         ScrollViewReader { proxy in
@@ -10315,8 +10693,10 @@ struct InstagramProfileView: View {
         .onChange(of: secretManager.cardSwipeBuffer) { _ in
             updateFollowingOverride()
         }
-        // Transfer effect: volume UP on own profile inflates count by saved offset
+        // Instapick: volume DOWN while a color page is open arms the card overlay
+        // (must run here — PostScrollView is a fullScreenCover above PerformanceView).
         .onChange(of: volumeMonitor.upCount) { _ in
+            // Transfer effect: volume UP on own profile inflates count by saved offset
             guard followingMagic.isEnabled else {
                 followingOverride = nil
                 followerOverride = nil
@@ -10346,6 +10726,9 @@ struct InstagramProfileView: View {
                 GlitchSoundPlayer.shared.play(style: .electricBuzz)
                 showTransferGlitch = true
             }
+        }
+        .onChange(of: volumeMonitor.downCount) { _ in
+            _ = InstapickSettings.shared.tryBeginOverlayFromVolume()
         }
         .overlay {
             if showTransferGlitch {
@@ -10602,6 +10985,7 @@ struct InstagramProfileView: View {
             if let activeId = ActiveSetSettings.shared.activeCardSetId,
                let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {
                 showOCRPeek(label: symbol)
+                beginAwaitingCoverTypingBioBeforePostPredictionIfNeeded()
                 Task {
                     guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
                     await revealByCardSlot(symbol: symbol, fromSet: activeSet)
@@ -10631,6 +11015,7 @@ struct InstagramProfileView: View {
            let activeId = ActiveSetSettings.shared.activeCustomSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
             showOCRPeek(label: "#\(slot)")
+            beginAwaitingCoverTypingBioBeforePostPredictionIfNeeded()
             Task {
                 guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
                 await revealByCustomSlot(slot, fromSet: activeSet)
@@ -10643,6 +11028,7 @@ struct InstagramProfileView: View {
         if let activeId = ActiveSetSettings.shared.activeNumberSetId,
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
             showOCRPeek(number: input)
+            beginAwaitingCoverTypingBioBeforePostPredictionIfNeeded()
             Task {
                 guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
                 await revealByDigits(digits, fromSet: activeSet)
@@ -10938,7 +11324,9 @@ struct InstagramProfileView: View {
                     transpositionGridEffect: transpositionGridEffect,
                     onMediaAppear: onMediaAppear,
                     onTapIndex: { index in
-                        guard !isSecretGridInputActive || isAmnesiaCarouselIndex(index) else { return }
+                        guard !isSecretGridInputActive
+                                || isAmnesiaCarouselIndex(index)
+                                || isInstapickCarouselIndex(index) else { return }
                         lastPostViewerIndex = index
                         lastDismissedViewerWasPosts = true
                         activeViewer = .posts(index: index)
@@ -11021,7 +11409,20 @@ struct InstagramProfileView: View {
                     initialIndex: index,
                     username: profile.username,
                     profileImage: cachedImages[profile.profilePicURL],
-                    userId: profile.userId
+                    userId: profile.userId,
+                    onCarouselIndexChange: { url, page in
+                        let itemId = mediaItemsByURL[url]?.mediaId
+                        let liveId = InstapickSettings.shared.carouselMediaId
+                        if url.hasPrefix("instapick://")
+                            || itemId == InstapickSettings.testMediaId
+                            || (liveId != nil && (itemId == liveId || url.contains(liveId!))) {
+                            InstapickSettings.shared.liveCarouselPage = page
+                            // Re-park mid volume on every color/cover page so DOWN
+                            // cannot be stuck at 0 after a previous system change.
+                            InstapickSettings.shared.armSilentMidVolumeForCarousel()
+                            print("🃏 [INSTAPICK] liveCarouselPage → \(page)")
+                        }
+                    }
                 )
             case .reels(let index):
                 let reelMap = Dictionary(uniqueKeysWithValues: profile.cachedReelItems.map { ($0.imageURL, $0) })
@@ -12919,6 +13320,17 @@ struct TaggedEmptyStateView: View {
     }
 }
 
+// MARK: - Post feed audio focus (visibility)
+
+/// Reports how visible each post's media frame is (0…1) so only one video plays sound.
+private struct PostMediaVisibilityKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { max($0, $1) })
+    }
+}
+
 // MARK: - Post Scroll Viewer (Instagram "Posts" style)
 
 struct PostScrollView: View {
@@ -12932,8 +13344,10 @@ struct PostScrollView: View {
     var forcePostURL: String? = nil
     var forcePostMediaId: String? = nil
     var forcedThumbnail: UIImage? = nil
+    var onCarouselIndexChange: ((String, Int) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var instapickSettings = InstapickSettings.shared
     @State private var resolvedItems: [String: InstagramMediaItem] = [:]
     /// Display order of posts. While the Force Post trick is armed the forced post
     /// is REMOVED from this list (it can never be seen by scrolling). When the
@@ -12942,6 +13356,9 @@ struct PostScrollView: View {
     @State private var displayURLs: [String]? = nil
     /// Triggered after the interceptor inserts the forced post; SwiftUI animates to it.
     @State private var forceScrollTrigger = false
+    /// Only the most-visible post may play audio (Instagram-like + keeps volume buttons reliable).
+    @State private var mediaVisibility: [String: CGFloat] = [:]
+    @State private var audioFocusURL: String? = nil
 
     private var urls: [String] { displayURLs ?? mediaURLs }
 
@@ -12977,7 +13394,17 @@ struct PostScrollView: View {
 
     private func postID(_ index: Int) -> String { "post_\(index)" }
 
+    private func isInstapickMedia(url: String, item: InstagramMediaItem?) -> Bool {
+        if url.hasPrefix("instapick://") { return true }
+        if item?.mediaId == InstapickSettings.testMediaId { return true }
+        if let liveId = InstapickSettings.shared.carouselMediaId {
+            return item?.mediaId == liveId || url.contains(liveId)
+        }
+        return false
+    }
+
     var body: some View {
+        ZStack {
         NavigationView {
             ScrollViewReader { proxy in
                 ZStack {
@@ -12990,13 +13417,27 @@ struct PostScrollView: View {
                             ForEach(urls, id: \.self) { url in
                                 PostCardView(
                                     url: url,
-                                    item: resolvedItems[url],
+                                    item: resolvedItems[url] ?? mediaItemsByURL[url],
                                     cachedImages: cachedImages,
                                     username: username,
                                     profileImage: profileImage,
-                                    isForced: isForcedPostURL(url)
+                                    isForced: isForcedPostURL(url),
+                                    allowSound: audioFocusURL == url,
+                                    onCarouselIndexChange: { index in
+                                        onCarouselIndexChange?(url, index)
+                                    }
                                 )
                                 Divider().background(Color(UIColor.separator))
+                            }
+                        }
+                        .onPreferenceChange(PostMediaVisibilityKey.self) { values in
+                            mediaVisibility = values
+                            let next = values
+                                .filter { $0.value >= 0.55 }
+                                .max(by: { $0.value < $1.value })?
+                                .key
+                            if next != audioFocusURL {
+                                audioFocusURL = next
                             }
                         }
                     }
@@ -13051,6 +13492,14 @@ struct PostScrollView: View {
                     if missingCount > 0 {
                         Task { await fetchMissingItems() }
                     }
+
+                    // Instapick: silent mid-volume so volume DOWN always works (no HUD).
+                    if let startURL,
+                       isInstapickMedia(url: startURL, item: mediaItemsByURL[startURL]) {
+                        // Kill any neighbouring reel audio before arming volume.
+                        VideoPlaybackCoordinator.shared.muteActive()
+                        InstapickSettings.shared.armSilentMidVolumeForCarousel()
+                    }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -13075,6 +13524,19 @@ struct PostScrollView: View {
             .background(Color(UIColor.igPageBackground))
         }
         .navigationViewStyle(.stack)
+
+            // Floating card only — Instagram chrome underneath stays intact.
+            // No opacity transition: a fade-in reads as a flash over the lift.
+            if let slot = instapickSettings.activeOverlaySlot,
+               let card = instapickSettings.cardOverlay() {
+                InstapickOverlayView(card: card) {
+                    instapickSettings.completeOverlayDrag()
+                }
+                .id("instapick-card-\(slot)")
+                .transition(.identity)
+                .zIndex(50)
+            }
+        }
     }
 
     @MainActor
@@ -13103,6 +13565,10 @@ private struct PostCardView: View {
     let username: String
     let profileImage: UIImage?
     var isForced: Bool = false
+    /// When false, inline videos stay muted (default until this card is the feed focus).
+    var allowSound: Bool = false
+    var onCarouselIndexChange: ((Int) -> Void)? = nil
+    @ObservedObject private var instapickSettings = InstapickSettings.shared
     @State private var carouselIndex = 0
 
     private static let numberFormatter: NumberFormatter = {
@@ -13114,6 +13580,15 @@ private struct PostCardView: View {
 
     private func formatted(_ n: Int) -> String {
         Self.numberFormatter.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+
+    private var isInstapickPost: Bool {
+        if url.hasPrefix("instapick://") { return true }
+        if item?.mediaId == InstapickSettings.testMediaId { return true }
+        if let liveId = instapickSettings.carouselMediaId {
+            return item?.mediaId == liveId || url.contains(liveId)
+        }
+        return false
     }
 
     var body: some View {
@@ -13144,6 +13619,14 @@ private struct PostCardView: View {
                     // Real UIKit marker scoped to the IMAGE → the interceptor settles
                     // the scroll with the image fully visible on any device/size.
                     if isForced { ForcedCardMarker() }
+                }
+                .background {
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: PostMediaVisibilityKey.self,
+                            value: [url: Self.visibleFraction(of: geo)]
+                        )
+                    }
                 }
 
             if carouselURLs.count > 1 {
@@ -13190,6 +13673,25 @@ private struct PostCardView: View {
                 Spacer().frame(height: 12)
             }
         }
+        .onChange(of: carouselIndex) { index in
+            onCarouselIndexChange?(index)
+        }
+        .onAppear {
+            onCarouselIndexChange?(carouselIndex)
+            if isInstapickPost {
+                VideoPlaybackCoordinator.shared.muteActive()
+                InstapickSettings.shared.armSilentMidVolumeForCarousel()
+            }
+        }
+    }
+
+    /// How much of this media frame sits inside the screen (0…1).
+    private static func visibleFraction(of geo: GeometryProxy) -> CGFloat {
+        let frame = geo.frame(in: .global)
+        let screen = UIScreen.main.bounds
+        let overlap = frame.intersection(screen)
+        guard frame.height > 1, overlap.height > 0 else { return 0 }
+        return min(1, overlap.height / frame.height)
     }
 
     private var carouselURLs: [String] {
@@ -13208,7 +13710,7 @@ private struct PostCardView: View {
                 .overlay(
                     TabView(selection: $carouselIndex) {
                         ForEach(Array(urls.enumerated()), id: \.offset) { index, imageURL in
-                            postImage(for: imageURL)
+                            postImage(for: imageURL, pageIndex: index)
                                 .tag(index)
                         }
                     }
@@ -13228,7 +13730,8 @@ private struct PostCardView: View {
                 .overlay(
                     GridVideoPlayer(
                         videoURL: videoURL,
-                        muted: false,
+                        // Only the focused (mostly on-screen) post may play audio.
+                        muted: !allowSound || instapickSettings.activeOverlaySlot != nil,
                         fillMode: true,
                         posterImage: cachedImages[url]
                     )
@@ -13249,21 +13752,46 @@ private struct PostCardView: View {
         }
     }
 
+    /// Nb underlay while the floating card is armed (same frame as the overlay —
+    /// never remount the base Image or SwiftUI flashes a blank cell).
+    private func liftUnderlayImage(pageIndex: Int) -> UIImage? {
+        guard isInstapickPost,
+              let slot = instapickSettings.activeOverlaySlot,
+              pageIndex == slot else { return nil }
+        return instapickSettings.imageB(slot)
+    }
+
     @ViewBuilder
-    private func postImage(for imageURL: String) -> some View {
-        if let image = cachedImages[imageURL] ?? (imageURL == url ? cachedImages[url] : nil) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let remoteURL = URL(string: imageURL) {
+    private func postImage(for imageURL: String, pageIndex: Int = 0) -> some View {
+        // Instagram feed crops to the 4:5 cell (top/bottom). Fit would letterbox
+        // tall Instapick screenshots and shrink the printed card.
+        let base = cachedImages[imageURL] ?? (imageURL == url ? cachedImages[url] : nil)
+        let underlay = liftUnderlayImage(pageIndex: pageIndex)
+        if let base {
+            ZStack {
+                Image(uiImage: base)
+                    .resizable()
+                    .scaledToFill()
+                if let underlay {
+                    Image(uiImage: underlay)
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .transaction { $0.animation = nil }
+            .id(imageURL)
+        } else if let remoteURL = URL(string: imageURL),
+                  remoteURL.scheme == "http" || remoteURL.scheme == "https" {
             AsyncImage(url: remoteURL) { phase in
                 switch phase {
                 case .success(let image):
                     image
                         .resizable()
-                        .scaledToFit()
+                        .scaledToFill()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
                 default:
                     Rectangle()
                         .fill(Color.gray.opacity(0.15))

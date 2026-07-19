@@ -1979,6 +1979,11 @@ Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Not
 "home.preperformance.amnesia_reset.title" = "Amnesia Carousel necesita reiniciarse";
 "home.preperformance.visible_photos.description" = "Archiva las fotos visibles antes de entrar en Performance para que no aparezcan publicamente en Instagram.";
 "home.preperformance.amnesia_reset.description" = "Amnesia Carousel esta revelado - reinicialo antes del siguiente show.";
+"home.preperformance.instapick_reset.title" = "Instapick necesita restaurarse";
+"home.preperformance.instapick_reset.description" = "Se revelaron slots de Instapick — restaura (desarchivar a / archivar b) antes del siguiente show.";
+"home.preperformance.instapick_reset.button" = "Restaurar Instapick";
+"home.preperformance.instapick_reset.restoring" = "Restaurando Instapick…";
+"home.preperformance.instapick_reset.progress" = "Restaurando Instapick %d/%d…";
 "set.bulk.no_empty_slots" = "No hay slots vacios para rellenar.";
 "set.bulk.slot_order_help" = "Las fotos se colocan en orden de slots (%@). Tambien puedes anadirlas una por una tocando cualquier slot vacio.";
 "set.bulk.import_blocked" = "La importacion esta desactivada mientras hay una subida o sincronizacion activa.";

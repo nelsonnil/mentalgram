@@ -95,6 +95,25 @@ enum TranspositionRevealMode: String, CaseIterable {
     }
 }
 
+enum TranspositionCaptureMode: String, CaseIterable {
+    case videoFrames = "video_frames"
+    case hybridStillBurst = "hybrid_still_burst"
+
+    var displayName: String {
+        switch self {
+        case .videoFrames: return "Video"
+        case .hybridStillBurst: return "Hybrid burst"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .videoFrames: return "Faster: pick best video frame after OCR layout is ready."
+        case .hybridStillBurst: return "Sharper: video OCR for timing, then a 3-photo still burst for GPT."
+        }
+    }
+}
+
 // MARK: - Auto Input Mode
 
 enum AutoInputMode: String, CaseIterable {
@@ -217,9 +236,9 @@ final class IntegrationsSettings: ObservableObject {
     static let shared = IntegrationsSettings()
 
     static let defaultAIScreenDetectionPrompt = """
-    Analiza esta foto de una pantalla de Instagram. Necesito identificar el PERFIL mostrado, no el post. Devuelve SOLO JSON válido:
+    Analyze this photo of an Instagram screen. Identify the AUTHOR of the visible post. Return ONLY valid JSON:
     {"platform":"instagram","isInstagramPost":true,"username":"","usernameCandidates":[],"displayName":"","dateText":"","relativeDate":"","visibleLikeText":"","visibleCommentText":"","visibleShareText":"","captionVisible":"","imageTextVisible":"","visualDescription":"","mainObjects":[],"peopleVisible":[],"locationText":"","postType":"image|carousel|video|reel|unknown","confidence":0.0,"missingOrUnclear":[]}
-    MUY IMPORTANTE: lee el username EXACTO del perfil mostrado. Presta especial atención a puntos, guiones bajos, números, letras repetidas y orden exacto de caracteres. El username tiene prioridad sobre cualquier otro texto visible. Para Reels/videos, lee también con máxima prioridad el título/caption visible justo debajo del username o en la parte inferior del video, porque ayuda a identificar el post exacto aunque la miniatura sea distinta. No inventes alternativas. Si no estás seguro del username exacto, deja username vacío, usa displayName si se ve claro y deja usernameCandidates vacío. La app buscará después el perfil más parecido.
+    CRITICAL: read the EXACT AUTHOR username from the post header (next to the avatar or under the Posts navigation title in any language). NEVER use usernames from like-rows, comments, music, buttons, or count units (mil/k/thousand/etc.). Preserve dots, underscores, numbers and exact spelling. Read exact like/comment/reshare counters into visibleLikeText/visibleCommentText/visibleShareText — icon order is heart→bubble→repost arrows→plane. If the heart has NO digit, leave visibleLikeText empty and put the bubble number in comments and the repost number in shares (never shift them left into likes). "Liked by…" text can appear even when like count is hidden. For Reels/videos, also read the title/caption under the username with highest priority; do not rely on thumbnail/frame similarity. If caption is missing, leave captionVisible empty and do NOT put comment authors into username. If unsure of the exact author username, leave username and usernameCandidates empty.
     """
 
     // Inject (receive — 11z.co)
@@ -237,6 +256,10 @@ final class IntegrationsSettings: ObservableObject {
     @Published var exploreSpyFormat: ExploreSpyFormat {
         didSet { UserDefaults.standard.set(exploreSpyFormat.rawValue, forKey: "integ_exploreSpyFormat") }
     }
+
+    /// PROVISIONAL: hide Transposition (settings, guide, runtime) until the feature ships.
+    /// Flip to `true` to surface the PRO card again.
+    static let transpositionFeatureEnabled = false
 
     // AI screen detection — camera photo of spectator phone → OpenAI Vision → Instagram post match.
     @Published var aiScreenDetectionEnabled: Bool {
@@ -258,7 +281,14 @@ final class IntegrationsSettings: ObservableObject {
         didSet { UserDefaults.standard.set(aiScreenCandidateLimit, forKey: "integ_aiScreenCandidateLimit") }
     }
     @Published var aiScreenCameraZoom: Double {
-        didSet { UserDefaults.standard.set(aiScreenCameraZoom, forKey: "integ_aiScreenCameraZoom") }
+        didSet {
+            let clamped = Self.clampedAIScreenCameraZoom(aiScreenCameraZoom)
+            if clamped != aiScreenCameraZoom {
+                aiScreenCameraZoom = clamped
+                return
+            }
+            UserDefaults.standard.set(aiScreenCameraZoom, forKey: "integ_aiScreenCameraZoom")
+        }
     }
     @Published var aiScreenVerifyLatestFollower: Bool {
         didSet { UserDefaults.standard.set(aiScreenVerifyLatestFollower, forKey: "integ_aiScreenVerifyLatestFollower") }
@@ -271,6 +301,9 @@ final class IntegrationsSettings: ObservableObject {
     }
     @Published var transpositionRevealMode: TranspositionRevealMode {
         didSet { UserDefaults.standard.set(transpositionRevealMode.rawValue, forKey: "integ_transpositionRevealMode") }
+    }
+    @Published var transpositionCaptureMode: TranspositionCaptureMode {
+        didSet { UserDefaults.standard.set(transpositionCaptureMode.rawValue, forKey: "integ_transpositionCaptureMode") }
     }
     @Published var transpositionSaveSelectedCaptureToPhotos: Bool {
         didSet { UserDefaults.standard.set(transpositionSaveSelectedCaptureToPhotos, forKey: "integ_transpositionSaveSelectedCaptureToPhotos") }
@@ -364,18 +397,23 @@ final class IntegrationsSettings: ObservableObject {
         exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
         exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
         exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
-        aiScreenDetectionEnabled = ud.bool(forKey: "integ_aiScreenDetectionEnabled")
+        // Force-off while Transposition is hidden so a previous enable can't fire in Performance.
+        aiScreenDetectionEnabled = Self.transpositionFeatureEnabled
+            ? ud.bool(forKey: "integ_aiScreenDetectionEnabled")
+            : false
         aiScreenDetectionMode = .visualMatch
         openAIAPIKey          = ud.string(forKey: "integ_openAIAPIKey") ?? ""
         openAIModel           = ud.string(forKey: "integ_openAIModel") ?? "gpt-4o-mini"
         aiScreenDetectionPrompt = ud.string(forKey: "integ_aiScreenDetectionPrompt") ?? Self.defaultAIScreenDetectionPrompt
         aiScreenCandidateLimit = 12
         let savedZoom = ud.double(forKey: "integ_aiScreenCameraZoom")
-        aiScreenCameraZoom = savedZoom == 0 ? 1.4 : min(max(savedZoom, 1.3), 1.5)
+        aiScreenCameraZoom = savedZoom == 0 ? 1.4 : Self.clampedAIScreenCameraZoom(savedZoom)
         aiScreenVerifyLatestFollower = ud.object(forKey: "integ_aiScreenVerifyLatestFollower") as? Bool ?? true
         aiScreenRevealAnimationEnabled = ud.object(forKey: "integ_aiScreenRevealAnimationEnabled") as? Bool ?? true
         aiScreenRevealAnimationStyle = AIScreenRevealAnimationStyle(rawValue: ud.string(forKey: "integ_aiScreenRevealAnimationStyle") ?? "") ?? .energyLines
         transpositionRevealMode = TranspositionRevealMode(rawValue: ud.string(forKey: "integ_transpositionRevealMode") ?? "") ?? .grid
+        // Hybrid still burst is disabled (shutter sound). Always coerce to silent video frames.
+        transpositionCaptureMode = .videoFrames
         transpositionSaveSelectedCaptureToPhotos = ud.bool(forKey: "integ_transpositionSaveSelectedCaptureToPhotos")
         transpositionDimBlackScreenBrightness = ud.bool(forKey: "integ_transpositionDimBlackScreenBrightness")
         transpositionBlackScreenReadySoundEnabled = ud.object(forKey: "integ_transpositionBlackScreenReadySoundEnabled") as? Bool ?? true
@@ -406,6 +444,13 @@ final class IntegrationsSettings: ObservableObject {
         bioText5Source  = ApiSource(rawValue: ud.integer(forKey: "integ_bioText5Source"))  ?? .none
     }
 
+    /// Wider range for Video + Hybrid still framing (device may clamp further).
+    static let aiScreenCameraZoomRange: ClosedRange<Double> = 1.0...3.0
+
+    static func clampedAIScreenCameraZoom(_ value: Double) -> Double {
+        min(max(value, aiScreenCameraZoomRange.lowerBound), aiScreenCameraZoomRange.upperBound)
+    }
+
     // MARK: - Reload (call after iCloud restore)
 
     /// Re-reads all persisted values from UserDefaults.
@@ -416,18 +461,22 @@ final class IntegrationsSettings: ObservableObject {
         exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
         exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
         exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
-        aiScreenDetectionEnabled = ud.bool(forKey: "integ_aiScreenDetectionEnabled")
+        // Force-off while Transposition is hidden so a previous enable can't fire in Performance.
+        aiScreenDetectionEnabled = Self.transpositionFeatureEnabled
+            ? ud.bool(forKey: "integ_aiScreenDetectionEnabled")
+            : false
         aiScreenDetectionMode = .visualMatch
         openAIAPIKey          = ud.string(forKey: "integ_openAIAPIKey") ?? ""
         openAIModel           = ud.string(forKey: "integ_openAIModel") ?? "gpt-4o-mini"
         aiScreenDetectionPrompt = ud.string(forKey: "integ_aiScreenDetectionPrompt") ?? Self.defaultAIScreenDetectionPrompt
         aiScreenCandidateLimit = 12
         let savedZoom = ud.double(forKey: "integ_aiScreenCameraZoom")
-        aiScreenCameraZoom = savedZoom == 0 ? 1.4 : min(max(savedZoom, 1.3), 1.5)
+        aiScreenCameraZoom = savedZoom == 0 ? 1.4 : Self.clampedAIScreenCameraZoom(savedZoom)
         aiScreenVerifyLatestFollower = ud.object(forKey: "integ_aiScreenVerifyLatestFollower") as? Bool ?? true
         aiScreenRevealAnimationEnabled = ud.object(forKey: "integ_aiScreenRevealAnimationEnabled") as? Bool ?? true
         aiScreenRevealAnimationStyle = AIScreenRevealAnimationStyle(rawValue: ud.string(forKey: "integ_aiScreenRevealAnimationStyle") ?? "") ?? .energyLines
         transpositionRevealMode = TranspositionRevealMode(rawValue: ud.string(forKey: "integ_transpositionRevealMode") ?? "") ?? .grid
+        transpositionCaptureMode = .videoFrames
         transpositionSaveSelectedCaptureToPhotos = ud.bool(forKey: "integ_transpositionSaveSelectedCaptureToPhotos")
         transpositionDimBlackScreenBrightness = ud.bool(forKey: "integ_transpositionDimBlackScreenBrightness")
         transpositionBlackScreenReadySoundEnabled = ud.object(forKey: "integ_transpositionBlackScreenReadySoundEnabled") as? Bool ?? true

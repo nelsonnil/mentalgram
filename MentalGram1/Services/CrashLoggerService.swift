@@ -1,22 +1,24 @@
 import Foundation
 import UIKit
 import Darwin
+import os.log
 
 // MARK: - CrashLoggerService
 //
 // Installs low-level handlers for both Objective-C exceptions and POSIX signals
-// so that any crash that kills the process is written to a JSON file in the
-// app's Documents directory BEFORE the process dies.
+// so that any crash that kills the process is written to disk BEFORE the process dies.
 //
-// Also detects silent Jetsam/OOM kills via a "running" marker file written at
-// startup and removed on clean exit.  If the marker is present at next launch
-// the previous session was killed by the OS (likely OOM / watchdog) and a
-// synthetic crash report is logged automatically.
+// Signal crashes are written as `.txt` (async-signal-safe). On the next launch they
+// are converted to full `.json` CrashReports so Settings → Crash Logs always shows
+// stack + device + diagnostics (not just "iPhone").
+//
+// Also detects silent Jetsam/OOM kills via a "running" marker file.
 //
 // Usage:
-//   1. Call CrashLoggerService.install() as early as possible at startup.
-//   2. Call CrashLoggerService.checkAndLogPreviousSessionCrash() right after.
-//   3. Call CrashLoggerService.markCleanExit() from applicationWillTerminate.
+//   1. Call CrashLoggerService.checkAndLogPreviousSessionCrash() first.
+//   2. Call CrashLoggerService.install() as early as possible.
+//   3. Call CrashLoggerService.importPendingSignalReports() after install.
+//   4. Call CrashLoggerService.markCleanExit() from applicationWillTerminate.
 
 final class CrashLoggerService {
 
@@ -37,8 +39,9 @@ final class CrashLoggerService {
             }
             crashDirCString = buf
         }
-        // Persist metadata once for the signal handler to read later.
+        // Persist metadata once for handlers / next-launch import to read.
         shared.writeMetadata()
+        shared.writePlainMetadataForSignalHandler()
         shared.installMemoryWarningObserver()
         // OOM / Jetsam marker: written here, removed on clean exit.
         shared.writeRunningMarker()
@@ -61,9 +64,31 @@ final class CrashLoggerService {
             name: "Abnormal Termination",
             reason: "The app was killed by the OS without invoking any crash handler " +
                     "(most likely an out-of-memory kill or watchdog timeout).",
-            stackTrace: "(Not available — process was killed by SIGKILL)"
+            stackTrace: "(Not available — process was killed by SIGKILL)",
+            includeRecentLogs: true
         )
         // Marker will be overwritten by the new install() call.
+    }
+
+    /// Converts raw `.txt` signal dumps from a previous crash into full `.json`
+    /// reports (with app version, real device id, diagnostics, recent logs).
+    /// Call once after `install()` on every launch.
+    static func importPendingSignalReports() {
+        guard let dir = crashDirURL else { return }
+        let fm = FileManager.default
+        let files = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+        for name in files where name.hasSuffix(".txt") && name.hasPrefix("crash_") {
+            let url = dir.appendingPathComponent(name)
+            guard let raw = try? String(contentsOf: url, encoding: .utf8), !raw.isEmpty else { continue }
+            if let report = parseSignalTextReport(fileName: name, contents: raw) {
+                if let data = try? JSONEncoder().encode(report) {
+                    let jsonName = name.replacingOccurrences(of: ".txt", with: ".json")
+                    try? data.write(to: dir.appendingPathComponent(jsonName), options: .atomic)
+                }
+            }
+            try? fm.removeItem(at: url)
+        }
+        pruneOldReports()
     }
 
     /// Call from applicationWillTerminate so the next launch does not
@@ -73,20 +98,27 @@ final class CrashLoggerService {
     }
 
     /// All crash reports written to disk, newest first.
+    /// Includes `.json` reports and any leftover `.txt` signal dumps not yet imported.
     var storedReports: [CrashReport] {
         guard let dir = crashDir else { return [] }
         let fm = FileManager.default
         let files = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
-        return files
-            .filter { $0.hasSuffix(".json") }
-            .compactMap { name -> CrashReport? in
-                let url = dir.appendingPathComponent(name)
+        var reports: [CrashReport] = []
+        for name in files {
+            let url = dir.appendingPathComponent(name)
+            if name.hasSuffix(".json"), name.hasPrefix("crash_") {
                 guard let data = try? Data(contentsOf: url),
                       let report = try? JSONDecoder().decode(CrashReport.self, from: data)
-                else { return nil }
-                return report
+                else { continue }
+                reports.append(report)
+            } else if name.hasSuffix(".txt"), name.hasPrefix("crash_") {
+                guard let raw = try? String(contentsOf: url, encoding: .utf8),
+                      let report = Self.parseSignalTextReport(fileName: name, contents: raw)
+                else { continue }
+                reports.append(report)
             }
-            .sorted { $0.date > $1.date }
+        }
+        return reports.sorted { $0.date > $1.date }
     }
 
     /// Deletes all stored crash reports.
@@ -95,6 +127,10 @@ final class CrashLoggerService {
         let fm = FileManager.default
         let files = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
         for name in files where name.hasSuffix(".json") || name.hasSuffix(".txt") {
+            // Keep metadata helpers
+            if name == Self.metaFileName || name == Self.plainMetaFileName || name == Self.markerFileName {
+                continue
+            }
             try? fm.removeItem(at: dir.appendingPathComponent(name))
         }
     }
@@ -111,13 +147,24 @@ final class CrashLoggerService {
         updateDiagnostics(screen: nil, action: "lifecycle: \(phase)")
     }
 
+    /// Human-readable export of every stored report (for testers to AirDrop / email).
+    func exportAllAsText() -> String {
+        let reports = storedReports
+        guard !reports.isEmpty else {
+            return "=== Vault Crash Logs ===\nNo crashes recorded.\n"
+        }
+        let header = "=== Vault Crash Logs ===\nExported: \(Date())\nCount: \(reports.count)\n\n"
+        return header + reports.map(\.plainText).joined(separator: "\n\n")
+    }
+
     // MARK: - Internals
 
-    private static let crashDirName    = "crash_logs"
-    private static let metaFileName    = "crash_meta.json"
-    private static let markerFileName  = "app_running.marker"
+    private static let crashDirName     = "crash_logs"
+    private static let metaFileName     = "crash_meta.json"
+    private static let plainMetaFileName = "crash_meta.txt"
+    private static let markerFileName   = "app_running.marker"
     private static let maxStoredReports = 20
-    private static let diagnosticsKey = "crash_diagnostics_v1"
+    private static let diagnosticsKey   = "crash_diagnostics_v1"
 
     // Pre-computed crash-dir path as a C string buffer (populated at install() time).
     // Safe to read from a signal handler — no heap allocation required.
@@ -133,6 +180,63 @@ final class CrashLoggerService {
 
     private var crashDir: URL? { Self.crashDirURL }
 
+    // MARK: - Device identity
+
+    /// Hardware machine id, e.g. `iPhone15,2` — never the useless generic "iPhone".
+    static func hardwareMachineIdentifier() -> String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let mirror = Mirror(reflecting: systemInfo.machine)
+        let identifier = mirror.children.reduce("") { partial, element in
+            guard let value = element.value as? Int8, value != 0 else { return partial }
+            return partial + String(UnicodeScalar(UInt8(value)))
+        }
+        return identifier.isEmpty ? "unknown" : identifier
+    }
+
+    /// Marketing-ish label + machine id for crash reports.
+    static func richDeviceModel() -> String {
+        let machine = hardwareMachineIdentifier()
+        let marketing = marketingName(for: machine)
+        let generic = UIDevice.current.model // "iPhone" / "iPad"
+        if let marketing {
+            return "\(marketing) (\(machine))"
+        }
+        return "\(generic) (\(machine))"
+    }
+
+    private static func marketingName(for machine: String) -> String? {
+        // Keep a short practical map — unknown ids still show the machine string.
+        let map: [String: String] = [
+            "iPhone14,7": "iPhone 14", "iPhone14,8": "iPhone 14 Plus",
+            "iPhone15,2": "iPhone 14 Pro", "iPhone15,3": "iPhone 14 Pro Max",
+            "iPhone15,4": "iPhone 15", "iPhone15,5": "iPhone 15 Plus",
+            "iPhone16,1": "iPhone 15 Pro", "iPhone16,2": "iPhone 15 Pro Max",
+            "iPhone17,1": "iPhone 16 Pro", "iPhone17,2": "iPhone 16 Pro Max",
+            "iPhone17,3": "iPhone 16", "iPhone17,4": "iPhone 16 Plus",
+            "iPhone17,5": "iPhone 16e",
+            "iPhone18,1": "iPhone 17 Pro", "iPhone18,2": "iPhone 17 Pro Max",
+            "iPhone18,3": "iPhone 17", "iPhone18,4": "iPhone 17 Air",
+            "iPad13,18": "iPad", "iPad14,10": "iPad Air",
+            "arm64": "Simulator"
+        ]
+        return map[machine]
+    }
+
+    private static func currentMemorySummary() -> String {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        let kr = withUnsafeMutablePointer(to: &info) { infoPtr in
+            infoPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), intPtr, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return "memory: unavailable" }
+        let usedMB = Double(info.resident_size) / 1_048_576.0
+        let totalMB = Double(ProcessInfo.processInfo.physicalMemory) / 1_048_576.0
+        return String(format: "memory: %.0f MB used / %.0f MB device", usedMB, totalMB)
+    }
+
     // MARK: - Jetsam / OOM marker
 
     private var runningMarkerURL: URL? {
@@ -141,7 +245,13 @@ final class CrashLoggerService {
 
     private func writeRunningMarker() {
         guard let url = runningMarkerURL else { return }
-        try? "running".data(using: .utf8)?.write(to: url)
+        let payload = [
+            "running",
+            "ts=\(ISO8601DateFormatter().string(from: Date()))",
+            "device=\(Self.richDeviceModel())",
+            Self.currentMemorySummary()
+        ].joined(separator: "\n")
+        try? payload.data(using: .utf8)?.write(to: url)
     }
 
     private func removeRunningMarker() {
@@ -156,22 +266,45 @@ final class CrashLoggerService {
         let buildNumber: String
         let osVersion: String
         let deviceModel: String
+        let deviceIdentifier: String
     }
 
     private static var metaURL: URL? {
         crashDirURL?.appendingPathComponent(metaFileName)
     }
 
+    private static var plainMetaURL: URL? {
+        crashDirURL?.appendingPathComponent(plainMetaFileName)
+    }
+
     private func writeMetadata() {
+        let machine = Self.hardwareMachineIdentifier()
         let meta = Meta(
             appVersion:  Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?",
             buildNumber: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?",
             osVersion:   UIDevice.current.systemVersion,
-            deviceModel: UIDevice.current.model
+            deviceModel: Self.richDeviceModel(),
+            deviceIdentifier: machine
         )
         if let url = Self.metaURL, let data = try? JSONEncoder().encode(meta) {
-            try? data.write(to: url)
+            try? data.write(to: url, options: .atomic)
         }
+    }
+
+    /// Plain ASCII meta file the signal handler can `open`/`read`/`write` safely.
+    private func writePlainMetadataForSignalHandler() {
+        guard let url = Self.plainMetaURL else { return }
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let text = """
+        App: \(appVersion) (\(build))
+        OS: iOS \(UIDevice.current.systemVersion)
+        Device: \(Self.richDeviceModel())
+        Machine: \(Self.hardwareMachineIdentifier())
+        \(Self.currentMemorySummary())
+
+        """
+        try? text.data(using: .utf8)?.write(to: url, options: .atomic)
     }
 
     private struct Diagnostics: Codable {
@@ -202,6 +335,19 @@ final class CrashLoggerService {
     private static func readDiagnostics() -> Diagnostics? {
         guard let data = UserDefaults.standard.data(forKey: diagnosticsKey) else { return nil }
         return try? JSONDecoder().decode(Diagnostics.self, from: data)
+    }
+
+    private static func recentAppLogSnippet(limit: Int = 25) -> String {
+        // Best-effort — LogManager may not be ready during very early crashes.
+        let entries = LogManager.shared.logs.suffix(limit)
+        guard !entries.isEmpty else { return "Recent app logs: (none)" }
+        var lines = ["Recent app logs (last \(entries.count)):"]
+        for entry in entries {
+            let msg = entry.message.replacingOccurrences(of: "\n", with: " ")
+            let clipped = msg.count > 180 ? String(msg.prefix(180)) + "…" : msg
+            lines.append("  [\(entry.fullTimeString)] [\(entry.level.rawValue)] \(clipped)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func updateDiagnostics(screen: String?, action: String?) {
@@ -259,13 +405,22 @@ final class CrashLoggerService {
             if let data = try? JSONEncoder().encode(diagnostics) {
                 UserDefaults.standard.set(data, forKey: Self.diagnosticsKey)
             }
+            // Refresh plain meta so a subsequent Jetsam/signal dump has fresh memory info.
+            CrashLoggerService.shared.writePlainMetadataForSignalHandler()
         }
     }
 
     // MARK: - Writing a JSON report (Foundation-safe: ObjC handler + Jetsam detector)
 
-    static func writeReport(type: String, name: String, reason: String, stackTrace: String) {
+    static func writeReport(
+        type: String,
+        name: String,
+        reason: String,
+        stackTrace: String,
+        includeRecentLogs: Bool = false
+    ) {
         var appVersion = "?"; var buildNumber = "?"; var osVersion = "?"; var deviceModel = "?"
+        var deviceIdentifier = Self.hardwareMachineIdentifier()
         if let url = metaURL,
            let data = try? Data(contentsOf: url),
            let meta = try? JSONDecoder().decode(Meta.self, from: data) {
@@ -273,30 +428,129 @@ final class CrashLoggerService {
             buildNumber = meta.buildNumber
             osVersion   = meta.osVersion
             deviceModel = meta.deviceModel
+            deviceIdentifier = meta.deviceIdentifier
+        } else {
+            deviceModel = richDeviceModel()
+            osVersion = UIDevice.current.systemVersion
+            appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+            buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         }
 
         let now      = Date()
         let ts       = ISO8601DateFormatter().string(from: now)
         let fileName = "crash_\(Int(now.timeIntervalSince1970)).json"
 
+        var diagnosticsBlock = readDiagnostics()?.plainText ?? "Not available"
+        diagnosticsBlock += "\n" + currentMemorySummary()
+        // Never touch LogManager from a live crash handler (locks / ObjC runtime risk).
+        // Safe on next-launch Jetsam/import paths.
+        if includeRecentLogs {
+            diagnosticsBlock += "\n" + recentAppLogSnippet()
+        }
+
         let report = CrashReport(
             id: fileName, date: now, timestamp: ts,
             type: type, name: name, reason: reason, stackTrace: stackTrace,
             appVersion: appVersion, buildNumber: buildNumber,
             osVersion: osVersion, deviceModel: deviceModel,
-            diagnostics: Self.readDiagnostics()?.plainText
+            deviceIdentifier: deviceIdentifier,
+            diagnostics: diagnosticsBlock
         )
 
         if let dir = crashDirURL, let data = try? JSONEncoder().encode(report) {
-            try? data.write(to: dir.appendingPathComponent(fileName))
+            try? data.write(to: dir.appendingPathComponent(fileName), options: .atomic)
         }
         pruneOldReports()
+        os_log(.fault, "Vault crash recorded: %{public}@ — %{public}@", type, name)
+    }
+
+    // MARK: - Parse signal .txt → CrashReport
+
+    static func parseSignalTextReport(fileName: String, contents: String) -> CrashReport? {
+        let signalName = contents
+            .split(separator: "\n")
+            .first(where: { $0.hasPrefix("Signal:") })
+            .map { $0.replacingOccurrences(of: "Signal:", with: "").trimmingCharacters(in: .whitespaces) }
+            ?? "SIGUNKNOWN"
+
+        // Stack starts after "Stack Trace:" line.
+        let stack: String
+        if let range = contents.range(of: "Stack Trace:\n") {
+            stack = String(contents[range.upperBound...])
+                .replacingOccurrences(of: "\n=================================\n", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            stack = contents
+        }
+
+        // Prefer live meta; fall back to values embedded in the .txt header.
+        var appVersion = "?"; var buildNumber = "?"; var osVersion = "?"; var deviceModel = "?"
+        var deviceIdentifier = hardwareMachineIdentifier()
+        if let url = metaURL,
+           let data = try? Data(contentsOf: url),
+           let meta = try? JSONDecoder().decode(Meta.self, from: data) {
+            appVersion = meta.appVersion
+            buildNumber = meta.buildNumber
+            osVersion = meta.osVersion
+            deviceModel = meta.deviceModel
+            deviceIdentifier = meta.deviceIdentifier
+        } else {
+            // Parse "App: 1.0 (123)" etc. from the txt header written by the signal handler.
+            for line in contents.split(separator: "\n").prefix(12) {
+                let s = String(line)
+                if s.hasPrefix("App: ") {
+                    let rest = String(s.dropFirst(5))
+                    if let open = rest.firstIndex(of: "("), let close = rest.firstIndex(of: ")") {
+                        appVersion = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
+                        buildNumber = String(rest[rest.index(after: open)..<close])
+                    } else {
+                        appVersion = rest
+                    }
+                } else if s.hasPrefix("OS: ") {
+                    osVersion = s.replacingOccurrences(of: "OS: iOS ", with: "")
+                        .replacingOccurrences(of: "OS: ", with: "")
+                } else if s.hasPrefix("Device: ") {
+                    deviceModel = String(s.dropFirst(8))
+                } else if s.hasPrefix("Machine: ") {
+                    deviceIdentifier = String(s.dropFirst(9))
+                }
+            }
+            if deviceModel == "?" { deviceModel = richDeviceModel() }
+        }
+
+        // Timestamp from filename crash_<unix>.txt when possible.
+        var date = Date()
+        let stamp = fileName
+            .replacingOccurrences(of: "crash_", with: "")
+            .replacingOccurrences(of: ".txt", with: "")
+        if let epoch = TimeInterval(stamp) {
+            date = Date(timeIntervalSince1970: epoch)
+        }
+
+        var diagnosticsBlock = readDiagnostics()?.plainText ?? "Not available"
+        diagnosticsBlock += "\n" + recentAppLogSnippet()
+
+        return CrashReport(
+            id: fileName.replacingOccurrences(of: ".txt", with: ".json"),
+            date: date,
+            timestamp: ISO8601DateFormatter().string(from: date),
+            type: "Signal",
+            name: signalName,
+            reason: "Process terminated by \(signalName) (Swift fatalError / native crash / abort).",
+            stackTrace: stack.isEmpty ? "(empty stack)" : stack,
+            appVersion: appVersion,
+            buildNumber: buildNumber,
+            osVersion: osVersion,
+            deviceModel: deviceModel,
+            deviceIdentifier: deviceIdentifier,
+            diagnostics: diagnosticsBlock
+        )
     }
 
     // MARK: - Writing a signal-safe text report (signal handler only)
     //
     // Uses only POSIX / Darwin calls that are async-signal-safe:
-    //   open(), write(), close(), time(), strlcpy(), strlcat(),
+    //   open(), write(), close(), read(), time(), strlcpy(), strlcat(),
     //   backtrace(), backtrace_symbols_fd()
     // No snprintf (variadic — unavailable in Swift), no Foundation, no ObjC.
 
@@ -337,7 +591,24 @@ final class CrashLoggerService {
             s.withUTF8Buffer { buf in _ = Darwin.write(fd, buf.baseAddress!, buf.count) }
         }
 
-        emit("===== CRASH REPORT (Signal) =====\nSignal: ")
+        emit("===== CRASH REPORT (Signal) =====\n")
+
+        // Copy pre-written plain meta (App/OS/Device) — open/read/write are signal-safe.
+        var metaPath = [CChar](repeating: 0, count: 1100)
+        strlcpy(&metaPath, &dirBuf, metaPath.count)
+        strlcat(&metaPath, "/crash_meta.txt", metaPath.count)
+        let metaFd = open(&metaPath, O_RDONLY)
+        if metaFd >= 0 {
+            var buf = [UInt8](repeating: 0, count: 512)
+            while true {
+                let n = Darwin.read(metaFd, &buf, buf.count)
+                if n <= 0 { break }
+                _ = Darwin.write(fd, buf, n)
+            }
+            close(metaFd)
+        }
+
+        emit("Signal: ")
         switch sigNum {
         case SIGABRT: emit("SIGABRT")
         case SIGSEGV: emit("SIGSEGV")
@@ -361,7 +632,10 @@ final class CrashLoggerService {
         guard let dir = crashDirURL else { return }
         let fm = FileManager.default
         let files = ((try? fm.contentsOfDirectory(atPath: dir.path)) ?? [])
-            .filter { ($0.hasSuffix(".json") || $0.hasSuffix(".txt")) && $0 != metaFileName && $0 != markerFileName }
+            .filter {
+                ($0.hasSuffix(".json") || $0.hasSuffix(".txt"))
+                && $0.hasPrefix("crash_")
+            }
             .sorted()
         if files.count > maxStoredReports {
             let toDelete = files.prefix(files.count - maxStoredReports)
@@ -384,13 +658,40 @@ struct CrashReport: Codable, Identifiable {
     let buildNumber: String
     let osVersion: String
     let deviceModel: String
+    /// Hardware id e.g. iPhone15,2 — optional for older on-disk reports.
+    let deviceIdentifier: String?
     let diagnostics: String?
+
+    init(
+        id: String, date: Date, timestamp: String,
+        type: String, name: String, reason: String, stackTrace: String,
+        appVersion: String, buildNumber: String,
+        osVersion: String, deviceModel: String,
+        deviceIdentifier: String? = nil,
+        diagnostics: String?
+    ) {
+        self.id = id
+        self.date = date
+        self.timestamp = timestamp
+        self.type = type
+        self.name = name
+        self.reason = reason
+        self.stackTrace = stackTrace
+        self.appVersion = appVersion
+        self.buildNumber = buildNumber
+        self.osVersion = osVersion
+        self.deviceModel = deviceModel
+        self.deviceIdentifier = deviceIdentifier
+        self.diagnostics = diagnostics
+    }
 
     var plainText: String {
         """
         ===== CRASH REPORT =====
         App:       \(appVersion) (\(buildNumber))
-        OS:        iOS \(osVersion) — \(deviceModel)
+        OS:        iOS \(osVersion)
+        Device:    \(deviceModel)
+        Machine:   \(deviceIdentifier ?? "?")
         Date:      \(timestamp)
         Type:      \(type)
         Name:      \(name)
@@ -398,7 +699,7 @@ struct CrashReport: Codable, Identifiable {
 
         Stack Trace:
         \(stackTrace)
-        
+
         Diagnostics:
         \(diagnostics ?? "Not available")
         ========================
@@ -415,7 +716,8 @@ private let objcExceptionHandler: @convention(c) (NSException) -> Void = { excep
         type: "Exception",
         name: exception.name.rawValue,
         reason: exception.reason ?? "(no reason)",
-        stackTrace: stack
+        stackTrace: stack,
+        includeRecentLogs: false
     )
 }
 

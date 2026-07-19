@@ -48,6 +48,9 @@ struct GridVideoPlayer: View {
         .onAppear {
             playerManager.setupPlayer(url: videoURL, muted: muted)
         }
+        .onChange(of: muted) { isMuted in
+            playerManager.setMuted(isMuted)
+        }
         .onDisappear {
             playerManager.cleanup()
         }
@@ -95,6 +98,7 @@ class VideoPlaybackCoordinator {
     /// Call when an unmuted player starts. Pauses the previous one automatically.
     func activate(_ newPlayer: AVPlayer) {
         if let old = activeUnmutedPlayer, old !== newPlayer {
+            old.isMuted = true
             old.pause()
         }
         activeUnmutedPlayer = newPlayer
@@ -105,6 +109,12 @@ class VideoPlaybackCoordinator {
         if activeUnmutedPlayer === player {
             activeUnmutedPlayer = nil
         }
+    }
+
+    /// Force-mute whoever is currently making sound (e.g. before Instapick volume arm).
+    func muteActive() {
+        activeUnmutedPlayer?.isMuted = true
+        activeUnmutedPlayer = nil
     }
 }
 
@@ -124,15 +134,10 @@ class VideoPlayerManager: ObservableObject {
         }
         self.isMuted = muted
 
-        // iOS requires an active AVAudioSession for AVPlayer to render video
-        // frames even when the player is muted. Without this, the first frame
-        // never renders and the cell stays black.
-        try? AVAudioSession.sharedInstance().setCategory(
-            muted ? .ambient : .playback,
-            mode: .default,
-            options: muted ? [.mixWithOthers] : []
-        )
-        try? AVAudioSession.sharedInstance().setActive(true, options: [])
+        // Always mixWithOthers so VolumeButtonMonitor / Instapick can own the
+        // system volume HUD-less path. Exclusive .playback was eating the first
+        // volume-down press while a neighbouring post played audio.
+        applyAudioSession(muted: muted)
 
         let asset = AVURLAsset(url: videoURL)
         let item = AVPlayerItem(asset: asset)
@@ -169,6 +174,23 @@ class VideoPlayerManager: ObservableObject {
         self.player = player
     }
 
+    func setMuted(_ muted: Bool) {
+        guard muted != isMuted else {
+            player?.isMuted = muted
+            return
+        }
+        isMuted = muted
+        applyAudioSession(muted: muted)
+        guard let player else { return }
+        player.isMuted = muted
+        if muted {
+            VideoPlaybackCoordinator.shared.deactivate(player)
+        } else {
+            VideoPlaybackCoordinator.shared.activate(player)
+            if player.timeControlStatus != .playing { player.play() }
+        }
+    }
+
     func cleanup() {
         if let p = player {
             if !isMuted { VideoPlaybackCoordinator.shared.deactivate(p) }
@@ -181,5 +203,16 @@ class VideoPlayerManager: ObservableObject {
         }
         statusObserver?.invalidate()
         statusObserver = nil
+    }
+
+    private func applyAudioSession(muted: Bool) {
+        // iOS still needs an active session for frames; keep mixWithOthers always
+        // so magician volume triggers stay reliable.
+        try? AVAudioSession.sharedInstance().setCategory(
+            muted ? .ambient : .playback,
+            mode: .default,
+            options: [.mixWithOthers]
+        )
+        try? AVAudioSession.sharedInstance().setActive(true, options: [])
     }
 }

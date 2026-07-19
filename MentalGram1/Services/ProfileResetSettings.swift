@@ -124,8 +124,12 @@ final class ProfileResetSettings: ObservableObject {
     }
 
     private func evaluateProfilePicDrift() -> Bool {
-        guard hasBaselineProfilePic,
-              let baselineHash = UserDefaults.standard.string(forKey: picHashKey),
+        guard hasBaselineProfilePic else { return false }
+        // Photo was replaced in the real Instagram app (CDN asset path changed).
+        if UserDefaults.standard.bool(forKey: "profile_pic_external_change") {
+            return true
+        }
+        guard let baselineHash = UserDefaults.standard.string(forKey: picHashKey),
               !baselineHash.isEmpty else { return false }
         guard let currentHash = UserDefaults.standard.string(forKey: "last_profile_pic_hash"),
               !currentHash.isEmpty else { return false }
@@ -210,16 +214,48 @@ final class ProfileResetSettings: ObservableObject {
               let data = UserDefaults.standard.data(forKey: picDataKey) else {
             throw InstagramError.apiError("No reset profile picture configured in Settings.")
         }
-        let ok = try await InstagramService.shared.changeProfilePicture(imageData: data, userInitiated: true)
-        if ok, let image = UIImage(data: data) {
-            await MainActor.run {
-                ProfileCacheService.shared.pendingProfilePic = image
-                refreshDriftState()
+        do {
+            let ok = try await InstagramService.shared.changeProfilePicture(imageData: data, userInitiated: true)
+            if ok, let image = UIImage(data: data) {
+                await MainActor.run {
+                    paintBaselineProfilePicLocally(image)
+                    refreshDriftState()
+                }
+                print("✅ [RESET] Profile picture restored to baseline")
+                LogManager.shared.info("Profile picture reset to baseline", category: .general)
             }
-            print("✅ [RESET] Profile picture restored to baseline")
-            LogManager.shared.info("Profile picture reset to baseline", category: .general)
+            return ok
+        } catch {
+            // Instagram already has this exact image — not a failure. Refresh local
+            // display cache so Performance stops spinning on a rotated CDN URL.
+            let message = error.localizedDescription.lowercased()
+            if message.contains("already your profile picture") {
+                if let image = UIImage(data: data) {
+                    await MainActor.run {
+                        UserDefaults.standard.set(false, forKey: "profile_pic_external_change")
+                        paintBaselineProfilePicLocally(image)
+                        refreshDriftState()
+                    }
+                }
+                print("✅ [RESET] Baseline already on Instagram — local profile pic cache refreshed")
+                LogManager.shared.info("Reset profile pic skipped (already on Instagram); local cache refreshed", category: .general)
+                return true
+            }
+            throw error
         }
-        return ok
+    }
+
+    /// Paints the baseline reset photo into Performance cache under the current CDN
+    /// URL and the stable own-profile-pic disk key.
+    @MainActor
+    private func paintBaselineProfilePicLocally(_ image: UIImage) {
+        ProfileCacheService.shared.pendingProfilePic = image
+        if let url = ProfileCacheService.shared.cachedProfile?.profilePicURL, !url.isEmpty {
+            ProfileCacheService.shared.saveOwnProfilePic(image, cdnURL: url)
+            ProfileCacheService.shared.saveImage(image, forURL: url)
+        } else {
+            ProfileCacheService.shared.saveOwnProfilePic(image)
+        }
     }
 }
 

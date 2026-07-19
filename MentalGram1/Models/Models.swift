@@ -173,6 +173,8 @@ struct InstagramMediaItem: Identifiable, Codable {
     let takenAt: Date?
     let likeCount: Int?
     let commentCount: Int?
+    /// Reshare / repost count when Instagram exposes it (optional; older caches may omit it).
+    var shareCount: Int? = nil
     let mediaType: MediaType
     /// Image URLs for carousel children, including the cover image when available.
     var carouselImageURLs: [String] = []
@@ -181,6 +183,9 @@ struct InstagramMediaItem: Identifiable, Codable {
     /// Width ÷ Height of the video (e.g. 1.78 for 16:9, 0.5625 for 9:16 portrait).
     /// Nil for photos/carousels; also nil when the API didn't return dimensions.
     var videoAspectRatio: CGFloat? = nil
+    /// True when Instagram marks the media as pinned on the profile grid.
+    /// Optional for backward compatibility with existing caches.
+    var isPinned: Bool? = nil
 
     enum MediaType: String, Codable {
         case photo = "photo"

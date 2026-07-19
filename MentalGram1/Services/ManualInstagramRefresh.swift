@@ -88,40 +88,57 @@ enum ManualInstagramRefresh {
                 UserDefaults.standard.removeObject(forKey: "perf_no_more_pages_\(uid)")
             }
 
+            let page1APIItems = fetched.cachedMediaItems
+            var syncedFetchedItems = page1APIItems
+            var syncedEndCursor = fetched.cachedNextMaxId
+
             if let previousProfile, previousProfile.userId == uid {
                 let previousItemsByURL = previousProfile.cachedMediaItems.reduce(into: [String: InstagramMediaItem]()) {
                     $0[$1.imageURL] = $1
                 }
-                let page1Ids = Set(fetched.cachedMediaItems.map { $0.mediaId })
-                let page1Result = ProfileMediaReconciler.applyAuthoritativePageRange(
+                let page1Result = ProfileMediaReconciler.applyExactFetchedPrefix(
                     currentURLs: previousProfile.cachedMediaURLs,
                     currentItemsByURL: previousItemsByURL,
-                    freshItems: fetched.cachedMediaItems,
-                    startCursor: nil,
-                    endCursor: fetched.cachedNextMaxId,
-                    protectedMediaIds: page1Ids
+                    freshItems: page1APIItems,
+                    endCursor: fetched.cachedNextMaxId
                 )
                 var authoritative = fetched
-                authoritative.cachedMediaURLs = page1Result.urls
-                authoritative.cachedMediaItems = page1Result.urls.compactMap { page1Result.itemsByURL[$0] }
+                authoritative.cachedMediaURLs = page1Result.urls.filter { !ProfileMediaReconciler.isOverlayURL($0) }
+                authoritative.cachedMediaItems = authoritative.cachedMediaURLs.compactMap { page1Result.itemsByURL[$0] }
                 authoritative.cachedNextMaxId = fetched.cachedNextMaxId
                 ProfileCacheService.shared.saveProfileAuthoritative(authoritative)
-                print("🧭 [HEADLESS REFRESH] Page 1 reconciled — +\(page1Result.appendedCount), -\(page1Result.removedCount), url↻\(page1Result.replacedURLCount)")
+                print("🧭 [HEADLESS REFRESH] Page 1 exact prefix — +\(page1Result.appendedCount), -\(page1Result.removedCount), url↻\(page1Result.replacedURLCount)")
             } else {
                 ProfileCacheService.shared.saveProfileAuthoritative(fetched)
             }
 
             // ── Extra-page deep refresh ───────────────────────────────────────────
             if clampedPages > 1, !uid.isEmpty {
-                let page1Ids = Set(fetched.cachedMediaItems.map { $0.mediaId })
-                await fetchExtraPages(
+                let extra = await fetchExtraPages(
                     instagram: instagram,
                     userId: uid,
                     firstProfile: fetched,
-                    page1MediaIds: page1Ids,
+                    page1Items: page1APIItems,
                     pagesToFetch: clampedPages - 1
                 )
+                syncedFetchedItems = extra.accumulatedItems
+                syncedEndCursor = extra.endCursor
             }
+
+            // Protect pending reveal:// mediaIds persisted on disk (not yet on Instagram).
+            var protectedRevealIds = Set<String>()
+            if !uid.isEmpty, let revealState = ProfileCacheService.shared.loadRevealState(userId: uid) {
+                for url in revealState.urls where url.hasPrefix("reveal://") && !url.hasPrefix("reveal://test-") {
+                    let raw = String(url.dropFirst("reveal://".count))
+                    if !raw.isEmpty { protectedRevealIds.insert(raw) }
+                }
+            }
+            ProfileMediaReconciler.reconcileSetPhotosMissingFromSyncedFeed(
+                fetchedKeys: ProfileMediaReconciler.mediaKeys(from: syncedFetchedItems),
+                syncedWindowEndPk: ProfileMediaReconciler.cursorPK(syncedEndCursor),
+                userId: uid.isEmpty ? nil : uid,
+                protectedMediaIds: protectedRevealIds
+            )
 
             if repairMode, !uid.isEmpty, let rebuilt = ProfileCacheService.shared.loadProfile() {
                 let required = ProfileCacheService.shared.requiredPerformancePreloadPosts(for: rebuilt)
@@ -152,23 +169,33 @@ enum ManualInstagramRefresh {
         }
     }
 
-    /// Fetches additional post pages and applies them authoritatively to the on-disk
-    /// profile cache.  Posts that were in the cached tail but are NOT returned by
-    /// Instagram for their chronological range (i.e. deleted/archived) are removed.
-    /// The safety gate is waited out (up to 30 s) instead of immediately failing.
+    private struct ExtraPagesResult {
+        let accumulatedItems: [InstagramMediaItem]
+        let endCursor: String?
+    }
+
+    /// Fetches additional post pages and applies the accumulated Instagram window
+    /// as an exact prefix on the on-disk cache. The safety gate is waited out
+    /// (up to 30 s) instead of immediately failing.
     private static func fetchExtraPages(
         instagram: InstagramService,
         userId: String,
         firstProfile: InstagramProfile,
-        page1MediaIds: Set<String>,
+        page1Items: [InstagramMediaItem],
         pagesToFetch: Int
-    ) async {
-        guard pagesToFetch > 0 else { return }
+    ) async -> ExtraPagesResult {
+        guard pagesToFetch > 0 else {
+            return ExtraPagesResult(accumulatedItems: page1Items, endCursor: firstProfile.cachedNextMaxId)
+        }
 
         var cursor = firstProfile.cachedNextMaxId
         var fetchedCount = 0
+        var accumulatedItems = page1Items
+        var endCursor = firstProfile.cachedNextMaxId
 
-        guard var cached = ProfileCacheService.shared.loadProfile(), cached.userId == userId else { return }
+        guard var cached = ProfileCacheService.shared.loadProfile(), cached.userId == userId else {
+            return ExtraPagesResult(accumulatedItems: page1Items, endCursor: firstProfile.cachedNextMaxId)
+        }
 
         for _ in 0..<pagesToFetch {
             guard let activeCursor = cursor, !activeCursor.isEmpty else {
@@ -176,7 +203,6 @@ enum ManualInstagramRefresh {
                 break
             }
 
-            // ── Safety gate with patient wait (mirrors PerformanceView logic) ────
             let gateMaxWaitNs: UInt64 = 30_000_000_000
             var gateWaited: UInt64 = 0
             var gate = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
@@ -209,25 +235,25 @@ enum ManualInstagramRefresh {
                 }
 
                 fetchedCount += 1
+                accumulatedItems.append(contentsOf: newItems)
                 cursor = newCursor
+                endCursor = newCursor
 
                 let itemsByURL = cached.cachedMediaItems.reduce(into: [String: InstagramMediaItem]()) {
                     $0[$1.imageURL] = $1
                 }
-                let pageResult = ProfileMediaReconciler.applyAuthoritativePageRange(
+                let pageResult = ProfileMediaReconciler.applyExactFetchedPrefix(
                     currentURLs: cached.cachedMediaURLs,
                     currentItemsByURL: itemsByURL,
-                    freshItems: newItems,
-                    startCursor: activeCursor,
-                    endCursor: newCursor,
-                    protectedMediaIds: page1MediaIds
+                    freshItems: accumulatedItems,
+                    endCursor: newCursor
                 )
-                cached.cachedMediaURLs = pageResult.urls
-                cached.cachedMediaItems = pageResult.urls.compactMap { pageResult.itemsByURL[$0] }
+                cached.cachedMediaURLs = pageResult.urls.filter { !ProfileMediaReconciler.isOverlayURL($0) }
+                cached.cachedMediaItems = cached.cachedMediaURLs.compactMap { pageResult.itemsByURL[$0] }
                 cached.cachedNextMaxId = newCursor
                 ProfileCacheService.shared.saveProfileAuthoritative(cached)
 
-                print("📄 [HEADLESS EXTRA] Page \(fetchedCount + 1): +\(pageResult.appendedCount) new, -\(pageResult.removedCount) deleted, url↻\(pageResult.replacedURLCount)")
+                print("📄 [HEADLESS EXTRA] Page \(fetchedCount + 1) exact window: +\(pageResult.appendedCount) new, -\(pageResult.removedCount) deleted, url↻\(pageResult.replacedURLCount)")
                 LogManager.shared.info("Headless extra page \(fetchedCount + 1): +\(pageResult.appendedCount) new, -\(pageResult.removedCount) deleted", category: .general)
             } catch {
                 print("⚠️ [HEADLESS EXTRA] Page fetch failed: \(error.localizedDescription)")
@@ -237,6 +263,7 @@ enum ManualInstagramRefresh {
         }
 
         print("📄 [HEADLESS EXTRA] Done — fetched \(fetchedCount) extra page(s)")
+        return ExtraPagesResult(accumulatedItems: accumulatedItems, endCursor: endCursor)
     }
 
     /// Reads the active own-note from Instagram and mirrors it into the same

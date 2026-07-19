@@ -1389,6 +1389,11 @@
 "home.preperformance.amnesia_reset.title" = "Amnesia Carousel needs reset";
 "home.preperformance.visible_photos.description" = "Archive visible photos before entering Performance so they do not appear publicly on Instagram.";
 "home.preperformance.amnesia_reset.description" = "Amnesia Carousel is revealed - reset it before the next show.";
+"home.preperformance.instapick_reset.title" = "Instapick needs restore";
+"home.preperformance.instapick_reset.description" = "Instapick slots were revealed — restore (unarchive a / archive b) before the next show.";
+"home.preperformance.instapick_reset.button" = "Restore Instapick";
+"home.preperformance.instapick_reset.restoring" = "Restoring Instapick…";
+"home.preperformance.instapick_reset.progress" = "Restoring Instapick %d/%d…";
 "set.bulk.no_empty_slots" = "There are no empty slots to fill.";
 "set.bulk.slot_order_help" = "Photos are placed in slot order (%@). You can also add one by one by tapping any empty slot.";
 "set.bulk.import_blocked" = "Import is disabled while upload or sync is active.";

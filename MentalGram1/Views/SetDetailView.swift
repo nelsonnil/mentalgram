@@ -3735,28 +3735,28 @@ struct SetDetailView: View {
             
             let filename = item.itemIdentifier ?? "photo_\(UUID().uuidString)"
             
-            // Check if slot already has a photo (replace) or is empty (insert)
-            let existingPhotos = currentSet.photos.filter { $0.symbol == symbol }
+            // Check if slot already has a photo in CURRENT BANK (replace) or is empty (insert)
+            // Use currentSlotPhotosForBulkImport() to respect bank independence
+            let currentBankPhotos = await MainActor.run { currentSlotPhotosForBulkImport() }
+            let existingPhotos = currentBankPhotos.filter { $0.symbol == symbol }
             
             await MainActor.run {
-                if !existingPhotos.isEmpty {
-                    // Replace existing
-                    dataManager.replacePhotoAtSymbol(
-                        setId: currentSet.id,
-                        symbol: symbol,
+                if let existingPhoto = existingPhotos.first {
+                    // Replace existing photo in current bank only
+                    dataManager.replacePhoto(
+                        photoId: existingPhoto.id,
                         newFilename: filename,
                         newImageData: optimizedImageData
                     )
                 } else {
-                    // Insert new
-                    let labels = effectiveSlotLabels
-                    let position = labels.firstIndex(of: symbol) ?? labels.count
-                    dataManager.insertPhotoAtPosition(
+                    // Insert new photo in current bank only (respects bank independence)
+                    let bankId = selectedBankIfAvailable?.id
+                    dataManager.insertPhotoInBank(
                         setId: currentSet.id,
+                        bankId: bankId,
                         symbol: symbol,
                         filename: filename,
-                        imageData: optimizedImageData,
-                        position: position
+                        imageData: optimizedImageData
                     )
                 }
                 
@@ -3797,6 +3797,7 @@ struct SetDetailView: View {
             return
         }
         let itemsToLoad = Array(zip(items, emptyLabels))
+        let bankId = selectedBankIfAvailable?.id
         isBulkLoading = true
         bulkLoadProgress = (0, itemsToLoad.count)
 
@@ -3815,10 +3816,14 @@ struct SetDetailView: View {
                             newImageData: optimized
                         )
                     } else {
-                        let position = labels.firstIndex(of: symbol) ?? labels.count
-                        dataManager.insertPhotoAtPosition(
-                            setId: currentSet.id, symbol: symbol,
-                            filename: filename, imageData: optimized, position: position)
+                        // Insert only in current bank to maintain bank independence
+                        dataManager.insertPhotoInBank(
+                            setId: currentSet.id,
+                            bankId: bankId,
+                            symbol: symbol,
+                            filename: filename,
+                            imageData: optimized
+                        )
                     }
                     bulkLoadProgress = (idx + 1, itemsToLoad.count)
                 }
@@ -3913,14 +3918,14 @@ struct SetDetailView: View {
                     newImageData: optimizedImageData
                 )
             } else {
-                let labels = effectiveSlotLabels
-                let position = labels.firstIndex(of: symbol) ?? labels.count
-                dataManager.insertPhotoAtPosition(
+                // Insert only in current bank to maintain bank independence
+                let bankId = selectedBankIfAvailable?.id
+                dataManager.insertPhotoInBank(
                     setId: currentSet.id,
+                    bankId: bankId,
                     symbol: symbol,
                     filename: filename,
-                    imageData: optimizedImageData,
-                    position: position
+                    imageData: optimizedImageData
                 )
             }
 

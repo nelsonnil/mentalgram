@@ -2515,8 +2515,18 @@ class InstagramService: ObservableObject {
     /// Archives a photo on Instagram.
     /// - Parameter skipPreCheck: Pass `true` when the caller already verified the photo
     ///   is public (e.g. right after `getMediaIsArchived`). Avoids a redundant GET.
-    func archivePhoto(mediaId: String, skipPreCheck: Bool = false) async throws -> Bool {
-        print("📦 [ARCHIVE] Starting archive for media ID: \(mediaId) (skipPreCheck: \(skipPreCheck))")
+    /// - Parameter humanDelay: Seconds to wait before the POST (nil = default 3–6s human pacing).
+    /// - Parameter mediaType: Instagram `media_type` query (1=photo, 2=video, 8=carousel).
+    ///   Sidecar children must use `1`. Whole album parents use `8`.
+    ///   Matches `instagram_private_api.media_only_me` — omitting this often yields HTTP 500
+    ///   on carousel children (`is_sidecar_child`).
+    func archivePhoto(
+        mediaId: String,
+        skipPreCheck: Bool = false,
+        humanDelay: TimeInterval? = nil,
+        mediaType: Int = 1
+    ) async throws -> Bool {
+        print("📦 [ARCHIVE] Starting archive for media ID: \(mediaId) (skipPreCheck: \(skipPreCheck), media_type: \(mediaType))")
         
         // ANTI-BOT: Check lockdown IMMEDIATELY (don't waste time on delay)
         if isLocked {
@@ -2549,12 +2559,15 @@ class InstagramService: ObservableObject {
             }
         }
         
-        // ANTI-BOT: Realistic human delay (3-6 seconds with jitter)
-        let baseDelay = UInt64.random(in: 3_000_000_000...6_000_000_000)
-        let jitter = UInt64.random(in: 0...500_000_000) // up to 0.5s extra jitter
-        let delay = baseDelay + jitter
-        print("   Waiting \(String(format: "%.1f", Double(delay) / 1_000_000_000.0))s before archive...")
-        try await Task.sleep(nanoseconds: delay)
+        // ANTI-BOT: human delay (override for paced Instapick batches).
+        let delaySeconds: Double
+        if let humanDelay {
+            delaySeconds = max(0.4, humanDelay)
+        } else {
+            delaySeconds = Double.random(in: 3.0...6.0) + Double.random(in: 0...0.5)
+        }
+        print("   Waiting \(String(format: "%.1f", delaySeconds))s before archive...")
+        try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
         
         // Instagram expects media_id in format: pk_userid (e.g., 3827949643435346901_80533585162)
         let fullMediaId: String
@@ -2564,12 +2577,18 @@ class InstagramService: ObservableObject {
             fullMediaId = "\(mediaId)_\(session.userId)"
         }
         
-        print("   Full media ID: \(fullMediaId)")
+        print("   Full media ID: \(fullMediaId) media_type=\(mediaType)")
         
+        // private API: query media_type + authenticated body (_uuid/_uid/_csrftoken).
         let data = try await apiRequest(
             method: "POST",
-            path: "/media/\(fullMediaId)/only_me/",
-            body: ["media_id": fullMediaId]
+            path: "/media/\(fullMediaId)/only_me/?media_type=\(mediaType)",
+            body: [
+                "media_id": fullMediaId,
+                "_uuid": clientUUID,
+                "_uid": session.userId,
+                "_csrftoken": session.csrfToken
+            ]
         )
         
         if let jsonString = String(data: data, encoding: .utf8) {
@@ -2662,10 +2681,16 @@ class InstagramService: ObservableObject {
         
         print("   Full media ID: \(fullMediaId)")
         
+        // Same contract as archive: media_type query + auth fields (sidecar children = type 1).
         let data = try await apiRequest(
             method: "POST",
-            path: "/media/\(fullMediaId)/undo_only_me/",
-            body: ["media_id": fullMediaId]
+            path: "/media/\(fullMediaId)/undo_only_me/?media_type=1",
+            body: [
+                "media_id": fullMediaId,
+                "_uuid": clientUUID,
+                "_uid": session.userId,
+                "_csrftoken": session.csrfToken
+            ]
         )
         
         if let jsonString = String(data: data, encoding: .utf8) {
@@ -4511,13 +4536,81 @@ class InstagramService: ObservableObject {
             videoURL: videoURL,
             caption: (media["caption"] as? [String: Any])?["text"] as? String,
             takenAt: (media["taken_at"] as? TimeInterval).map { Date(timeIntervalSince1970: $0) },
-            likeCount: media["like_count"] as? Int,
-            commentCount: media["comment_count"] as? Int,
+            likeCount: Self.optionalInt(media["like_count"]),
+            commentCount: Self.optionalInt(media["comment_count"]),
+            shareCount: extractShareCount(from: media),
             mediaType: mediaType == 2 ? .video : (mediaType == 8 ? .carousel : .photo),
             carouselImageURLs: carouselURLs,
             ownerUsername: ownerUsername,
-            videoAspectRatio: videoAspectRatio
+            videoAspectRatio: videoAspectRatio,
+            isPinned: extractPinnedFlag(from: media)
         )
+    }
+
+    private func extractShareCount(from media: [String: Any]) -> Int? {
+        // Prefer explicit reshare/repost counters (circular-arrow UI). Avoid send/paper-plane.
+        let keys = [
+            "reshare_count",
+            "repost_count",
+            "media_repost_count",
+            "share_count",
+            "shares_count",
+            "ig_reshare_count"
+        ]
+        for key in keys {
+            if let value = Self.optionalInt(media[key]) {
+                return value
+            }
+        }
+        if let clips = media["clips_metadata"] as? [String: Any] {
+            for key in keys {
+                if let value = Self.optionalInt(clips[key]) {
+                    return value
+                }
+            }
+        }
+        if let interactivity = media["media_notes"] as? [String: Any],
+           let value = Self.optionalInt(interactivity["reshare_count"]) {
+            return value
+        }
+        return nil
+    }
+
+    private func extractPinnedFlag(from media: [String: Any]) -> Bool {
+        // Only explicit profile-grid pin flags. A broad "key contains pin" scan
+        // false-positives on shopping/mapping/spin fields and scrambles Visual Match order.
+        let directKeys = [
+            "is_pinned",
+            "is_profile_grid_pinned",
+            "is_grid_pinned",
+            "is_pinned_media",
+            "profile_grid_is_pinned",
+            "timeline_pinned_user_ids"
+        ]
+        for key in directKeys {
+            if key == "timeline_pinned_user_ids" {
+                if let array = media[key] as? [Any], !array.isEmpty { return true }
+                continue
+            }
+            if Self.robustBool(media[key]) { return true }
+        }
+        return false
+    }
+
+    /// Optional Int from JSON (nil when key missing). Unlike robustInt, does not coerce missing → 0.
+    private static func optionalInt(_ value: Any?) -> Int? {
+        guard let value else { return nil }
+        if value is NSNull { return nil }
+        if let i = value as? Int { return i }
+        if let i = value as? Int64 { return Int(i) }
+        if let d = value as? Double { return Int(d) }
+        if let n = value as? NSNumber { return n.intValue }
+        if let s = value as? String {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return nil }
+            return Int(trimmed)
+        }
+        return nil
     }
 
     private func extractCarouselImageURLs(from media: [String: Any], fallbackCoverURL: String) -> [String] {
@@ -4648,8 +4741,8 @@ class InstagramService: ObservableObject {
                 takenAt = nil
             }
             
-            let likeCount = item["like_count"] as? Int
-            let commentCount = item["comment_count"] as? Int
+            let likeCount = Self.optionalInt(item["like_count"])
+            let commentCount = Self.optionalInt(item["comment_count"])
             
             // Extract video URL if it's a video
             var videoUrl: String?
@@ -4679,8 +4772,10 @@ class InstagramService: ObservableObject {
                 takenAt: takenAt,
                 likeCount: likeCount,
                 commentCount: commentCount,
+                shareCount: extractShareCount(from: item),
                 mediaType: mediaType,
-                carouselImageURLs: carouselURLs
+                carouselImageURLs: carouselURLs,
+                isPinned: extractPinnedFlag(from: item)
             )
             mediaItems.append(mediaItem)
         }
@@ -4773,7 +4868,8 @@ class InstagramService: ObservableObject {
                 takenAt: nil,
                 likeCount: nil,
                 commentCount: nil,
-                mediaType: videoUrl != nil ? .video : .photo
+                mediaType: videoUrl != nil ? .video : .photo,
+                isPinned: extractPinnedFlag(from: item)
             )
             mediaItems.append(mediaItem)
         }
@@ -4912,8 +5008,8 @@ class InstagramService: ObservableObject {
                 takenAt = nil
             }
             
-            let likeCount = item["like_count"] as? Int
-            let commentCount = item["comment_count"] as? Int
+            let likeCount = Self.optionalInt(item["like_count"])
+            let commentCount = Self.optionalInt(item["comment_count"])
             let ownerUsername = (item["user"] as? [String: Any])?["username"] as? String
             
             // Extract video URL if it's a video
@@ -4944,9 +5040,11 @@ class InstagramService: ObservableObject {
                 takenAt: takenAt,
                 likeCount: likeCount,
                 commentCount: commentCount,
+                shareCount: extractShareCount(from: item),
                 mediaType: mediaType,
                 carouselImageURLs: carouselURLs,
-                ownerUsername: ownerUsername
+                ownerUsername: ownerUsername,
+                isPinned: extractPinnedFlag(from: item)
             )
             mediaItems.append(mediaItem)
         }
@@ -5859,7 +5957,8 @@ class InstagramService: ObservableObject {
         // Anti-bot: 5-9s before archiving carousel B
         try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...9_000_000_000))
         print("🎭 [AMNESIA] Archiving full carousel B (mediaId=\(mediaIdB))…")
-        _ = try await archivePhoto(mediaId: mediaIdB, skipPreCheck: true)
+        // Parent album → media_type 8 (CAROUSEL), not photo/sidecar-child.
+        _ = try await archivePhoto(mediaId: mediaIdB, skipPreCheck: true, mediaType: 8)
         advance()
 
         // Persist both IDs
@@ -5907,7 +6006,7 @@ class InstagramService: ObservableObject {
             }
             // Anti-bot: brief gap between the two operations
             try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
-            let shortArchived = try await archivePhoto(mediaId: shortId, skipPreCheck: true)
+            let shortArchived = try await archivePhoto(mediaId: shortId, skipPreCheck: true, mediaType: 8)
             if !shortArchived {
                 LogManager.shared.warning("Amnesia reveal partial: full carousel is public, but short carousel was not archived", category: .api)
             }
@@ -5923,7 +6022,7 @@ class InstagramService: ObservableObject {
                 throw InstagramError.apiError("Amnesia reset failed: short carousel was not unarchived")
             }
             try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
-            let fullArchived = try await archivePhoto(mediaId: fullId, skipPreCheck: true)
+            let fullArchived = try await archivePhoto(mediaId: fullId, skipPreCheck: true, mediaType: 8)
             if !fullArchived {
                 LogManager.shared.warning("Amnesia reset partial: short carousel is public, but full carousel was not archived", category: .api)
             }
@@ -5932,7 +6031,404 @@ class InstagramService: ObservableObject {
             LogManager.shared.success("Amnesia Carousel reseteado (4 imágenes visibles)", category: .api)
         }
     }
-    
+
+    // MARK: - Instapick carousel
+
+    /// Uploads five whole Instagram carousels (Amnesia-style archive of full posts):
+    ///   0 Base  — o,1a,2a,3a,4a (stays public)
+    ///   1…4 Color N — same with slot N as `b` (archived after publish)
+    ///
+    /// Reveal later archives Base and unarchives Color N (never child-slide only_me).
+    func uploadInstapickCarousel(
+        forceRestart: Bool = false,
+        onProgress: @escaping (Int, Int, String) -> Void
+    ) async throws {
+        if isSessionExpired { throw InstagramError.sessionExpired }
+        if isSessionChallenged { throw InstagramError.challengeRequired }
+        guard !isLocked else {
+            throw InstagramError.botDetected("Lockdown active. Wait for the timer, then tap Continue upload.")
+        }
+
+        let imageSets = await MainActor.run { InstapickSettings.shared.uploadCarouselImageSets() }
+        guard let imageSets, imageSets.count == 5 else {
+            throw InstagramError.apiError("Instapick assets missing (need o + 1a/1b…4a/4b)")
+        }
+
+        let backgroundTask = await MainActor.run { () -> UIBackgroundTaskIdentifier in
+            var taskId = UIBackgroundTaskIdentifier.invalid
+            taskId = UIApplication.shared.beginBackgroundTask(withName: "InstapickUpload") {
+                Task { @MainActor in
+                    InstapickSettings.shared.markUploadInterrupted(
+                        detail: "App backgrounded / iOS stopped the process. Tap Continue upload."
+                    )
+                    if taskId != .invalid {
+                        UIApplication.shared.endBackgroundTask(taskId)
+                    }
+                }
+            }
+            return taskId
+        }
+        defer {
+            if backgroundTask != .invalid {
+                let id = backgroundTask
+                Task { @MainActor in
+                    UIApplication.shared.endBackgroundTask(id)
+                }
+            }
+        }
+
+        if forceRestart {
+            await MainActor.run {
+                InstapickSettings.shared.clearUploadCheckpoint()
+                InstapickSettings.shared.clearLiveUpload()
+            }
+        }
+
+        let total = 5
+        let labels = InstapickSettings.postLabels
+        var completed = await MainActor.run { InstapickSettings.shared.completedPostCount }
+        onProgress(completed, total, completed == 0 ? "Starting…" : "Resuming…")
+
+        func throwIfCancelled() throws {
+            if Task.isCancelled {
+                Task { @MainActor in
+                    InstapickSettings.shared.markUploadInterrupted(
+                        detail: "Upload cancelled. Tap Continue upload."
+                    )
+                }
+                throw InstagramError.networkError("cancelled")
+            }
+            if isLocked { throw InstagramError.botDetected("Lockdown active during upload.") }
+            if isSessionChallenged { throw InstagramError.challengeRequired }
+            if isSessionExpired { throw InstagramError.sessionExpired }
+        }
+
+        func jpeg(_ img: UIImage, index: Int) throws -> Data {
+            let normalized = InstagramService.normalizeImageOrientation(img)
+            let targetSize = CGSize(width: 864, height: 1080)
+            let targetRatio = targetSize.width / targetSize.height
+            let sourceRatio = normalized.size.width / normalized.size.height
+            let cropSize: CGSize
+            if sourceRatio > targetRatio {
+                let cropWidth = normalized.size.height * targetRatio
+                cropSize = CGSize(width: cropWidth, height: normalized.size.height)
+            } else {
+                let cropHeight = normalized.size.width / targetRatio
+                cropSize = CGSize(width: normalized.size.width, height: cropHeight)
+            }
+            let cropOrigin = CGPoint(
+                x: (normalized.size.width - cropSize.width) / 2,
+                y: (normalized.size.height - cropSize.height) / 2
+            )
+            let drawScale = targetSize.width / cropSize.width
+            let drawRect = CGRect(
+                x: -cropOrigin.x * drawScale,
+                y: -cropOrigin.y * drawScale,
+                width: normalized.size.width * drawScale,
+                height: normalized.size.height * drawScale
+            )
+            UIGraphicsBeginImageContextWithOptions(targetSize, true, 1.0)
+            normalized.draw(in: drawRect)
+            guard let preparedImage = UIGraphicsGetImageFromCurrentImageContext() else {
+                UIGraphicsEndImageContext()
+                throw InstagramError.apiError("Could not prepare Instapick image")
+            }
+            UIGraphicsEndImageContext()
+            guard let finalData = preparedImage.jpegData(compressionQuality: 0.88) else {
+                throw InstagramError.apiError("Could not compress Instapick image")
+            }
+            print("📦 [INSTAPICK] Image #\(index + 1) final: 864x1080, \(finalData.count / 1024)KB")
+            return finalData
+        }
+
+        // Determine first post index that still needs work.
+        var startPost = 0
+        let baseId = await MainActor.run { InstapickSettings.shared.carouselMediaId }
+        if baseId != nil { startPost = 1 }
+        for slot in 1...4 {
+            let has = await MainActor.run { InstapickSettings.shared.variantMediaIds["\(slot)"] != nil }
+            if has { startPost = slot + 1 } else { break }
+        }
+        // Mid-rupload resume for the post currently in checkpoint.
+        let cpIndex = await MainActor.run { InstapickSettings.shared.checkpointPostIndex }
+        var uploadIds = await MainActor.run { InstapickSettings.shared.checkpointUploadIds }
+        if !forceRestart, !uploadIds.isEmpty, uploadIds.count < 5, (0..<5).contains(cpIndex) {
+            startPost = cpIndex
+        } else {
+            uploadIds = []
+        }
+
+        print("🃏 [INSTAPICK] Upload start — from post \(startPost)/5 forceRestart=\(forceRestart)")
+
+        for postIndex in startPost..<5 {
+            try throwIfCancelled()
+            let label = labels[postIndex]
+            let images = imageSets[postIndex]
+            let shouldArchive = postIndex > 0
+            let checklistId = postIndex == 0 ? "post-base" : "post-v\(postIndex)"
+
+            await MainActor.run {
+                InstapickSettings.shared.markChecklistItem(id: checklistId, status: .active)
+                InstapickSettings.shared.saveCheckpoint(
+                    phase: .uploading,
+                    uploadIds: uploadIds,
+                    postIndex: postIndex,
+                    detail: "Uploading \(label)…"
+                )
+            }
+
+            // Reuse partial upload_ids only for the current post.
+            if postIndex != cpIndex || forceRestart {
+                uploadIds = []
+            }
+
+            for i in uploadIds.count..<5 {
+                try throwIfCancelled()
+                onProgress(completed, total, "\(label): photo \(i + 1)/5…")
+                let imgData = try jpeg(images[i], index: i)
+                let sidecarId = uploadIds.first ?? ""
+                let id = try await uploadPhotoForSidecar(
+                    imageData: imgData,
+                    stepLabel: "IP-\(label)-\(i + 1)",
+                    clientSidecarId: sidecarId
+                )
+                uploadIds.append(id)
+                await MainActor.run {
+                    InstapickSettings.shared.saveCheckpoint(
+                        phase: .uploading,
+                        uploadIds: uploadIds,
+                        postIndex: postIndex,
+                        detail: "\(label): uploaded \(uploadIds.count)/5"
+                    )
+                }
+                if i < 4 {
+                    try await Task.sleep(nanoseconds: UInt64.random(in: 2_000_000_000...4_000_000_000))
+                }
+            }
+
+            try throwIfCancelled()
+            onProgress(completed, total, "Publishing \(label)…")
+            print("🃏 [INSTAPICK] Waiting before configure_sidecar (\(label))…")
+            try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
+            try throwIfCancelled()
+            let mediaId = try await configureSidecar(
+                uploadIds: uploadIds,
+                caption: "",
+                clientSidecarId: uploadIds[0]
+            )
+            uploadIds = []
+
+            if shouldArchive {
+                try throwIfCancelled()
+                onProgress(completed, total, "Hiding \(label)…")
+                try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...8_000_000_000))
+                try await waitForInstapickArchiveBudget { seconds, reason in
+                    onProgress(completed, total, "Safety pause (\(reason)) — \(seconds)s…")
+                }
+                let archived = try await archivePhoto(
+                    mediaId: mediaId,
+                    skipPreCheck: true,
+                    humanDelay: 2.0,
+                    mediaType: 8
+                )
+                guard archived else {
+                    await MainActor.run {
+                        InstapickSettings.shared.markChecklistItem(id: checklistId, status: .failed)
+                        InstapickSettings.shared.saveCheckpoint(
+                            phase: .uploading,
+                            uploadIds: [],
+                            postIndex: postIndex,
+                            detail: "Could not hide \(label). Tap Continue upload."
+                        )
+                    }
+                    throw InstagramError.apiError("Could not archive \(label). Wait a few minutes and Continue upload.")
+                }
+            }
+
+            await MainActor.run {
+                if postIndex == 0 {
+                    InstapickSettings.shared.rememberBaseId(mediaId)
+                } else {
+                    InstapickSettings.shared.rememberVariantId(slot: postIndex, mediaId: mediaId)
+                }
+                InstapickSettings.shared.markChecklistItem(id: checklistId, status: .done)
+                InstapickSettings.shared.saveCheckpoint(
+                    phase: .uploading,
+                    uploadIds: [],
+                    postIndex: postIndex + 1,
+                    detail: "\(label) done"
+                )
+            }
+            completed += 1
+            onProgress(completed, total, "\(label) ready")
+            consecutiveErrors = 0
+
+            if postIndex < 4 {
+                try await Task.sleep(nanoseconds: UInt64.random(in: 5_000_000_000...9_000_000_000))
+            }
+        }
+
+        await MainActor.run {
+            InstapickSettings.shared.applyLiveUploadReady()
+        }
+        print("✅ [INSTAPICK] Five carousels ready")
+        LogManager.shared.success("Instapick ready — 5 carousels", category: .upload)
+    }
+
+    /// Reveal: unarchive Color N post, then archive Base (whole posts, media_type 8).
+    func swapInstapickSlot(slot: Int) async throws {
+        guard (1...4).contains(slot) else {
+            throw InstagramError.apiError("Invalid Instapick color")
+        }
+        let settings = InstapickSettings.shared
+        guard let baseId = settings.carouselMediaId,
+              let variantId = settings.variantMediaId(forSlot: slot) else {
+            throw InstagramError.apiError("Instapick is not prepared on Instagram")
+        }
+        guard settings.swappedSlots.isEmpty else {
+            throw InstagramError.apiError("Already revealed this show. Tap Reset for next show first.")
+        }
+        guard !isLocked else { throw InstagramError.apiError("Lockdown active") }
+        if isSessionChallenged { throw InstagramError.challengeRequired }
+
+        print("🃏 [INSTAPICK] Reveal Color \(slot): unarchive variant, archive Base…")
+        await MainActor.run { settings.uploadState = .swapping }
+
+        let unarchived = try await unarchivePhoto(mediaId: variantId, skipPreCheck: true)
+        guard unarchived else {
+            await MainActor.run { settings.uploadState = .ready }
+            throw InstagramError.apiError("Could not show Color \(slot) post")
+        }
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        var archivedState = try await getMediaIsArchived(mediaId: variantId)
+        if archivedState != false {
+            try await Task.sleep(nanoseconds: 4_000_000_000)
+            let pk = variantId.split(separator: "_").first.map(String.init) ?? variantId
+            stateCheckCache.removeValue(forKey: pk)
+            archivedState = try await getMediaIsArchived(mediaId: variantId)
+        }
+        guard archivedState == false else {
+            await MainActor.run { settings.uploadState = .ready }
+            throw InstagramError.apiError("Color \(slot) post is not public yet")
+        }
+
+        try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+        try await waitForInstapickArchiveBudget()
+        let baseArchived = try await archivePhoto(
+            mediaId: baseId,
+            skipPreCheck: true,
+            humanDelay: 1.5,
+            mediaType: 8
+        )
+        if !baseArchived {
+            LogManager.shared.warning(
+                "Instapick Color \(slot) public but Base was not archived",
+                category: .api
+            )
+        }
+
+        InstagramSafetyGate.shared.markPostReveal(mediaIds: [variantId])
+        InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .unarchive)
+        await MainActor.run { settings.uploadState = .ready }
+        print("✅ [INSTAPICK] Color \(slot) revealed on Instagram")
+        LogManager.shared.success("Instapick Color \(slot) revealed", category: .api)
+    }
+
+    /// Reset after a show: show Base again, hide the revealed Color post.
+    func restoreInstapickSlots(
+        onProgress: ((Int, Int) -> Void)? = nil
+    ) async throws {
+        let settings = InstapickSettings.shared
+        let slots = settings.swappedSlots.sorted()
+        guard !slots.isEmpty else { return }
+        guard let baseId = settings.carouselMediaId else {
+            throw InstagramError.apiError("Missing Instapick Base post")
+        }
+        guard !isLocked else { throw InstagramError.apiError("Lockdown active") }
+        if isSessionChallenged { throw InstagramError.challengeRequired }
+
+        print("🃏 [INSTAPICK] Reset for next show — slots \(slots)…")
+        await MainActor.run { settings.uploadState = .swapping }
+        let total = slots.count
+        var revealedIds: [String] = []
+
+        for (index, slot) in slots.enumerated() {
+            guard let variantId = settings.variantMediaId(forSlot: slot) else {
+                throw InstagramError.apiError("Missing Color \(slot) post id")
+            }
+            onProgress?(index + 1, total)
+
+            let baseUnarchived = try await unarchivePhoto(mediaId: baseId, skipPreCheck: true)
+            guard baseUnarchived else {
+                await MainActor.run { settings.uploadState = .ready }
+                throw InstagramError.apiError("Could not show Base post again")
+            }
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            var baseState = try await getMediaIsArchived(mediaId: baseId)
+            if baseState != false {
+                try await Task.sleep(nanoseconds: 4_000_000_000)
+                let pk = baseId.split(separator: "_").first.map(String.init) ?? baseId
+                stateCheckCache.removeValue(forKey: pk)
+                baseState = try await getMediaIsArchived(mediaId: baseId)
+            }
+            guard baseState == false else {
+                await MainActor.run { settings.uploadState = .ready }
+                throw InstagramError.apiError("Base post is not public yet")
+            }
+
+            try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            try await waitForInstapickArchiveBudget()
+            let variantArchived = try await archivePhoto(
+                mediaId: variantId,
+                skipPreCheck: true,
+                humanDelay: 1.5,
+                mediaType: 8
+            )
+            if !variantArchived {
+                LogManager.shared.warning(
+                    "Instapick reset: Base public but Color \(slot) not archived",
+                    category: .api
+                )
+            }
+            revealedIds.append(baseId)
+            if index < slots.count - 1 {
+                try await Task.sleep(nanoseconds: UInt64.random(in: 3_000_000_000...5_000_000_000))
+            }
+        }
+
+        if !revealedIds.isEmpty {
+            InstagramSafetyGate.shared.markPostReveal(mediaIds: revealedIds)
+            InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .unarchive)
+        }
+        await MainActor.run {
+            settings.resetSwaps()
+            settings.uploadState = .ready
+        }
+        print("✅ [INSTAPICK] Reset complete — Base visible again")
+        LogManager.shared.success("Instapick reset for next show", category: .api)
+    }
+
+    /// Waits out archive SafetyGate budget. Calls `onWait` every second for UI.
+    private func waitForInstapickArchiveBudget(
+        onWait: ((Int, String) -> Void)? = nil
+    ) async throws {
+        while true {
+            let budget = InstagramSafetyGate.shared.decision(for: .archive)
+            if budget.allowed { return }
+            guard budget.waitSeconds <= 3 * 60 else {
+                throw InstagramError.apiError(
+                    "Safety pause: \(budget.reason). Wait ~\(budget.waitSeconds / 60) min and try again."
+                )
+            }
+            let wait = max(1, budget.waitSeconds + 1)
+            print("🃏 [INSTAPICK] Archive budget pause — waiting \(wait)s (\(budget.reason))")
+            for remaining in stride(from: wait, through: 1, by: -1) {
+                onWait?(remaining, budget.reason)
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
     // MARK: - Instagram Notes
     //
     // ── ENDPOINT HISTORY (update this when Instagram breaks Notes) ────────────────
@@ -6689,12 +7185,26 @@ class InstagramService: ObservableObject {
         // ANTI-BOT: Wait if network changed recently
         try await waitForNetworkStability()
         
-        // Check if image hash matches last upload (prevent duplicate)
+        // ANTI-BOT: Skip duplicate upload when THIS app last pushed the same bytes
+        // AND Instagram's CDN asset path still matches (no external change in IG app).
+        // userInitiated Reset must still upload if the magician changed the pic in
+        // real Instagram — local hash alone is not proof of what's live on IG.
         let imageHash = hashImageData(imageData)
         if let lastHash = UserDefaults.standard.string(forKey: "last_profile_pic_hash"),
            lastHash == imageHash {
-            print("⚠️ [PROFILE PIC] Same image already uploaded - SKIP")
-            throw InstagramError.apiError("This is already your profile picture. Please select a different image.")
+            let externalChange = UserDefaults.standard.bool(forKey: "profile_pic_external_change")
+            let currentURL = ProfileCacheService.shared.cachedProfile?.profilePicURL ?? ""
+            let cdnStillSameAsset = !externalChange && (
+                currentURL.isEmpty
+                || ProfileCacheService.shared.ownProfilePicMatchesCDNIdentity(of: currentURL)
+                || ProfileCacheService.shared.savedOwnProfilePicCDNIdentity() == nil
+            )
+            if !userInitiated || cdnStillSameAsset {
+                print("⚠️ [PROFILE PIC] Same image already uploaded - SKIP (userInitiated=\(userInitiated) cdnSame=\(cdnStillSameAsset) external=\(externalChange))")
+                throw InstagramError.apiError("This is already your profile picture. Please select a different image.")
+            }
+            print("🛡️ [PROFILE PIC] Hash matches last upload but CDN asset changed externally — allowing user-initiated re-upload")
+            LogManager.shared.info("Profile pic hash match bypassed: CDN asset changed since last Vault upload", category: .api)
         }
         
         // Convert to JPEG if needed (Instagram requires JPEG)
@@ -6839,6 +7349,10 @@ class InstagramService: ObservableObject {
                 
                 // Save hash to prevent duplicate uploads
                 UserDefaults.standard.set(imageHash, forKey: "last_profile_pic_hash")
+                UserDefaults.standard.set(false, forKey: "profile_pic_external_change")
+                if let picURL = ProfileCacheService.shared.cachedProfile?.profilePicURL, !picURL.isEmpty {
+                    ProfileCacheService.shared.rememberOwnProfilePicCDNIdentity(picURL)
+                }
                 
                 // ANTI-BOT: Add cooldown before next profile pic change
                 let cooldownUntil = Date().addingTimeInterval(300) // 5 minutes
@@ -6912,6 +7426,17 @@ class InstagramService: ObservableObject {
         if let n = value as? NSNumber { return n.intValue }
         if let s = value as? String, let i = Int(s) { return i }
         return 0
+    }
+
+    static func robustBool(_ value: Any?) -> Bool {
+        if let b = value as? Bool { return b }
+        if let n = value as? NSNumber { return n.boolValue }
+        if let i = value as? Int { return i != 0 }
+        if let s = value as? String {
+            let normalized = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return ["1", "true", "yes", "y"].contains(normalized)
+        }
+        return false
     }
     
     // MARK: - Image Orientation Fix

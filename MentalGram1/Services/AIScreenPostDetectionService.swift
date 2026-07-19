@@ -34,11 +34,49 @@ struct AIScreenPostAnalysis: Codable {
             .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
+    /// Primary Instagram search queries. Display names are excluded here to avoid fuzzy friend hits.
     var profileSearchQueries: [String] {
         var seen = Set<String>()
-        return (normalizedUsernameCandidates + [displayName ?? ""])
+        return normalizedUsernameCandidates
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
+    /// Controlled fallback only when username is empty and displayName looks handle-like (not a phrase).
+    /// Copy with corrected engagement counter texts (used when likes are hidden and GPT shifts icons).
+    func withEngagementTexts(likes: String?, comments: String?, shares: String?) -> AIScreenPostAnalysis {
+        AIScreenPostAnalysis(
+            platform: platform,
+            isInstagramPost: isInstagramPost,
+            username: username,
+            usernameCandidates: usernameCandidates,
+            displayName: displayName,
+            dateText: dateText,
+            relativeDate: relativeDate,
+            visibleLikeText: likes,
+            visibleCommentText: comments,
+            visibleShareText: shares,
+            captionVisible: captionVisible,
+            imageTextVisible: imageTextVisible,
+            visualDescription: visualDescription,
+            mainObjects: mainObjects,
+            peopleVisible: peopleVisible,
+            locationText: locationText,
+            postType: postType,
+            confidence: confidence,
+            missingOrUnclear: missingOrUnclear
+        )
+    }
+
+    var displayNameSearchQuery: String? {
+        guard normalizedUsername.isEmpty else { return nil }
+        let cleaned = (displayName ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard cleaned.count >= 5, cleaned.count <= 30 else { return nil }
+        guard !cleaned.contains(" ") else { return nil }
+        guard cleaned.range(of: #"^[a-z0-9._]+$"#, options: .regularExpression) != nil else { return nil }
+        return cleaned
     }
 
     static func normalizeUsername(_ value: String) -> String {
@@ -47,6 +85,18 @@ struct AIScreenPostAnalysis: Codable {
             .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
             .lowercased()
     }
+}
+
+struct AIScreenOCRObservation {
+    let text: String
+    /// Vision normalized box: origin bottom-left, y increases upward. 1 = top of image.
+    let boundingBox: CGRect
+}
+
+struct AIScreenAuthorOCRResult {
+    let fullText: String
+    let matchingText: String
+    let authorCandidates: [String]
 }
 
 struct AIScreenPostMatch: Codable {
@@ -102,25 +152,36 @@ final class AIScreenPostDetectionService {
         let prompt = settings.aiScreenDetectionPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let usernamePrecisionInstructions = """
 
-        CRITICAL USERNAME INSTRUCTIONS:
-        - The exact Instagram username/profile is the most important output. Spend extra attention on it before answering.
-        - Read the profile username from the largest profile/header area when visible, and cross-check it with any repeated username in the post header or navigation bar.
-        - Preserve dots, underscores, numbers, repeated letters, accents when part of displayName, and exact letter order.
-        - Do not autocorrect to a more famous or more likely account. Report what is actually visible.
-        - Do not return alternative guesses. Keep usernameCandidates empty unless a second username is clearly visible on screen.
-        - If the exact username is blurry, leave username empty rather than guessing.
-        - If only the display name is visible, leave username empty if needed and set displayName.
-        - Example: "veronicaluis._", "veronicaluis_", "veronicalius._" and "veronicalius_" are all different.
-        - The app will search Instagram afterwards if the exact username does not match, so one truthful exact answer or an empty username is better than invented alternatives.
+        CRITICAL USERNAME INSTRUCTIONS (language-agnostic):
+        - The exact Instagram AUTHOR username is the most important output.
+        - Read username ONLY from the post author header: next to the avatar, and/or under the top navigation title (Posts / Publicaciones / Publications / Beitrage / etc.).
+        - Cross-check if the same author handle repeats at the start of the caption.
+        - NEVER use usernames from like-rows ("Liked by..." / "Les gusta a..." / equivalents), comments, suggested accounts, music/audio rows, stickers, or buttons.
+        - NEVER invent usernames from count units (mil/mill/k/thousand/mille/etc.) or OCR garbage like "mll".
+        - NEVER use music artist names as username.
+        - NEVER use UI button labels in any language (Follow/Seguir/Watch again/Ver otra vez/etc.).
+        - Preserve dots, underscores, numbers, repeated letters, and exact letter order.
+        - Do not autocorrect to a more famous account. Report only what is visible in the author header.
+        - Keep usernameCandidates empty unless the SAME author handle appears with a tiny OCR ambiguity (dots/underscores). Never put a second social person there.
+        - If the exact author username is blurry, leave username empty rather than guessing.
+        - If only a display name is visible in the author header, leave username empty and set displayName.
 
         MATCHING METADATA:
-        - If visible, read the like count exactly into visibleLikeText (examples: "1.5 mill.", "35.3 mil", "12,482").
-        - If visible, read the comment count exactly into visibleCommentText.
-        - If visible, read repost/share/send counts into visibleShareText.
+        - Engagement icon order (L→R bottom/side bar): heart (likes) → speech bubble (comments) → circular repost arrows (shares/reposts) → paper plane (send, usually no count).
+        - If visible, read the like count exactly into visibleLikeText (examples: "1.5 mill.", "35.3 mil", "12,482", "32.4K", "4787"). These are NOT usernames.
+        - CRITICAL HIDDEN LIKES: if the heart has NO digit beside it, visibleLikeText MUST be "". Do NOT put the next icon's number into likes.
+          Example: heart(empty) + bubble "44" + repost "48" → visibleLikeText="", visibleCommentText="44", visibleShareText="48".
+          WRONG: likes="44", comments="48", shares="".
+        - "Liked by…" / "Les gusta a…" can still appear when the like COUNT is hidden — that is NOT a like number.
+        - If visible, read the comment count into visibleCommentText (speech-bubble number).
+        - If visible, read the reshare/repost circular-arrow count into visibleShareText. Prefer reshare/repost over paper-plane send.
+        - When likes are hidden, comments + shares are CRITICAL for identifying the post.
+        - Counters are CRITICAL for matching when caption is missing or the media is a Reel/video.
         - If these numbers are not visible, leave the fields empty. Do not estimate.
-        - For Reels/videos, read large text overlays inside the video frame into imageTextVisible (examples: "LA PERSONA", quotes, subtitles, title cards).
-        - For Reels/videos, read the visible title/caption line directly below the username/profile row into captionVisible. This line is HIGH PRIORITY because it often identifies the exact Reel even when the thumbnail is a different frame.
-        - If vertical side counters are visible, assign each number to its correct icon: heart=likes, speech bubble=comments, paper plane/share=shares. Do not move a comments/share number into likes.
+        - For Reels/videos, read large text overlays inside the video frame into imageTextVisible. Ignore replay/more-reels UI overlays in any language.
+        - For Reels/videos, read the visible title/caption line directly below the username/profile row into captionVisible. HIGH PRIORITY for identifying the Reel.
+        - Thumbnail/frame similarity is unreliable for videos; prioritize caption/overlay/counts.
+        - If a post has no useful caption and only comments are visible, leave captionVisible empty; do NOT put comment authors into username.
         """
         let content = try await sendVisionRequest(
             apiKey: apiKey,
@@ -135,12 +196,19 @@ final class AIScreenPostDetectionService {
     }
 
     func recognizeLocalText(in image: UIImage) async -> String {
+        let observations = await recognizeLocalObservations(in: image)
+        return observations.map(\.text).joined(separator: " ")
+    }
+
+    /// Accurate OCR with bounding boxes for author extraction and caption matching.
+    func recognizeLocalObservations(in image: UIImage) async -> [AIScreenOCRObservation] {
         await Task.detached(priority: .userInitiated) {
-            guard let cgImage = image.cgImage else { return "" }
+            guard let cgImage = image.cgImage else { return [] }
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = false
-            request.recognitionLanguages = ["es-ES", "en-US"]
+            // Broad language coverage; username handles are still Latin alphanumeric.
+            request.recognitionLanguages = ["es-ES", "en-US", "fr-FR", "pt-BR", "de-DE", "it-IT"]
             request.minimumTextHeight = 0.012
 
             let handler = VNImageRequestHandler(
@@ -150,37 +218,219 @@ final class AIScreenPostDetectionService {
             )
             do {
                 try handler.perform([request])
-                return (request.results ?? [])
-                    .compactMap { $0.topCandidates(1).first?.string }
-                    .joined(separator: " ")
+                return (request.results ?? []).compactMap { observation in
+                    guard let text = observation.topCandidates(1).first?.string,
+                          !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        return nil
+                    }
+                    return AIScreenOCRObservation(text: text, boundingBox: observation.boundingBox)
+                }
             } catch {
-                return ""
+                return []
             }
         }.value
     }
 
+    /// Author usernames from top band only; full/matching text for post matching.
+    func extractAuthorOCR(from image: UIImage) async -> AIScreenAuthorOCRResult {
+        let observations = await recognizeLocalObservations(in: image)
+        let fullText = observations.map(\.text).joined(separator: " ")
+        let matchingText = observations
+            .filter { !Self.isLikelySocialNoiseLine($0.text) }
+            .map(\.text)
+            .joined(separator: " ")
+        let authorCandidates = authorUsernameCandidates(from: observations)
+        return AIScreenAuthorOCRResult(
+            fullText: fullText,
+            matchingText: matchingText,
+            authorCandidates: authorCandidates
+        )
+    }
+
+    /// Legacy bag-of-words helper. Prefer `extractAuthorOCR` / top-band candidates for usernames.
     func localUsernameCandidates(from text: String) -> [String] {
+        usernameTokens(from: text, minimumLength: 5)
+    }
+
+    func authorUsernameCandidates(from observations: [AIScreenOCRObservation]) -> [String] {
+        // Vision Y: 1 = top. Author header lives in roughly the top 28%.
+        let topBandMinY: CGFloat = 0.72
+        let topObservations = observations.filter { $0.boundingBox.maxY >= topBandMinY || $0.boundingBox.midY >= topBandMinY }
+        let source = topObservations.isEmpty ? Array(observations.prefix(8)) : topObservations
+
+        var scores: [String: Double] = [:]
+        for observation in source {
+            let line = observation.text
+            if Self.isLikelySocialNoiseLine(line) { continue }
+            let topBias = max(0, observation.boundingBox.midY - topBandMinY) * 4.0
+            for token in usernameTokens(from: line, minimumLength: 4) {
+                guard token.count >= 5 || Self.hasStrongShortUsernameSignal(token, in: line) else { continue }
+                scores[token, default: 0] += 1.0 + topBias
+            }
+        }
+
+        // Bonus for tokens repeated across top-band lines (typical author handle).
+        let topText = source.map(\.text).joined(separator: " ").lowercased()
+        for (token, _) in scores {
+            let occurrences = topText.components(separatedBy: token).count - 1
+            if occurrences >= 2 {
+                scores[token, default: 0] += 1.5
+            }
+        }
+
+        return scores
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key.count > rhs.key.count
+                }
+                return lhs.value > rhs.value
+            }
+            .map(\.key)
+            .prefix(6)
+            .map { $0 }
+    }
+
+    /// Ranked author queries: consensus first, then OpenAI, then repeated local top-band.
+    func rankedAuthorSearchQueries(openAI: [String], localTop: [String]) -> [String] {
+        let open = openAI
+            .map(AIScreenPostAnalysis.normalizeUsername)
+            .filter { isPlausibleAuthorUsername($0) }
+        let local = localTop
+            .map(AIScreenPostAnalysis.normalizeUsername)
+            .filter { isPlausibleAuthorUsername($0) }
+
+        let localSet = Set(local)
+        var ranked: [String] = []
+        var seen = Set<String>()
+
+        func append(_ values: [String]) {
+            for value in values where seen.insert(value).inserted {
+                ranked.append(value)
+            }
+        }
+
+        append(open.filter { localSet.contains($0) })
+        append(open)
+        append(local)
+        return Array(ranked.prefix(6))
+    }
+
+    func isPlausibleAuthorUsername(_ value: String) -> Bool {
+        let token = AIScreenPostAnalysis.normalizeUsername(value)
+        guard token.count >= 4, token.count <= 30 else { return false }
+        guard !token.allSatisfy(\.isNumber) else { return false }
+        guard token.range(of: #"^[a-z0-9._]+$"#, options: .regularExpression) != nil else { return false }
+        guard !Self.usernameStopwords.contains(token) else { return false }
+        guard !Self.isCountUnitToken(token) else { return false }
+        return true
+    }
+
+    private static func hasStrongShortUsernameSignal(_ token: String, in line: String) -> Bool {
+        guard token.count == 4 else { return true }
+        if token.contains(".") || token.contains("_") { return true }
+        if token.rangeOfCharacter(from: .decimalDigits) != nil { return true }
+        // If OCR keeps an @ prefix in the source line, a 4-char handle is intentional.
+        if line.lowercased().contains("@\(token)") { return true }
+        return false
+    }
+
+    private func usernameTokens(from text: String, minimumLength: Int) -> [String] {
         let normalized = text
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
+        if Self.isLikelySocialNoiseLine(normalized) {
+            return []
+        }
         let pattern = #"@?[a-z0-9._]{3,30}"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let nsRange = NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)
-        let stopwords: Set<String> = [
-            "instagram", "seguir", "seguidos", "publicaciones", "comentario",
-            "comentarios", "persona", "reels", "reel", "video", "likes", "share",
-            "como", "sabes", "estas", "para", "porque", "cuando", "desde"
-        ]
         var seen = Set<String>()
         return regex.matches(in: normalized, range: nsRange).compactMap { match in
             guard let range = Range(match.range, in: normalized) else { return nil }
             let token = String(normalized[range]).trimmingCharacters(in: CharacterSet(charactersIn: "@._"))
-            guard token.count >= 3,
-                  !token.allSatisfy(\.isNumber),
-                  !stopwords.contains(token),
+            guard isPlausibleAuthorUsername(token),
+                  token.count >= minimumLength,
                   seen.insert(token).inserted else { return nil }
             return token
         }
+    }
+
+    private static let usernameStopwords: Set<String> = [
+        // Product / chrome (multi-language)
+        "instagram", "reels", "reel", "video", "videos", "posts", "post", "story", "stories",
+        "follow", "following", "followers", "seguir", "seguidos", "seguidores", "suivre", "abonner",
+        "abonnes", "abonnement", "iscritti", "segui", "seguito", "folgen", "gefolgt",
+        "seguidores", "publicaciones", "publicacion", "publicacoes", "publicacao",
+        "beitraege", "beitrage", "beitrag", "pubblicazioni", "pubblicazione",
+        "publications", "publication", "投稿", "게시물",
+        "comment", "comments", "comentario", "comentarios", "commentaires", "kommentare",
+        "commenti", "comentarios", "comentarios", "댓글",
+        "like", "likes", "share", "shares", "send", "save", "saved",
+        "j’aime", "jaime", "curtidas", "curtir", "gefällt", "gefallt", "mi piace",
+        "translation", "traduccion", "traduction", "ubersetzung", "traducao",
+        "traduzione", "翻訳", "번역", "watch", "again", "more", "ver", "otra", "vez",
+        "mas", "voir", "encore", "voirplus", "guardare", "ancora", "mehr", "ansehen",
+        "suggested", "sugerencias", "suggestions", "vorschlag", "suggerimenti",
+        "recomendado", "recomendados", "recomendadas",
+        "liked", "gusta", "gustan", "les", "otros", "otras", "others", "autres", "andere",
+        "altri", "altre", "outras", "outros",
+        "persona", "personas", "people", "personnes", "personen",
+        // Common filler words that OCR often picks as "usernames"
+        "the", "and", "for", "with", "from", "this", "that", "your",
+        "como", "sabes", "estas", "para", "porque", "cuando", "desde",
+        "pour", "avec", "dans", "und", "oder", "mit", "von", "per", "con", "che",
+        "song", "audio", "music", "musica", "musique", "musik", "original"
+    ]
+
+    private static func isCountUnitToken(_ token: String) -> Bool {
+        let units: Set<String> = [
+            "mil", "mill", "mll", "milo", "mill.", "k", "km", "mk",
+            "thousand", "thousands", "million", "millions",
+            "mille", "milhares", "milhao", "milhoes", "tausend", "mio",
+            "millionen", "milioni", "mila", "万", "천", "만"
+        ]
+        if units.contains(token) { return true }
+        // OCR noise around thousand-unit abbreviations: mll / rnil / nii
+        if token.count <= 4,
+           token.range(of: #"^m?l{1,3}$"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
+    }
+
+    private static func isLikelySocialNoiseLine(_ text: String) -> Bool {
+        let normalized = text
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+
+        // Language-agnostic structural signals for like/comment social rows.
+        let usernameLikePattern = #"@?[a-z0-9._]{5,30}"#
+        let usernameMatches = (try? NSRegularExpression(pattern: usernameLikePattern))?
+            .numberOfMatches(in: normalized, range: NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)) ?? 0
+        if usernameMatches >= 2, normalized.contains(" ") {
+            // Multiple handles in one line usually means "liked by A and B" / comment row.
+            return true
+        }
+
+        let markers = [
+            // EN
+            "liked by", "and others", "watch again", "watch more", "see translation", "suggested for you",
+            // ES
+            "les gusta a", "y mas personas", "ver mas reels", "ver otra vez", "ver traduccion", "sugerencias",
+            // FR
+            "aime par", "aime par", "et d autres", "voir la traduction", "regarder a nouveau",
+            // PT
+            "curtido por", "curtida por", "curtidas por", "e outras", "e outros", "ver traducao", "assistir novamente",
+            // DE
+            "gefallt", "gefallen", "und andere", "ubersetzung anzeigen", "noch einmal ansehen",
+            // IT
+            "piace a", "e altri", "e altre", "vedi traduzione",
+            // NL / common EU variants
+            "vind ik leuk", "en anderen", "vertaling bekijken",
+            // Non-latin UI hints sometimes OCR'd as-is
+            "翻訳を見る", "좋아요", "번역 보기"
+        ]
+        return markers.contains { normalized.contains($0) }
     }
 
     func testOpenAIConnection() async throws -> String {
@@ -242,10 +492,15 @@ final class AIScreenPostDetectionService {
         let apiKey = settings.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !apiKey.isEmpty else { throw AIScreenDetectionError.missingAPIKey }
 
+        // GPT often shifts counters left when likes are hidden (heart with no digit).
+        let analysis = correctHiddenLikesCounterShift(analysis, localOCRText: localOCRText)
+        logMatchAttemptHeader(analysis: analysis, candidateCount: candidates.count, localOCRText: localOCRText)
+
         let hydrated = await hydrateCandidates(candidates)
         guard !hydrated.isEmpty else {
             guard let fallbackItem = candidates.first else { throw AIScreenDetectionError.noCandidates }
-            print("⚠️ [AI SCREEN] Candidates exist but images could not hydrate; using first post fallback mediaId=\(fallbackItem.mediaId)")
+            print("⚠️ [VISUAL MATCH] Candidates exist but images could not hydrate; using first post fallback mediaId=\(fallbackItem.mediaId)")
+            LogManager.shared.warning("Visual match hydrate failed — first fallback mediaId=\(fallbackItem.mediaId)", category: .general)
             return AIScreenResolvedPostMatch(
                 candidate: AIScreenCandidateImage(item: fallbackItem, image: UIImage()),
                 confidence: 0,
@@ -254,8 +509,10 @@ final class AIScreenPostDetectionService {
             )
         }
 
+        logCandidateStatsTable(hydrated)
+
         if let titlePrefixCandidate = strictTitlePrefixShortcutMatch(analysis: analysis, hydrated: hydrated, localOCRText: localOCRText) {
-            print("⚡️ [AI SCREEN] Strict title-prefix shortcut selected mediaId=\(titlePrefixCandidate.item.mediaId)")
+            logMatchDecision(reason: "strict_title_prefix_shortcut", mediaId: titlePrefixCandidate.item.mediaId, confidence: 0.96)
             return AIScreenResolvedPostMatch(
                 candidate: titlePrefixCandidate,
                 confidence: 0.96,
@@ -263,9 +520,10 @@ final class AIScreenPostDetectionService {
                 isLowConfidence: false
             )
         }
+        print("🔎 [VISUAL MATCH] Title-prefix shortcut: no unique match")
 
         if let strictStatsCandidate = strictStatsShortcutMatch(analysis: analysis, hydrated: hydrated) {
-            print("⚡️ [AI SCREEN] Strict stats shortcut selected mediaId=\(strictStatsCandidate.item.mediaId)")
+            logMatchDecision(reason: "strict_stats_shortcut", mediaId: strictStatsCandidate.item.mediaId, confidence: 0.9)
             return AIScreenResolvedPostMatch(
                 candidate: strictStatsCandidate,
                 confidence: 0.9,
@@ -273,9 +531,10 @@ final class AIScreenPostDetectionService {
                 isLowConfidence: false
             )
         }
+        print("🔎 [VISUAL MATCH] Strict stats shortcut: no unique match")
 
         if let textCandidate = strictVisibleTextShortcutMatch(analysis: analysis, hydrated: hydrated, localOCRText: localOCRText) {
-            print("⚡️ [AI SCREEN] Strict visible-text shortcut selected mediaId=\(textCandidate.item.mediaId)")
+            logMatchDecision(reason: "strict_visible_text_shortcut", mediaId: textCandidate.item.mediaId, confidence: 0.86)
             return AIScreenResolvedPostMatch(
                 candidate: textCandidate,
                 confidence: 0.86,
@@ -283,20 +542,53 @@ final class AIScreenPostDetectionService {
                 isLowConfidence: false
             )
         }
+        print("🔎 [VISUAL MATCH] Visible-text shortcut: no unique match")
+
+        // Prefer GPT counters before collage/thumbnail comparison. Reels/videos often have
+        // thumbnails that do not match the visible frame, so image similarity is unreliable.
+        if let statsCandidate = statsFallbackMatch(analysis: analysis, hydrated: hydrated) {
+            logMatchDecision(reason: "stats_fallback_before_collage", mediaId: statsCandidate.item.mediaId, confidence: 0.72)
+            return AIScreenResolvedPostMatch(
+                candidate: statsCandidate,
+                confidence: 0.72,
+                reason: "stats_fallback_before_collage",
+                isLowConfidence: false
+            )
+        }
+        print("🔎 [VISUAL MATCH] Stats fallback: no unique match")
+
+        let postType = (analysis.postType ?? "").lowercased()
+        let isVideoLike = postType.contains("reel") || postType.contains("video")
+        let hasUsefulCaption = !(analysis.captionVisible ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !(analysis.imageTextVisible ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        // For Reels/videos without caption/overlay text, skip thumbnail collage matching.
+        if isVideoLike && !hasUsefulCaption {
+            let fallbackIndex = fallbackCandidateIndex(for: hydrated, preferFirst: true)
+            return AIScreenResolvedPostMatch(
+                candidate: hydrated[fallbackIndex],
+                confidence: 0,
+                reason: "video_no_caption_center_fallback",
+                isLowConfidence: true
+            )
+        }
 
         let collage = makeCandidateCollage(hydrated)
         let candidateText = hydrated.enumerated().map { index, candidate in
             let item = candidate.item
             let date = item.takenAt.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+            let likes = item.likeCount.map(String.init) ?? ""
+            let comments = item.commentCount.map(String.init) ?? ""
+            let shares = item.shareCount.map(String.init) ?? ""
             return """
-            \(index + 1). mediaId=\(item.mediaId), owner=\(item.ownerUsername ?? ""), date=\(date), caption=\((item.caption ?? "").prefix(160))
+            \(index + 1). mediaId=\(item.mediaId), owner=\(item.ownerUsername ?? ""), date=\(date), likes=\(likes), comments=\(comments), shares=\(shares), caption=\((item.caption ?? "").prefix(160))
             """
         }.joined(separator: "\n")
 
         let text = """
-        La primera imagen es una foto tomada a una pantalla de Instagram. La segunda imagen es un collage numerado de candidatos del perfil @\(analysis.normalizedUsername).
+        The first image is a photo of an Instagram screen. The second image is a numbered collage of candidate posts from @\(analysis.normalizedUsername).
 
-        Datos extraidos de la pantalla:
+        Screen-extracted data:
         username: \(analysis.normalizedUsername)
         dateText: \(analysis.dateText ?? "")
         visibleLikeText: \(analysis.visibleLikeText ?? "")
@@ -306,17 +598,27 @@ final class AIScreenPostDetectionService {
         imageTextVisible: \(analysis.imageTextVisible ?? "")
         visualDescription: \(analysis.visualDescription ?? "")
         localOCRText: \(localOCRText)
+        postType: \(analysis.postType ?? "")
 
-        Candidatos:
+        Candidates:
         \(candidateText)
 
-        Elige el numero del candidato que coincide con el post de la pantalla.
-        IMPORTANTE PARA REELS/VIDEOS: la miniatura del collage puede NO ser el mismo frame visible del video. En ese caso, no dependas solo de la miniatura. La prioridad mas alta es el titulo/caption visible debajo del username o en la parte inferior del video, porque suele ser unico del Reel. Despues usa texto grande visible en el video, subtitulos, caption, username y contadores laterales extraidos arriba. Por ejemplo, si el frame visible dice "LA PERSONA" o debajo aparece un titulo como "COMO SABES SI ESTAS...", busca ese texto o una frase muy relacionada en los candidatos.
-        No inventes coincidencias: si no hay señal clara visual/textual/estadistica, usa selectedIndex 0. Devuelve SOLO JSON valido:
+        Choose the candidate number that matches the on-screen post.
+        PRIORITY ORDER (language-agnostic):
+        1) Title/caption text under the author username
+        2) Large overlay text inside the media
+        3) Comment/share/like counts (likes may be missing/hidden — then use comments + shares)
+        4) Only then visual similarity of still images
+        CRITICAL: For Reels/videos, collage thumbnails often show a DIFFERENT frame. Do NOT rely on thumbnail/image similarity for video/reel posts. Prefer caption/overlay/counts.
+        If visibleLikeText is empty because likes are hidden, match using comments and shares.
+        Ignore UI chrome in any language (Follow, Posts, See translation, Watch again, etc.).
+        Ignore comment authors and "Liked by ..." people. They are not the post identity.
+        If there is no clear textual/statistical signal, return selectedIndex 0.
+        Return ONLY valid JSON:
         {"selectedIndex":1,"confidence":0.0,"reason":""}
-        Si no hay coincidencia clara o la confianza es baja, usa selectedIndex 0.
         """
 
+        print("🔎 [VISUAL MATCH] Calling OpenAI collage match (videoLike=\(isVideoLike) hasCaption=\(hasUsefulCaption))")
         let content = try await sendVisionRequest(
             apiKey: apiKey,
             model: settings.openAIModel,
@@ -324,36 +626,100 @@ final class AIScreenPostDetectionService {
             images: [screenPhoto, collage],
             maxTokens: 300
         )
+        print("🤖 [VISUAL MATCH] Collage GPT raw: \(content.prefix(400))")
+        LogManager.shared.info("Visual match collage GPT raw: \(content.prefix(400))", category: .general)
+
         let match = try decodeJSON(AIScreenPostMatch.self, from: content)
+        print("🤖 [VISUAL MATCH] Collage GPT parsed selectedIndex=\(match.selectedIndex) confidence=\(match.confidence) reason=\(match.reason ?? "")")
         let visualCandidate: AIScreenCandidateImage? = {
             guard match.selectedIndex > 0, match.selectedIndex <= hydrated.count else { return nil }
             return hydrated[match.selectedIndex - 1]
         }()
 
-        if let visualCandidate, match.confidence >= 0.78 {
+        // Accept collage result mainly when text/caption evidence exists; never trust weak video thumbnail picks.
+        let minVisualConfidence = isVideoLike ? 0.9 : 0.78
+        if let visualCandidate, match.confidence >= minVisualConfidence, hasUsefulCaption || !isVideoLike {
+            logMatchDecision(reason: match.reason ?? "collage_text_assisted", mediaId: visualCandidate.item.mediaId, confidence: match.confidence)
             return AIScreenResolvedPostMatch(
                 candidate: visualCandidate,
                 confidence: match.confidence,
-                reason: match.reason ?? "visual",
+                reason: match.reason ?? "collage_text_assisted",
                 isLowConfidence: false
             )
         }
 
-        if let statsCandidate = statsFallbackMatch(analysis: analysis, hydrated: hydrated) {
-            return AIScreenResolvedPostMatch(
-                candidate: statsCandidate,
-                confidence: max(match.confidence, 0.62),
-                reason: "stats_fallback",
-                isLowConfidence: match.confidence < 0.78
-            )
-        }
-
+        let fallbackIndex = fallbackCandidateIndex(for: hydrated, preferFirst: isVideoLike)
+        let fallback = visualCandidate ?? hydrated[fallbackIndex]
+        logMatchDecision(
+            reason: match.reason ?? "low_confidence_fallback",
+            mediaId: fallback.item.mediaId,
+            confidence: match.confidence,
+            low: true
+        )
         return AIScreenResolvedPostMatch(
-            candidate: visualCandidate ?? hydrated[0],
+            candidate: fallback,
             confidence: match.confidence,
             reason: match.reason ?? "low_confidence_fallback",
             isLowConfidence: true
         )
+    }
+
+    private func logMatchAttemptHeader(
+        analysis: AIScreenPostAnalysis,
+        candidateCount: Int,
+        localOCRText: String
+    ) {
+        let likes = parseCount(analysis.visibleLikeText).map(String.init) ?? "nil"
+        let comments = parseCount(analysis.visibleCommentText).map(String.init) ?? "nil"
+        let shares = parseCount(analysis.visibleShareText).map(String.init) ?? "nil"
+        let line = """
+        📋 [VISUAL MATCH] GPT screen analysis \
+        username=\(analysis.normalizedUsername) \
+        postType=\(analysis.postType ?? "") \
+        likesText='\(analysis.visibleLikeText ?? "")'(\(likes)) \
+        commentsText='\(analysis.visibleCommentText ?? "")'(\(comments)) \
+        sharesText='\(analysis.visibleShareText ?? "")'(\(shares)) \
+        caption='\(analysis.captionVisible ?? "")' \
+        imageText='\(analysis.imageTextVisible ?? "")' \
+        confidence=\(analysis.confidence) \
+        candidates=\(candidateCount) \
+        localOCR='\(localOCRText.prefix(180))'
+        """
+        print(line)
+        LogManager.shared.info(line, category: .general)
+    }
+
+    private func logCandidateStatsTable(_ hydrated: [AIScreenCandidateImage]) {
+        let rows = hydrated.enumerated().map { index, candidate in
+            let item = candidate.item
+            let likes = item.likeCount.map(String.init) ?? "-"
+            let comments = item.commentCount.map(String.init) ?? "-"
+            let shares = item.shareCount.map(String.init) ?? "-"
+            let pinned = item.isPinned == true ? "pin" : "-"
+            let caption = (item.caption ?? "").prefix(40)
+            return "#\(index + 1) id=\(item.mediaId) L=\(likes) C=\(comments) S=\(shares) \(pinned) '\(caption)'"
+        }.joined(separator: " | ")
+        print("📋 [VISUAL MATCH] Candidate stats: \(rows)")
+        LogManager.shared.info("Visual match candidate stats: \(rows)", category: .general)
+    }
+
+    private func logMatchDecision(reason: String, mediaId: String, confidence: Double, low: Bool = false) {
+        let prefix = low ? "⚠️" : "✅"
+        let line = "\(prefix) [VISUAL MATCH] Decision reason=\(reason) mediaId=\(mediaId) confidence=\(confidence) low=\(low)"
+        print(line)
+        if low {
+            LogManager.shared.warning(line, category: .general)
+        } else {
+            LogManager.shared.success(line, category: .general)
+        }
+    }
+
+    private func fallbackCandidateIndex(for hydrated: [AIScreenCandidateImage], preferFirst: Bool = false) -> Int {
+        guard !hydrated.isEmpty else { return 0 }
+        if preferFirst || hydrated.contains(where: { $0.item.isPinned == true }) {
+            return 0
+        }
+        return min(max(hydrated.count / 2, 0), hydrated.count - 1)
     }
 
     private func strictTitlePrefixShortcutMatch(
@@ -432,33 +798,85 @@ final class AIScreenPostDetectionService {
         analysis: AIScreenPostAnalysis,
         hydrated: [AIScreenCandidateImage]
     ) -> AIScreenCandidateImage? {
+        // Prefer GPT-read counters from the spectator screen (more reliable than local OCR near icons).
+        // Likes may be hidden by the account — then comments + shares are the main signal.
         let targetLikes = parseCount(analysis.visibleLikeText)
         let targetComments = parseCount(analysis.visibleCommentText)
-        guard targetLikes != nil || targetComments != nil else { return nil }
+        var targetShares = parseCount(analysis.visibleShareText)
+        let likesHidden = targetLikes == nil
+        // Instagram often omits reshare_count on feed items — don't require shares if no candidate has them.
+        let shareCoverage = hydrated.filter { $0.item.shareCount != nil }.count
+        if targetShares != nil, shareCoverage == 0 {
+            print("🔎 [VISUAL MATCH] Strict stats: screen has shares=\(targetShares.map(String.init) ?? "-") but 0 candidates expose shareCount — ignoring share target")
+            targetShares = nil
+        }
+        guard targetLikes != nil || targetComments != nil || targetShares != nil else {
+            print("🔎 [VISUAL MATCH] Strict stats: GPT provided no parseable counters")
+            return nil
+        }
+        let availableTargets = [targetLikes, targetComments, targetShares].compactMap { $0 }.count
+        print("🔎 [VISUAL MATCH] Strict stats targets likes=\(targetLikes.map(String.init) ?? "hidden/-") comments=\(targetComments.map(String.init) ?? "-") shares=\(targetShares.map(String.init) ?? "-") available=\(availableTargets) likesHidden=\(likesHidden) shareCoverage=\(shareCoverage)/\(hydrated.count) (tol ±3 / 1%)")
 
-        let scored = hydrated.compactMap { candidate -> (candidate: AIScreenCandidateImage, score: Double, evidence: Int)? in
+        let scored = hydrated.compactMap { candidate -> (candidate: AIScreenCandidateImage, score: Double, evidence: Int, possible: Int, detail: String)? in
             let item = candidate.item
             var score = 0.0
             var evidence = 0
+            var possible = 0
+            var parts: [String] = []
 
+            // Only score likes when GPT actually saw a like count (account may hide likes).
             if let targetLikes, let likes = item.likeCount {
-                evidence += 1
-                score += strictCountScore(actual: likes, target: targetLikes)
+                possible += 1
+                let part = countMatchScore(actual: likes, target: targetLikes)
+                if part > 0 {
+                    evidence += 1
+                    score += part
+                    parts.append("L\(likes)/\(targetLikes)=\(String(format: "%.2f", part))")
+                }
             }
             if let targetComments, let comments = item.commentCount {
-                evidence += 1
-                score += strictCountScore(actual: comments, target: targetComments)
+                possible += 1
+                let part = countMatchScore(actual: comments, target: targetComments)
+                if part > 0 {
+                    evidence += 1
+                    score += part
+                    parts.append("C\(comments)/\(targetComments)=\(String(format: "%.2f", part))")
+                }
+            }
+            if let targetShares, let shares = item.shareCount {
+                possible += 1
+                let part = countMatchScore(actual: shares, target: targetShares)
+                if part > 0 {
+                    evidence += 1
+                    score += part
+                    parts.append("S\(shares)/\(targetShares)=\(String(format: "%.2f", part))")
+                }
             }
 
             guard evidence > 0 else { return nil }
-            return (candidate, score / Double(evidence), evidence)
+            return (candidate, score / Double(evidence), evidence, possible, parts.joined(separator: ","))
         }
         .sorted { $0.score > $1.score }
 
+        if let best = scored.first {
+            print("🔎 [VISUAL MATCH] Strict stats best mediaId=\(best.candidate.item.mediaId) score=\(String(format: "%.2f", best.score)) evidence=\(best.evidence)/\(best.possible) \(best.detail)")
+            if let second = scored.dropFirst().first {
+                print("🔎 [VISUAL MATCH] Strict stats runner-up mediaId=\(second.candidate.item.mediaId) score=\(String(format: "%.2f", second.score)) evidence=\(second.evidence)/\(second.possible)")
+            }
+        }
+
         guard let best = scored.first else { return nil }
         let runnerUpScore = scored.dropFirst().first?.score ?? 0
-        let hasStrongEvidence = best.evidence >= 2 ? best.score >= 0.92 : best.score >= 0.98
-        guard hasStrongEvidence, best.score - runnerUpScore >= 0.22 else { return nil }
+        // Prefer 2+ counters. If likes are hidden, comments+shares is ideal.
+        // If only one counter was readable on screen — or API omits shares for this item — require a unique fit.
+        let requiredEvidence = min(availableTargets >= 2 ? 2 : 1, max(best.possible, 1))
+        let hasStrongEvidence = best.evidence >= requiredEvidence
+            ? best.score >= (likesHidden && best.evidence >= 2 ? 0.8 : 0.85)
+            : best.score >= 0.98
+        guard hasStrongEvidence, best.score - runnerUpScore >= 0.12 else {
+            print("🔎 [VISUAL MATCH] Strict stats rejected (need unique fit; requiredEvidence=\(requiredEvidence) got=\(best.evidence)/\(best.possible))")
+            return nil
+        }
         return best.candidate
     }
 
@@ -514,45 +932,83 @@ final class AIScreenPostDetectionService {
     ) -> AIScreenCandidateImage? {
         let targetLikes = parseCount(analysis.visibleLikeText)
         let targetComments = parseCount(analysis.visibleCommentText)
-        guard targetLikes != nil || targetComments != nil else { return nil }
+        var targetShares = parseCount(analysis.visibleShareText)
+        let likesHidden = targetLikes == nil
+        let shareCoverage = hydrated.filter { $0.item.shareCount != nil }.count
+        if targetShares != nil, shareCoverage == 0 {
+            targetShares = nil
+        }
+        let availableTargets = [targetLikes, targetComments, targetShares].compactMap { $0 }.count
+        guard availableTargets > 0 else { return nil }
 
-        let scored = hydrated.compactMap { candidate -> (candidate: AIScreenCandidateImage, score: Double)? in
+        // When likes are hidden, comments+shares alone are enough (requiredEvidence = 2 if both exist).
+        // If API omits shares, a unique comment match can still win.
+        let requiredEvidence = min(2, availableTargets)
+
+        let scored = hydrated.compactMap { candidate -> (candidate: AIScreenCandidateImage, score: Double, evidence: Int)? in
             let item = candidate.item
             var score = 0.0
             var evidence = 0
+            var possible = 0
 
             if let targetLikes, let likes = item.likeCount {
-                evidence += 1
-                score += closenessScore(actual: likes, target: targetLikes)
+                possible += 1
+                let part = countMatchScore(actual: likes, target: targetLikes)
+                if part > 0 {
+                    evidence += 1
+                    score += part
+                }
             }
             if let targetComments, let comments = item.commentCount {
-                evidence += 1
-                score += closenessScore(actual: comments, target: targetComments)
+                possible += 1
+                let part = countMatchScore(actual: comments, target: targetComments)
+                if part > 0 {
+                    evidence += 1
+                    score += part
+                }
+            }
+            if let targetShares, let shares = item.shareCount {
+                possible += 1
+                let part = countMatchScore(actual: shares, target: targetShares)
+                if part > 0 {
+                    evidence += 1
+                    score += part
+                }
             }
 
-            guard evidence > 0 else { return nil }
-            return (candidate, score / Double(evidence))
+            let needed = min(requiredEvidence, max(possible, 1))
+            guard evidence >= needed else { return nil }
+            return (candidate, score / Double(max(evidence, 1)), evidence)
         }
         .sorted { $0.score > $1.score }
 
-        guard let best = scored.first, best.score >= 0.72 else { return nil }
-        if scored.count > 1, best.score - scored[1].score < 0.12 { return nil }
+        guard let best = scored.first, best.score >= 0.7 else {
+            print("🔎 [VISUAL MATCH] Stats fallback: no candidate with ≥\(requiredEvidence) counters in tolerance (likesHidden=\(likesHidden))")
+            return nil
+        }
+        if scored.count > 1, best.score - scored[1].score < 0.1 {
+            print("🔎 [VISUAL MATCH] Stats fallback: ambiguous top-2 scores \(String(format: "%.2f", best.score)) vs \(String(format: "%.2f", scored[1].score))")
+            return nil
+        }
+        print("🔎 [VISUAL MATCH] Stats fallback best mediaId=\(best.candidate.item.mediaId) score=\(String(format: "%.2f", best.score)) evidence=\(best.evidence) likesHidden=\(likesHidden)")
         return best.candidate
     }
 
-    private func closenessScore(actual: Int, target: Int) -> Double {
-        guard target > 0 else { return 0 }
-        let diff = abs(Double(actual - target))
-        let tolerance = max(Double(target) * 0.08, 25)
-        return max(0, 1 - diff / tolerance)
+    /// Absolute ±3 for typical counters; for large like counts also allow ~1%.
+    private func countMatchScore(actual: Int, target: Int) -> Double {
+        guard target >= 0, actual >= 0 else { return 0 }
+        let diff = abs(actual - target)
+        let tolerance = countTolerance(for: target)
+        guard diff <= tolerance else { return 0 }
+        if tolerance == 0 { return 1 }
+        return 1 - (Double(diff) / Double(tolerance))
     }
 
-    private func strictCountScore(actual: Int, target: Int) -> Double {
-        guard target >= 0 else { return 0 }
-        let diff = abs(actual - target)
-        let tolerance = max(Int((Double(max(target, 1)) * 0.015).rounded()), 2)
-        guard diff <= tolerance else { return 0 }
-        return 1 - (Double(diff) / Double(max(tolerance, 1)))
+    private func countTolerance(for target: Int) -> Int {
+        if target >= 1000 {
+            return max(3, Int((Double(target) * 0.01).rounded()))
+        }
+        return 3
     }
 
     private func meaningfulTerms(_ text: String) -> Set<String> {
@@ -561,9 +1017,13 @@ final class AIScreenPostDetectionService {
 
     private func orderedMeaningfulTerms(_ text: String) -> [String] {
         let stopwords: Set<String> = [
-            "instagram", "publicacion", "publicaciones", "seguir", "seguidos",
-            "persona", "video", "reel", "foto", "comment", "comments", "like", "likes",
-            "the", "and", "para", "con", "por", "una", "uno", "las", "los", "que", "del"
+            "instagram", "publicacion", "publicaciones", "posts", "post", "seguir", "seguidos",
+            "follow", "following", "followers", "persona", "personas", "people", "video", "reel",
+            "reels", "foto", "photo", "comment", "comments", "like", "likes", "share", "shares",
+            "mil", "mill", "mll", "thousand", "mille", "traduccion", "translation", "traduction",
+            "ver", "otra", "vez", "mas", "watch", "again", "more", "gusta", "liked", "les",
+            "the", "and", "para", "con", "por", "una", "uno", "las", "los", "que", "del",
+            "others", "autres", "andere"
         ]
         let normalized = text
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
@@ -575,7 +1035,8 @@ final class AIScreenPostDetectionService {
         return matches.compactMap { match in
             guard let range = Range(match.range, in: normalized) else { return nil }
             let term = String(normalized[range])
-            return stopwords.contains(term) ? nil : term
+            if stopwords.contains(term) || Self.isCountUnitToken(term) { return nil }
+            return term
         }
     }
 
@@ -593,23 +1054,85 @@ final class AIScreenPostDetectionService {
         }
     }
 
+    /// When likes are hidden, GPT often fills likes/comments with the bubble+repost numbers and leaves shares empty.
+    /// Shift left → comments/shares when OCR/UI signals confirm hidden likes.
+    private func correctHiddenLikesCounterShift(
+        _ analysis: AIScreenPostAnalysis,
+        localOCRText: String
+    ) -> AIScreenPostAnalysis {
+        let likesText = analysis.visibleLikeText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let commentsText = analysis.visibleCommentText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let sharesText = analysis.visibleShareText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        // Already looks correct (likes empty, comments+shares present).
+        if likesText.isEmpty, !commentsText.isEmpty, !sharesText.isEmpty {
+            return analysis
+        }
+
+        // Classic mis-shift: likes+comments filled, shares empty.
+        guard !likesText.isEmpty, !commentsText.isEmpty, sharesText.isEmpty,
+              let shiftedComments = parseCount(likesText),
+              let shiftedShares = parseCount(commentsText) else {
+            return analysis
+        }
+
+        let ocr = localOCRText
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+        let likedBySignals = [
+            "les gusta", "liked by", "liked", "gusta a", "mas personas", "and others",
+            "y otras", "y otros", "autres personnes", "andere personen"
+        ]
+        let hasLikedByRow = likedBySignals.contains { ocr.contains($0) }
+
+        // OCR often shows the two engagement digits in order near the action bar.
+        let pairPattern = #"\b\#(shiftedComments)\b[^\d]{0,12}\b\#(shiftedShares)\b"#
+        let hasAdjacentPair = (try? NSRegularExpression(pattern: pairPattern))
+            .map { $0.firstMatch(in: ocr, range: NSRange(ocr.startIndex..<ocr.endIndex, in: ocr)) != nil }
+            ?? false
+
+        // Prefer correcting when UI/OCR says likes are hidden, or when the pair appears as-is in OCR.
+        guard hasLikedByRow || hasAdjacentPair else { return analysis }
+
+        print("🔧 [VISUAL MATCH] Corrected hidden-likes counter shift: likes='\(likesText)' comments='\(commentsText)' shares='' → likes='' comments='\(likesText)' shares='\(commentsText)' (likedBy=\(hasLikedByRow) adjacentPair=\(hasAdjacentPair))")
+        LogManager.shared.info(
+            "Visual match corrected hidden-likes shift likes=\(likesText) comments=\(commentsText) → comments=\(likesText) shares=\(commentsText)",
+            category: .general
+        )
+        return analysis.withEngagementTexts(likes: "", comments: likesText, shares: commentsText)
+    }
+
     private func parseCount(_ text: String?) -> Int? {
         guard var raw = text?.lowercased()
-            .replacingOccurrences(of: ",", with: ".")
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty else { return nil }
 
         var multiplier = 1.0
-        if raw.contains("mill") || raw.contains("m ") || raw.hasSuffix("m") {
+        if raw.contains("million") || raw.contains("millones") || raw.contains("mill.")
+            || raw.contains("mio") || (raw.contains("mill") && !raw.contains("mille")) {
             multiplier = 1_000_000
-        } else if raw.contains("mil") || raw.contains("k") {
+        } else if raw.contains("thousand") || raw.contains("tausend") || raw.contains("milhares")
+                    || raw.contains("mille") || raw.contains("mil") || raw.contains("k") {
             multiplier = 1_000
+        } else if raw.hasSuffix("m"), raw.rangeOfCharacter(from: .decimalDigits) != nil {
+            multiplier = 1_000_000
         }
+
+        // Normalize decimal separators after detecting units.
+        raw = raw.replacingOccurrences(of: ",", with: ".")
         raw = raw
             .replacingOccurrences(of: "millones", with: "")
+            .replacingOccurrences(of: "million", with: "")
+            .replacingOccurrences(of: "millions", with: "")
+            .replacingOccurrences(of: "thousand", with: "")
+            .replacingOccurrences(of: "thousands", with: "")
+            .replacingOccurrences(of: "tausend", with: "")
+            .replacingOccurrences(of: "milhares", with: "")
+            .replacingOccurrences(of: "mille", with: "")
             .replacingOccurrences(of: "mill.", with: "")
             .replacingOccurrences(of: "mill", with: "")
             .replacingOccurrences(of: "mil", with: "")
+            .replacingOccurrences(of: "mio", with: "")
             .replacingOccurrences(of: "k", with: "")
             .replacingOccurrences(of: "m", with: "")
             .filter { $0.isNumber || $0 == "." }

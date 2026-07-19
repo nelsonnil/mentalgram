@@ -21,8 +21,7 @@ struct CrashLogsView: View {
             if !reports.isEmpty {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
-                        let all = reports.map { $0.plainText }.joined(separator: "\n\n")
-                        shareItems = [all]
+                        shareItems = [CrashLoggerService.shared.exportAllAsText()]
                         showingShareAll = true
                     } label: {
                         Image(systemName: "square.and.arrow.up")
@@ -62,7 +61,7 @@ struct CrashLogsView: View {
                 .foregroundColor(.green)
             Text("No crashes recorded")
                 .font(.title3.weight(.semibold))
-            Text("If a crash occurs it will appear here automatically on the next launch.")
+            Text("If the app crashes, open Vault again and the report appears here automatically (stack trace, device id, last screen/actions). Share it from this screen — TestFlight feedback alone usually only shows the device model.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -74,7 +73,7 @@ struct CrashLogsView: View {
     private var list: some View {
         List {
             Section {
-                Text("\(reports.count) crash\(reports.count == 1 ? "" : "es") recorded. Share the report(s) with the developer to help diagnose the issue.")
+                Text("\(reports.count) crash\(reports.count == 1 ? "" : "es") recorded. Open a report → Share, or use the share button above to send all of them. Do not rely on TestFlight “feedback” for the stack — use this export.")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -89,6 +88,8 @@ struct CrashLogsView: View {
     }
 
     private func reload() {
+        // Import any leftover .txt signal dumps before listing.
+        CrashLoggerService.importPendingSignalReports()
         reports = CrashLoggerService.shared.storedReports
     }
 }
@@ -100,8 +101,7 @@ private struct CrashRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Type icon
-            Image(systemName: report.type == "Signal" ? "waveform.badge.exclamationmark" : "bolt.trianglebadge.exclamationmark.fill")
+            Image(systemName: iconName)
                 .font(.system(size: 22))
                 .foregroundColor(.red)
                 .frame(width: 32)
@@ -123,13 +123,22 @@ private struct CrashRowView: View {
                 HStack(spacing: 6) {
                     Label("v\(report.appVersion) (\(report.buildNumber))", systemImage: "app.badge")
                     Text("·")
-                    Text("iOS \(report.osVersion)")
+                    Text(report.deviceModel)
+                        .lineLimit(1)
                 }
                 .font(.system(size: 11))
                 .foregroundColor(.secondary.opacity(0.7))
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private var iconName: String {
+        switch report.type {
+        case "Signal": return "waveform.badge.exclamationmark"
+        case "Jetsam/OOM": return "memorychip"
+        default: return "bolt.trianglebadge.exclamationmark.fill"
+        }
     }
 
     private func formattedDate(_ date: Date) -> String {
@@ -151,7 +160,6 @@ struct CrashDetailView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Header card
                     VStack(alignment: .leading, spacing: 8) {
                         Label(report.name, systemImage: "bolt.trianglebadge.exclamationmark.fill")
                             .font(.headline)
@@ -166,6 +174,9 @@ struct CrashDetailView: View {
                             infoRow("App", "v\(report.appVersion) (build \(report.buildNumber))")
                             infoRow("OS", "iOS \(report.osVersion)")
                             infoRow("Device", report.deviceModel)
+                            if let machine = report.deviceIdentifier, !machine.isEmpty {
+                                infoRow("Machine", machine)
+                            }
                         }
                         .font(.footnote)
                     }
@@ -173,7 +184,6 @@ struct CrashDetailView: View {
                     .background(Color(.secondarySystemBackground))
                     .cornerRadius(12)
 
-                    // Stack trace
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Stack Trace")
                             .font(.subheadline.weight(.semibold))
@@ -187,6 +197,22 @@ struct CrashDetailView: View {
                         .padding(10)
                         .background(Color(.secondarySystemBackground))
                         .cornerRadius(8)
+                    }
+
+                    if let diagnostics = report.diagnostics, !diagnostics.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Diagnostics")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(.secondary)
+                            Text(diagnostics)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.primary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(Color(.secondarySystemBackground))
+                                .cornerRadius(8)
+                        }
                     }
                 }
                 .padding()

@@ -710,6 +710,50 @@ class ProfileCacheService: ObservableObject {
     }
     
     // MARK: - Image Cache
+
+    /// Stable filename for the magician's own profile picture.
+    /// Instagram CDN profile-pic URLs rotate query tokens constantly; URL-keyed
+    /// files miss on the next session and Performance shows a spinner. This key
+    /// never changes for a given logged-in user.
+    private static let ownProfilePicFilename = "own_profile_pic.jpg"
+    private static let ownProfilePicIdentityKeyPrefix = "own_profile_pic_cdn_identity_"
+
+    /// CDN asset identity: scheme+host+path without query/fragment.
+    /// Token rotation keeps this stable; a real profile-pic change usually changes the path.
+    static func profilePicCDNIdentity(for urlString: String) -> String {
+        guard let url = URL(string: urlString), !urlString.isEmpty else { return "" }
+        var comps = URLComponents()
+        comps.scheme = url.scheme
+        comps.host = url.host
+        comps.path = url.path
+        return comps.string ?? urlString
+    }
+
+    private func ownProfilePicIdentityDefaultsKey(for userId: String) -> String {
+        Self.ownProfilePicIdentityKeyPrefix + userId
+    }
+
+    func savedOwnProfilePicCDNIdentity() -> String? {
+        guard let userId = activeUserId() else { return nil }
+        let value = UserDefaults.standard.string(forKey: ownProfilePicIdentityDefaultsKey(for: userId))
+        return (value?.isEmpty == false) ? value : nil
+    }
+
+    func rememberOwnProfilePicCDNIdentity(_ urlString: String, userId: String? = nil) {
+        guard let resolvedUserId = userId ?? activeUserId() else { return }
+        let identity = Self.profilePicCDNIdentity(for: urlString)
+        guard !identity.isEmpty else { return }
+        UserDefaults.standard.set(identity, forKey: ownProfilePicIdentityDefaultsKey(for: resolvedUserId))
+    }
+
+    /// True when `urlString` refers to the same CDN asset we last saved as own profile pic
+    /// (query-token rotation only). False when Instagram replaced the photo (path changed)
+    /// or we have never recorded an identity.
+    func ownProfilePicMatchesCDNIdentity(of urlString: String) -> Bool {
+        let urlId = Self.profilePicCDNIdentity(for: urlString)
+        guard !urlId.isEmpty, let saved = savedOwnProfilePicCDNIdentity() else { return false }
+        return saved == urlId
+    }
     
     func saveImage(_ image: UIImage, forURL urlString: String) {
         guard let data = image.jpegData(compressionQuality: 0.8) else { return }
@@ -718,6 +762,10 @@ class ProfileCacheService: ObservableObject {
         let directory = userImageDirectory(for: userId)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         try? data.write(to: directory.appendingPathComponent("\(filename).jpg"))
+        // Keep a stable copy whenever we persist the current own profile-pic URL.
+        if urlString == cachedProfile?.profilePicURL || urlString == pendingOwnProfilePicURLHint {
+            saveOwnProfilePic(image, userId: userId, jpegData: data, cdnURL: urlString)
+        }
     }
 
     func loadImage(forURL urlString: String) -> UIImage? {
@@ -726,6 +774,57 @@ class ProfileCacheService: ObservableObject {
         let fileURL = userImageDirectory(for: userId).appendingPathComponent("\(filename).jpg")
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
         return UIImage(data: data)
+    }
+
+    /// Hint used while `cachedProfile` still holds the previous CDN URL (during bridge).
+    private var pendingOwnProfilePicURLHint: String?
+
+    /// Persist the own profile picture under a stable disk key (survives CDN URL rotation).
+    func saveOwnProfilePic(_ image: UIImage, userId: String? = nil, jpegData: Data? = nil, cdnURL: String? = nil) {
+        guard let data = jpegData ?? image.jpegData(compressionQuality: 0.8) else { return }
+        guard let resolvedUserId = userId ?? activeUserId() else { return }
+        let directory = userImageDirectory(for: resolvedUserId)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? data.write(to: directory.appendingPathComponent(Self.ownProfilePicFilename))
+        let urlForIdentity = cdnURL
+            ?? pendingOwnProfilePicURLHint
+            ?? cachedProfile?.profilePicURL
+        if let urlForIdentity, !urlForIdentity.isEmpty {
+            rememberOwnProfilePicCDNIdentity(urlForIdentity, userId: resolvedUserId)
+        }
+    }
+
+    func loadOwnProfilePic() -> UIImage? {
+        guard let userId = activeUserId() else { return nil }
+        let fileURL = userImageDirectory(for: userId).appendingPathComponent(Self.ownProfilePicFilename)
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return UIImage(data: data)
+    }
+
+    /// Resolve the own profile pic for display: URL key → stable own key (only if same CDN asset).
+    /// Never returns a stale own pic after the user changed their photo in the real Instagram app.
+    func loadOwnProfilePic(forURL urlString: String) -> UIImage? {
+        if !urlString.isEmpty, let image = loadImage(forURL: urlString) {
+            // Backfill stable key if an older install only has the URL file.
+            if loadOwnProfilePic() == nil || !ownProfilePicMatchesCDNIdentity(of: urlString) {
+                saveOwnProfilePic(image, cdnURL: urlString)
+            }
+            return image
+        }
+        // Stable fallback only when the CDN asset identity still matches (token rotation).
+        // If the path changed (photo replaced on Instagram), force a network download instead.
+        guard !urlString.isEmpty, ownProfilePicMatchesCDNIdentity(of: urlString) || savedOwnProfilePicCDNIdentity() == nil else {
+            return nil
+        }
+        guard let image = loadOwnProfilePic() else { return nil }
+        if savedOwnProfilePicCDNIdentity() == nil {
+            // Legacy install: accept once and stamp identity so future external changes are detected.
+            rememberOwnProfilePicCDNIdentity(urlString)
+        }
+        pendingOwnProfilePicURLHint = urlString
+        saveImage(image, forURL: urlString)
+        pendingOwnProfilePicURLHint = nil
+        return image
     }
 
     /// Save an image keyed by stable mediaId (e.g. Instagram post pk).

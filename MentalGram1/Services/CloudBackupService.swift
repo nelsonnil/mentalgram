@@ -61,6 +61,11 @@ class CloudBackupService: ObservableObject {
         "amnesia_enabled", "amnesia_shortCarouselMediaId",
         "amnesia_fullCarouselMediaId", "amnesia_isRevealed",
         "amnesia_reveal_state_safety_migration_v1", "amnesia_ownerUserId",
+        // Instapick — live carousel IDs, swap state, grid pin, account owner
+        "instapick_enabled", "instapick_carousel_media_id",
+        "instapick_variant_media_ids", "instapick_swapped_slots",
+        "instapick_grid_pin_index", "instapick_ownerUserId",
+        "instapick_tilt_style", "instapick_volume_fx", "instapick_card_art",
         // Following Magic
         "followingMagicEnabled", "followingMagicDuration",
         "followingMagicGlitch", "followingMagicTriggerDelay",

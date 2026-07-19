@@ -19,6 +19,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Install crash logger as early as possible so any subsequent crash
         // (including during app startup) is captured and written to disk.
         CrashLoggerService.install()
+        // Promote raw signal .txt dumps from the previous crash into full JSON
+        // reports (stack + real device id + diagnostics) so testers can share them.
+        CrashLoggerService.importPendingSignalReports()
         CrashLoggerService.shared.recordAction("app launched")
         _ = BackupRoutineManager.shared
         if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem,

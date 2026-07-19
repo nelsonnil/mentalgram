@@ -15,17 +15,111 @@ enum ProfileMediaReconciler {
         let protectedCount: Int
     }
 
+    /// Forces the grid prefix to match Instagram's returned window exactly (order + ids).
+    ///
+    /// - Prefix: `freshItems` in Instagram order (source of truth for the synced window).
+    /// - Tail: previous local CDN posts that are older than `endCursor` and absent from
+    ///   fresh (not yet covered by this sync). Anything "newer" than `endCursor` that
+    ///   Instagram did not return is dropped (deleted/archived ghost).
+    /// - Overlay URLs (`reveal://`, `amnesia://`) are preserved for the caller to place.
+    ///
+    /// Use for page-1 manual sync and for the accumulated window after pages 2..N.
+    static func applyExactFetchedPrefix(
+        currentURLs: [String],
+        currentItemsByURL: [String: InstagramMediaItem],
+        freshItems: [InstagramMediaItem],
+        endCursor: String?
+    ) -> PageRangeResult {
+        let endPk = cursorPK(endCursor) // nil ⇒ Instagram returned the full public grid
+        var freshByKey: [String: InstagramMediaItem] = [:]
+        var freshKeysInOrder: [String] = []
+        for item in freshItems {
+            let key = mediaKey(item.mediaId.isEmpty ? item.imageURL : item.mediaId)
+            if freshByKey[key] == nil {
+                freshByKey[key] = item
+                freshKeysInOrder.append(key)
+            }
+        }
+
+        var resultURLs: [String] = []
+        var resultItemsByURL: [String: InstagramMediaItem] = [:]
+        var seenKeys = Set<String>()
+        var removedCount = 0
+        var replacedURLCount = 0
+
+        // 1) Exact Instagram prefix
+        for key in freshKeysInOrder {
+            guard let fresh = freshByKey[key] else { continue }
+            if let oldURL = currentURLs.first(where: {
+                guard let existing = currentItemsByURL[$0], !isOverlayURL($0) else { return false }
+                return mediaKey(existing.mediaId.isEmpty ? existing.imageURL : existing.mediaId) == key
+            }), oldURL != fresh.imageURL {
+                replacedURLCount += 1
+            }
+            append(fresh, preferredURL: fresh.imageURL, into: &resultURLs, itemsByURL: &resultItemsByURL, seenKeys: &seenKeys)
+        }
+
+        // 2) Preserve overlays (Performance repositions reveals as needed)
+        for url in currentURLs where isOverlayURL(url) {
+            if seenKeys.insert(url).inserted {
+                resultURLs.append(url)
+                if let existing = currentItemsByURL[url] {
+                    resultItemsByURL[url] = existing
+                }
+            }
+        }
+
+        // 3) Older local tail only (outside the synced window)
+        for url in currentURLs {
+            guard !isOverlayURL(url), let existing = currentItemsByURL[url] else { continue }
+            let key = mediaKey(existing.mediaId.isEmpty ? existing.imageURL : existing.mediaId)
+            if freshByKey[key] != nil { continue }
+            if seenKeys.contains(key) { continue }
+
+            let pk = mediaPK(existing.mediaId)
+            let keepAsOlderTail: Bool = {
+                guard let endPk else {
+                    // No further pages — anything not returned is gone from Instagram.
+                    return false
+                }
+                guard let pk else {
+                    // Unparseable id and not in fresh → drop (ghost / corrupt cache).
+                    return false
+                }
+                return pk <= endPk
+            }()
+
+            if keepAsOlderTail {
+                append(existing, preferredURL: existing.imageURL, into: &resultURLs, itemsByURL: &resultItemsByURL, seenKeys: &seenKeys)
+            } else {
+                removedCount += 1
+            }
+        }
+
+        let previousKeys = Set(currentURLs.compactMap { url -> String? in
+            guard !isOverlayURL(url), let existing = currentItemsByURL[url] else { return nil }
+            return mediaKey(existing.mediaId.isEmpty ? existing.imageURL : existing.mediaId)
+        })
+        let appendedCount = freshKeysInOrder.filter { !previousKeys.contains($0) }.count
+
+        return PageRangeResult(
+            urls: resultURLs,
+            itemsByURL: resultItemsByURL,
+            removedCount: removedCount,
+            appendedCount: appendedCount,
+            replacedURLCount: replacedURLCount,
+            protectedCount: 0
+        )
+    }
+
     /// Applies one authoritative Instagram feed page to an existing grid.
     ///
-    /// The authoritative page range is `(endCursorPk, startCursorPk)`.
-    /// - Page 1 uses `startCursor == nil`, so the range is `(endCursorPk, +infinity)`.
-    /// - Page 2+ uses the previous page cursor as `startCursor` and the current
-    ///   response cursor as `endCursor`.
+    /// Page 1 (`startCursor == nil`) uses exact Instagram prefix matching.
+    /// Pages 2+ use PK-range replacement; prefer calling `applyExactFetchedPrefix`
+    /// with the accumulated window when doing multi-page sync.
     ///
-    /// Items in the range that are not returned by Instagram are removed as
-    /// deleted/archived. Items outside the range are left untouched. Items in
-    /// `protectedMediaIds` are never removed; this protects page-1 pinned posts,
-    /// whose pk can be much older than their visible position.
+    /// Items in `protectedMediaIds` are never removed on deep pages; this protects
+    /// page-1 pinned posts whose pk can be much older than their visible position.
     static func applyAuthoritativePageRange(
         currentURLs: [String],
         currentItemsByURL: [String: InstagramMediaItem],
@@ -34,6 +128,16 @@ enum ProfileMediaReconciler {
         endCursor: String?,
         protectedMediaIds: Set<String> = []
     ) -> PageRangeResult {
+        // Page 1: exact Instagram prefix — avoids first-slot ghosts after archive/delete.
+        if startCursor == nil {
+            return applyExactFetchedPrefix(
+                currentURLs: currentURLs,
+                currentItemsByURL: currentItemsByURL,
+                freshItems: freshItems,
+                endCursor: endCursor
+            )
+        }
+
         let startPk = cursorPK(startCursor) ?? Int64.max
         let endPk = cursorPK(endCursor) ?? Int64.min
         let protectedKeys = Set(protectedMediaIds.map(mediaKey))
@@ -73,7 +177,8 @@ enum ProfileMediaReconciler {
             }
 
             let pk = mediaPK(existing.mediaId)
-            let inRange = pk.map { $0 > endPk && $0 < startPk } ?? false
+            // Unparseable pk inside a deep sync: treat as in-range so ghosts still drop.
+            let inRange = pk.map { $0 > endPk && $0 < startPk } ?? true
             if inRange {
                 if let fresh = freshByKey[key] {
                     if fresh.imageURL != url { replacedURLCount += 1 }
@@ -104,6 +209,70 @@ enum ProfileMediaReconciler {
         )
     }
 
+    /// Marks set photos as archived when their mediaId falls inside the synced
+    /// Instagram window but was not returned by Instagram (deleted/archived on IG,
+    /// or leftover set reveal that is no longer public).
+    ///
+    /// Photos older than `syncedWindowEndPk` are left alone — they simply were not
+    /// covered by this sync depth. MediaIds in `protectedMediaIds` (e.g. pending
+    /// `reveal://` not yet indexed by Instagram) are never archived here.
+    @MainActor
+    static func reconcileSetPhotosMissingFromSyncedFeed(
+        fetchedKeys: Set<String>,
+        syncedWindowEndPk: Int64?,
+        userId: String?,
+        protectedMediaIds: Set<String> = []
+    ) {
+        let normalizedFetched = Set(fetchedKeys.map(mediaKey))
+        let protectedKeys = Set(protectedMediaIds.map(mediaKey))
+        var archivedCount = 0
+
+        for set in DataManager.shared.sets {
+            for photo in set.photos {
+                guard let mediaId = photo.mediaId, !photo.isArchived else { continue }
+                let key = mediaKey(mediaId)
+                if normalizedFetched.contains(key) { continue }
+                if protectedKeys.contains(key) { continue }
+
+                let pk = mediaPK(mediaId)
+                let shouldArchive: Bool = {
+                    guard let endPk = syncedWindowEndPk else {
+                        // Full public grid was returned — anything missing is gone.
+                        return true
+                    }
+                    guard let pk else {
+                        // Can't place it in the window; leave alone.
+                        return false
+                    }
+                    // Inside the synced window (newer than oldest fetched cursor) but absent.
+                    return pk > endPk
+                }()
+
+                guard shouldArchive else { continue }
+
+                DataManager.shared.updatePhoto(
+                    photoId: photo.id,
+                    mediaId: mediaId,
+                    isArchived: true,
+                    uploadStatus: .completed,
+                    errorMessage: nil,
+                    uploadDate: photo.uploadDate
+                )
+                ProfileCacheService.shared.removeMediaEverywhere(mediaId: mediaId, userId: userId)
+                archivedCount += 1
+                print("🔄 [SET SYNC] Archived set photo \(mediaId) — absent from Instagram sync window")
+            }
+        }
+
+        if archivedCount > 0 {
+            LogManager.shared.info("Set reconcile after sync: archived \(archivedCount) photo(s) missing from Instagram", category: .general)
+        }
+    }
+
+    static func mediaKeys(from items: [InstagramMediaItem]) -> Set<String> {
+        Set(items.map { mediaKey($0.mediaId.isEmpty ? $0.imageURL : $0.mediaId) })
+    }
+
     static func mediaKey(_ mediaId: String) -> String {
         mediaId.split(separator: "_").first.map(String.init) ?? mediaId
     }
@@ -119,7 +288,10 @@ enum ProfileMediaReconciler {
     }
 
     static func isOverlayURL(_ url: String) -> Bool {
-        url.hasPrefix("reveal://") || url.hasPrefix("reveal://test-") || url.hasPrefix("amnesia://")
+        url.hasPrefix("reveal://")
+            || url.hasPrefix("reveal://test-")
+            || url.hasPrefix("amnesia://")
+            || url.hasPrefix("instapick://")
     }
 
     private static func append(
