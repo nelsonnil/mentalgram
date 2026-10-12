@@ -20,6 +20,10 @@ Registro de todo lo observado durante la recuperación (octubre 2026). Cada nota
 | 12-oct | Al entrar en Performance se pedía el perfil dos veces seguidas: cabecera y cuadrícula. Ahora la primera página se reutiliza durante 30 s | `fetchProfileInfoUnshared` + `getUserMediaItems` | Revisar en la auditoría si hay más llamadas duplicadas al entrar |
 | 12-oct | Tras el login, la app pedía `/accounts/current_user/` (429) para obtener el usuario y validar la sesión, y entraba en lockdown de 5 min. Ya está cambiado a la consulta GraphQL | `fetchUsername`, `validateSession`, `probeSession` | Hecho. Queda `prefetchEditFieldsIfNeeded` (también usa `current_user`, para la bio); desaparecerá al pasar a `set_biography` |
 
+| 12-oct | `www.instagram.com/api/v1/users/web_profile_info/` también da **429** (con una página HTML). **Ya no hay fuente para seguidos, nº de publicaciones y biografía** | Consola Vault Dev | **Pendiente**: capturar de dónde los saca la build 153 (posiblemente otra consulta GraphQL) |
+| 12-oct | `POST /clips/user/` (reels) responde **400 `feedback_required`** y la app se bloqueaba 15 min. La build 153 usa `ClipsProfileQuery`. Ya está cambiado | `getUserReels`, `getUserReelsPage` | Hecho. `feedback_required` en lecturas ya no bloquea |
+| 12-oct | Las respuestas GraphQL renombran algunos campos con un prefijo (`1ltaken_at`, `1fvideo_duration`) | `ClipsProfileQuery` | Se normalizan; a tener en cuenta en cualquier consulta GraphQL nueva |
+
 ## B. Frenos internos de la app (posibles falsos "límites de Instagram")
 
 | Fecha | Observación | Dónde | Propuesta |

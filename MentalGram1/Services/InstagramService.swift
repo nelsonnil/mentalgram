@@ -1931,9 +1931,12 @@ class InstagramService: ObservableObject {
         // bursts (rapid refreshes, post-reveal re-archives, pending challenges).
         try await InstagramSafetyGate.shared.waitForApiSlot(method: method, path: path)
         
-        // ANTI-BOT: Check rate limit (max 55 actions/hour)
+        // The hourly budget only covers writes: the official app issues hundreds
+        // of reads per hour, and counting them stalled profile loading/pagination.
+        let pathOnly = path.components(separatedBy: "?").first ?? path
+        let isReadRequest = method == "GET" || pathOnly.contains("/graphql/query")
         let rateCheck = checkRateLimit()
-        if rateCheck.limited {
+        if !isReadRequest && rateCheck.limited {
             print("🚫 [RATE LIMIT] \(rateCheck.actionsUsed) actions in last hour - BLOCKED")
             LogManager.shared.warning("Rate limit reached (\(rateCheck.actionsUsed)/\(maxActionsPerHour)). Wait before continuing.", category: .api)
             throw InstagramError.apiError("Rate limit reached. \(rateCheck.actionsUsed) actions in the last hour. Wait a few minutes before continuing.")
@@ -1976,8 +1979,7 @@ class InstagramService: ObservableObject {
             request.httpBody = (components.percentEncodedQuery ?? "").data(using: .utf8)
         }
         
-        // Track this action for rate limiting
-        trackAction()
+        if !isReadRequest { trackAction() }
         InstagramSafetyGate.shared.recordApiRequest(method: method, path: path)
 
         // Log the request with timing info
@@ -2014,7 +2016,7 @@ class InstagramService: ObservableObject {
                 // superseded / aborted), so roll back the action we optimistically
                 // counted above. Without this, a handful of cancelled feed reads
                 // exhaust the 6-reads/10-min window and strand the grid at page 1.
-                untrackAction()
+                if !isReadRequest { untrackAction() }
                 InstagramSafetyGate.shared.rollbackLastRequest(method: method, path: path)
                 let rate = checkRateLimit()
                 print("↩️ [BUDGET] Cancelled \(method) \(shortPath) rolled back — actions now \(rate.actionsUsed)/\(maxActionsPerHour)")
@@ -8686,7 +8688,7 @@ final class InstagramSafetyGate {
     /// Seconds after app launch during which silent / auto API calls are blocked.
     /// Tuned to be longer than the typical "Performance entry" burst observed
     /// in logs (≈15s) so the pattern is fully broken.
-    private let coldStartWindow: TimeInterval = 45
+    private let coldStartWindow: TimeInterval = 0
     private var coldStartCloseLogged: Bool = false
 
     // MARK: - Warm-Resume Guard
@@ -8694,7 +8696,7 @@ final class InstagramSafetyGate {
     /// pause in background. Same idea as cold-start, but with a smaller window
     /// because the process did not restart — only the user-facing scene.
     private var warmResumeTime: Date? = nil
-    private let warmResumeWindow: TimeInterval = 25
+    private let warmResumeWindow: TimeInterval = 0
     private var warmResumeCloseLogged: Bool = false
 
     // MARK: - Post-Mutation Quiet Window
@@ -8703,7 +8705,7 @@ final class InstagramSafetyGate {
     /// This prevents patterns like POST /accounts/edit_profile/ followed seconds later
     /// by POST /clips/user/ or multiple reveal POSTs, which produced challenge_required
     /// in tester logs.
-    private let postMutationQuietWindow: TimeInterval = 120
+    private let postMutationQuietWindow: TimeInterval = 30
     /// Any Instagram-facing read/search/settings action should be separated from
     /// the next upload start. Upload's own requests are excluded so the loop does
     /// not block itself between photos.
@@ -8927,20 +8929,6 @@ final class InstagramSafetyGate {
             )
         }
 
-        if let heavyArchiveAt = defaults.object(forKey: key("last_heavy_archive_at")) as? Double {
-            let elapsed = now - heavyArchiveAt
-            if elapsed < 180 {
-                let wait = max(1, Int(180 - elapsed))
-                logBlock("performance entry blocked — post-archive cooldown \(wait)s")
-                return PerformanceEntryDecision(
-                    allowRemoteCalls: false,
-                    waitSeconds: wait,
-                    reason: "post-archive cooldown"
-                )
-            }
-            defaults.removeObject(forKey: key("last_heavy_archive_at"))
-        }
-
         // Check existing pause BEFORE recording a new entry — otherwise a user
         // repeatedly tapping Performance during a pause keeps inflating the counter,
         // which cascades into progressively longer blocks.
@@ -8976,28 +8964,6 @@ final class InstagramSafetyGate {
             setTimestamps(entries, for: .performanceEntry)
         }
 
-        // Re-entry penalties: throttle truly rapid re-opens only.
-        if entries.count >= 5 {
-            let pauseUntil = now + 120
-            defaults.set(pauseUntil, forKey: key("performance_pause_until"))
-            logBlock("performance re-entry \(entries.count)/5min — cache-only for 120s")
-            return PerformanceEntryDecision(
-                allowRemoteCalls: false,
-                waitSeconds: 120,
-                reason: "too many Performance entries"
-            )
-        }
-
-        if entries.count >= 2, let previous = entries.dropLast().last, now - previous < 30 {
-            let wait = max(1, Int(30 - (now - previous)))
-            logBlock("performance re-entry too soon — cache-only \(wait)s")
-            return PerformanceEntryDecision(
-                allowRemoteCalls: false,
-                waitSeconds: wait,
-                reason: "recent Performance entry"
-            )
-        }
-
         return PerformanceEntryDecision(allowRemoteCalls: true, waitSeconds: 0, reason: "")
     }
 
@@ -9030,55 +8996,14 @@ final class InstagramSafetyGate {
             return minGapDecision(action: action, now: now, minGap: 150)
         case .reveal:
             return minGapDecision(action: action, now: now, minGap: 150)
-        case .pullRefresh:
-            return minGapDecision(action: action, now: now, minGap: 120)
-        case .entryRefresh:
-            return minGapDecision(action: action, now: now, minGap: 90)
         case .silentGridRefresh:
-            if let recentPagination = recentActionDecision(
-                actions: [.ownProfilePagination, .visitedProfilePagination],
-                now: now,
-                minGap: 20,
-                reason: "recent feed pagination"
-            ) {
-                return recentPagination
-            }
-            return minGapDecision(action: action, now: now, minGap: 30)
-        case .ownProfilePagination:
-            if let recentRefresh = recentActionDecision(
-                actions: [.silentGridRefresh, .entryRefresh, .pullRefresh],
-                now: now,
-                // The tester log showed /feed/user/ repeating every ~2s until the
-                // account reached 55/55. Keep profile pagination well separated from
-                // any entry/silent refresh that already hit the same endpoint.
-                minGap: 20,
-                reason: "recent feed refresh"
-            ) {
-                return recentRefresh
-            }
-            return pacedWindowDecision(action: action, now: now, minGap: 12, maxCount: 6, window: 600)
-        case .exploreRefresh:
-            return minGapDecision(action: action, now: now, minGap: 900)
-        case .explorePagination:
-            return pacedWindowDecision(action: action, now: now, minGap: 15, maxCount: 8, window: 600)
-        case .searchUsers:
-            return minGapDecision(action: action, now: now, minGap: 5)
-        case .visitedProfileOpen:
-            return minGapDecision(action: action, now: now, minGap: 3)
-        case .visitedProfilePagination:
-            if let recentRefresh = recentActionDecision(
-                actions: [.silentGridRefresh, .entryRefresh, .pullRefresh],
-                now: now,
-                minGap: 6,
-                reason: "recent feed refresh"
-            ) {
-                return recentRefresh
-            }
-            return pacedWindowDecision(action: action, now: now, minGap: 3, maxCount: 10, window: 600)
-        case .visitedProfileRefresh:
-            return minGapDecision(action: action, now: now, minGap: 900)
-        case .feedUserRead:
-            return pacedWindowDecision(action: action, now: now, minGap: 10, maxCount: 6, window: 600)
+            // Automatic only: avoids firing the same refresh twice in a row.
+            return minGapDecision(action: action, now: now, minGap: 10)
+        case .pullRefresh, .entryRefresh, .ownProfilePagination,
+             .exploreRefresh, .explorePagination, .searchUsers,
+             .visitedProfileOpen, .visitedProfilePagination, .visitedProfileRefresh,
+             .feedUserRead:
+            return .allowed
         case .archive:
             return windowDecision(action: action, now: now, maxCount: 8, window: 600)
         case .unarchive:
