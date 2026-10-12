@@ -67,8 +67,8 @@ struct DeviceInfo {
     ///   appVersionCode = "961145276"
     ///   bloksVersionId = "7189b949425f9bf80ea8bd880cf5a3080b292d9b1c4b38a18d112f7c4b71e7a8"
     /// ─────────────────────────────────────────────────────────────────────────
-    let appVersion = "390.0.0.28.85"
-    let appVersionCode = "765313520"
+    let appVersion = "428.0.0.47.67"
+    let appVersionCode = "961145276"
     
     /// Device locale matching the real device settings
     var deviceLocale: String {

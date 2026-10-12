@@ -143,7 +143,7 @@ class InstagramService: ObservableObject {
     
     // MARK: - Pigeon Session (anti-bot: session tracking like real Instagram app)
     private var pigeonSessionId: String = UUID().uuidString
-    private let bloksVersionId = "0a3ae4c88248863609c67e278f34af44673cff300bc76add965a9fb036bd3ca3"
+    private let bloksVersionId = "7189b949425f9bf80ea8bd880cf5a3080b292d9b1c4b38a18d112f7c4b71e7a8"
     
     // MARK: - Bandwidth Simulation (anti-bot: report realistic connection speeds)
     private var bandwidthSpeedKbps: String = "\(Int.random(in: 2500...8000))"
