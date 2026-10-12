@@ -3344,34 +3344,50 @@ class InstagramService: ObservableObject {
         }
 
         if !usedFastPath {
-        let data = try await apiRequest(method: "GET", path: "/users/\(uid)/info/")
-        
-            // Detect the "endpoint permanently broken" pattern so we can fast-path
-            // future calls. The empty-body response is ~25 bytes (`{"user":{},...}`).
-            if data.count <= 50 {
-                let secsSinceLast = usersInfoBrokenTs > 0 ? (Date().timeIntervalSince1970 - usersInfoBrokenTs) : -1
-                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: usersInfoBrokenKey)
-                // Also bump the global marker so searched profiles can fast-path
-                // without paying for their own 25-byte probe.
-                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: usersInfoGloballyBrokenKey)
-                print("🔴 [PROFILE] /users/info returned only \(data.count) bytes for uid \(uid) — caching as broken (last seen broken \(Int(secsSinceLast))s ago)")
-                LogManager.shared.warning("/users/{uid}/info/ empty body (\(data.count)B) for uid:\(uid) — marked broken globally; future searches will fast-path through web_profile_info", category: .profile)
+            // /users/{id}/info/ is retired (HTTP 429 even for the official app). Header basics
+            // (username, name, picture, private, verified) come from IGProfileTimelineQuery;
+            // following/media counts and biography from web_profile_info.
+            do {
+                let page = try await fetchProfileTimeline(userId: uid, count: Self.profileTimelinePageSize)
+                user = page.user
+                print("🧩 [PROFILE] Header from IGProfileTimelineQuery — @\(user["username"] as? String ?? "?") keys:\(user.keys.count)")
+            } catch InstagramError.apiError(let message) {
+                print("⚠️ [PROFILE] IGProfileTimelineQuery failed for header: \(message)")
+                LogManager.shared.warning("Profile header: IGProfileTimelineQuery failed — \(message)", category: .profile)
             }
 
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                print("❌ [PROFILE] Failed to parse JSON response")
-                let rawStr = String(data: data.prefix(500), encoding: .utf8) ?? "(binary)"
-                LogManager.shared.error("getProfileInfo: JSON parse failed — raw: \(rawStr)", category: .api)
-            return nil
+            let timelineUsername = (user["username"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let hintUsername = usernameHint?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let webUsername = timelineUsername
+                ?? (hintUsername?.isEmpty == false ? hintUsername : nil)
+                ?? (isOwnProfile && !session.username.isEmpty ? session.username : nil)
+            if let webUsername, let webUser = await fetchWebProfileInfoFallback(username: webUsername) {
+                let webAuthoritative: Set<String> = ["follower_count", "following_count", "media_count", "biography"]
+                for (key, value) in webUser where !(value is NSNull) {
+                    if webAuthoritative.contains(key) || user[key] == nil || user[key] is NSNull {
+                        user[key] = value
+                    }
+                }
+                print("🧩 [PROFILE] web_profile_info merged — followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"])) media:\(Self.robustInt(user["media_count"]))")
+            } else {
+                LogManager.shared.warning("Profile header: web_profile_info unavailable for @\(webUsername ?? "?") — counts may be missing", category: .profile)
             }
 
-            guard let u = json["user"] as? [String: Any] else {
-                let topKeys = json.keys.sorted().joined(separator: ", ")
-                print("❌ [PROFILE] No 'user' key — top-level keys: \(topKeys)")
-                LogManager.shared.error("getProfileInfo: missing 'user' key — keys: \(topKeys)", category: .api)
+            if user.isEmpty {
+                LogManager.shared.error("getProfileInfo: no header source worked for uid:\(uid)", category: .profile)
                 return nil
             }
-            user = u
+            if extractProfileUserId(from: user) == "0" {
+                user["pk"] = uid
+                user["pk_id"] = uid
+                user["id"] = uid
+            }
+            if let pic = profilePicURLHint, !pic.isEmpty, (user["profile_pic_url"] as? String ?? "").isEmpty {
+                user["profile_pic_url"] = pic
+            }
+            if let fn = fullNameHint, !fn.isEmpty, (user["full_name"] as? String ?? "").isEmpty {
+                user["full_name"] = fn
+            }
         }
         
         // Debug: Print user data
@@ -4621,6 +4637,12 @@ class InstagramService: ObservableObject {
     }
 
     private static let profileTimelineDocId = "56030350814417327502004290437"
+    static let profileTimelinePageSize = 12
+
+    /// First page of the last timeline fetched, so the header load and the grid load that
+    /// follows it on Performance entry share one request.
+    private var firstTimelinePageCache: (userId: String, fetchedAt: Date, page: ProfileTimelinePage)?
+    private static let firstTimelinePageCacheTTL: TimeInterval = 30
 
     private static func formEncode(_ fields: [(String, String)]) -> String {
         var allowed = CharacterSet.alphanumerics
@@ -4753,7 +4775,11 @@ class InstagramService: ObservableObject {
         let nextMaxId = Self.stringValue(timeline["next_max_id"])
         let moreAvailable = (timeline["more_available"] as? Bool) ?? false
         print("🧩 [GRAPHQL] IGProfileTimelineQuery uid:\(userId) items:\(items.count) more:\(moreAvailable) next:\(nextMaxId ?? "none")")
-        return ProfileTimelinePage(user: user, items: items, nextMaxId: nextMaxId, moreAvailable: moreAvailable)
+        let page = ProfileTimelinePage(user: user, items: items, nextMaxId: nextMaxId, moreAvailable: moreAvailable)
+        if (maxId ?? "").isEmpty && !items.isEmpty {
+            firstTimelinePageCache = (userId, Date(), page)
+        }
+        return page
     }
 
     private static func profileTimelineVariables(userId: String, count: Int, maxId: String?) -> [String: Any] {
@@ -4809,11 +4835,19 @@ class InstagramService: ObservableObject {
         print("📷 [MEDIA] Fetching \(amount) media items for user ID: \(uid), maxId: \(maxId ?? "none")")
 
         var graphPage: ProfileTimelinePage?
-        do {
-            graphPage = try await fetchProfileTimeline(userId: uid, count: amount, maxId: maxId)
-        } catch InstagramError.apiError(let message) {
-            print("⚠️ [MEDIA] GraphQL timeline failed (\(message)) — falling back to /feed/user/")
-            LogManager.shared.warning("Profile timeline GraphQL failed: \(message) — using /feed/user/", category: .api)
+        if (maxId ?? "").isEmpty,
+           let cached = firstTimelinePageCache,
+           cached.userId == uid,
+           Date().timeIntervalSince(cached.fetchedAt) < Self.firstTimelinePageCacheTTL {
+            print("🧩 [MEDIA] Reusing first timeline page fetched \(Int(Date().timeIntervalSince(cached.fetchedAt)))s ago")
+            graphPage = cached.page
+        } else {
+            do {
+                graphPage = try await fetchProfileTimeline(userId: uid, count: amount, maxId: maxId)
+            } catch InstagramError.apiError(let message) {
+                print("⚠️ [MEDIA] GraphQL timeline failed (\(message)) — falling back to /feed/user/")
+                LogManager.shared.warning("Profile timeline GraphQL failed: \(message) — using /feed/user/", category: .api)
+            }
         }
 
         let items: [[String: Any]]
