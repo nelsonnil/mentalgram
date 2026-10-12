@@ -3103,6 +3103,76 @@ class InstagramService: ObservableObject {
         return "0"
     }
 
+    /// Header sources that failed during this launch; skipped until the app restarts.
+    private static var failedHeaderSources = Set<String>()
+
+    /// `/users/{id}/info/` and `web_profile_info` return 429 even for the reference
+    /// build, so following/media counts and biography come from whichever of these
+    /// still answers. Each attempt is logged with `[HEADER-SOURCE]`.
+    private func fetchHeaderFromAlternativeSources(userId: String, username: String?) async -> [String: Any]? {
+        var candidates: [(name: String, path: String)] = [
+            ("info_stream", "/users/\(userId)/info_stream/?entry_point=profile&from_module=profile&is_prefetch=false"),
+            ("info_params", "/users/\(userId)/info/?entry_point=profile&from_module=self_profile&is_prefetch=false")
+        ]
+        if let username, !username.isEmpty {
+            let encoded = username.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? username
+            candidates.append(("usernameinfo", "/users/\(encoded)/usernameinfo/"))
+            candidates.append(("search", "/users/search/?q=\(encoded)&count=5&search_surface=user_search_page"))
+        }
+
+        for candidate in candidates where !Self.failedHeaderSources.contains(candidate.name) {
+            do {
+                let data = try await apiRequest(method: "GET", path: candidate.path)
+                let users = Self.headerUserCandidates(in: data)
+                let match = users.first { dict in
+                    let id = Self.stringValue(dict["pk"] ?? dict["pk_id"] ?? dict["id"])
+                    let name = dict["username"] as? String
+                    return id == userId || (username != nil && name?.lowercased() == username?.lowercased())
+                }
+                if let match, match["following_count"] != nil || match["media_count"] != nil || match["biography"] != nil {
+                    print("🧪 [HEADER-SOURCE] \(candidate.name) OK — following:\(Self.robustInt(match["following_count"])) posts:\(Self.robustInt(match["media_count"])) bio:\(match["biography"] != nil)")
+                    LogManager.shared.success("[HEADER-SOURCE] \(candidate.name) OK — keys:\(match.keys.sorted().joined(separator: ","))", category: .profile)
+                    return match
+                }
+                print("🧪 [HEADER-SOURCE] \(candidate.name) answered (\(data.count) B) without header fields")
+                LogManager.shared.warning("[HEADER-SOURCE] \(candidate.name) answered without header fields (\(data.count) B, users:\(users.count))", category: .profile)
+            } catch {
+                print("🧪 [HEADER-SOURCE] \(candidate.name) failed: \(error.localizedDescription)")
+                LogManager.shared.warning("[HEADER-SOURCE] \(candidate.name) failed: \(error.localizedDescription)", category: .profile)
+            }
+            Self.failedHeaderSources.insert(candidate.name)
+        }
+        return nil
+    }
+
+    /// Collects every user-like dictionary in a JSON (or newline-delimited JSON) payload.
+    private static func headerUserCandidates(in data: Data) -> [[String: Any]] {
+        var roots: [Any] = []
+        if let whole = try? JSONSerialization.jsonObject(with: data) {
+            roots.append(whole)
+        } else if let text = String(data: data, encoding: .utf8) {
+            for line in text.split(whereSeparator: \.isNewline) {
+                if let lineData = line.data(using: .utf8),
+                   let object = try? JSONSerialization.jsonObject(with: lineData) {
+                    roots.append(object)
+                }
+            }
+        }
+        var found: [[String: Any]] = []
+        func walk(_ node: Any) {
+            if let dict = node as? [String: Any] {
+                if dict["username"] != nil, dict["pk"] != nil || dict["pk_id"] != nil || dict["id"] != nil {
+                    found.append(dict)
+                }
+                dict.values.forEach(walk)
+            } else if let array = node as? [Any] {
+                array.forEach(walk)
+            }
+        }
+        roots.forEach(walk)
+        return found
+    }
+
     private func fetchWebProfileInfoFallback(username: String) async -> [String: Any]? {
         var components = URLComponents(string: "https://www.instagram.com/api/v1/users/web_profile_info/")
         components?.queryItems = [URLQueryItem(name: "username", value: username)]
@@ -3955,6 +4025,14 @@ class InstagramService: ObservableObject {
         ]
         .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
         .first { !$0.isEmpty }
+
+        if user["following_count"] == nil || user["media_count"] == nil,
+           let headerUser = await fetchHeaderFromAlternativeSources(userId: uid, username: fallbackUsername) {
+            for (key, value) in headerUser where !(value is NSNull) && (user[key] == nil || user[key] is NSNull || Self.robustInt(user[key]) == 0 || ((user[key] as? String)?.isEmpty == true)) {
+                user[key] = value
+            }
+            extractedUserId = extractProfileUserId(from: user)
+        }
 
         if isOwnProfile,
            (user["follower_count"] == nil || user["following_count"] == nil),
