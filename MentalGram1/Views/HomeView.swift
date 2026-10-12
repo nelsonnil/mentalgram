@@ -9377,8 +9377,8 @@ struct InstapickSettingsCard: View {
             title: "Instapick",
             subtitle: settings.isLiveReady
                 ? "Ready on Instagram"
-                : (settings.hasLiveMediaIds && !settings.areBSlidesArchived
-                   ? "Archives pending on Instagram"
+                : (settings.completedPostCount > 0
+                   ? "Upload incomplete (\(settings.completedPostCount)/5)"
                    : (ppTestMode.isActive ? "Test Mode — local carousel" : "Test Mode or Upload to Instagram")),
             isExpanded: $isExpanded
         ) {
@@ -9420,8 +9420,8 @@ struct InstapickSettingsCard: View {
                         Text("Instagram carousel ready · Sync Performance after upload")
                             .font(VaultTheme.Typography.caption())
                             .foregroundColor(.green)
-                    } else if settings.hasLiveMediaIds && !settings.areBSlidesArchived {
-                        Text("IDs saved, but b slides are NOT verified archived — Instagram may still show all 9. Tap Continue archive b.")
+                    } else if settings.completedPostCount > 0 {
+                        Text("\(settings.completedPostCount)/5 posts on Instagram. Tap Continue upload to finish the pack.")
                             .font(VaultTheme.Typography.caption())
                             .foregroundColor(.orange)
                             .fixedSize(horizontal: false, vertical: true)
@@ -9553,22 +9553,6 @@ struct InstapickSettingsCard: View {
                             .font(VaultTheme.Typography.captionSmall())
                             .foregroundColor(.red.opacity(0.9))
                             .fixedSize(horizontal: false, vertical: true)
-                        if settings.resumeKind == .archive || settings.carouselMediaId != nil {
-                            Button {
-                                startRetryArchiveB()
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "archivebox.fill")
-                                    Text("Retry archive b")
-                                        .font(VaultTheme.Typography.captionBold())
-                                }
-                                .foregroundColor(accent)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(settings.uploadState.isUploading || instagram.isLocked)
-                        }
                     }
 
                     if instagram.isLocked {
@@ -9581,7 +9565,7 @@ struct InstapickSettingsCard: View {
                             .foregroundColor(.orange)
                     }
 
-                    Text("Uploads o+1a/1b…4a/4b, then archives all b so IG shows o,1a,2a,3a,4a. If you close the app, you can Continue upload.")
+                    Text("Publishes 5 carousels: Base (o,1a…4a) stays visible, Color 1…4 are archived until the reveal. If you close the app, you can Continue upload.")
                         .font(VaultTheme.Typography.captionSmall())
                         .foregroundColor(VaultTheme.Colors.textSecondary)
                 }
@@ -9626,20 +9610,6 @@ struct InstapickSettingsCard: View {
 
                     if settings.hasLiveMediaIds {
                         Button {
-                            startRetryArchiveB()
-                        } label: {
-                            Text(settings.areBSlidesArchived
-                                 ? "Re-check archive b slides"
-                                 : "Retry archive b slides")
-                                .font(VaultTheme.Typography.captionBold())
-                                .foregroundColor(accent)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 4)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(settings.uploadState.isUploading || settings.uploadState == .swapping || instagram.isLocked)
-
-                        Button {
                             settings.clearLiveUpload()
                         } label: {
                             Text("Clear Instagram link")
@@ -9678,12 +9648,7 @@ struct InstapickSettingsCard: View {
             return settings.uploadState.label
         }
         if settings.hasResumableCheckpoint {
-            switch settings.resumeKind {
-            case .rupload: return "Continue upload (\(settings.checkpointUploadIds.count)/9)"
-            case .published: return "Continue upload (publish / archive)"
-            case .archive: return "Continue archive b"
-            case .none: return "Continue upload"
-            }
+            return "Continue upload (\(settings.completedPostCount)/5)"
         }
         return settings.isLiveReady ? "Re-upload to Instagram" : "Upload to Instagram"
     }
@@ -9691,17 +9656,9 @@ struct InstapickSettingsCard: View {
     private var resumeHint: String {
         let detail = settings.checkpointDetail
         switch settings.resumeKind {
-        case .rupload:
+        case .uploading:
             return detail.isEmpty
-                ? "\(settings.checkpointUploadIds.count)/9 images already uploaded. Continue skips repeating them."
-                : detail
-        case .published:
-            return detail.isEmpty
-                ? "Carousel was published (or almost). Continue fetches children and archives the b slides."
-                : detail
-        case .archive:
-            return detail.isEmpty
-                ? "b slides still need to be archived. Continue / Retry archive b."
+                ? "\(settings.completedPostCount)/5 posts already on Instagram. Continue skips repeating them."
                 : detail
         case .none:
             return detail
@@ -9760,7 +9717,7 @@ struct InstapickSettingsCard: View {
     }
 
     private func startUpload(forceRestart: Bool) {
-        guard let images = settings.uploadOrderedImages(), images.count == 9 else {
+        guard settings.uploadCarouselImageSets()?.count == 5 else {
             uploadError = "Missing Instapick assets in the bundle"
             showingError = true
             return
@@ -9777,26 +9734,18 @@ struct InstapickSettingsCard: View {
         }
         if forceRestart {
             settings.clearUploadCheckpoint()
-            settings.clearBVerifiedArchives()
         }
         settings.beginUploadChecklist()
-        let startStep: Int = {
-            switch settings.resumeKind {
-            case .rupload: return settings.checkpointUploadIds.count
-            case .published, .archive: return 9
-            case .none: return 0
-            }
-        }()
+        let startStep = forceRestart ? 0 : settings.completedPostCount
         settings.updateUploadChecklist(completed: startStep)
         settings.uploadState = .uploading(
             step: startStep,
-            total: 14,
+            total: 5,
             detail: forceRestart ? "Starting…" : "Resuming…"
         )
         Task {
             do {
                 try await InstagramService.shared.uploadInstapickCarousel(
-                    images: images,
                     forceRestart: forceRestart
                 ) { step, total, detail in
                     Task { @MainActor in
@@ -9812,7 +9761,7 @@ struct InstapickSettingsCard: View {
                     if !settings.isLiveReady {
                         settings.uploadState = .error(
                             settings.checkpointDetail.isEmpty
-                                ? "Upload finished without verified b archives. Tap Continue archive b."
+                                ? "Upload incomplete. Tap Continue upload."
                                 : settings.checkpointDetail
                         )
                     }
@@ -9835,62 +9784,6 @@ struct InstapickSettingsCard: View {
                     }
                     settings.uploadState = .error(recovery.text)
                     uploadError = recovery.text
-                    showingError = true
-                }
-            }
-        }
-    }
-
-    private func startRetryArchiveB() {
-        guard settings.carouselMediaId != nil,
-              (1...4).allSatisfy({ settings.childMediaIds["\($0)b"] != nil }) else {
-            uploadError = "No Instapick IDs saved. Upload the carousel again."
-            showingError = true
-            return
-        }
-        settings.beginUploadChecklist()
-        var items = settings.uploadChecklist
-        for i in items.indices {
-            let id = items[i].id
-            if i < 10 {
-                items[i].status = .done
-            } else if settings.verifiedArchivedBLabels.contains(id.replacingOccurrences(of: "arch-", with: "")) {
-                items[i].status = .done
-            } else {
-                items[i].status = .pending
-            }
-        }
-        settings.uploadChecklist = items
-        settings.updateUploadChecklist(completed: 10)
-        settings.uploadState = .uploading(step: 10, total: 14, detail: "Archiving 1b…")
-        Task {
-            do {
-                try await InstagramService.shared.retryInstapickArchiveBSlides { step, total, detail in
-                    Task { @MainActor in
-                        // `step` is completed archives (0…4). Keep current row active while waiting.
-                        let checklistIndex = min(10 + step, 13)
-                        settings.updateUploadChecklist(completed: checklistIndex)
-                        settings.uploadState = .uploading(
-                            step: min(10 + step, 14),
-                            total: 14,
-                            detail: detail
-                        )
-                    }
-                }
-                await MainActor.run {
-                    if settings.isLiveReady {
-                        settings.uploadState = .ready
-                        settings.uploadChecklist = []
-                    } else {
-                        settings.uploadState = .error(
-                            "Archive retry finished, but b slides are still not verified on Instagram."
-                        )
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    settings.uploadState = .error(error.localizedDescription)
-                    uploadError = error.localizedDescription
                     showingError = true
                 }
             }
