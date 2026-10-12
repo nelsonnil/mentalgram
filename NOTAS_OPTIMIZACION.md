@@ -74,4 +74,4 @@ Registro de todo lo observado durante la recuperación (octubre 2026). Cada nota
 - Era 300 s tras cualquier lectura; como Performance lee el perfil constantemente, casi siempre había que esperar ~4–5 min antes de cada subida. Bajado a 20 s.
 - Subida verificada (12 oct): rupload → current_user → configure_sidecar → only_me (archivar) sin errores, 4 acciones por foto. La espera de ~36 s antes de archivar es intencionada.
 - Entrar en la pestaña Performance cancela la subida a propósito (PerformanceView, onChange selectedTab).
-- Pendiente: verificar GET /media/{pk}/info/ (Amnesia / Sync & Archive).
+- GET /media/{pk}/info/ verificado (12 oct): 200 con "visibility":"only_me" en archivadas; getMediaIsArchived lo interpreta bien (Amnesia / Sync & Archive OK).
