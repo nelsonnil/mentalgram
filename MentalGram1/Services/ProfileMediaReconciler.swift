@@ -279,7 +279,11 @@ enum ProfileMediaReconciler {
 
     static func cursorPK(_ cursor: String?) -> Int64? {
         guard let cursor, !cursor.isEmpty else { return nil }
-        return cursor.split(separator: "_").first.flatMap { Int64($0) }
+        // A present but unreadable cursor must never be treated as "full grid returned"
+        // (nil), which would drop the older tail and archive set photos.
+        guard let maxId = InstagramService.decodeTimelineCursor(cursor).maxId,
+              let pk = maxId.split(separator: "_").first.flatMap({ Int64($0) }) else { return Int64.max }
+        return pk
     }
 
     static func mediaPK(_ mediaId: String) -> Int64? {
