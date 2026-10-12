@@ -8856,7 +8856,7 @@ final class InstagramSafetyGate {
     /// Any Instagram-facing read/search/settings action should be separated from
     /// the next upload start. Upload's own requests are excluded so the loop does
     /// not block itself between photos.
-    private let preUploadQuietWindow: TimeInterval = 300
+    private let preUploadQuietWindow: TimeInterval = 20
 
     private init() {}
 
