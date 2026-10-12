@@ -391,7 +391,9 @@ struct PerformanceView: View {
     /// Timestamp of the last loadMoreIfNeeded trigger — debounces rapid-fire
     /// calls that happen when SwiftUI re-renders cells after a grid change.
     @State private var lastLoadMoreTriggeredAt: Date = .distantPast
-    private let maxPhotosOwnProfile = 100
+    private let maxPhotosOwnProfile = 5000
+    /// Upper bound for one full sync (each timeline page is ~12 posts).
+    private static let fullSyncMaxPages = 450
     // Lazy-tab loading: track whether each secondary tab has been loaded at least once.
     @State private var reelsLoadedOnce      = false
     @State private var taggedLoadedOnce     = false
@@ -847,12 +849,12 @@ struct PerformanceView: View {
     /// Performance → photo never appears because the cache is served and the
     /// refresh is throttled out".
     @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
-    private let minRefreshInterval: TimeInterval = 60
+    private let minRefreshInterval: TimeInterval = 10
     @State private var isPullRefreshInFlight = false
     @State private var isSilentGridRefreshing = false
     @State private var lastManualRefreshFailureMessage: String? = nil
     @State private var lastManualRefreshRetrySeconds: Int? = nil
-    private let fullRefreshAfterGridRefreshGap: TimeInterval = 90
+    private let fullRefreshAfterGridRefreshGap: TimeInterval = 10
     /// Controls whether pull-to-refresh is active. Set to false after each refresh
     /// and restored once both local (60 s) and SafetyGate (120 s) cooldowns expire,
     /// so the pull gesture bounces without showing the spinner when blocked.
@@ -7047,11 +7049,9 @@ struct PerformanceView: View {
             await syncCurrentNoteFromInstagramAfterManualRefresh()
         }
 
-        // Keep pull-to-refresh disabled for 120 s (= SafetyGate minGap) so the
-        // user can't trigger a second full load right after this one.
         isRefreshEnabled = false
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(120) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(10) * 1_000_000_000)
             isRefreshEnabled = true
         }
     }
@@ -7129,6 +7129,9 @@ struct PerformanceView: View {
         LogManager.shared.info("Profile refresh started repair=\(repairMode)", category: .general)
 
         isLoading = true
+        if source.hasPrefix("manual") || source == "authoritative_after_archive" {
+            instagram.invalidateFirstTimelinePageCache()
+        }
 
         do {
             // ANTI-BOT: Wait if network changed recently
@@ -7470,9 +7473,9 @@ struct PerformanceView: View {
                 // Fetch pages 2…postPages; each page extends the exact Instagram prefix.
                 var syncedFetchedItems = page1APIItems
                 var syncedEndCursor = page1EndCursor
-                if postPages > 1 {
+                if isAuthoritativeRefresh || postPages > 1 {
                     let extra = await fetchExtraRefreshPages(
-                        postPages: postPages,
+                        postPages: Self.fullSyncMaxPages,
                         userId: mergedProfile.userId,
                         page1Items: page1APIItems,
                         repairMode: repairMode
@@ -7591,11 +7594,20 @@ struct PerformanceView: View {
         var fetchedCount = 0
         var accumulatedItems = page1Items
         var endCursor = nextMaxId
+        var requestedCursors = Set<String>()
+        // Keeps scroll pagination from appending pages while the full sync rebuilds the grid.
+        isLoadingMore = true
+        defer { isLoadingMore = false }
 
         for _ in 0..<pagesNeeded {
-            postManualRefreshProgress(repairMode ? "Repairing page \(fetchedCount + 2)/\(postPages)" : "Syncing page \(fetchedCount + 2)/\(postPages)")
+            postManualRefreshProgress(repairMode ? "Repairing page \(fetchedCount + 2)" : "Syncing page \(fetchedCount + 2)")
             guard let cursor = nextMaxId, !cursor.isEmpty else {
                 print("📄 [EXTRA PAGES] No cursor — stopping at page \(fetchedCount + 1)")
+                break
+            }
+            guard requestedCursors.insert(cursor).inserted else {
+                print("📄 [EXTRA PAGES] Cursor repeated — stopping at page \(fetchedCount + 1)")
+                LogManager.shared.warning("Full sync stopped: Instagram repeated a cursor", category: .general)
                 break
             }
 
@@ -7617,7 +7629,7 @@ struct PerformanceView: View {
             }
             InstagramSafetyGate.shared.record(.ownProfilePagination)
 
-            let humanDelay = UInt64.random(in: 1_400_000_000...2_600_000_000)
+            let humanDelay = UInt64.random(in: 700_000_000...1_400_000_000)
             try? await Task.sleep(nanoseconds: humanDelay)
 
             do {
@@ -7626,15 +7638,28 @@ struct PerformanceView: View {
                     amount: 18,
                     maxId: cursor
                 )
+                // "No more pages" is only trusted when the posts read match the profile's
+                // post count; otherwise the deepest cursor read stays as the window end so
+                // nothing older is dropped or archived because of a short response.
+                let expectedCount = profile?.mediaCount ?? 0
+                let readLooksShort: () -> Bool = {
+                    expectedCount > 0 && ProfileMediaReconciler.mediaKeys(from: accumulatedItems).count + 2 < expectedCount
+                }
                 guard !newItems.isEmpty else {
                     print("📄 [EXTRA PAGES] Empty page — no more posts")
                     hasMorePages = false
+                    nextMaxId = nil
+                    endCursor = readLooksShort() ? cursor : nil
                     break
                 }
 
                 fetchedCount += 1
                 accumulatedItems.append(contentsOf: newItems)
-                endCursor = newCursor
+                let windowCursor = (newCursor == nil && readLooksShort()) ? cursor : newCursor
+                if windowCursor != newCursor {
+                    LogManager.shared.warning("Full sync ended short of Instagram count (\(ProfileMediaReconciler.mediaKeys(from: accumulatedItems).count)/\(expectedCount)) — older posts kept", category: .general)
+                }
+                endCursor = windowCursor
                 print("📄 [EXTRA PAGES] Page \(fetchedCount + 1): fetched \(newItems.count) items (cursor: \(newCursor ?? "nil"))")
                 LogManager.shared.info("Extra refresh page \(fetchedCount + 1): \(newItems.count) items", category: .general)
 
@@ -7642,7 +7667,7 @@ struct PerformanceView: View {
                     currentURLs: allMediaURLs,
                     currentItemsByURL: mediaItemsByURL,
                     freshItems: accumulatedItems,
-                    endCursor: newCursor
+                    endCursor: windowCursor
                 )
                 allMediaURLs = pageResult.urls
                 mediaItemsByURL = pageResult.itemsByURL
@@ -7672,7 +7697,29 @@ struct PerformanceView: View {
             }
         }
 
+        // A pending reveal confirmed on a deeper page now exists as a real post; drop its overlay.
+        let confirmedKeys = ProfileMediaReconciler.mediaKeys(from: accumulatedItems)
+        let confirmedOverlays = allMediaURLs.filter { url in
+            guard let mediaId = revealMediaId(from: url) else { return false }
+            return confirmedKeys.contains(mediaIdKey(mediaId))
+        }
+        if !confirmedOverlays.isEmpty {
+            allMediaURLs.removeAll { confirmedOverlays.contains($0) }
+            for url in confirmedOverlays {
+                revealDates.removeValue(forKey: url)
+                mediaItemsByURL.removeValue(forKey: url)
+            }
+            persistCurrentRevealState()
+            print("⚡️ [REVEAL CONFIRM] \(confirmedOverlays.count) reveal(s) confirmed on deeper pages")
+        }
+
+        if nextMaxId == nil, let uid = profile?.userId, !uid.isEmpty {
+            UserDefaults.standard.set(true, forKey: "perf_no_more_pages_\(uid)")
+        }
+        let visibleCount = allMediaURLs.filter { !ProfileMediaReconciler.isOverlayURL($0) }.count
+        let expected = profile?.mediaCount ?? 0
         print("📄 [EXTRA PAGES] Done — fetched \(fetchedCount) extra page(s), grid now \(allMediaURLs.count) items")
+        LogManager.shared.info("Full sync: \(fetchedCount + 1) page(s), \(visibleCount) posts, Instagram count \(expected), complete=\(nextMaxId == nil)", category: .general)
         return ExtraRefreshPagesResult(accumulatedItems: accumulatedItems, endCursor: endCursor)
     }
 
@@ -8270,12 +8317,7 @@ struct PerformanceView: View {
 
                     // Respect limit
                     let remainingSlots = maxPhotosOwnProfile - allMediaURLs.count
-                    let urlsToAppend = Array(freshItems.prefix(remainingSlots).map { $0.imageURL })
-
-                    // Filter to multiples of 3 to avoid UI gaps
-                    let totalAfterAdd = allMediaURLs.count + urlsToAppend.count
-                    let remainder = totalAfterAdd % 3
-                    let urlsToDisplay = remainder == 0 ? urlsToAppend : Array(urlsToAppend.dropLast(remainder))
+                    let urlsToDisplay = Array(freshItems.prefix(remainingSlots).map { $0.imageURL })
 
                     allMediaURLs.append(contentsOf: urlsToDisplay)
                     nextMaxId = newMaxId

@@ -1563,22 +1563,10 @@ private struct RefreshDepthPickerSheet: View {
 
     private let options: [DepthOption] = [
         DepthOption(
-            pages: 1, posts: "~12", apiCalls: 1,
-            title: "Recent posts only",
-            detail: "Best when you've only added or deleted posts recently. Fastest — 1 API call, no extra delay.",
-            icon: "bolt.fill", color: Color(hex: "4ADE80")
-        ),
-        DepthOption(
-            pages: 2, posts: "~24", apiCalls: 2,
-            title: "Last two pages",
-            detail: "Use if changes happened in the last 24 posts. Adds 1 extra API call with a short anti-bot pause between reads.",
-            icon: "arrow.down.circle.fill", color: Color(hex: "60A5FA")
-        ),
-        DepthOption(
-            pages: 3, posts: "~36", apiCalls: 3,
-            title: "Deep refresh",
-            detail: "Use when you've added or removed older posts. 3 API calls total with 2 anti-bot pacing delays (~12 s each).",
-            icon: "arrow.down.to.line.alt", color: Color(hex: "C084FC")
+            pages: 1, posts: "All", apiCalls: 1,
+            title: "Full sync",
+            detail: "Reads every post on your profile so the replica matches Instagram exactly: new, deleted, archived, unarchived and pinned posts.",
+            icon: "arrow.triangle.2.circlepath", color: Color(hex: "4ADE80")
         )
     ]
 
@@ -1589,7 +1577,7 @@ private struct RefreshDepthPickerSheet: View {
                 Text("Refresh from Instagram")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundColor(.white)
-                Text("Choose how many post pages to fetch. Each page is ~12 posts.")
+                Text("Syncs the whole profile with Instagram.")
                     .font(.system(size: 13))
                     .foregroundColor(Color(hex: "A1A1AA"))
             }
@@ -1627,19 +1615,6 @@ private struct RefreshDepthPickerSheet: View {
                                     .font(.system(size: 12))
                                     .foregroundColor(Color(hex: "A1A1AA"))
                                     .fixedSize(horizontal: false, vertical: true)
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                        .font(.system(size: 10))
-                                    Text("\(opt.apiCalls) API call\(opt.apiCalls > 1 ? "s" : "")")
-                                    if opt.pages > 1 {
-                                        Text("·")
-                                        Image(systemName: "timer")
-                                            .font(.system(size: 10))
-                                        Text("\(opt.pages - 1) anti-bot delay\(opt.pages > 2 ? "s" : "")")
-                                    }
-                                }
-                                .font(.system(size: 11))
-                                .foregroundColor(Color(hex: "71717A"))
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -1650,12 +1625,6 @@ private struct RefreshDepthPickerSheet: View {
                         .padding(.vertical, 14)
                     }
                     .buttonStyle(.plain)
-
-                    if opt.pages < 3 {
-                        Divider()
-                            .background(Color.white.opacity(0.07))
-                            .padding(.leading, 70)
-                    }
                 }
 
                 Divider()

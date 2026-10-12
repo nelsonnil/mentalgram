@@ -64,6 +64,7 @@ enum ManualInstagramRefresh {
 
         do {
             try await instagram.waitForNetworkStability()
+            instagram.invalidateFirstTimelinePageCache()
             let previousProfile: InstagramProfile?
             if repairMode {
                 ProfileCacheService.shared.preparePublicReplicaRebuild()
@@ -112,14 +113,14 @@ enum ManualInstagramRefresh {
                 ProfileCacheService.shared.saveProfileAuthoritative(fetched)
             }
 
-            // ── Extra-page deep refresh ───────────────────────────────────────────
-            if clampedPages > 1, !uid.isEmpty {
+            // ── Full sync: every remaining page ───────────────────────────────────
+            if !uid.isEmpty {
                 let extra = await fetchExtraPages(
                     instagram: instagram,
                     userId: uid,
                     firstProfile: fetched,
                     page1Items: page1APIItems,
-                    pagesToFetch: clampedPages - 1
+                    pagesToFetch: fullSyncMaxPages
                 )
                 syncedFetchedItems = extra.accumulatedItems
                 syncedEndCursor = extra.endCursor
@@ -169,6 +170,9 @@ enum ManualInstagramRefresh {
         }
     }
 
+    /// Upper bound for one full sync (each timeline page is ~12 posts).
+    private static let fullSyncMaxPages = 450
+
     private struct ExtraPagesResult {
         let accumulatedItems: [InstagramMediaItem]
         let endCursor: String?
@@ -197,9 +201,19 @@ enum ManualInstagramRefresh {
             return ExtraPagesResult(accumulatedItems: page1Items, endCursor: firstProfile.cachedNextMaxId)
         }
 
+        var requestedCursors = Set<String>()
+        let expectedCount = firstProfile.mediaCount
+        let readLooksShort: () -> Bool = {
+            expectedCount > 0 && ProfileMediaReconciler.mediaKeys(from: accumulatedItems).count + 2 < expectedCount
+        }
+
         for _ in 0..<pagesToFetch {
             guard let activeCursor = cursor, !activeCursor.isEmpty else {
                 print("📄 [HEADLESS EXTRA] No cursor — stopping at page \(fetchedCount + 1)")
+                break
+            }
+            guard requestedCursors.insert(activeCursor).inserted else {
+                print("📄 [HEADLESS EXTRA] Cursor repeated — stopping at page \(fetchedCount + 1)")
                 break
             }
 
@@ -220,7 +234,7 @@ enum ManualInstagramRefresh {
             }
             InstagramSafetyGate.shared.record(.ownProfilePagination)
 
-            let humanDelay = UInt64.random(in: 1_500_000_000...2_800_000_000)
+            let humanDelay = UInt64.random(in: 700_000_000...1_400_000_000)
             try? await Task.sleep(nanoseconds: humanDelay)
 
             do {
@@ -231,13 +245,15 @@ enum ManualInstagramRefresh {
                 )
                 guard !newItems.isEmpty else {
                     print("📄 [HEADLESS EXTRA] Empty page — no more posts")
+                    endCursor = readLooksShort() ? activeCursor : nil
                     break
                 }
 
                 fetchedCount += 1
                 accumulatedItems.append(contentsOf: newItems)
                 cursor = newCursor
-                endCursor = newCursor
+                let windowCursor = (newCursor == nil && readLooksShort()) ? activeCursor : newCursor
+                endCursor = windowCursor
 
                 let itemsByURL = cached.cachedMediaItems.reduce(into: [String: InstagramMediaItem]()) {
                     $0[$1.imageURL] = $1
@@ -246,7 +262,7 @@ enum ManualInstagramRefresh {
                     currentURLs: cached.cachedMediaURLs,
                     currentItemsByURL: itemsByURL,
                     freshItems: accumulatedItems,
-                    endCursor: newCursor
+                    endCursor: windowCursor
                 )
                 cached.cachedMediaURLs = pageResult.urls.filter { !ProfileMediaReconciler.isOverlayURL($0) }
                 cached.cachedMediaItems = cached.cachedMediaURLs.compactMap { pageResult.itemsByURL[$0] }

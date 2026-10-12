@@ -209,9 +209,28 @@ enum ProfileMediaReconciler {
         )
     }
 
-    /// Marks set photos as archived when their mediaId falls inside the synced
-    /// Instagram window but was not returned by Instagram (deleted/archived on IG,
-    /// or leftover set reveal that is no longer public).
+    /// Instagram's public feed can keep returning a post for a short while after it
+    /// was archived, so a sync right after an in-app archive must not flip it back.
+    private static let appArchiveGrace: TimeInterval = 600
+    private static let appArchiveLock = NSLock()
+    private static var appArchivedAt: [String: Date] = [:]
+
+    static func noteAppArchived(mediaId: String) {
+        appArchiveLock.lock()
+        defer { appArchiveLock.unlock() }
+        appArchivedAt[mediaKey(mediaId)] = Date()
+    }
+
+    private static func wasRecentlyArchivedByApp(_ key: String) -> Bool {
+        appArchiveLock.lock()
+        defer { appArchiveLock.unlock() }
+        guard let at = appArchivedAt[key] else { return false }
+        return Date().timeIntervalSince(at) < appArchiveGrace
+    }
+
+    /// Mirrors Instagram's visibility into set photos for the synced window:
+    /// - absent from the window → archived (deleted/archived on IG, or leftover reveal)
+    /// - present in the window while marked archived → visible (unarchived on IG)
     ///
     /// Photos older than `syncedWindowEndPk` are left alone — they simply were not
     /// covered by this sync depth. MediaIds in `protectedMediaIds` (e.g. pending
@@ -226,11 +245,26 @@ enum ProfileMediaReconciler {
         let normalizedFetched = Set(fetchedKeys.map(mediaKey))
         let protectedKeys = Set(protectedMediaIds.map(mediaKey))
         var archivedCount = 0
+        var unarchivedCount = 0
 
         for set in DataManager.shared.sets {
             for photo in set.photos {
-                guard let mediaId = photo.mediaId, !photo.isArchived else { continue }
+                guard let mediaId = photo.mediaId else { continue }
                 let key = mediaKey(mediaId)
+                if photo.isArchived {
+                    guard normalizedFetched.contains(key), !wasRecentlyArchivedByApp(key) else { continue }
+                    DataManager.shared.updatePhoto(
+                        photoId: photo.id,
+                        mediaId: mediaId,
+                        isArchived: false,
+                        uploadStatus: .completed,
+                        errorMessage: nil,
+                        uploadDate: photo.uploadDate
+                    )
+                    unarchivedCount += 1
+                    print("🔄 [SET SYNC] Set photo \(mediaId) is public on Instagram — marked visible")
+                    continue
+                }
                 if normalizedFetched.contains(key) { continue }
                 if protectedKeys.contains(key) { continue }
 
@@ -264,8 +298,8 @@ enum ProfileMediaReconciler {
             }
         }
 
-        if archivedCount > 0 {
-            LogManager.shared.info("Set reconcile after sync: archived \(archivedCount) photo(s) missing from Instagram", category: .general)
+        if archivedCount > 0 || unarchivedCount > 0 {
+            LogManager.shared.info("Set reconcile after sync: archived \(archivedCount), marked visible \(unarchivedCount)", category: .general)
         }
     }
 

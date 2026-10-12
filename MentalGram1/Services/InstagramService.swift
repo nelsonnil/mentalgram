@@ -2586,6 +2586,7 @@ class InstagramService: ObservableObject {
                 // happening right after must not return the stale "visible" entry.
                 let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
                 stateCheckCache.removeValue(forKey: pk)
+                ProfileMediaReconciler.noteAppArchived(mediaId: pk)
                 
                 // When called from S&A (skipPreCheck=true), S&A manages its own
                 // inter-archive timing — don't impose an upload cooldown here.
@@ -4825,6 +4826,11 @@ class InstagramService: ObservableObject {
     /// follows it on Performance entry share one request.
     private var firstTimelinePageCache: (userId: String, fetchedAt: Date, page: ProfileTimelinePage)?
     private static let firstTimelinePageCacheTTL: TimeInterval = 30
+
+    /// Manual refreshes must read Instagram, not the page reused by the entry load.
+    func invalidateFirstTimelinePageCache() {
+        firstTimelinePageCache = nil
+    }
 
     private static func formEncode(_ fields: [(String, String)]) -> String {
         var allowed = CharacterSet.alphanumerics
@@ -9674,6 +9680,34 @@ extension InstagramService {
                         guard result.hasMore, let next = result.nextCursor else { break }
                         cursor = next
                     }
+                case "damage":
+                    emit("🧪 [SELFTEST] damage → \(debugDamageReplica())")
+                case "fullsync":
+                    let truth = try await debugTruthGrid()
+                    emit("🧪 [SELFTEST] fullsync → truth \(truth.count) posts; \(debugDamageReplica())")
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    let result = await ManualInstagramRefresh.run()
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    emit("🧪 [SELFTEST] fullsync → refresh ok:\(result.success) \(result.message ?? "") \(debugCompareReplica(truth))")
+                case "perfsync":
+                    // Performance must be mounted: it ACKs the notification and runs its own refresh.
+                    let truth = try await debugTruthGrid()
+                    let before = ProfileCacheService.shared.loadProfile()?.cachedMediaItems.count ?? 0
+                    var acked = false
+                    var finished: Bool? = nil
+                    let center = NotificationCenter.default
+                    let ackObserver = center.addObserver(forName: .performanceManualRefreshAck, object: nil, queue: .main) { _ in acked = true }
+                    let resultObserver = center.addObserver(forName: .performanceManualRefreshResult, object: nil, queue: .main) { note in
+                        finished = (note.userInfo?["success"] as? Bool) ?? false
+                    }
+                    await MainActor.run { center.post(name: .performanceManualRefresh, object: nil, userInfo: ["postPages": 1]) }
+                    for _ in 0..<180 where finished == nil {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                    }
+                    center.removeObserver(ackObserver)
+                    center.removeObserver(resultObserver)
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    emit("🧪 [SELFTEST] perfsync → replica before \(before), ack:\(acked) ok:\(finished.map(String.init) ?? "timeout") \(debugCompareReplica(truth))")
                 default:
                     emit("🧪 [SELFTEST] unknown test \(test)")
                 }
@@ -9684,6 +9718,46 @@ extension InstagramService {
         }
         emit("🧪 [PROBE] done")
         try? output.joined(separator: "\n").write(to: docs.appendingPathComponent("probe_results.txt"), atomically: true, encoding: .utf8)
+    }
+
+    /// Every own post straight from Instagram, newest first, as media keys.
+    private func debugTruthGrid() async throws -> [String] {
+        var truth: [String] = []
+        var cursor: String? = nil
+        for _ in 1...450 {
+            invalidateFirstTimelinePageCache()
+            let (items, next) = try await getUserMediaItems(userId: session.userId, amount: 18, maxId: cursor)
+            truth += items.map { ProfileMediaReconciler.mediaKey($0.mediaId) }
+            guard let next, next != cursor else { break }
+            cursor = next
+        }
+        var seen = Set<String>()
+        return truth.filter { seen.insert($0).inserted }
+    }
+
+    /// Drops a middle block, inserts a ghost inside the window and swaps two posts.
+    private func debugDamageReplica() -> String {
+        guard var damaged = ProfileCacheService.shared.loadProfile() else { return "no cached profile" }
+        var items = damaged.cachedMediaItems
+        let before = items.count
+        if items.count > 40 { items.removeSubrange(12..<40) }
+        if items.count > 6, let pk = ProfileMediaReconciler.mediaPK(items[5].mediaId) {
+            let ghostId = "\(pk + 1)_\(session.userId)"
+            items.insert(InstagramMediaItem(id: ghostId, mediaId: ghostId, imageURL: "https://ghost.invalid/\(pk + 1).jpg",
+                                            videoURL: nil, caption: nil, takenAt: items[5].takenAt, likeCount: nil,
+                                            commentCount: nil, mediaType: .photo), at: 5)
+        }
+        if items.count > 3 { items.swapAt(1, 3) }
+        damaged.cachedMediaItems = items
+        damaged.cachedMediaURLs = items.map(\.imageURL)
+        ProfileCacheService.shared.saveProfileAuthoritative(damaged)
+        return "replica damaged \(before) → \(items.count)"
+    }
+
+    private func debugCompareReplica(_ truth: [String]) -> String {
+        let synced = ProfileCacheService.shared.loadProfile()?.cachedMediaItems.map { ProfileMediaReconciler.mediaKey($0.mediaId) } ?? []
+        let firstDiff = zip(truth, synced).enumerated().first { $0.element.0 != $0.element.1 }?.offset
+        return "synced \(synced.count)/\(truth.count) identical:\(truth == synced) firstDiff:\(firstDiff.map(String.init) ?? "none")"
     }
 }
 #endif
