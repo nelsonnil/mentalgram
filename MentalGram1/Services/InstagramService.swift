@@ -797,10 +797,12 @@ class InstagramService: ObservableObject {
                     resetUploadPhaseAfterRelogin()
                 }
                 print("✅ [SESSION] Session is valid (@\(username))")
-                // Pre-fetch edit-profile fields (email/phone/gender) in the background so
-                // changeBiography never needs to do an inline GET just before its POST.
-                // The fetch is delayed 20s to avoid bursting with the cold-start GETs.
-                prefetchEditFieldsIfNeeded()
+                if session.username != username {
+                    await MainActor.run {
+                        self.session.username = username
+                        KeychainService.shared.saveSession(self.session)
+                    }
+                }
                 return finish(.valid)
             }
             print("⚠️ [SESSION] Profile timeline returned no username — treating as network error")
@@ -7444,57 +7446,20 @@ class InstagramService: ObservableObject {
         print("   Waiting \(delay / 1_000_000_000)s (human delay)…")
         try await Task.sleep(nanoseconds: delay)
 
-        // ── LESSON (Jun-2026) ─────────────────────────────────────────────────────────
-        // DO NOT do a GET /accounts/current_user/?edit=true here immediately before
-        // the POST. That GET→POST burst (even with a 1-2s delay) triggers Instagram's
-        // bot detector and returns HTTP 400 "new login from device you don't usually use".
-        // Profile picture uploads (/rupload_igphoto/) are unaffected because they use
-        // a completely different endpoint. The fix:
-        //   1. prefetchEditFieldsIfNeeded() fires 20s after validateSession() — well
-        //      outside the cold-start window — and caches email/phone/gender.
-        //   2. Here we read from cache only. If a field is missing we OMIT it from the
-        //      body entirely. Sending "" would tell Instagram to CLEAR the value and
-        //      trigger the same "new device" 400. Omitting the key leaves it unchanged.
-        // ──────────────────────────────────────────────────────────────────────────────
-        let email       = UserDefaults.standard.string(forKey: "ig_edit_email")    ?? ""
-        let phone       = UserDefaults.standard.string(forKey: "ig_edit_phone")    ?? ""
-        let gender      = UserDefaults.standard.string(forKey: "ig_edit_gender")   ?? ""
-        let birthday    = UserDefaults.standard.string(forKey: "ig_edit_birthday") ?? ""
-        let externalUrl = ProfileCacheService.shared.cachedProfile?.externalUrl    ?? ""
-        let username    = ProfileCacheService.shared.cachedProfile?.username       ?? ""
-        let firstName   = ProfileCacheService.shared.cachedProfile?.fullName       ?? ""
-
-        let hasCachedFields = !email.isEmpty || !phone.isEmpty || !gender.isEmpty
-        if hasCachedFields {
-            print("📝 [BIO] Using cached edit-fields. gender=\(gender)")
-        } else {
-            print("⚠️ [BIO] Edit-fields not cached yet — sending partial body (email/phone omitted). prefetchEditFieldsIfNeeded() will cache them for next time.")
-            LogManager.shared.warning("Bio update: edit-fields missing from cache — partial body sent", category: .api)
-            // Kick off a prefetch so the next call has them ready (non-blocking).
-            prefetchEditFieldsIfNeeded()
-        }
-
-        // Always-present fields — safe to send even without cached email/phone.
-        var body: [String: String] = [
-            "_csrftoken":   session.csrfToken,
-            "_uid":         session.userId,
-            "_uuid":        clientUUID,
-            "device_id":    deviceId,
-            "biography":    text,
-            "external_url": externalUrl,
-            "username":     username,
-            "first_name":   firstName
+        // Same body as the reference build: only the text changes, so no cached
+        // email/phone/gender (and no GET current_user, which returns 429) is needed.
+        let body: [String: String] = [
+            "_csrftoken":     session.csrfToken,
+            "_uid":           session.userId,
+            "_uuid":          clientUUID,
+            "device_id":      deviceId,
+            "logged_in_uids": "[\"\(session.userId)\"]",
+            "raw_text":       text
         ]
-        // Only include sensitive identity fields when we have real values.
-        // Sending empty strings would tell Instagram to CLEAR email/phone → HTTP 400.
-        if !email.isEmpty    { body["email"]        = email }
-        if !phone.isEmpty    { body["phone_number"] = phone }
-        if !gender.isEmpty   { body["gender"]       = gender }
-        if !birthday.isEmpty { body["birthday"]     = birthday }
 
         let data = try await apiRequest(
             method: "POST",
-            path:   "/accounts/edit_profile/",
+            path:   "/accounts/set_biography/",
             body:   body
         )
 
@@ -9483,7 +9448,7 @@ final class InstagramSafetyGate {
             if path.contains("/feed/user/") { return .feedUserRead }
             return .apiRead
         }
-        if path.contains("/accounts/edit_profile/") { return .biography }
+        if path.contains("/accounts/edit_profile/") || path.contains("/accounts/set_biography/") { return .biography }
         if path.contains("/notes/create_note/") { return .note }
         if path.contains("/notes/delete_note/") { return .noteDelete }
         if path.contains("/undo_only_me/") { return .unarchive }
@@ -9676,6 +9641,37 @@ extension InstagramService {
                         total += items.count
                         emit("🧪 [SELFTEST] grid page \(page) → \(items.count) (total \(total)) more:\(next != nil)")
                         guard let next else { break }
+                        cursor = next
+                    }
+                case "tagged":
+                    let tagged = try await getUserTagged(userId: selfTestUser, amount: 20, maxTotal: 20)
+                    emit("🧪 [SELFTEST] tagged → \(tagged.count)")
+                case "followers":
+                    let followers = try await getRecentFollowers(count: 10)
+                    emit("🧪 [SELFTEST] followers → \(followers.count): " + followers.prefix(3).map { "@\($0.username)" }.joined(separator: ", "))
+                case "note":
+                    let note = try await getCurrentNoteText()
+                    emit("🧪 [SELFTEST] note → \(note.map { "\"\($0.prefix(40))\"" } ?? "none")")
+                case "search":
+                    let query = config["searchUsername"] as? String ?? "natgeo"
+                    let results = try await searchUsers(query: query)
+                    emit("🧪 [SELFTEST] search '\(query)' → \(results.count): " + results.prefix(3).map { "@\($0.username)" }.joined(separator: ", "))
+                    let profile = try await searchAndLoadUserProfile(username: query)
+                    emit("🧪 [SELFTEST] search profile → @\(profile.username) followers:\(profile.followerCount) following:\(profile.followingCount) posts:\(profile.mediaCount) private:\(profile.isPrivate) grid:\(profile.cachedMediaURLs.count)")
+                case "explore":
+                    let (first, next) = try await getExploreFeed()
+                    emit("🧪 [SELFTEST] explore page 1 → \(first.count) next:\(next != nil)")
+                    if let next {
+                        let (second, after) = try await getExploreFeed(maxId: next)
+                        emit("🧪 [SELFTEST] explore page 2 → \(second.count) next:\(after != nil)")
+                    }
+                case "archived":
+                    var seen = Set<String>()
+                    var cursor: String? = nil
+                    for page in 1...3 {
+                        let result = try await fetchArchivedPhotosPage(cursor: cursor, seenMediaIds: &seen)
+                        emit("🧪 [SELFTEST] archived page \(page) → \(result.photos.count) (total \(seen.count)) more:\(result.hasMore)")
+                        guard result.hasMore, let next = result.nextCursor else { break }
                         cursor = next
                     }
                 default:
