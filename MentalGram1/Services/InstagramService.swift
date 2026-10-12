@@ -3103,128 +3103,47 @@ class InstagramService: ObservableObject {
         return "0"
     }
 
-    /// Header sources that failed during this launch; skipped until the app restarts.
-    private static var failedHeaderSources = Set<String>()
-
-    /// `/users/{id}/info/` and `web_profile_info` return 429 even for the reference
-    /// build, so following/media counts and biography come from whichever of these
-    /// still answers. Each attempt is logged with `[HEADER-SOURCE]`.
+    /// `/users/{id}/info/`, `info_stream`, `usernameinfo`, `current_user` and
+    /// `web_profile_info` all return 429 (also for the reference build), so
+    /// following/media counts and biography come from PolarisProfilePageContentQuery.
     private func fetchHeaderFromAlternativeSources(userId: String, username: String?) async -> [String: Any]? {
-        if !Self.failedHeaderSources.contains("polaris") {
-            do {
-                let user = try await fetchPolarisProfile(userId: userId, username: username)
-                print("🧪 [HEADER-SOURCE] polaris OK — following:\(Self.robustInt(user["following_count"])) posts:\(Self.robustInt(user["media_count"])) bio:\(user["biography"] != nil)")
-                LogManager.shared.success("[HEADER-SOURCE] polaris OK — keys:\(user.keys.sorted().joined(separator: ","))", category: .profile)
-                return user
-            } catch {
-                print("🧪 [HEADER-SOURCE] polaris failed: \(error.localizedDescription)")
-                LogManager.shared.warning("[HEADER-SOURCE] polaris failed: \(error.localizedDescription)", category: .profile)
-                Self.failedHeaderSources.insert("polaris")
-            }
+        do {
+            let user = try await fetchPolarisProfile(userId: userId, username: username)
+            print("🧪 [HEADER-SOURCE] polaris OK — following:\(Self.robustInt(user["following_count"])) posts:\(Self.robustInt(user["media_count"])) bio:\(user["biography"] != nil)")
+            LogManager.shared.success("[HEADER-SOURCE] polaris OK — following:\(Self.robustInt(user["following_count"])) posts:\(Self.robustInt(user["media_count"]))", category: .profile)
+            return user
+        } catch {
+            print("🧪 [HEADER-SOURCE] polaris failed: \(error.localizedDescription)")
+            LogManager.shared.warning("[HEADER-SOURCE] polaris failed: \(error.localizedDescription)", category: .profile)
+            return nil
         }
-
-        var candidates: [(name: String, path: String)] = [
-            ("info_stream", "/users/\(userId)/info_stream/?entry_point=profile&from_module=profile&is_prefetch=false"),
-            ("info_params", "/users/\(userId)/info/?entry_point=profile&from_module=self_profile&is_prefetch=false")
-        ]
-        if let username, !username.isEmpty {
-            let encoded = username.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? username
-            candidates.append(("usernameinfo", "/users/\(encoded)/usernameinfo/"))
-            candidates.append(("search", "/users/search/?q=\(encoded)&count=5&search_surface=user_search_page"))
-        }
-
-        for candidate in candidates where !Self.failedHeaderSources.contains(candidate.name) {
-            do {
-                let data = try await apiRequest(method: "GET", path: candidate.path)
-                let users = Self.headerUserCandidates(in: data)
-                let match = users.first { dict in
-                    let id = Self.stringValue(dict["pk"] ?? dict["pk_id"] ?? dict["id"])
-                    let name = dict["username"] as? String
-                    return id == userId || (username != nil && name?.lowercased() == username?.lowercased())
-                }
-                if let match, match["following_count"] != nil || match["media_count"] != nil || match["biography"] != nil {
-                    print("🧪 [HEADER-SOURCE] \(candidate.name) OK — following:\(Self.robustInt(match["following_count"])) posts:\(Self.robustInt(match["media_count"])) bio:\(match["biography"] != nil)")
-                    LogManager.shared.success("[HEADER-SOURCE] \(candidate.name) OK — keys:\(match.keys.sorted().joined(separator: ","))", category: .profile)
-                    return match
-                }
-                print("🧪 [HEADER-SOURCE] \(candidate.name) answered (\(data.count) B) without header fields")
-                LogManager.shared.warning("[HEADER-SOURCE] \(candidate.name) answered without header fields (\(data.count) B, users:\(users.count))", category: .profile)
-            } catch {
-                print("🧪 [HEADER-SOURCE] \(candidate.name) failed: \(error.localizedDescription)")
-                LogManager.shared.warning("[HEADER-SOURCE] \(candidate.name) failed: \(error.localizedDescription)", category: .profile)
-            }
-            Self.failedHeaderSources.insert(candidate.name)
-        }
-        return nil
     }
 
-    // MARK: - Web GraphQL (www.instagram.com, doc_id)
+    // MARK: - Relay (web) queries on the mobile host
 
-    private static let webGraphQLURL = "https://www.instagram.com/graphql/query/"
-    private static let webAppId = "936619743392459"
-    private static let polarisProfileDocId = "25980296051578533"
-    private static let highlightsWebDocId = "9532867876840543"
-
-    /// POSTs a doc_id query to the web GraphQL host with the logged-in cookies and
-    /// returns its `data` object.
-    private func webDocIdGraphQL(docId: String, friendlyName: String, variables: [String: Any], referer: String) async throws -> [String: Any] {
-        guard let url = URL(string: Self.webGraphQLURL) else { throw InstagramError.invalidURL }
-        let variablesData = try JSONSerialization.data(withJSONObject: variables)
-        let variablesJSON = String(data: variablesData, encoding: .utf8) ?? "{}"
-        let body = Self.formEncode([
-            ("variables", variablesJSON),
-            ("doc_id", docId),
-            ("server_timestamps", "true")
-        ])
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        for (key, value) in buildHeaders() where key.lowercased() != "content-type" {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue(Self.webAppId, forHTTPHeaderField: "X-IG-App-ID")
-        request.setValue(friendlyName, forHTTPHeaderField: "X-FB-Friendly-Name")
-        request.setValue(referer, forHTTPHeaderField: "Referer")
-        request.setValue("https://www.instagram.com", forHTTPHeaderField: "Origin")
-        if let csrf = HTTPCookieStorage.shared.cookies?.first(where: { $0.name == "csrftoken" })?.value {
-            request.setValue(csrf, forHTTPHeaderField: "X-CSRFToken")
-        }
-        request.httpBody = body.data(using: .utf8)
-
-        let started = CFAbsoluteTimeGetCurrent()
-        let (data, response) = try await getSession.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let ms = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
-        print("🌐 [WEB-GRAPHQL] \(friendlyName) → \(status) [\(ms)ms] [\(data.count / 1024) KB]")
-        LogManager.shared.debug("POST www/graphql/query \(friendlyName) → \(status) [\(ms)ms]", category: .api)
-
-        guard status == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let dataDict = json["data"] as? [String: Any] else {
-            let raw = String(data: data, encoding: .utf8) ?? ""
-            throw InstagramError.apiError("\(friendlyName) HTTP \(status): \(raw.prefix(160))")
-        }
-        return dataDict
-    }
+    /// doc_ids come from the web bundles (`<Name>_instagramRelayOperation` modules on
+    /// static.cdninstagram.com) and rotate every few weeks; a stale one answers
+    /// "The GraphQL document with ID … was not found".
+    private static let polarisProfileDocId = "28036671149327607"
+    private static let highlightsTrayDocId = "26970053832668570"
+    private static let highlightsTrayPagedDocId = "9532867876840543"
 
     /// PolarisProfilePageContentQuery: header fields (following_count, media_count,
     /// biography…) that the mobile endpoints no longer return.
     private func fetchPolarisProfile(userId: String, username: String?) async throws -> [String: Any] {
         let variables: [String: Any] = [
+            "enable_integrity_filters": true,
             "id": userId,
-            "render_surface": "PROFILE",
             "__relay_internal__pv__PolarisCannesGuardianExperienceEnabledrelayprovider": true,
             "__relay_internal__pv__PolarisCASB976ProfileEnabledrelayprovider": false,
-            "__relay_internal__pv__PolarisRepostsConsumptionEnabledrelayprovider": false
+            "__relay_internal__pv__PolarisWebSchoolsEnabledrelayprovider": false,
+            "__relay_internal__pv__PolarisRepostsConsumptionEnabledrelayprovider": false,
+            "__relay_internal__pv__PolarisShortDramaEnabledrelayprovider": false
         ]
-        let referer = "https://www.instagram.com/\(username ?? userId)/"
-        let data = try await webDocIdGraphQL(
-            docId: Self.polarisProfileDocId,
+        let data = try await relayDocQuery(
             friendlyName: "PolarisProfilePageContentQuery",
-            variables: variables,
-            referer: referer
+            docId: Self.polarisProfileDocId,
+            variables: variables
         )
         guard var user = data["user"] as? [String: Any] else {
             throw InstagramError.apiError("PolarisProfilePageContentQuery: no user")
@@ -3240,37 +3159,47 @@ class InstagramService: ObservableObject {
         return user
     }
 
-    /// Highlights tray via the web doc_id query (`highlights_tray` returns 429).
-    /// Nodes keep the same shape (`id`, `title`, `cover_media`) the tray parser expects.
+    /// Highlights tray via PolarisProfileStoryHighlightsTrayContentQuery
+    /// (`highlights_tray` returns 429). Nodes keep the shape (`id`, `title`,
+    /// `cover_media`) the tray parser expects.
     private func fetchHighlightsWebTray(userId: String) async throws -> [[String: Any]] {
-        var nodes: [[String: Any]] = []
-        var cursor: Any = NSNull()
-        for _ in 0..<5 {
-            let variables: [String: Any] = [
-                "after": cursor,
-                "before": NSNull(),
-                "first": 100,
-                "last": NSNull(),
-                "max_highlights_to_fetch_on_pagination": NSNull(),
-                "user_id": userId
-            ]
-            let data = try await webDocIdGraphQL(
-                docId: Self.highlightsWebDocId,
-                friendlyName: "PolarisProfileStoryHighlightsTrayContentQuery",
-                variables: variables,
-                referer: "https://www.instagram.com/"
-            )
+        func edges(in data: [String: Any]) throws -> (nodes: [[String: Any]], next: String?) {
             guard let connection = data.values.compactMap({ $0 as? [String: Any] }).first(where: { $0["edges"] != nil }),
                   let edges = connection["edges"] as? [[String: Any]] else {
-                throw InstagramError.apiError("Highlights web query: no edges (keys: \(data.keys.sorted().joined(separator: ",")))")
+                throw InstagramError.apiError("Highlights query: no edges (keys: \(data.keys.sorted().joined(separator: ",")))")
             }
-            nodes.append(contentsOf: edges.compactMap { $0["node"] as? [String: Any] })
             let pageInfo = connection["page_info"] as? [String: Any]
-            guard (pageInfo?["has_next_page"] as? Bool) == true,
-                  let next = pageInfo?["end_cursor"] as? String, !next.isEmpty else { break }
-            cursor = next
+            let next = (pageInfo?["has_next_page"] as? Bool) == true ? pageInfo?["end_cursor"] as? String : nil
+            return (edges.compactMap { $0["node"] as? [String: Any] }, next)
         }
-        print("🌟 [HIGHLIGHTS] Web GraphQL returned \(nodes.count) highlight(s)")
+
+        var nodes: [[String: Any]] = []
+        do {
+            let data = try await relayDocQuery(
+                friendlyName: "PolarisProfileStoryHighlightsTrayContentQuery",
+                docId: Self.highlightsTrayDocId,
+                variables: ["user_id": userId]
+            )
+            nodes = try edges(in: data).nodes
+        } catch {
+            print("⚠️ [HIGHLIGHTS] Current tray query failed (\(error.localizedDescription)) — trying paged query")
+            var cursor: Any = NSNull()
+            for _ in 0..<5 {
+                let data = try await relayDocQuery(
+                    friendlyName: "PolarisProfileStoryHighlightsTrayContentQuery",
+                    docId: Self.highlightsTrayPagedDocId,
+                    variables: [
+                        "after": cursor, "before": NSNull(), "first": 100, "last": NSNull(),
+                        "max_highlights_to_fetch_on_pagination": NSNull(), "user_id": userId
+                    ]
+                )
+                let page = try edges(in: data)
+                nodes.append(contentsOf: page.nodes)
+                guard let next = page.next, !next.isEmpty else { break }
+                cursor = next
+            }
+        }
+        print("🌟 [HIGHLIGHTS] GraphQL returned \(nodes.count) highlight(s)")
         return nodes.map { node in
             var item = node
             if let id = Self.stringValue(node["id"]), id.hasPrefix("highlight:") == false {
@@ -3278,34 +3207,6 @@ class InstagramService: ObservableObject {
             }
             return item
         }
-    }
-
-    /// Collects every user-like dictionary in a JSON (or newline-delimited JSON) payload.
-    private static func headerUserCandidates(in data: Data) -> [[String: Any]] {
-        var roots: [Any] = []
-        if let whole = try? JSONSerialization.jsonObject(with: data) {
-            roots.append(whole)
-        } else if let text = String(data: data, encoding: .utf8) {
-            for line in text.split(whereSeparator: \.isNewline) {
-                if let lineData = line.data(using: .utf8),
-                   let object = try? JSONSerialization.jsonObject(with: lineData) {
-                    roots.append(object)
-                }
-            }
-        }
-        var found: [[String: Any]] = []
-        func walk(_ node: Any) {
-            if let dict = node as? [String: Any] {
-                if dict["username"] != nil, dict["pk"] != nil || dict["pk_id"] != nil || dict["id"] != nil {
-                    found.append(dict)
-                }
-                dict.values.forEach(walk)
-            } else if let array = node as? [Any] {
-                array.forEach(walk)
-            }
-        }
-        roots.forEach(walk)
-        return found
     }
 
     private func fetchWebProfileInfoFallback(username: String) async -> [String: Any]? {
@@ -3376,7 +3277,14 @@ class InstagramService: ObservableObject {
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUsername.isEmpty else { return nil }
 
-        guard let user = await fetchWebProfileInfoFallback(username: trimmedUsername) else {
+        var resolvedUser: [String: Any]? = nil
+        if !userId.isEmpty {
+            resolvedUser = try? await fetchPolarisProfile(userId: userId, username: trimmedUsername)
+        }
+        if resolvedUser == nil {
+            resolvedUser = await fetchWebProfileInfoFallback(username: trimmedUsername)
+        }
+        guard let user = resolvedUser else {
             print("⚠️ [DATE FORCE] Lightweight counts failed for @\(trimmedUsername)")
             return nil
         }
@@ -4107,6 +4015,17 @@ class InstagramService: ObservableObject {
             LogManager.shared.warning("Profile protected data skipped — private:\(isPrivate) following:\(isFollowing) requested:\(isFollowRequested)", category: .profile)
         }
 
+        if user["following_count"] == nil || user["media_count"] == nil,
+           let headerUser = await fetchHeaderFromAlternativeSources(
+               userId: uid,
+               username: (user["username"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? usernameHint
+           ) {
+            for (key, value) in headerUser where !(value is NSNull) && (user[key] == nil || user[key] is NSNull || Self.robustInt(user[key]) == 0 || ((user[key] as? String)?.isEmpty == true)) {
+                user[key] = value
+            }
+            extractedUserId = extractProfileUserId(from: user)
+        }
+
         // Some accounts/API buckets return a partial /users/{id}/info payload for the
         // logged-in user while /feed/user still works. In that case the grid has posts
         // but the header loses name, counters, or profile photo. Merge only missing
@@ -4160,14 +4079,6 @@ class InstagramService: ObservableObject {
         ]
         .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
         .first { !$0.isEmpty }
-
-        if user["following_count"] == nil || user["media_count"] == nil,
-           let headerUser = await fetchHeaderFromAlternativeSources(userId: uid, username: fallbackUsername) {
-            for (key, value) in headerUser where !(value is NSNull) && (user[key] == nil || user[key] is NSNull || Self.robustInt(user[key]) == 0 || ((user[key] as? String)?.isEmpty == true)) {
-                user[key] = value
-            }
-            extractedUserId = extractProfileUserId(from: user)
-        }
 
         if isOwnProfile,
            (user["follower_count"] == nil || user["following_count"] == nil),
@@ -4948,6 +4859,34 @@ class InstagramService: ObservableObject {
             "X-FB-Friendly-Name": friendlyName,
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
         ]
+    }
+
+    /// Web (Relay) queries also run on the mobile host when posted with `doc_id`
+    /// instead of `client_doc_id`; no web lsd/fb_dtsg tokens are needed there.
+    private func relayDocQuery(friendlyName: String, docId: String, variables: [String: Any]) async throws -> [String: Any] {
+        guard let variablesData = try? JSONSerialization.data(withJSONObject: variables),
+              let variablesString = String(data: variablesData, encoding: .utf8) else {
+            throw InstagramError.apiError("\(friendlyName): could not encode variables")
+        }
+        let body = Self.formEncode([
+            ("variables", variablesString),
+            ("doc_id", docId),
+            ("server_timestamps", "true")
+        ])
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/graphql/query",
+            rawBody: body,
+            absoluteURL: Self.graphqlURL,
+            extraHeaders: Self.graphqlHeaders(friendlyName: friendlyName)
+        )
+        let merged = try Self.mergeGraphQLStream(data)
+        guard let payload = merged["data"] as? [String: Any] else {
+            let preview = String(data: data.prefix(300), encoding: .utf8) ?? "<binary>"
+            throw InstagramError.apiError("\(friendlyName): no data — \(preview)")
+        }
+        print("🧩 [GRAPHQL] \(friendlyName) OK [\(data.count / 1024) KB]")
+        return payload
     }
 
     private func graphqlQuery(friendlyName: String, docId: String, variables: [String: Any]) async throws -> [String: Any] {
@@ -9618,7 +9557,7 @@ extension InstagramService {
         let configURL = docs.appendingPathComponent("probes.json")
         guard let configData = try? Data(contentsOf: configURL),
               let config = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
-              let probes = config["probes"] as? [[String: Any]] else { return }
+              let probes = config["probes"] as? [[String: Any]] ?? (config["selfTests"] != nil ? [] : nil) else { return }
 
         let delay = (config["delay"] as? Double) ?? 4
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -9640,7 +9579,7 @@ extension InstagramService {
             .map { "\($0.key)=\($0.value)" }
             .sorted()
             .joined(separator: "; ")
-        let replacements: [String: String] = [
+        var replacements: [String: String] = [
             "{uid}": session.userId,
             "{username}": session.username,
             "{csrf}": cookie("csrftoken").isEmpty ? session.csrfToken : cookie("csrftoken"),
@@ -9653,7 +9592,7 @@ extension InstagramService {
             replacements.reduce(text) { $0.replacingOccurrences(of: $1.key, with: $1.value) }
         }
 
-        for probe in probes {
+        for (index, probe) in probes.enumerated() {
             let name = probe["name"] as? String ?? "probe"
             let method = (probe["method"] as? String ?? "GET").uppercased()
             guard let url = URL(string: fill(probe["url"] as? String ?? "")) else {
@@ -9693,12 +9632,59 @@ extension InstagramService {
                         line += "\n   ✘ \(key)"
                     }
                 }
+                for (placeholder, pattern) in probe["extract"] as? [String: String] ?? [:] {
+                    if let regex = try? NSRegularExpression(pattern: pattern),
+                       let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                       match.numberOfRanges > 1,
+                       let range = Range(match.range(at: 1), in: text) {
+                        replacements["{\(placeholder)}"] = String(text[range])
+                        line += "\n   ⇢ {\(placeholder)} = \(text[range].prefix(12))… (\(text[range].count) chars)"
+                    } else {
+                        line += "\n   ⇢ {\(placeholder)} not found"
+                    }
+                }
+                if (probe["save"] as? Bool) == true {
+                    try? data.write(to: docs.appendingPathComponent("probe_\(index).txt"))
+                }
                 line += "\n   ⤷ \(text.prefix(300).replacingOccurrences(of: "\n", with: " "))"
                 emit(line)
             } catch {
                 emit("🧪 [PROBE] \(name) — error: \(error.localizedDescription)")
             }
             try? await Task.sleep(nanoseconds: 700_000_000)
+        }
+        let selfTestUsers = (config["selfTestUserIds"] as? [String]).flatMap { $0.isEmpty ? nil : $0 } ?? [session.userId]
+        for selfTestUser in selfTestUsers {
+        emit("🧪 [SELFTEST] user \(selfTestUser)")
+        for test in config["selfTests"] as? [String] ?? [] {
+            do {
+                switch test {
+                case "profile":
+                    let profile = try await getProfileInfo(userId: selfTestUser)
+                    emit("🧪 [SELFTEST] profile → @\(profile?.username ?? "nil") followers:\(profile?.followerCount ?? -1) following:\(profile?.followingCount ?? -1) posts:\(profile?.mediaCount ?? -1) bio:\(profile?.biography.prefix(30) ?? "nil")")
+                case "highlights":
+                    let highlights = try await getUserHighlights(userId: selfTestUser)
+                    emit("🧪 [SELFTEST] highlights → \(highlights.count): " + highlights.prefix(5).map { "\($0.id)=\($0.title) cover:\(!$0.coverImageURL.isEmpty)" }.joined(separator: ", "))
+                case "reels":
+                    let (reels, next) = try await getUserReelsPage(userId: selfTestUser, amount: 12)
+                    emit("🧪 [SELFTEST] reels → \(reels.count) next:\(next != nil)")
+                case "grid":
+                    var cursor: String? = nil
+                    var total = 0
+                    for page in 1...6 {
+                        let (items, next) = try await getUserMediaItems(userId: selfTestUser, amount: 21, maxId: cursor)
+                        total += items.count
+                        emit("🧪 [SELFTEST] grid page \(page) → \(items.count) (total \(total)) more:\(next != nil)")
+                        guard let next else { break }
+                        cursor = next
+                    }
+                default:
+                    emit("🧪 [SELFTEST] unknown test \(test)")
+                }
+            } catch {
+                emit("🧪 [SELFTEST] \(test) failed: \(error.localizedDescription)")
+            }
+        }
         }
         emit("🧪 [PROBE] done")
         try? output.joined(separator: "\n").write(to: docs.appendingPathComponent("probe_results.txt"), atomically: true, encoding: .utf8)
