@@ -141,7 +141,28 @@ Para las pruebas que requieren cambios en Instagram (archivar, borrar, fijar), t
 16. Unificar las rutas de subida (`rupload` + `configure_sidecar`) en una sola.
 17. Dividir `InstagramService.swift` (~9.700 líneas) por áreas y añadir tests del reconciliador con capturas reales como datos.
 
-## 5. Orden de trabajo propuesto
+## 5. Estado (12 oct, commit 11d6608)
+
+**Hecho y verificado con el laboratorio:**
+- Todo refresco manual (tirar hacia abajo en Performance, botón de Ajustes/Sets y Repair) lee **todas** las páginas. Para no borrar nada por una respuesta corta, el final de la lista solo se acepta si el número de publicaciones leídas cuadra con el del perfil.
+- Prueba `fullsync` (refresco sin Performance): partiendo de una copia estropeada (27 publicaciones, una fantasma y dos cambiadas de sitio), queda **69/69 idéntica a Instagram**.
+- Prueba `perfsync` (refresco de Performance): partiendo de 42 con una fantasma, quita la fantasma, lee 5 páginas y queda **69/69 idéntica**.
+- Sets en los dos sentidos: si una foto de set aparece en el perfil, se marca visible; si falta en la parte leída, se marca archivada. Las fotos archivadas desde la app tienen 10 minutos de margen, porque Instagram tarda en reflejarlo.
+- Los reveals confirmados en páginas profundas ya no salen duplicados.
+- Sin límite de 100 publicaciones (ahora 5.000) y sin el recorte a múltiplos de 3.
+- Refrescar otra vez ya no está bloqueado 60–120 s (ahora 10 s), y el refresco manual pide siempre la página 1 de nuevo.
+- El selector de 1/2/3 páginas se sustituye por "Full sync", más la opción de reparar.
+
+**Decisión:** la entrada en Performance sigue sin llamadas a Instagram (pinta la copia al instante, importante durante una actuación). Lo que se cambie desde Instagram se corrige al refrescar. El punto 5 de la Fase B queda como opción para más adelante.
+
+**Pendiente:**
+- Probar con cambios reales hechos desde Instagram: archivar, desarchivar, borrar y fijar.
+- Detectar fotos de sets borradas en Instagram (necesita leer también las archivadas).
+- Paginación por scroll cuando la copia no está completa: sigue añadiendo al final. Tras un refresco completo no se usa.
+- Fase C y Fase E.
+- Freno oculto encontrado: tras archivar desde la app (fuera de Sync & Archive) se bloquea la siguiente subida 160–220 s (`photo_upload_cooldown_until`). Revisarlo con los demás frenos de escritura.
+
+## 6. Orden de trabajo propuesto
 
 1. Fase A (núcleo) y su batería de pruebas. Es lo que resuelve los desajustes.
 2. Fase B y Fase C.
