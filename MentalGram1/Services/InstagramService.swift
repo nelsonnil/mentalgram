@@ -631,18 +631,24 @@ class InstagramService: ObservableObject {
             return false
         }
         do {
-            // Use the accounts/current_user endpoint — minimal payload, no side effects.
-            let url = URL(string: "https://i.instagram.com/api/v1/accounts/current_user/?edit=true")!
-            var req = URLRequest(url: url)
-            req.setValue("sessionid=\(session.sessionId); ds_user_id=\(session.userId)", forHTTPHeaderField: "Cookie")
-            req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-            req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            // Bypasses apiRequest on purpose: it runs while the lockdown blocks apiRequest.
+            // 1-item profile timeline (/accounts/current_user/ is retired and always 429s).
+            var req = URLRequest(url: URL(string: Self.graphqlURL)!)
+            req.httpMethod = "POST"
             req.timeoutInterval = 10
+            let headers = buildHeaders().merging(Self.graphqlHeaders(friendlyName: "IGProfileTimelineQuery")) { _, new in new }
+            for (key, value) in headers { req.setValue(value, forHTTPHeaderField: key) }
+            req.httpBody = try Self.graphqlBody(
+                friendlyName: "IGProfileTimelineQuery",
+                docId: Self.profileTimelineDocId,
+                variables: Self.profileTimelineVariables(userId: session.userId, count: 1, maxId: nil)
+            ).data(using: .utf8)
             let (data, response) = try await URLSession.shared.data(for: req)
             guard let http = response as? HTTPURLResponse else { return false }
             if http.statusCode == 200,
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               json["user"] != nil {
+               let json = try? Self.mergeGraphQLStream(data),
+               let graphData = json["data"] as? [String: Any],
+               graphData["xdt_api__v1__profile_timeline"] is [String: Any] {
                 print("✅ [PROBE] Session valid — challenge was resolved")
                 InstagramSafetyGate.shared.recordProbeResult(success: true)
                 return true
@@ -782,75 +788,30 @@ class InstagramService: ObservableObject {
 
         print("🔍 [SESSION] Validating session...")
         do {
-            // Try without ?edit=true first — that parameter can cause different/missing
-            // response structures on some account types (e.g. Korean/regional accounts).
-            let data = try await apiRequest(method: "GET", path: "/accounts/current_user/")
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                // Valid if: "user" key present, OR status=="ok", OR no explicit error message.
-                // This is intentionally lenient because 200 without "user" can be a format
-                // variation, not a genuine expiry — as evidenced by other endpoints working fine.
-                let hasUser = json["user"] != nil
-                let statusOk = (json["status"] as? String) == "ok"
-                let message = (json["message"] as? String)?.lowercased() ?? ""
-                let statusCode = (json["status_code"] as? String)?.lowercased() ?? ""
-                let hasErrorMsg = json["message"] != nil && (json["status"] as? String) == "fail"
-                let loggedOut = (json["login_required"] as? Bool) == true
-                let explicitLoginRequired = loggedOut
-                    || message.contains("login_required")
-                    || statusCode.contains("login_required")
-
-                let snippet = String(describing: json.keys.prefix(6))
-                print("🔍 [SESSION] current_user response keys: \(snippet)")
-                LogManager.shared.debug("validateSession keys: \(snippet)", category: .api)
-
-                if !hasErrorMsg && !explicitLoginRequired && (hasUser || statusOk || !json.isEmpty) {
-                    await MainActor.run {
-                        clearSessionExpired()
-                        resetUploadPhaseAfterRelogin()
-                    }
-                    print("✅ [SESSION] Session is valid (hasUser:\(hasUser) statusOk:\(statusOk))")
-                    // Pre-fetch edit-profile fields (email/phone/gender) in the background so
-                    // changeBiography never needs to do an inline GET just before its POST.
-                    // The fetch is delayed 20s to avoid bursting with the cold-start GETs.
-                    prefetchEditFieldsIfNeeded()
-                    return finish(.valid)
+            // /accounts/current_user/ is retired (HTTP 429 even for the official app), so the
+            // session is validated with a 1-item profile timeline, which the official app uses.
+            let page = try await fetchProfileTimeline(userId: session.userId, count: 1)
+            if let username = page.user["username"] as? String, !username.isEmpty {
+                await MainActor.run {
+                    clearSessionExpired()
+                    resetUploadPhaseAfterRelogin()
                 }
-
-                // HTTP 200 + status=fail is not always logout. Instagram sometimes returns
-                // {"message":"We're sorry, but something went wrong.","status_code":"200","status":"fail"}
-                // from /accounts/current_user/ while the same freshly captured cookies keep
-                // working for other endpoints. Treat only explicit login_required (or real
-                // 401/403 handled by apiRequest) as expired; generic 200/fail is a transient
-                // validation/network-format problem and must not wipe the session or device.
-                let bodyPreview = String(data: data.prefix(300), encoding: .utf8)?
-                    .replacingOccurrences(of: "\n", with: " ") ?? "<binary>"
-                let responseMessage = (json["message"] as? String) ?? ""
-                let responseStatusCode = (json["status_code"] as? String) ?? ""
-                let cookieSummary = currentCookieSummary()
-                let deviceIdPrefix = String(deviceId.prefix(8))
-                print("⚠️ [SESSION] 200 but validation returned fail (keys:\(snippet))")
-                LogManager.shared.warning("validateSession 200/fail indicator (keys:\(snippet))", category: .auth)
-                LogManager.shared.warning(
-                    "Session diagnostic | device:\(deviceIdPrefix)… status_code:\(responseStatusCode) message:\(responseMessage) cookies:\(cookieSummary) body:\(bodyPreview)",
-                    category: .auth
-                )
-                if explicitLoginRequired {
-                    print("🔑 [SESSION] login_required confirmed → auto-logout to LoginView")
-                    LogManager.shared.warning("Auto-logout: explicit login_required from Instagram", category: .auth)
-                    await markSessionExpired(context: .normal)
-                    await MainActor.run { logout() }
-                    return finish(.expired)
-                }
-
-                if wasAlreadyExpired {
-                    print("ℹ️ [SESSION] Pre-expired flag + generic 200/fail — keeping session, returning networkError")
-                    LogManager.shared.warning("Pre-expired flag ignored for generic 200/fail validation response", category: .auth)
-                }
-                return finish(.networkError)
+                print("✅ [SESSION] Session is valid (@\(username))")
+                // Pre-fetch edit-profile fields (email/phone/gender) in the background so
+                // changeBiography never needs to do an inline GET just before its POST.
+                // The fetch is delayed 20s to avoid bursting with the cold-start GETs.
+                prefetchEditFieldsIfNeeded()
+                return finish(.valid)
             }
-            // JSON parse failed entirely — treat as network/format error, not expiry
-            print("⚠️ [SESSION] Could not parse response — treating as network error")
+            print("⚠️ [SESSION] Profile timeline returned no username — treating as network error")
+            LogManager.shared.warning("validateSession: profile timeline returned no username", category: .auth)
             return finish(.networkError)
+        } catch InstagramError.apiError(let message) where message.lowercased().contains("login_required") {
+            print("🔑 [SESSION] login_required confirmed → auto-logout to LoginView")
+            LogManager.shared.warning("Auto-logout: explicit login_required from Instagram", category: .auth)
+            await markSessionExpired(context: .normal)
+            await MainActor.run { logout() }
+            return finish(.expired)
         } catch InstagramError.sessionExpired {
             // Context already set by apiRequest — only set if not already marked
             if !isSessionExpired { await markSessionExpired(context: .normal) }
@@ -1944,7 +1905,9 @@ class InstagramService: ObservableObject {
         method: String,
         path: String,
         body: [String: String]? = nil,
-        rawBody: String? = nil
+        rawBody: String? = nil,
+        absoluteURL: String? = nil,
+        extraHeaders: [String: String] = [:]
     ) async throws -> Data {
         // Auto-expire lockdown if the countdown has already passed
         if isLocked, let until = lockUntil, Date() > until {
@@ -1988,7 +1951,7 @@ class InstagramService: ObservableObject {
             try await waitForConnection()
         }
         
-        guard let url = URL(string: "\(baseURL)\(path)") else {
+        guard let url = URL(string: absoluteURL ?? "\(baseURL)\(path)") else {
             throw InstagramError.invalidURL
         }
         
@@ -1996,7 +1959,7 @@ class InstagramService: ObservableObject {
         request.httpMethod = method
         request.timeoutInterval = 30  // 30s timeout
         
-        let headers = buildHeaders()
+        let headers = buildHeaders().merging(extraHeaders) { _, extra in extra }
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
@@ -2116,6 +2079,8 @@ class InstagramService: ObservableObject {
             consecutiveBotSignalErrors = 0
             challengeRequiredStreak = 0
             hasRecentApiError = false
+        } else if httpResponse.statusCode == 429 && (method == "GET" || shortPath.contains("/graphql/query")) {
+            // Retired read endpoint — must not feed the exponential backoff.
         } else {
             consecutiveErrors += 1
             hasRecentApiError = true
@@ -2124,6 +2089,14 @@ class InstagramService: ObservableObject {
         
         // Check for bot detection signals in HTTP status
         if httpResponse.statusCode == 429 {
+            // Instagram answers 429 permanently on retired read endpoints (/users/{id}/info/,
+            // /accounts/current_user/, highlights_tray) — even for the official app. A read 429
+            // only fails that call so the caller can fall back; it must not lock the whole app.
+            let isRead = method == "GET" || shortPath.contains("/graphql/query")
+            if isRead {
+                LogManager.shared.warning("\(method) \(shortPath) → HTTP 429 on read — endpoint unavailable, no lockdown [\(duration)]", category: .api)
+                throw InstagramError.apiError("HTTP 429 on \(shortPath)")
+            }
             LogManager.shared.bot("\(method) \(shortPath) → HTTP 429 Rate Limited [\(duration)] [actions:\(rateInfo.actionsUsed)/\(maxActionsPerHour)]")
             await triggerLockdown(reason: "Rate limited by Instagram. Too many requests.", duration: 300)
             throw InstagramError.botDetected("Rate limited (HTTP 429). Wait 5 minutes.")
@@ -2409,10 +2382,8 @@ class InstagramService: ObservableObject {
     
     func fetchUsername() async -> String? {
         do {
-            let data = try await apiRequest(method: "GET", path: "/accounts/current_user/?edit=true")
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let user = json["user"] as? [String: Any],
-               let username = user["username"] as? String {
+            let page = try await fetchProfileTimeline(userId: session.userId, count: 1)
+            if let username = page.user["username"] as? String, !username.isEmpty {
                 return username
             }
         } catch {
@@ -4638,40 +4609,246 @@ class InstagramService: ObservableObject {
     
     // MARK: - Get User Media Items (Extended with metadata)
     
+    // MARK: - GraphQL (i.instagram.com/graphql/query)
+
+    /// One page of `IGProfileTimelineQuery`: profile header basics + grid media dicts
+    /// (same shape as `/feed/user/` items once the streamed chunks are merged).
+    struct ProfileTimelinePage {
+        let user: [String: Any]
+        let items: [[String: Any]]
+        let nextMaxId: String?
+        let moreAvailable: Bool
+    }
+
+    private static let profileTimelineDocId = "56030350814417327502004290437"
+
+    private static func formEncode(_ fields: [(String, String)]) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._*")
+        return fields.map { key, value in
+            let k = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
+            let v = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+            return "\(k)=\(v)"
+        }.joined(separator: "&")
+    }
+
+    private static let graphqlURL = "https://i.instagram.com/graphql/query"
+
+    private static func graphqlBody(friendlyName: String, docId: String, variables: [String: Any]) throws -> String {
+        guard let variablesData = try? JSONSerialization.data(withJSONObject: variables),
+              let variablesString = String(data: variablesData, encoding: .utf8) else {
+            throw InstagramError.apiError("\(friendlyName): could not encode variables")
+        }
+        return formEncode([
+            ("method", "post"),
+            ("pretty", "false"),
+            ("format", "json"),
+            ("server_timestamps", "true"),
+            ("locale", DeviceInfo.shared.deviceLocale),
+            ("fb_api_req_friendly_name", friendlyName),
+            ("client_doc_id", docId),
+            ("fb_api_caller_class", "graphservice"),
+            ("variables", variablesString)
+        ])
+    }
+
+    private static func graphqlHeaders(friendlyName: String) -> [String: String] {
+        [
+            "X-FB-Friendly-Name": friendlyName,
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        ]
+    }
+
+    private func graphqlQuery(friendlyName: String, docId: String, variables: [String: Any]) async throws -> [String: Any] {
+        let body = try Self.graphqlBody(friendlyName: friendlyName, docId: docId, variables: variables)
+        let data = try await apiRequest(
+            method: "POST",
+            path: "/graphql/query",
+            rawBody: body,
+            absoluteURL: Self.graphqlURL,
+            extraHeaders: Self.graphqlHeaders(friendlyName: friendlyName)
+        )
+        let merged = try Self.mergeGraphQLStream(data)
+        guard merged["data"] is [String: Any] else {
+            let preview = String(data: data.prefix(300), encoding: .utf8) ?? "<binary>"
+            throw InstagramError.apiError("\(friendlyName): no data — \(preview)")
+        }
+        return merged
+    }
+
+    /// GraphQL responses arrive as one JSON object per line: the first carries the
+    /// essential payload, the rest are deferred fragments (`path` + `data`) that must be
+    /// merged into the node at `path`.
+    static func mergeGraphQLStream(_ data: Data) throws -> [String: Any] {
+        guard let text = String(data: data, encoding: .utf8) else { throw InstagramError.invalidResponse }
+        var root: [String: Any]?
+        for line in text.split(whereSeparator: \.isNewline) {
+            guard let chunk = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
+            guard let current = root else {
+                root = chunk
+                continue
+            }
+            guard let path = chunk["path"] as? [Any],
+                  let patch = chunk["data"] as? [String: Any],
+                  let currentData = current["data"] as? [String: Any],
+                  let patched = applyGraphQLPatch(patch, at: path[...], into: currentData) as? [String: Any] else { continue }
+            root?["data"] = patched
+        }
+        guard let result = root else { throw InstagramError.invalidResponse }
+        return result
+    }
+
+    private static func applyGraphQLPatch(_ patch: [String: Any], at path: ArraySlice<Any>, into node: Any) -> Any {
+        guard let head = path.first else {
+            guard var dict = node as? [String: Any] else { return patch }
+            for (key, value) in patch {
+                if let existing = dict[key] as? [String: Any], let incoming = value as? [String: Any] {
+                    dict[key] = existing.merging(incoming) { _, new in new }
+                } else {
+                    dict[key] = value
+                }
+            }
+            return dict
+        }
+        let rest = path.dropFirst()
+        if let key = head as? String, var dict = node as? [String: Any], let child = dict[key] {
+            dict[key] = applyGraphQLPatch(patch, at: rest, into: child)
+            return dict
+        }
+        if let index = head as? Int, var array = node as? [Any], array.indices.contains(index) {
+            array[index] = applyGraphQLPatch(patch, at: rest, into: array[index])
+            return array
+        }
+        return node
+    }
+
+    /// Profile grid + header basics, exactly as the official app (build 153 capture) requests it.
+    func fetchProfileTimeline(userId: String, count: Int = 12, maxId: String? = nil) async throws -> ProfileTimelinePage {
+        let json = try await graphqlQuery(
+            friendlyName: "IGProfileTimelineQuery",
+            docId: Self.profileTimelineDocId,
+            variables: Self.profileTimelineVariables(userId: userId, count: count, maxId: maxId)
+        )
+        guard let data = json["data"] as? [String: Any],
+              let timeline = data["xdt_api__v1__profile_timeline"] as? [String: Any] else {
+            throw InstagramError.apiError("IGProfileTimelineQuery: missing xdt_api__v1__profile_timeline")
+        }
+
+        let grid = timeline["profile_grid_items"] as? [[String: Any]] ?? []
+        let items = grid.compactMap { $0["media"] as? [String: Any] }
+
+        // The top-level user only has basics; media.user / caption.user add follower_count etc.
+        var user = timeline["user"] as? [String: Any] ?? [:]
+        for media in items {
+            let candidates = [media["user"], (media["caption"] as? [String: Any])?["user"]]
+            for case let candidate as [String: Any] in candidates {
+                guard Self.stringValue(candidate["id"] ?? candidate["pk"]) == userId else { continue }
+                for (key, value) in candidate where user[key] == nil || user[key] is NSNull {
+                    if !(value is NSNull) { user[key] = value }
+                }
+            }
+        }
+        if user["pk"] == nil { user["pk"] = userId }
+
+        let nextMaxId = Self.stringValue(timeline["next_max_id"])
+        let moreAvailable = (timeline["more_available"] as? Bool) ?? false
+        print("🧩 [GRAPHQL] IGProfileTimelineQuery uid:\(userId) items:\(items.count) more:\(moreAvailable) next:\(nextMaxId ?? "none")")
+        return ProfileTimelinePage(user: user, items: items, nextMaxId: nextMaxId, moreAvailable: moreAvailable)
+    }
+
+    private static func profileTimelineVariables(userId: String, count: Int, maxId: String?) -> [String: Any] {
+        var variables: [String: Any] = [
+            "user_id": userId,
+            "count": count,
+            "include_media_notes_fields": true,
+            "exclude_collaborative_posts": false,
+            "request_media_chunk": true,
+            "include_unseen_media_ids": false,
+            "include_eligible_insights_entrypoints": false,
+            "exclude_user": false,
+            "include_fb_mentioned_users": false,
+            "request_hints_chunk": false,
+            "defer_maybe_non_essential_lightweight_fields": false,
+            "include_attribution_ui_data_v2": true,
+            "exclude_pinned_posts": false,
+            "include_videos_for_associated_highlights": false,
+            "include_ring_creator_fields": false,
+            "include_timeline_ordered_edge": false,
+            "enable_carousel_media_count_in_deferred": true,
+            "initial_count_carousel_media": 5,
+            "include_accessibility_caption_for_carousel": true,
+            "exclude_comment": "false",
+            "fetch_profile_grid_items": true,
+            "include_profile_grid_rendering_option": false,
+            "force_compute_user_tags": false,
+            "include_is_photo_comments_composer_enabled_for_author": false,
+            "include_attribution_ui_data": true,
+            "exclude_besties_content": true,
+            "include_is_unseen_by_viewer": false,
+            "defer_hints_chunk": false,
+            "enable_profile_fm_integration": false,
+            "num_previews_for_associated_highlights": 3,
+            "skip_clips_captions_fields": false,
+            "include_associated_highlights": false,
+            "exclude_highlights": true
+        ]
+        if let maxId, !maxId.isEmpty {
+            variables["max_id"] = maxId
+        }
+        return variables
+    }
+
+    private static func stringValue(_ value: Any?) -> String? {
+        if let s = value as? String, !s.isEmpty { return s }
+        if let n = value as? NSNumber { return n.stringValue }
+        return nil
+    }
+
     func getUserMediaItems(userId: String? = nil, amount: Int = 18, maxId: String? = nil) async throws -> ([InstagramMediaItem], String?) {
         let uid = userId ?? session.userId
         print("📷 [MEDIA] Fetching \(amount) media items for user ID: \(uid), maxId: \(maxId ?? "none")")
-        
-        var components = URLComponents()
-        components.queryItems = [URLQueryItem(name: "count", value: String(amount))]
-        if let maxId = maxId, !maxId.isEmpty {
-            components.queryItems?.append(URLQueryItem(name: "max_id", value: maxId))
+
+        var graphPage: ProfileTimelinePage?
+        do {
+            graphPage = try await fetchProfileTimeline(userId: uid, count: amount, maxId: maxId)
+        } catch InstagramError.apiError(let message) {
+            print("⚠️ [MEDIA] GraphQL timeline failed (\(message)) — falling back to /feed/user/")
+            LogManager.shared.warning("Profile timeline GraphQL failed: \(message) — using /feed/user/", category: .api)
         }
-        let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
-        let path = "/feed/user/\(uid)/\(query)"
-        let data = try await apiRequest(method: "GET", path: path)
-        
-        // Debug: Print raw response
-        if let jsonString = String(data: data, encoding: .utf8) {
-            print("📷 [MEDIA] Raw response (first 500 chars): \(String(jsonString.prefix(500)))")
+
+        let items: [[String: Any]]
+        var json: [String: Any] = [:]
+        if let graphPage {
+            items = graphPage.items
+        } else {
+            var components = URLComponents()
+            components.queryItems = [URLQueryItem(name: "count", value: String(amount))]
+            if let maxId = maxId, !maxId.isEmpty {
+                components.queryItems?.append(URLQueryItem(name: "max_id", value: maxId))
+            }
+            let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+            let path = "/feed/user/\(uid)/\(query)"
+            let data = try await apiRequest(method: "GET", path: path)
+
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("📷 [MEDIA] Raw response (first 500 chars): \(String(jsonString.prefix(500)))")
+            }
+
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("❌ [MEDIA] Failed to parse JSON")
+                return ([], nil)
+            }
+            json = parsed
+            print("📷 [MEDIA] Response keys: \(parsed.keys.sorted())")
+
+            guard let feedItems = parsed["items"] as? [[String: Any]] else {
+                print("❌ [MEDIA] No 'items' key found or invalid format")
+                print("📷 [MEDIA] Available keys: \(parsed.keys.joined(separator: ", "))")
+                return try await getUserMediaFromAlternativeEndpoint(userId: uid, amount: amount, maxId: maxId)
+            }
+            items = feedItems
         }
-        
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("❌ [MEDIA] Failed to parse JSON")
-            return ([], nil)
-        }
-        
-        // Debug: Print available keys
-        print("📷 [MEDIA] Response keys: \(json.keys.sorted())")
-        
-        guard let items = json["items"] as? [[String: Any]] else {
-            print("❌ [MEDIA] No 'items' key found or invalid format")
-            print("📷 [MEDIA] Available keys: \(json.keys.joined(separator: ", "))")
-            
-            // Try alternative: get from user info endpoint
-            return try await getUserMediaFromAlternativeEndpoint(userId: uid, amount: amount, maxId: maxId)
-        }
-        
+
         print("📷 [MEDIA] Found \(items.count) items in response")
         
         var mediaItems: [InstagramMediaItem] = []
@@ -4782,7 +4959,9 @@ class InstagramService: ObservableObject {
         
         // Get next_max_id for pagination. Instagram may return this as String or NSNumber.
         let nextMaxId: String?
-        if let s = json["next_max_id"] as? String, !s.isEmpty {
+        if let graphPage {
+            nextMaxId = graphPage.moreAvailable ? graphPage.nextMaxId : nil
+        } else if let s = json["next_max_id"] as? String, !s.isEmpty {
             nextMaxId = s
         } else if let n = json["next_max_id"] as? NSNumber {
             nextMaxId = n.stringValue
@@ -9111,7 +9290,8 @@ final class InstagramSafetyGate {
     }
 
     private func actionFor(method: String, path: String) -> Action {
-        guard method != "GET" else {
+        // GraphQL queries are POSTs but read-only.
+        guard method != "GET", !path.contains("/graphql/query") else {
             if path.contains("/feed/user/") { return .feedUserRead }
             return .apiRead
         }
