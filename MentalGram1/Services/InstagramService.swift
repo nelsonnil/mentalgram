@@ -3110,6 +3110,19 @@ class InstagramService: ObservableObject {
     /// build, so following/media counts and biography come from whichever of these
     /// still answers. Each attempt is logged with `[HEADER-SOURCE]`.
     private func fetchHeaderFromAlternativeSources(userId: String, username: String?) async -> [String: Any]? {
+        if !Self.failedHeaderSources.contains("polaris") {
+            do {
+                let user = try await fetchPolarisProfile(userId: userId, username: username)
+                print("🧪 [HEADER-SOURCE] polaris OK — following:\(Self.robustInt(user["following_count"])) posts:\(Self.robustInt(user["media_count"])) bio:\(user["biography"] != nil)")
+                LogManager.shared.success("[HEADER-SOURCE] polaris OK — keys:\(user.keys.sorted().joined(separator: ","))", category: .profile)
+                return user
+            } catch {
+                print("🧪 [HEADER-SOURCE] polaris failed: \(error.localizedDescription)")
+                LogManager.shared.warning("[HEADER-SOURCE] polaris failed: \(error.localizedDescription)", category: .profile)
+                Self.failedHeaderSources.insert("polaris")
+            }
+        }
+
         var candidates: [(name: String, path: String)] = [
             ("info_stream", "/users/\(userId)/info_stream/?entry_point=profile&from_module=profile&is_prefetch=false"),
             ("info_params", "/users/\(userId)/info/?entry_point=profile&from_module=self_profile&is_prefetch=false")
@@ -3143,6 +3156,128 @@ class InstagramService: ObservableObject {
             Self.failedHeaderSources.insert(candidate.name)
         }
         return nil
+    }
+
+    // MARK: - Web GraphQL (www.instagram.com, doc_id)
+
+    private static let webGraphQLURL = "https://www.instagram.com/graphql/query/"
+    private static let webAppId = "936619743392459"
+    private static let polarisProfileDocId = "25980296051578533"
+    private static let highlightsWebDocId = "9532867876840543"
+
+    /// POSTs a doc_id query to the web GraphQL host with the logged-in cookies and
+    /// returns its `data` object.
+    private func webDocIdGraphQL(docId: String, friendlyName: String, variables: [String: Any], referer: String) async throws -> [String: Any] {
+        guard let url = URL(string: Self.webGraphQLURL) else { throw InstagramError.invalidURL }
+        let variablesData = try JSONSerialization.data(withJSONObject: variables)
+        let variablesJSON = String(data: variablesData, encoding: .utf8) ?? "{}"
+        let body = Self.formEncode([
+            ("variables", variablesJSON),
+            ("doc_id", docId),
+            ("server_timestamps", "true")
+        ])
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        for (key, value) in buildHeaders() where key.lowercased() != "content-type" {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.webAppId, forHTTPHeaderField: "X-IG-App-ID")
+        request.setValue(friendlyName, forHTTPHeaderField: "X-FB-Friendly-Name")
+        request.setValue(referer, forHTTPHeaderField: "Referer")
+        request.setValue("https://www.instagram.com", forHTTPHeaderField: "Origin")
+        if let csrf = HTTPCookieStorage.shared.cookies?.first(where: { $0.name == "csrftoken" })?.value {
+            request.setValue(csrf, forHTTPHeaderField: "X-CSRFToken")
+        }
+        request.httpBody = body.data(using: .utf8)
+
+        let started = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await getSession.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let ms = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+        print("🌐 [WEB-GRAPHQL] \(friendlyName) → \(status) [\(ms)ms] [\(data.count / 1024) KB]")
+        LogManager.shared.debug("POST www/graphql/query \(friendlyName) → \(status) [\(ms)ms]", category: .api)
+
+        guard status == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let dataDict = json["data"] as? [String: Any] else {
+            let raw = String(data: data, encoding: .utf8) ?? ""
+            throw InstagramError.apiError("\(friendlyName) HTTP \(status): \(raw.prefix(160))")
+        }
+        return dataDict
+    }
+
+    /// PolarisProfilePageContentQuery: header fields (following_count, media_count,
+    /// biography…) that the mobile endpoints no longer return.
+    private func fetchPolarisProfile(userId: String, username: String?) async throws -> [String: Any] {
+        let variables: [String: Any] = [
+            "id": userId,
+            "render_surface": "PROFILE",
+            "__relay_internal__pv__PolarisCannesGuardianExperienceEnabledrelayprovider": true,
+            "__relay_internal__pv__PolarisCASB976ProfileEnabledrelayprovider": false,
+            "__relay_internal__pv__PolarisRepostsConsumptionEnabledrelayprovider": false
+        ]
+        let referer = "https://www.instagram.com/\(username ?? userId)/"
+        let data = try await webDocIdGraphQL(
+            docId: Self.polarisProfileDocId,
+            friendlyName: "PolarisProfilePageContentQuery",
+            variables: variables,
+            referer: referer
+        )
+        guard var user = data["user"] as? [String: Any] else {
+            throw InstagramError.apiError("PolarisProfilePageContentQuery: no user")
+        }
+        if user["pk"] == nil, let id = user["id"] { user["pk"] = id }
+        if user["profile_pic_url"] == nil,
+           let hd = (user["hd_profile_pic_url_info"] as? [String: Any])?["url"] {
+            user["profile_pic_url"] = hd
+        }
+        guard user["following_count"] != nil || user["media_count"] != nil || user["biography"] != nil else {
+            throw InstagramError.apiError("PolarisProfilePageContentQuery: user without header fields (keys: \(user.keys.sorted().prefix(30).joined(separator: ",")))")
+        }
+        return user
+    }
+
+    /// Highlights tray via the web doc_id query (`highlights_tray` returns 429).
+    /// Nodes keep the same shape (`id`, `title`, `cover_media`) the tray parser expects.
+    private func fetchHighlightsWebTray(userId: String) async throws -> [[String: Any]] {
+        var nodes: [[String: Any]] = []
+        var cursor: Any = NSNull()
+        for _ in 0..<5 {
+            let variables: [String: Any] = [
+                "after": cursor,
+                "before": NSNull(),
+                "first": 100,
+                "last": NSNull(),
+                "max_highlights_to_fetch_on_pagination": NSNull(),
+                "user_id": userId
+            ]
+            let data = try await webDocIdGraphQL(
+                docId: Self.highlightsWebDocId,
+                friendlyName: "PolarisProfileStoryHighlightsTrayContentQuery",
+                variables: variables,
+                referer: "https://www.instagram.com/"
+            )
+            guard let connection = data.values.compactMap({ $0 as? [String: Any] }).first(where: { $0["edges"] != nil }),
+                  let edges = connection["edges"] as? [[String: Any]] else {
+                throw InstagramError.apiError("Highlights web query: no edges (keys: \(data.keys.sorted().joined(separator: ",")))")
+            }
+            nodes.append(contentsOf: edges.compactMap { $0["node"] as? [String: Any] })
+            let pageInfo = connection["page_info"] as? [String: Any]
+            guard (pageInfo?["has_next_page"] as? Bool) == true,
+                  let next = pageInfo?["end_cursor"] as? String, !next.isEmpty else { break }
+            cursor = next
+        }
+        print("🌟 [HIGHLIGHTS] Web GraphQL returned \(nodes.count) highlight(s)")
+        return nodes.map { node in
+            var item = node
+            if let id = Self.stringValue(node["id"]), id.hasPrefix("highlight:") == false {
+                item["id"] = "highlight:\(id)"
+            }
+            return item
+        }
     }
 
     /// Collects every user-like dictionary in a JSON (or newline-delimited JSON) payload.
@@ -4517,26 +4652,33 @@ class InstagramService: ObservableObject {
         let uid = userId ?? session.userId
         print("🌟 [HIGHLIGHTS] Fetching story highlights for user ID: \(uid)")
 
-        let data = try await apiRequest(method: "GET", path: "/highlights/\(uid)/highlights_tray/")
+        let tray: [[String: Any]]
+        do {
+            tray = try await fetchHighlightsWebTray(userId: uid)
+        } catch {
+            print("⚠️ [HIGHLIGHTS] Web GraphQL failed (\(error.localizedDescription)) — trying highlights_tray")
+            LogManager.shared.warning("Highlights web GraphQL failed: \(error.localizedDescription) — using highlights_tray", category: .api)
+            let data = try await apiRequest(method: "GET", path: "/highlights/\(uid)/highlights_tray/")
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            let raw = String(data: data, encoding: .utf8) ?? "<non-utf8>"
-            print("⚠️ [HIGHLIGHTS] Invalid JSON response: \(raw.prefix(500))")
-            return []
-        }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                let raw = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+                print("⚠️ [HIGHLIGHTS] Invalid JSON response: \(raw.prefix(500))")
+                return []
+            }
 
-        let tray = (json["tray"] as? [[String: Any]])
-            ?? (json["items"] as? [[String: Any]])
-            ?? (json["highlight_reels"] as? [[String: Any]])
-            ?? ((json["reels"] as? [String: [String: Any]])?.values.map { $0 })
+            let restTray = (json["tray"] as? [[String: Any]])
+                ?? (json["items"] as? [[String: Any]])
+                ?? (json["highlight_reels"] as? [[String: Any]])
+                ?? ((json["reels"] as? [String: [String: Any]])?.values.map { $0 })
 
-        guard let tray else {
-            print("⚠️ [HIGHLIGHTS] No tray found in response. Keys: \(Array(json.keys).sorted().joined(separator: ","))")
-            return []
+            guard let restTray else {
+                print("⚠️ [HIGHLIGHTS] No tray found in response. Keys: \(Array(json.keys).sorted().joined(separator: ","))")
+                return []
+            }
+            tray = restTray
         }
         if tray.isEmpty {
-            let raw = String(data: data, encoding: .utf8) ?? "<non-utf8>"
-            print("🌟 [HIGHLIGHTS] Tray empty. Response: \(raw.prefix(500))")
+            print("🌟 [HIGHLIGHTS] Tray empty for uid \(uid)")
         }
 
         var highlights: [InstagramHighlight] = []
