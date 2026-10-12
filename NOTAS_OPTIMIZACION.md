@@ -16,6 +16,10 @@ Registro de todo lo observado durante la recuperación (octubre 2026). Cada nota
 | 12-oct | `usertags`, `friendships/followers`, `notes/get_notes`, `only_me`, `undo_only_me`, `only_me_feed`, `discover/topical_explore` siguen igual (HTTP 200) | Capturas | Sin cambios |
 | 12-oct | La build 153 pide `only_me_feed` en 12 páginas seguidas (cada 4–5 s) al abrir el selector de archivadas | Capturas | Valorar paginar bajo demanda (cargar más al hacer scroll) |
 
+| 12-oct | `IGProfileTimelineQuery` con `count: 1` responde HTTP 200 con la cuenta, pero con **0 fotos** y `more_available: false` | Consola Vault Dev | Vale para validar la sesión (y es ligera: 2 KB), pero no sirve como "primera página" |
+| 12-oct | Al entrar en Performance se pedía el perfil dos veces seguidas: cabecera y cuadrícula. Ahora la primera página se reutiliza durante 30 s | `fetchProfileInfoUnshared` + `getUserMediaItems` | Revisar en la auditoría si hay más llamadas duplicadas al entrar |
+| 12-oct | Tras el login, la app pedía `/accounts/current_user/` (429) para obtener el usuario y validar la sesión, y entraba en lockdown de 5 min. Ya está cambiado a la consulta GraphQL | `fetchUsername`, `validateSession`, `probeSession` | Hecho. Queda `prefetchEditFieldsIfNeeded` (también usa `current_user`, para la bio); desaparecerá al pasar a `set_biography` |
+
 ## B. Frenos internos de la app (posibles falsos "límites de Instagram")
 
 | Fecha | Observación | Dónde | Propuesta |
@@ -25,6 +29,8 @@ Registro de todo lo observado durante la recuperación (octubre 2026). Cada nota
 | 12-oct | **Cold start de 45 s** sin llamadas automáticas al abrir la app; también hay ventanas de 25 s (reanudar), 120 s (tras mutación) y 300 s (antes de subir / tras reveal) | `InstagramSafetyGate` (~L8429–8450) | Medir si hacen falta. Hacen que la app parezca rota ("no refresca") |
 | 12-oct | Marcas `users_info_broken` guardadas **7 días** (perfil propio) / 24 h (global) en UserDefaults | `fetchProfileInfoUnshared` (~L3304–3385) | Desaparecerán al migrar a GraphQL; si no, reducirlas y hacerlas visibles |
 | 12-oct | 5 respuestas `status:fail` seguidas → lockdown preventivo de 300 s, aunque el fallo sea del código (cookies, token) | `checkForBotSignals` (~L513) | Distinguir fallos de formato/sesión de señales reales de bot |
+| 12-oct | Si no hay caché local del perfil, Performance **cancela la entrada y te saca** ("no usable local replica cache"). Para el usuario parece que la app "se sale" | `PerformanceView` (preload decision / entry held) | Mostrar un estado de carga o un mensaje claro en lugar de salir |
+| 12-oct | Volver a entrar en Performance en menos de unos segundos activa "re-entry too soon — cache-only" | SafetyGate performance entry throttle | Revisar si hace falta |
 | 12-oct | Límites por acción de SafetyGate: bio 180 s, nota 150 s, reveal 150 s, pull-refresh 120 s, paginación 6 páginas cada 10 min, archivar 8 cada 10 min… | `InstagramSafetyGate.decision` (~L8746) | Revisar uno por uno con datos reales |
 
 ## C. Código y estructura

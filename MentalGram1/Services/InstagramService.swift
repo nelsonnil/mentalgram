@@ -2214,6 +2214,12 @@ class InstagramService: ObservableObject {
                 // Instagram soft-blocked this action. Treat it as bot-detected so the
                 // lockdown kicks in and the WiFi disguise covers the screen during
                 // Performance — prevents the raw Instagram dialog from leaking to spectators.
+                // Read-only POSTs (GraphQL queries, the retired /clips/user/) only fail the call.
+                let isReadOnlyPost = shortPath.contains("/graphql/query") || shortPath.contains("/clips/user/")
+                if method != "GET", isFeedRestriction, isReadOnlyPost {
+                    LogManager.shared.warning("POST \(shortPath) → feedback_required on a read — endpoint unavailable, no lockdown", category: .api)
+                    throw InstagramError.apiError("feedback_required on \(shortPath)")
+                }
                 if method != "GET", isFeedRestriction {
                     let feedbackTitle = errorJson["feedback_title"] as? String ?? "feedback_required"
                     print("🤖 [API] POST \(shortPath) → feedback_required (\(feedbackTitle)) — triggering bot lockdown")
@@ -4172,6 +4178,72 @@ class InstagramService: ObservableObject {
     }
     
     // MARK: - Get User Reels
+
+    private static let clipsProfileDocId = "209049231614685382737238866578"
+
+    /// One reels page via `ClipsProfileQuery` (what the official app uses; POST /clips/user/
+    /// now answers feedback_required). Returned in the old `/clips/user/` shape
+    /// (`items[].media` + `paging_info`) so the existing parsers keep working.
+    private func fetchClipsProfilePage(userId: String, pageSize: Int, maxId: String?) async throws -> [String: Any] {
+        let variables: [String: Any] = [
+            "exclude_main_user_field": false,
+            "data": [
+                "should_stream_response": false,
+                "max_id": (maxId?.isEmpty == false ? maxId! : NSNull()) as Any,
+                "audience": NSNull(),
+                "page_size": pageSize,
+                "target_user_id": userId,
+                "sort_by_views": false,
+                "no_of_medias_in_each_chunk": 6,
+                "include_feed_video": true
+            ] as [String: Any],
+            "exclude_caption_user_field": false,
+            "enable_video_versions_in_light_media": true,
+            "enable_audience_in_light_media": false,
+            "use_defer": false,
+            "enable_clips_metadata_in_light_media": false,
+            "enable_likers_in_full_media": false,
+            "stream_use_customized_batch": false,
+            "initial_stream_count": 6,
+            "use_stream": false,
+            "enable_thumbnails_in_light_media": false
+        ]
+        let json = try await graphqlQuery(
+            friendlyName: "ClipsProfileQuery",
+            docId: Self.clipsProfileDocId,
+            variables: variables
+        )
+        guard let data = json["data"] as? [String: Any],
+              let clips = data.first(where: { $0.key.contains("xdt_user_clips_graphql") })?.value as? [String: Any] else {
+            throw InstagramError.apiError("ClipsProfileQuery: missing xdt_user_clips_graphql")
+        }
+        let normalized = Self.normalizeGraphQLAliases(clips) as? [String: Any] ?? clips
+        let count = (normalized["items"] as? [Any])?.count ?? 0
+        print("🧩 [GRAPHQL] ClipsProfileQuery uid:\(userId) items:\(count)")
+        return normalized
+    }
+
+    /// GraphQL responses alias some fields with a type prefix (`1ltaken_at`, `1fvideo_duration`).
+    /// Adds the plain key next to the aliased one so `/api/v1` parsers find it.
+    private static func normalizeGraphQLAliases(_ node: Any) -> Any {
+        if let array = node as? [Any] {
+            return array.map { normalizeGraphQLAliases($0) }
+        }
+        guard let dict = node as? [String: Any] else { return node }
+        var result: [String: Any] = [:]
+        for (key, value) in dict {
+            result[key] = normalizeGraphQLAliases(value)
+        }
+        for (key, value) in dict {
+            let chars = Array(key)
+            guard chars.count > 2, chars[0].isNumber, chars[1].isLetter, chars[1].isLowercase else { continue }
+            let plain = String(chars.dropFirst(2))
+            if result[plain] == nil {
+                result[plain] = normalizeGraphQLAliases(value)
+            }
+        }
+        return result
+    }
     
     func getUserReelsPage(
         userId: String? = nil,
@@ -4181,20 +4253,7 @@ class InstagramService: ObservableObject {
         let uid = userId ?? session.userId
         print("🎬 [REELS] Fetching reels page for user ID: \(uid), maxId: \(maxId ?? "none")")
 
-        var body: [String: String] = [
-            "target_user_id": uid,
-            "page_size": String(amount),
-            "include_feed_video": "true"
-        ]
-        if let maxId, !maxId.isEmpty {
-            body["max_id"] = maxId
-        }
-
-        let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("❌ [REELS] Failed to parse reels page response")
-            return ([], nil)
-        }
+        let json = try await fetchClipsProfilePage(userId: uid, pageSize: amount, maxId: maxId)
 
         let rawList: [[String: Any]]
         if let items = json["items"] as? [[String: Any]] {
@@ -4243,20 +4302,8 @@ class InstagramService: ObservableObject {
         let pageLimit = max(1, maxPages)
 
         repeat {
-            var body: [String: String] = [
-            "target_user_id": uid,
-            "page_size": String(amount),
-            "include_feed_video": "true"
-        ]
-            if let cursor = pagingMaxId { body["max_id"] = cursor }
+            let json = try await fetchClipsProfilePage(userId: uid, pageSize: amount, maxId: pagingMaxId)
 
-        let data = try await apiRequest(method: "POST", path: "/clips/user/", body: body)
-        
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            print("❌ [REELS] Failed to parse reels response")
-                break
-        }
-        
             if page == 0 {
         print("🎬 [REELS] Top-level keys: \(json.keys.sorted().joined(separator: ", "))")
             }
