@@ -158,6 +158,12 @@ struct MentalGram1App: App {
                     // PROVISIONAL RELEASE: license activation is temporarily disabled.
                     // checkLicenseGrandfathering()
                     handleFirstLaunch()
+                    #if DEBUG
+                    if !Self.debugProbesStarted {
+                        Self.debugProbesStarted = true
+                        Task { await InstagramService.shared.runDebugProbesIfPresent() }
+                    }
+                    #endif
                     // Backups are manual-only. Do not upload local state/photos on launch,
                     // because a bad local state could overwrite the user's good backup.
                     // Exception: one-time background sync of existing set photo *files* to
@@ -320,6 +326,9 @@ struct MentalGram1App: App {
     private static var didRestoreThisLaunch = false
     /// Guards the self-heal to one attempt per app process (onAppear can fire repeatedly).
     private static var selfHealRanThisProcess = false
+    #if DEBUG
+    private static var debugProbesStarted = false
+    #endif
 
     /// Safety net: if any set references a local photo file that is missing — but iCloud is
     /// available with a backup — re-pull the photos from iCloud Drive. This covers the case

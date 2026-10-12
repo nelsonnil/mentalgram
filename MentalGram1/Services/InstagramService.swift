@@ -9599,3 +9599,109 @@ final class InstagramSafetyGate {
         LogManager.shared.warning("SAFETY BLOCK — \(message)", category: .api)
     }
 }
+
+#if DEBUG
+// MARK: - Debug probe runner
+//
+// Development-only: if Documents/probes.json exists, every launch runs the
+// requests it lists with the current session and logs the results with
+// `[PROBE]` (also written to Documents/probe_results.txt). Lets endpoints be
+// tested by copying a new JSON to the device instead of rebuilding.
+//
+// probes.json: {"delay": 4, "probes": [{"name", "method", "url", "headers",
+// "body", "appHeaders" (default true), "dropHeaders", "findKeys"}]}
+// Placeholders in url/headers/body: {uid} {username} {csrf} {sessionid}
+// {ds_user_id} {mid} {cookie_header}.
+extension InstagramService {
+    func runDebugProbesIfPresent() async {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let configURL = docs.appendingPathComponent("probes.json")
+        guard let configData = try? Data(contentsOf: configURL),
+              let config = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
+              let probes = config["probes"] as? [[String: Any]] else { return }
+
+        let delay = (config["delay"] as? Double) ?? 4
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+
+        var output: [String] = []
+        func emit(_ line: String) {
+            print(line)
+            output.append(line)
+        }
+
+        let cookies = HTTPCookieStorage.shared.cookies ?? []
+        let igCookies = cookies.filter { $0.domain.contains("instagram.com") }
+        emit("🧪 [PROBE] start — \(probes.count) probe(s); cookies: " + igCookies.map { "\($0.name)@\($0.domain)" }.sorted().joined(separator: ", "))
+        func cookie(_ name: String) -> String {
+            igCookies.first { $0.name == name }?.value ?? ""
+        }
+        let cookieHeader = igCookies
+            .reduce(into: [String: String]()) { $0[$1.name] = $1.value }
+            .map { "\($0.key)=\($0.value)" }
+            .sorted()
+            .joined(separator: "; ")
+        let replacements: [String: String] = [
+            "{uid}": session.userId,
+            "{username}": session.username,
+            "{csrf}": cookie("csrftoken").isEmpty ? session.csrfToken : cookie("csrftoken"),
+            "{sessionid}": cookie("sessionid").isEmpty ? session.sessionId : cookie("sessionid"),
+            "{ds_user_id}": cookie("ds_user_id").isEmpty ? session.userId : cookie("ds_user_id"),
+            "{mid}": cookie("mid"),
+            "{cookie_header}": cookieHeader
+        ]
+        func fill(_ text: String) -> String {
+            replacements.reduce(text) { $0.replacingOccurrences(of: $1.key, with: $1.value) }
+        }
+
+        for probe in probes {
+            let name = probe["name"] as? String ?? "probe"
+            let method = (probe["method"] as? String ?? "GET").uppercased()
+            guard let url = URL(string: fill(probe["url"] as? String ?? "")) else {
+                emit("🧪 [PROBE] \(name) — invalid url")
+                continue
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.timeoutInterval = 25
+            if (probe["appHeaders"] as? Bool) ?? true {
+                for (key, value) in buildHeaders() {
+                    request.setValue(value, forHTTPHeaderField: key)
+                }
+            }
+            for header in probe["dropHeaders"] as? [String] ?? [] {
+                request.setValue(nil, forHTTPHeaderField: header)
+            }
+            for (key, value) in probe["headers"] as? [String: String] ?? [:] {
+                request.setValue(fill(value), forHTTPHeaderField: key)
+            }
+            if let body = probe["body"] as? String {
+                request.httpBody = fill(body).data(using: .utf8)
+            }
+
+            let started = CFAbsoluteTimeGetCurrent()
+            do {
+                let (data, response) = try await getSession.data(for: request)
+                let http = response as? HTTPURLResponse
+                let ms = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+                let text = String(data: data, encoding: .utf8) ?? ""
+                var line = "🧪 [PROBE] \(name) → \(http?.statusCode ?? 0) [\(ms)ms] [\(data.count) B] final:\(http?.url?.absoluteString.prefix(80) ?? "")"
+                for key in probe["findKeys"] as? [String] ?? [] {
+                    if let range = text.range(of: "\"\(key)\"") {
+                        let tail = text[range.lowerBound...].prefix(90)
+                        line += "\n   ✔︎ \(tail)"
+                    } else {
+                        line += "\n   ✘ \(key)"
+                    }
+                }
+                line += "\n   ⤷ \(text.prefix(300).replacingOccurrences(of: "\n", with: " "))"
+                emit(line)
+            } catch {
+                emit("🧪 [PROBE] \(name) — error: \(error.localizedDescription)")
+            }
+            try? await Task.sleep(nanoseconds: 700_000_000)
+        }
+        emit("🧪 [PROBE] done")
+        try? output.joined(separator: "\n").write(to: docs.appendingPathComponent("probe_results.txt"), atomically: true, encoding: .utf8)
+    }
+}
+#endif
