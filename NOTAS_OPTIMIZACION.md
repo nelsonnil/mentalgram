@@ -37,6 +37,8 @@ Registro de todo lo observado durante la recuperación (octubre 2026). Cada nota
 | 12-oct | Volver a entrar en Performance en menos de unos segundos activa "re-entry too soon — cache-only" | SafetyGate performance entry throttle | Revisar si hace falta |
 | 12-oct | Límites por acción de SafetyGate: bio 180 s, nota 150 s, reveal 150 s, pull-refresh 120 s, paginación 6 páginas cada 10 min, archivar 8 cada 10 min… | `InstagramSafetyGate.decision` (~L8746) | Revisar uno por uno con datos reales |
 
+| 12-oct | **Decisión (commit 8adcc58)**: los frenos de lectura empeoraban la app sin protegerla. Ahora: el cupo de 55/h solo cuenta escrituras (GET y GraphQL no); cold start y warm resume a 0 s; sin límites de paginación, Explore, búsqueda ni perfil visitado; sin pausa de reentrada en Performance ni la de 3 min tras archivar; ventana tras mutación de 120 → 30 s | `apiRequest`, `InstagramSafetyGate` | **Se mantienen** los frenos de escrituras (bio, nota, reveal, archivar, subir) y las reacciones a señales reales (challenge, login_required, 429/feedback en escrituras). Revisarlos al probar cada función |
+
 ## C. Código y estructura
 
 | Fecha | Observación | Dónde | Propuesta |

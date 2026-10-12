@@ -4821,7 +4821,10 @@ class InstagramService: ObservableObject {
         }
         if user["pk"] == nil { user["pk"] = userId }
 
-        let nextMaxId = Self.stringValue(timeline["next_max_id"])
+        let nextMaxId = Self.encodeTimelineCursor(
+            maxId: Self.stringValue(timeline["next_max_id"]),
+            gridCursor: Self.stringValue(timeline["profile_grid_items_cursor"])
+        )
         let moreAvailable = (timeline["more_available"] as? Bool) ?? false
         print("🧩 [GRAPHQL] IGProfileTimelineQuery uid:\(userId) items:\(items.count) more:\(moreAvailable) next:\(nextMaxId ?? "none")")
         let page = ProfileTimelinePage(user: user, items: items, nextMaxId: nextMaxId, moreAvailable: moreAvailable)
@@ -4867,10 +4870,30 @@ class InstagramService: ObservableObject {
             "include_associated_highlights": false,
             "exclude_highlights": true
         ]
-        if let maxId, !maxId.isEmpty {
-            variables["max_id"] = maxId
+        let cursor = decodeTimelineCursor(maxId)
+        if let id = cursor.maxId {
+            variables["max_id"] = id
+        }
+        if let grid = cursor.gridCursor {
+            variables["profile_grid_items_cursor"] = grid
         }
         return variables
+    }
+
+    /// The timeline only advances when both `max_id` and `profile_grid_items_cursor`
+    /// are sent, so callers get a single opaque cursor "maxId|gridCursor".
+    private static let timelineCursorSeparator: Character = "|"
+
+    private static func encodeTimelineCursor(maxId: String?, gridCursor: String?) -> String? {
+        guard let maxId else { return nil }
+        guard let gridCursor else { return maxId }
+        return "\(maxId)\(timelineCursorSeparator)\(gridCursor)"
+    }
+
+    static func decodeTimelineCursor(_ cursor: String?) -> (maxId: String?, gridCursor: String?) {
+        guard let cursor, !cursor.isEmpty else { return (nil, nil) }
+        let parts = cursor.split(separator: timelineCursorSeparator, maxSplits: 1).map(String.init)
+        return (parts.first, parts.count > 1 ? parts[1] : nil)
     }
 
     private static func stringValue(_ value: Any?) -> String? {
@@ -4906,8 +4929,8 @@ class InstagramService: ObservableObject {
         } else {
             var components = URLComponents()
             components.queryItems = [URLQueryItem(name: "count", value: String(amount))]
-            if let maxId = maxId, !maxId.isEmpty {
-                components.queryItems?.append(URLQueryItem(name: "max_id", value: maxId))
+            if let feedMaxId = Self.decodeTimelineCursor(maxId).maxId {
+                components.queryItems?.append(URLQueryItem(name: "max_id", value: feedMaxId))
             }
             let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
             let path = "/feed/user/\(uid)/\(query)"
