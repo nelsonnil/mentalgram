@@ -22,6 +22,7 @@ Registro de todo lo observado durante la recuperación (octubre 2026). Cada nota
 
 | 12-oct | `www.instagram.com/api/v1/users/web_profile_info/` también da **429** (con una página HTML). **Ya no hay fuente para seguidos, nº de publicaciones y biografía** | Consola Vault Dev | **Pendiente**: capturar de dónde los saca la build 153 (posiblemente otra consulta GraphQL) |
 | 12-oct | `POST /clips/user/` (reels) responde **400 `feedback_required`** y la app se bloqueaba 15 min. La build 153 usa `ClipsProfileQuery`. Ya está cambiado | `getUserReels`, `getUserReelsPage` | Hecho. `feedback_required` en lecturas ya no bloquea |
+| 12-oct | La paginación de `IGProfileTimelineQuery` necesita **`max_id` + `profile_grid_items_cursor`**; solo con `max_id` devuelve siempre la primera página y la app marcaba "no hay más". Ahora se guardan juntos en un cursor `maxId\|gridCursor` | `fetchProfileTimeline`, `profileTimelineVariables` | Hecho (commit 6ada7c1). La marca `perf_no_more_pages_*` se guarda demasiado pronto (si el cursor se repite); revisar en la auditoría |
 | 12-oct | Las respuestas GraphQL renombran algunos campos con un prefijo (`1ltaken_at`, `1fvideo_duration`) | `ClipsProfileQuery` | Se normalizan; a tener en cuenta en cualquier consulta GraphQL nueva |
 
 ## B. Frenos internos de la app (posibles falsos "límites de Instagram")
