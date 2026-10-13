@@ -106,6 +106,7 @@ class InstagramService: ObservableObject {
     
     // Network change tracking (anti-bot protection)
     private var lastConnectionType: String = "unknown"
+    private var networkStateLogged = false
     private var lastNetworkChangeTime: Date?
     @Published var isNetworkStabilizing: Bool = false
     @Published var networkChangedDuringUpload: Bool = false // Alert for active uploads
@@ -400,13 +401,22 @@ class InstagramService: ObservableObject {
                     }
                 }
                 
+                let typeChanged = self.connectionType != newConnectionType
                 self.isConnected = newConnected
                 self.connectionType = newConnectionType
                 self.lastConnectionType = newConnectionType
                 
                 let statusText = newConnected ? "Connected" : "Disconnected"
                 print("📶 [NETWORK] Connection: \(newConnectionType) - \(statusText)")
-                LogManager.shared.network("\(newConnectionType) - \(statusText)")
+                // iOS re-reports the same path often; only real changes are worth keeping.
+                if wasConnected != newConnected || typeChanged || !self.networkStateLogged {
+                    self.networkStateLogged = true
+                    if newConnected {
+                        LogManager.shared.network("\(newConnectionType) - \(statusText)")
+                    } else {
+                        LogManager.shared.warning("Network lost (was \(wasConnected ? "connected" : "offline"))", category: .network)
+                    }
+                }
             }
         }
         networkMonitor.start(queue: networkQueue)
@@ -2088,7 +2098,7 @@ class InstagramService: ObservableObject {
         } else {
             consecutiveErrors += 1
             hasRecentApiError = true
-            LogManager.shared.warning("\(method) \(shortPath) HTTP \(httpResponse.statusCode) [\(duration)] [consecutiveErrors:\(consecutiveErrors)]", category: .api)
+            LogManager.shared.warning("\(method) \(shortPath) HTTP \(httpResponse.statusCode) [\(duration)] [consecutiveErrors:\(consecutiveErrors)]\(Self.instagramErrorSummary(data))", category: .api)
         }
         
         // Check for bot detection signals in HTTP status
@@ -2098,16 +2108,16 @@ class InstagramService: ObservableObject {
             // only fails that call so the caller can fall back; it must not lock the whole app.
             let isRead = method == "GET" || shortPath.contains("/graphql/query")
             if isRead {
-                LogManager.shared.warning("\(method) \(shortPath) → HTTP 429 on read — endpoint unavailable, no lockdown [\(duration)]", category: .api)
+                LogManager.shared.warning("\(method) \(shortPath) → HTTP 429 on read — endpoint unavailable, no lockdown [\(duration)]\(Self.instagramErrorSummary(data))", category: .api)
                 throw InstagramError.apiError("HTTP 429 on \(shortPath)")
             }
-            LogManager.shared.bot("\(method) \(shortPath) → HTTP 429 Rate Limited [\(duration)] [actions:\(rateInfo.actionsUsed)/\(maxActionsPerHour)]")
+            LogManager.shared.bot("\(method) \(shortPath) → HTTP 429 Rate Limited [\(duration)] [actions:\(rateInfo.actionsUsed)/\(maxActionsPerHour)]\(Self.instagramErrorSummary(data))")
             await triggerLockdown(reason: "Rate limited by Instagram. Too many requests.", duration: 300)
             throw InstagramError.botDetected("Rate limited (HTTP 429). Wait 5 minutes.")
         }
         
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-            LogManager.shared.bot("\(method) \(shortPath) → HTTP \(httpResponse.statusCode) Session expired [\(duration)]")
+            LogManager.shared.bot("\(method) \(shortPath) → HTTP \(httpResponse.statusCode) Session expired [\(duration)]\(Self.instagramErrorSummary(data))")
             if method == "GET", shortPath.contains("/feed/user/") {
                 InstagramSafetyGate.shared.markFeedReadCircuit(
                     duration: 20 * 60,
@@ -3212,7 +3222,13 @@ class InstagramService: ObservableObject {
         }
     }
 
+    /// web_profile_info answers 429/HTML for every account since Oct 2026; skip it for a
+    /// while after a failure instead of paying (and logging) the dead request each time.
+    private static var webProfileInfoDownUntil: Date?
+    private static let webProfileInfoBackoff: TimeInterval = 30 * 60
+
     private func fetchWebProfileInfoFallback(username: String) async -> [String: Any]? {
+        if let until = Self.webProfileInfoDownUntil, until > Date() { return nil }
         var components = URLComponents(string: "https://www.instagram.com/api/v1/users/web_profile_info/")
         components?.queryItems = [URLQueryItem(name: "username", value: username)]
         guard let url = components?.url else { return nil }
@@ -3230,14 +3246,12 @@ class InstagramService: ObservableObject {
         do {
             let (data, response) = try await getSession.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            LogManager.shared.debug("Profile web fallback HTTP \(status) for @\(username)", category: .profile)
             guard status == 200,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let dataDict = json["data"] as? [String: Any],
                   let webUser = dataDict["user"] as? [String: Any] else {
-                if let raw = String(data: data, encoding: .utf8) {
-                    LogManager.shared.warning("Profile web fallback unexpected response: \(String(raw.prefix(180)))", category: .profile)
-                }
+                Self.webProfileInfoDownUntil = Date().addingTimeInterval(Self.webProfileInfoBackoff)
+                LogManager.shared.info("web_profile_info unavailable (HTTP \(status)\(Self.instagramErrorSummary(data))) — skipped for 30 min", category: .profile)
                 return nil
             }
 
@@ -3493,8 +3507,6 @@ class InstagramService: ObservableObject {
                     }
                 }
                 print("🧩 [PROFILE] web_profile_info merged — followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"])) media:\(Self.robustInt(user["media_count"]))")
-            } else {
-                LogManager.shared.warning("Profile header: web_profile_info unavailable for @\(webUsername ?? "?") — counts may be missing", category: .profile)
             }
 
             if user.isEmpty {
@@ -3516,13 +3528,11 @@ class InstagramService: ObservableObject {
         
         // Debug: Print user data
         print("📊 [PROFILE] User data keys: \(user.keys.sorted().joined(separator: ", "))")
-        LogManager.shared.debug("Profile user keys: \(user.keys.sorted().joined(separator: ","))", category: .profile)
         if let profilePicUrl = user["profile_pic_url"] as? String {
             print("📊 [PROFILE] Profile pic URL found: \(String(profilePicUrl.prefix(80)))...")
-            LogManager.shared.debug("Profile pic URL present: \(String(profilePicUrl.prefix(80)))", category: .profile)
         } else {
             print("⚠️ [PROFILE] No profile_pic_url field found")
-            LogManager.shared.warning("Profile pic URL missing in /users/info response", category: .profile)
+            LogManager.shared.warning("Profile pic URL missing in profile response (keys: \(user.keys.sorted().prefix(25).joined(separator: ",")))", category: .profile)
         }
         
         var extractedUserId = extractProfileUserId(from: user)
@@ -3884,8 +3894,12 @@ class InstagramService: ObservableObject {
                     extractedUserId == "0"
 
                 if earlyHeaderIncomplete, let webUsername = earlyHeaderUsername {
-                    LogManager.shared.info("Searched profile early header recovery via web_profile_info for @\(webUsername)", category: .profile)
-                    if let webUser = await fetchWebProfileInfoFallback(username: webUsername) {
+                    var recovered = await fetchWebProfileInfoFallback(username: webUsername)
+                    if recovered == nil, extractedUserId != "0" || uid != "0" {
+                        recovered = await fetchHeaderFromAlternativeSources(userId: extractedUserId != "0" ? extractedUserId : uid,
+                                                                            username: webUsername)
+                    }
+                    if let webUser = recovered {
                         for (key, value) in webUser where user[key] == nil || ((user[key] as? String)?.isEmpty == true) || Self.robustInt(user[key]) == 0 {
                             user[key] = value
                         }
@@ -3894,7 +3908,7 @@ class InstagramService: ObservableObject {
                         print("⚡ [PROFILE] Searched header recovered early — @\(user["username"] as? String ?? webUsername) followers:\(Self.robustInt(user["follower_count"]))")
                         LogManager.shared.success("Searched-profile early header OK — @\(user["username"] as? String ?? webUsername) followers:\(Self.robustInt(user["follower_count"])) following:\(Self.robustInt(user["following_count"]))", category: .profile)
                     } else {
-                        LogManager.shared.warning("Searched-profile early web_profile_info nil for @\(webUsername) — will retry later", category: .profile)
+                        LogManager.shared.warning("Searched profile @\(webUsername): header still incomplete (web_profile_info and Polaris failed)", category: .profile)
                     }
                 }
 
@@ -5061,6 +5075,26 @@ class InstagramService: ObservableObject {
         guard let cursor, !cursor.isEmpty else { return (nil, nil) }
         let parts = cursor.split(separator: timelineCursorSeparator, maxSplits: 1).map(String.init)
         return (parts.first, parts.count > 1 ? parts[1] : nil)
+    }
+
+    /// Instagram's own reason for a failed response (message / error_type / spam flags),
+    /// so a log line says *why* and not only the HTTP code. HTML pages are named, not dumped.
+    static func instagramErrorSummary(_ data: Data) -> String {
+        guard !data.isEmpty else { return " · empty body" }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let head = String(data: data.prefix(64), encoding: .utf8)?.lowercased() ?? ""
+            return head.contains("<!doctype html") || head.contains("<html") ? " · HTML page (not API JSON)" : " · non-JSON body (\(data.count) B)"
+        }
+        var parts: [String] = []
+        for key in ["message", "error_type", "feedback_title", "feedback_message", "error_title"] {
+            if let value = json[key] as? String, !value.isEmpty { parts.append("\(key)=\(value.prefix(120))") }
+        }
+        if json["spam"] as? Bool == true { parts.append("spam=true") }
+        if json["challenge"] != nil { parts.append("challenge") }
+        if let errors = json["errors"] as? [[String: Any]], let first = errors.first?["message"] as? String {
+            parts.append("graphql=\(first.prefix(120))")
+        }
+        return parts.isEmpty ? "" : " · " + parts.joined(separator: " ")
     }
 
     private static func stringValue(_ value: Any?) -> String? {
@@ -8888,6 +8922,7 @@ final class InstagramSafetyGate {
         defer { lock.unlock() }
         warmResumeTime = Date()
         warmResumeCloseLogged = false
+        guard warmResumeWindow > 0 else { warmResumeCloseLogged = true; return }
         print("⏳ [WARM-RESUME] Window opened — \(Int(warmResumeWindow))s of automatic-call lockdown")
         LogManager.shared.info("[WARM-RESUME] Window opened — automatic IG calls blocked for ~\(Int(warmResumeWindow))s", category: .general)
     }
@@ -8909,7 +8944,9 @@ final class InstagramSafetyGate {
         // in TestFlight logs that the lockdown ended.
         if !coldActive && appLaunchTime != nil && !coldStartCloseLogged {
             coldStartCloseLogged = true
-            LogManager.shared.info("[COLD-START] Window closed — automatic IG calls re-enabled", category: .general)
+            if coldStartWindow > 0 {
+                LogManager.shared.info("[COLD-START] Window closed — automatic IG calls re-enabled", category: .general)
+            }
         }
         if !warmActive && warmResumeTime != nil && !warmResumeCloseLogged {
             warmResumeCloseLogged = true

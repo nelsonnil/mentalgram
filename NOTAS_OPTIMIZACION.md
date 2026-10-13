@@ -70,6 +70,16 @@ Registro de todo lo observado durante la recuperación (octubre 2026). Cada nota
 | 12-oct | Se perdieron 22 builds de trabajo porque no se subieron a GitHub | Commit + push tras cada build buena |
 | 12-oct | Para probar sin pisar la build de TestFlight se usa la variante `com.nelsonnil.vault.dev` ("Vault Dev") | Mantenerla como flujo habitual de desarrollo |
 
+## Registro interno (vault_logs.json) — 13 oct
+- Antes: 300 entradas (<1 día); 44 % eran `VISUAL … changed` (cada cambio de imagen en Performance), 15 "WiFi - Connected" seguidos, avisos de cold start de una ventana que ya es 0 s y `web_profile_info` fallando ~10 veces con el HTML pegado.
+- Ahora:
+  - 2.000 entradas; mensajes idénticos seguidos se agrupan como "(×N, last hh:mm:ss)"; guardado en disco agrupado cada 2 s salvo avisos/errores (inmediato) y al pasar a segundo plano.
+  - "App started" incluye versión, build, bundle e iOS.
+  - Los fallos HTTP llevan el motivo de Instagram (`message`, `error_type`, `feedback_*`, `challenge`, error GraphQL, o "HTML page").
+  - Red: solo cambios reales; la pérdida de red queda como aviso.
+  - `VISUAL`: solo si falta algo visible (imágenes, foto de perfil, perfil, overlay de seguridad, lockdown).
+  - `web_profile_info`: tras fallar se salta 30 min; los perfiles buscados recuperan la cabecera con Polaris.
+
 ## Espera antes de subir (preUploadQuietWindow)
 - Era 300 s tras cualquier lectura; como Performance lee el perfil constantemente, casi siempre había que esperar ~4–5 min antes de cada subida. Bajado a 20 s.
 - Subida verificada (12 oct): rupload → current_user → configure_sidecar → only_me (archivar) sin errores, 4 acciones por foto. La espera de ~36 s antes de archivar es intencionada.

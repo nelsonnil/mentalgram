@@ -9,7 +9,11 @@ struct AppLogEntry: Identifiable, Codable {
     let timestamp: Date
     let level: LogLevel
     let category: LogCategory
-    let message: String
+    var message: String
+    /// Set when identical consecutive messages were collapsed into this entry.
+    var repeatCount: Int?
+    var lastSeen: Date?
+    var baseMessage: String?
     
     init(level: LogLevel, category: LogCategory, message: String) {
         self.id = UUID()
@@ -88,8 +92,11 @@ class LogManager: ObservableObject {
     
     @Published var logs: [AppLogEntry] = []
     
-    private let maxLogs = 300
+    private let maxLogs = 2000
     private let logRetentionDays = 7
+    /// Identical consecutive messages within this window collapse into one entry.
+    private let repeatCollapseWindow: TimeInterval = 600
+    private var pendingSave: DispatchWorkItem?
 
     /// File-system path — no UserDefaults size limit
     private var logsFileURL: URL {
@@ -104,32 +111,68 @@ class LogManager: ObservableObject {
         loadLogs()
         cleanOldLogs()
 
-        log("App started", level: .info, category: .general)
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let bundle = Bundle.main.bundleIdentifier ?? "?"
+        log("App started — v\(version) (\(build)) \(bundle) · \(ProcessInfo.processInfo.operatingSystemVersionString)",
+            level: .info, category: .general)
         // Open the cold-start window so the SafetyGate blocks automatic API
-        // calls during the first ~45 seconds. Breaks the 3-endpoint warmup
-        // pattern that Instagram fingerprints as a bot.
+        // calls during the first seconds after launch (if configured).
         InstagramSafetyGate.shared.markAppLaunch()
-        log("[COLD-START] Window opened — automatic IG calls blocked for ~45s", level: .info, category: .general)
+
+        NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            self?.pendingSave?.cancel()
+            self?.saveLogs()
+        }
     }
     
     // MARK: - Logging
     
     func log(_ message: String, level: LogLevel = .info, category: LogCategory = .general) {
         let entry = AppLogEntry(level: level, category: category, message: message)
+        let urgent = level == .error || level == .warning || level == .bot
         
         DispatchQueue.main.async {
-            self.logs.append(entry)
+            if var last = self.logs.last,
+               last.level == level, last.category == category,
+               (last.baseMessage ?? last.message) == message,
+               entry.timestamp.timeIntervalSince(last.lastSeen ?? last.timestamp) < self.repeatCollapseWindow {
+                let count = (last.repeatCount ?? 1) + 1
+                last.baseMessage = message
+                last.repeatCount = count
+                last.lastSeen = entry.timestamp
+                last.message = "\(message) (×\(count), last \(entry.timeString))"
+                self.logs[self.logs.count - 1] = last
+            } else {
+                self.logs.append(entry)
+            }
             
             // Trim if too many
             if self.logs.count > self.maxLogs {
                 self.logs.removeFirst(self.logs.count - self.maxLogs)
             }
             
-            self.saveLogs()
+            self.scheduleSave(immediately: urgent)
         }
         
         // Also print to console for Xcode debugging
         print("\(entry.icon) [\(level.rawValue)] [\(category.rawValue)] \(message)")
+    }
+
+    /// Encoding 2000 entries on every line is wasteful; routine lines are batched,
+    /// problems are written at once so they survive a crash right after.
+    private func scheduleSave(immediately: Bool) {
+        pendingSave?.cancel()
+        guard !immediately else {
+            pendingSave = nil
+            saveLogs()
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.saveLogs() }
+        pendingSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
     
     // Convenience methods

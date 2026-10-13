@@ -945,7 +945,14 @@ struct PerformanceView: View {
         let whiteSafetyOverlay = !performanceRemoteCallsAllowed && profile == nil && safetyGateCountdown > 0
         let message = "VISUAL \(reason) profile:\(profile != nil) user:\(profile?.username ?? "nil") urls:\(allMediaURLs.count) visibleMissing:\(missingVisible)/\(visibleURLs.count) cachedImages:\(cachedImages.count) picCached:\(profilePicCached) overlays{preload:\(isFirstTimePreloading),safetyWhite:\(whiteSafetyOverlay),firstBanner:\(showFirstTimeBanner),home:\(showingHomeScreenIllusion),screenOff:\(showingScreenOffCover),locked:\(instagram.isLocked)} loading{profile:\(isLoading),images:\(isLoadingImages),silent:\(isSilentGridRefreshing),more:\(isLoadingMore)} selectedTab:\(selectedTab) refreshEnabled:\(isRefreshEnabled)"
         print("🧭 [VISUAL] \(message)")
-        LogManager.shared.info(message, category: .general)
+        // Grid/image churn fires this dozens of times per entry; keep it only when
+        // the spectator could actually see something wrong.
+        let somethingVisiblyWrong = missingVisible > 0 || profile == nil || !profilePicCached
+            || whiteSafetyOverlay || instagram.isLocked
+        let isChurn = reason == "cachedImages count changed" || reason == "allMediaURLs changed"
+        if somethingVisiblyWrong || !isChurn {
+            LogManager.shared.info(message, category: .general)
+        }
     }
 
     private var testModeFloatingBadge: some View {
