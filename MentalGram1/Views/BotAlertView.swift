@@ -18,7 +18,85 @@ struct BotAlertView: View {
     @State private var timeRemaining: String = ""
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    /// "Try Again Later" (feedback_required) on one POST is a per-action limit, not a
+    /// security check. Logging out or waiting 24h is the wrong advice for it.
+    private var isActionLimitOnly: Bool {
+        instagram.challengeRequiredStreak == 0
+            && instagram.lockReason.contains("feedback_required")
+    }
+
+    private var limitedActionName: String {
+        let reason = instagram.lockReason
+        if reason.contains("change_profile_picture") { return "profile picture changes" }
+        if reason.contains("set_biography") || reason.contains("edit_profile") { return "bio changes" }
+        if reason.contains("only_me") { return "archiving / unarchiving posts" }
+        if reason.contains("configure") || reason.contains("upload") { return "uploads" }
+        return "this action"
+    }
+
     var body: some View {
+        if isActionLimitOnly {
+            actionLimitBody
+        } else {
+            flaggedBody
+        }
+    }
+
+    private var actionLimitBody: some View {
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    Image(systemName: "hourglass")
+                        .font(.system(size: 54))
+                        .foregroundColor(.orange)
+                        .padding(.top, 48)
+
+                    Text("Instagram paused \(limitedActionName)")
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+
+                    Text("Instagram answered \"Try Again Later\" to one request. This is a temporary limit on \(limitedActionName) — your account is not flagged and no verification is needed. The app pauses all Instagram calls until the timer ends.")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+
+                    if !timeRemaining.isEmpty {
+                        VStack(spacing: 2) {
+                            Text("Safety pause")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(timeRemaining)
+                                .font(.system(size: 34, weight: .bold, design: .monospaced))
+                                .foregroundColor(.orange)
+                                .monospacedDigit()
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        stepRow("1", "Wait for the timer. Everything else resumes automatically.")
+                        stepRow("2", limitedActionName == "profile picture changes"
+                                ? "The rejected photo won't be retried automatically. Retrying soon can make Instagram's limit longer."
+                                : "Avoid repeating \(limitedActionName) for a while.")
+                        stepRow("3", "No need to log out.")
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 28)
+                }
+            }
+        }
+        .onReceive(timer) { _ in updateCountdown() }
+        .onAppear { updateCountdown() }
+    }
+
+    private var flaggedBody: some View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
 

@@ -156,12 +156,14 @@ class ProfileCacheService: ObservableObject {
     
     // MARK: - Profile Cache
     
-    func saveProfile(_ profile: InstagramProfile) {
+    func saveProfile(_ profile: InstagramProfile, file: StaticString = #fileID, line: UInt = #line) {
         // Merge with the previously cached version (same userId) so a partial
         // response from Instagram never downgrades good data we already had.
         // This protects against the soft-block pattern where /users/{id}/info
         // returns a 200 with an empty user object.
-        let merged = sanitizeProfileSnapshot(mergeWithCachedIfNeeded(profile))
+        let previous = existingProfile(for: profile.userId)
+        let merged = sanitizeProfileSnapshot(mergeWithCachedIfNeeded(profile, existing: previous))
+        logMediaShrinkIfNeeded(from: previous, to: merged, file: file, line: line)
 
         guard isCacheable(merged) else {
             print("🛡️ [CACHE] Refusing to cache invalid profile userId=\(merged.userId) username='\(merged.username)' picURL.isEmpty=\(merged.profilePicURL.isEmpty)")
@@ -200,22 +202,45 @@ class ProfileCacheService: ObservableObject {
 
     /// Public strict save for full authoritative refreshes. Unlike `saveProfile`, this does
     /// not preserve the old media tail, so posts deleted on Instagram disappear locally too.
-    func saveProfileAuthoritative(_ profile: InstagramProfile) {
+    func saveProfileAuthoritative(_ profile: InstagramProfile, file: StaticString = #fileID, line: UInt = #line) {
         let sanitized = sanitizeProfileSnapshot(profile)
         guard isCacheable(sanitized) else {
             print("🛡️ [CACHE] Refusing to strictly cache invalid authoritative profile userId=\(sanitized.userId)")
             LogManager.shared.warning("Authoritative profile cache rejected invalid profile userId=\(sanitized.userId)", category: .profile)
             return
         }
+        logMediaShrinkIfNeeded(from: existingProfile(for: sanitized.userId), to: sanitized, file: file, line: line)
         saveProfileStrict(sanitized)
     }
 
+    /// In-memory profile for this user, or the on-disk copy when memory is empty or
+    /// still holds another account (e.g. right after launch/login).
+    private func existingProfile(for userId: String) -> InstagramProfile? {
+        if let cachedProfile, cachedProfile.userId == userId { return cachedProfile }
+        guard !userId.isEmpty,
+              let data = try? Data(contentsOf: userProfileDirectory(for: userId).appendingPathComponent("profile.json"))
+        else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(InstagramProfile.self, from: data)
+    }
+
+    private func logMediaShrinkIfNeeded(from previous: InstagramProfile?, to next: InstagramProfile,
+                                        file: StaticString, line: UInt) {
+        guard let previous, previous.userId == next.userId else { return }
+        let before = previous.cachedMediaURLs.count
+        let after = next.cachedMediaURLs.count
+        guard before - after >= 10 else { return }
+        print("⚠️ [CACHE] Post grid shrank \(before) → \(after) (caller: \(file):\(line))")
+        LogManager.shared.warning("Profile cache posts shrank \(before) → \(after) from \(file):\(line)", category: .profile)
+    }
+
     /// Returns the incoming profile after copying any non-empty header / counts
-    /// fields from `cachedProfile` when the incoming one has them blank or zero.
+    /// fields from `existing` when the incoming one has them blank or zero.
     /// Media arrays are also preserved when the incoming side is empty — this
     /// prevents transient API failures from wiping our local snapshot.
-    private func mergeWithCachedIfNeeded(_ incoming: InstagramProfile) -> InstagramProfile {
-        guard let existing = cachedProfile, existing.userId == incoming.userId else {
+    private func mergeWithCachedIfNeeded(_ incoming: InstagramProfile, existing: InstagramProfile?) -> InstagramProfile {
+        guard let existing, existing.userId == incoming.userId else {
             return incoming
         }
 
@@ -489,12 +514,18 @@ class ProfileCacheService: ObservableObject {
     /// Use this for full-grid refreshes and archive-sync so removed/archived posts do not
     /// linger in the local cache. `updateMediaURLsAndItems` (tail-preserving) is for
     /// background partial refreshes where pagination has not returned all pages yet.
-    func replaceMediaURLsAndItems(_ urls: [String], items: [InstagramMediaItem]) {
+    /// - Parameter nextMaxId: `.some(cursor)` also replaces the saved pagination cursor
+    ///   (`.some(nil)` = no more pages); `nil` keeps the current one.
+    func replaceMediaURLsAndItems(_ urls: [String], items: [InstagramMediaItem],
+                                  nextMaxId: String?? = nil,
+                                  file: StaticString = #fileID, line: UInt = #line) {
         guard let p = cachedProfile else { return }
         let strictURLs = urls.filter { !$0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }
         let strictItems = deduplicatedMediaItems(items)
         let filteredURLs = deduplicatedURLs(strictURLs, items: strictItems)
-        let updated = rebuildProfile(p, mediaURLs: filteredURLs, mediaItems: strictItems)
+        var updated = rebuildProfile(p, mediaURLs: filteredURLs, mediaItems: strictItems)
+        if let nextMaxId { updated.cachedNextMaxId = nextMaxId }
+        logMediaShrinkIfNeeded(from: p, to: updated, file: file, line: line)
         // Use strict save: no merge so archived posts are not re-added from the old cache tail.
         saveProfileStrict(updated)
         print("🗂️ [CACHE] replaceMediaURLsAndItems (authoritative): \(filteredURLs.count) URLs, \(strictItems.count) items saved")
@@ -792,6 +823,22 @@ class ProfileCacheService: ObservableObject {
         if let urlForIdentity, !urlForIdentity.isEmpty {
             rememberOwnProfilePicCDNIdentity(urlForIdentity, userId: resolvedUserId)
         }
+    }
+
+    /// Drops every locally stored copy of the own profile picture so the next paint
+    /// downloads what Instagram really serves (CDN image GET, not an API action).
+    func discardOwnProfilePicCache() {
+        guard let userId = activeUserId() else { return }
+        let directory = userImageDirectory(for: userId)
+        try? fileManager.removeItem(at: directory.appendingPathComponent(Self.ownProfilePicFilename))
+        if let picURL = cachedProfile?.profilePicURL, !picURL.isEmpty {
+            let filename = picURL.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            if !filename.isEmpty {
+                try? fileManager.removeItem(at: directory.appendingPathComponent("\(filename).jpg"))
+            }
+        }
+        UserDefaults.standard.removeObject(forKey: ownProfilePicIdentityDefaultsKey(for: userId))
+        print("🧹 [CACHE] Own profile picture cache discarded — will re-download from Instagram CDN")
     }
 
     func loadOwnProfilePic() -> UIImage? {

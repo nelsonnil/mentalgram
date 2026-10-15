@@ -138,10 +138,6 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: restoreInProgress)
-                // PROVISIONAL RELEASE: license activation is temporarily disabled.
-                // Keep LicenseManager/LicenseActivationView in the project so it can be
-                // re-enabled later, but do not block users in this version.
-                /*
                 .overlay {
                     if license.needsActivation {
                         LicenseActivationView()
@@ -149,14 +145,12 @@ struct MentalGram1App: App {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: license.isActivated)
-                */
                 .onOpenURL { url in
                     URLActionManager.shared.handleURL(url)
                 }
                 .onAppear {
                     UIApplication.shared.isIdleTimerDisabled = true
-                    // PROVISIONAL RELEASE: license activation is temporarily disabled.
-                    // checkLicenseGrandfathering()
+                    checkLicenseGrandfathering()
                     handleFirstLaunch()
                     #if DEBUG
                     if !Self.debugProbesStarted {

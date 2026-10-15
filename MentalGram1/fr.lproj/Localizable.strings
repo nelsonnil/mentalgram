@@ -636,6 +636,8 @@
 "followers.tab.subscriptions" = "Abonnements";
 "followers.tab.more" = "Plus";
 "followers.section.all" = "Tous les abonnés";
+"followers.section.following" = "Tous les abonnements";
+"followers.following_btn" = "Abonné(e)";
 "followers.follow_back" = "Suivre aussi";
 "followers.remove_btn" = "Supprimer";
 "followers.search" = "Rechercher";
@@ -1539,7 +1541,7 @@
 "amnesia.anim.phase1_title" = "Le magicien ferme la vue";
 "amnesia.anim.phase1_sub" = "Le magicien ouvre et ferme le carrousel dans Vault";
 "amnesia.anim.phase2_title" = "Instagram révèle la vérité";
-"amnesia.anim.phase2_sub" = "La 5ᵉ image apparaît ✨  Elle a toujours été là";
+"amnesia.anim.phase2_sub" = "L'image cachée apparaît en 3ᵉ diapositive ✨  Elle a toujours été là";
 "amnesia.anim.phase3_title" = "Le spectateur vérifie";
 "amnesia.anim.phase3_sub" = "\"Combien en vois-tu ?\" — Cinq. \"Il y en a toujours eu cinq.\"";
 "amnesia.anim.card_circle" = "Cercle";

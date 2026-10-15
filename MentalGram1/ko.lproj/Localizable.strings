@@ -473,6 +473,8 @@
 "followers.tab.subscriptions" = "구독";
 "followers.tab.more" = "더보기";
 "followers.section.all" = "모든 팔로워";
+"followers.section.following" = "모든 팔로잉";
+"followers.following_btn" = "팔로잉";
 "followers.follow_back" = "맞팔로우";
 "followers.remove_btn" = "삭제";
 "followers.search" = "검색";
@@ -1361,7 +1363,7 @@
 "amnesia.anim.phase1_title" = "마술사가 뷰를 닫음";
 "amnesia.anim.phase1_sub" = "마술사가 Vault에서 캐러셀을 열고 닫음";
 "amnesia.anim.phase2_title" = "Instagram이 진실을 드러냄";
-"amnesia.anim.phase2_sub" = "5번째 이미지 등장 ✨  항상 거기 있었음";
+"amnesia.anim.phase2_sub" = "숨긴 이미지가 3번째 슬라이드로 등장 ✨  항상 거기 있었음";
 "amnesia.anim.phase3_title" = "관객이 확인함";
 "amnesia.anim.phase3_sub" = "\"몇 개가 보여?\" — 다섯 개. \"항상 다섯 개였어.\"";
 "amnesia.anim.card_circle" = "원";

@@ -4,15 +4,13 @@ import SwiftUI
 //
 // Shown inside each set card (SetRowView). Lets the magician pick the single
 // input method for that set, restricted to the methods allowed for its type.
-// Methods that need extra setup show a "Configure" button that opens a sheet
-// editing the (globally shared) configuration for that input.
+// Configuration opens from the card's Configure button.
 
 struct SetInputPicker: View {
     let set: PhotoSet
 
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var integrations = IntegrationsSettings.shared
-    @State private var configMethod: InputMethod? = nil
 
     private var allowed: [InputMethod] { InputMethod.allowed(for: set.type) }
 
@@ -33,109 +31,74 @@ struct SetInputPicker: View {
         }
     }
 
-    private var configureTitle: String {
-        if selected == .api, let detail = selectionDetail {
-            return "Configure API: \(detail)"
-        }
-        return "Configure \(selected.title)"
-    }
-
-    private var accent: Color {
-        switch set.type {
-        case .word:   return Color(hex: "7C3AED")
-        case .number: return Color(hex: "FF9500")
-        case .custom: return Color(hex: "F97316")
-        case .card:   return Color(hex: "16A34A")
-        case .list:   return Color(hex: "64D2FF")
-        }
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(VaultTheme.Colors.textTertiary)
-                Text("set.input.label")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                    .textCase(.uppercase)
-                Spacer()
-                if let detail = selectionDetail {
+        VStack(alignment: .leading, spacing: 10) {
+            if let detail = selectionDetail {
+                HStack {
+                    Spacer(minLength: 8)
                     Text(detail)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(accent)
+                        .foregroundColor(selected.chipColor)
                         .lineLimit(1)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(accent.opacity(0.15))
-                        .cornerRadius(5)
                 }
             }
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 96), spacing: 6)],
-                alignment: .leading,
-                spacing: 6
-            ) {
-                ForEach(allowed) { method in
-                    chip(for: method)
-                }
-            }
-
-            // Configure button — full-width, shown when selected method has settings
-            if selected.needsConfig {
-                Button { configMethod = selected } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(configureTitle)
-                            .font(.system(size: 14, weight: .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(allowed) { method in
+                        inputTile(for: method)
                     }
-                    .foregroundColor(accent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(accent.opacity(0.12))
-                    .cornerRadius(9)
                 }
-                .buttonStyle(.plain)
+                .padding(.vertical, 2)
             }
-        }
-        .sheet(item: $configMethod) { method in
-            SetInputConfigSheet(method: method, setType: set.type, accent: accent)
         }
     }
 
     @ViewBuilder
-    private func chip(for method: InputMethod) -> some View {
+    private func inputTile(for method: InputMethod) -> some View {
         let isSelected = selected == method
+        let color = method.chipColor
         Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                 dataManager.setInputMethod(method, for: set.id)
             }
         } label: {
-            HStack(spacing: 5) {
+            VStack(spacing: 6) {
                 Image(systemName: method.icon)
-                    .font(.system(size: 11, weight: .semibold))
-                Text(method.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .font(.system(size: 22, weight: .semibold))
+                Text(method.chipTitle)
+                    .font(.system(size: 10, weight: .bold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+                    .multilineTextAlignment(.center)
             }
-            .foregroundColor(isSelected ? .white : VaultTheme.Colors.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .frame(maxWidth: .infinity)
-            .background(isSelected ? accent : Color(hex: "#2C2C2E"))
-            .cornerRadius(8)
+            .foregroundColor(isSelected ? .white : color.opacity(0.95))
+            .frame(width: 76, height: 76)
+            .background(
+                Group {
+                    if isSelected {
+                        LinearGradient(
+                            colors: [color, color.opacity(0.72)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    } else {
+                        color.opacity(0.14)
+                    }
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isSelected ? Color.white.opacity(0.22) : color.opacity(0.35), lineWidth: isSelected ? 1.5 : 1)
+            )
+            .cornerRadius(14)
+            .shadow(color: isSelected ? color.opacity(0.35) : .clear, radius: 8, x: 0, y: 4)
+            .scaleEffect(isSelected ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
+        .accessibilityLabel(method.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -146,7 +109,7 @@ struct SetInputPicker: View {
 
 struct SetInputConfigSheet: View {
     let method: InputMethod
-    let setType: SetType
+    let set: PhotoSet
     let accent: Color
 
     @Environment(\.presentationMode) private var presentationMode
@@ -167,6 +130,7 @@ struct SetInputConfigSheet: View {
                     case .numpadCard:  NumpadCardConfig()
                     case .listInput:   ListInputConfig()
                     case .fakeNotes:   FakeNotesInputConfig()
+                    case .urlScheme:   SetURLSchemeConfigContent(set: set, accent: accent)
                     }
                 }
                 .padding(VaultTheme.Spacing.lg)
@@ -202,6 +166,78 @@ struct SetInputConfigSheet: View {
                     .foregroundColor(VaultTheme.Colors.textSecondary)
             }
             Spacer()
+        }
+    }
+}
+
+// MARK: - URL Scheme config (per set)
+
+struct SetURLSchemeConfigContent: View {
+    let set: PhotoSet
+    let accent: Color
+    @State private var copied = false
+
+    private var urlScheme: String {
+        guard let mode = set.type.revealURLTemplate else { return "" }
+        let setParam = "&set=\(set.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? set.name)"
+        switch set.type {
+        case .word:           return "vault://reveal?\(mode)=<word>\(setParam)"
+        case .number:         return "vault://reveal?\(mode)=1\(setParam)"
+        case .custom, .list:  return "vault://reveal?\(mode)=<1-100>\(setParam)"
+        case .card:           return "vault://reveal?\(mode)=3D\(setParam)"
+        }
+    }
+
+    private var helperText: String {
+        switch set.type {
+        case .word:
+            return "Replace <word> with the word to reveal. Example: vault://reveal?word=MAGIC&set=\(set.name)"
+        case .number:
+            return "Put the number after word=. Example: vault://reveal?word=7&set=\(set.name)"
+        case .custom, .list:
+            return "Put the slot number after slot=. Example: vault://reveal?slot=15&set=\(set.name)"
+        case .card:
+            return "Use value + suit after card=. Example: vault://reveal?card=3D&set=\(set.name)"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VaultTheme.Spacing.md) {
+            Text(urlScheme)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundColor(VaultTheme.Colors.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.white.opacity(0.06))
+                .cornerRadius(10)
+
+            Text(helperText)
+                .font(VaultTheme.Typography.caption())
+                .foregroundColor(VaultTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                UIPasteboard.general.string = urlScheme
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.easeInOut(duration: 0.15)) { copied = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    withAnimation { copied = false }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(copied ? "Copied" : "Copy URL")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(copied ? VaultTheme.Colors.success : accent)
+                .cornerRadius(12)
+            }
+            .buttonStyle(.plain)
         }
     }
 }

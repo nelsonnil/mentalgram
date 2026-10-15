@@ -141,10 +141,7 @@ final class LicenseManager: ObservableObject {
     
     /// Verifica si el usuario necesita activar una licencia
     var needsActivation: Bool {
-        // PROVISIONAL RELEASE: license activation is temporarily disabled for this
-        // build. Keep the activation code/codes in place so it can be re-enabled by
-        // restoring `return !isActivated`.
-        return false
+        !isActivated
     }
     
     /// Intenta activar con un código de licencia

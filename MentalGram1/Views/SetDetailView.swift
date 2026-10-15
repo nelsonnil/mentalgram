@@ -390,13 +390,21 @@ struct SetDetailView: View {
             let reverifyBlockedByCooldown = reverifyCooldownLeft > 0
             VStack(spacing: 6) {
                 if uploadManager.isReverifying {
-                    HStack(spacing: 8) {
-                        ProgressView().scaleEffect(0.75)
-                        Text("Re-verifying \(uploadManager.reverifyProgress)/\(uploadManager.reverifyTotal)…")
-                            .font(.caption).foregroundColor(.secondary)
-                        if uploadManager.reverifyDesynced > 0 {
-                            Text("(\(uploadManager.reverifyDesynced) desync)")
-                                .font(.caption).foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            ProgressView().scaleEffect(0.75)
+                            Text("Re-verifying \(uploadManager.reverifyProgress)/\(uploadManager.reverifyTotal)…")
+                                .font(.caption).foregroundColor(.secondary)
+                            if uploadManager.reverifyDesynced > 0 {
+                                Text("(\(uploadManager.reverifyDesynced) desync)")
+                                    .font(.caption).foregroundColor(.orange)
+                            }
+                        }
+                        if let phase = uploadManager.reverifyPhase, !phase.isEmpty {
+                            Text(phase)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .padding(.horizontal, 12).padding(.vertical, 7)
@@ -409,11 +417,13 @@ struct SetDetailView: View {
                                 .font(.system(size: 12)).foregroundColor(.orange)
                             Text(err)
                                 .font(.caption).foregroundColor(.orange)
-                                .lineLimit(2)
+                                .lineLimit(4)
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer()
                             Button {
                                 uploadManager.reverifyError = nil
                                 uploadManager.reverifyStatusMessage = nil
+                                uploadManager.reverifyIsPartial = false
                                 startReverify()
                             } label: {
                                 Text("Retry")
@@ -427,19 +437,20 @@ struct SetDetailView: View {
 
                     if let status = uploadManager.reverifyStatusMessage, uploadManager.reverifyError == nil {
                         HStack(spacing: 8) {
-                            Image(systemName: uploadManager.reverifyDesynced > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            Image(systemName: uploadManager.reverifyIsPartial || uploadManager.reverifyDesynced > 0
+                                  ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                                 .font(.system(size: 12))
-                                .foregroundColor(uploadManager.reverifyDesynced > 0 ? .orange : .green)
+                                .foregroundColor(uploadManager.reverifyIsPartial || uploadManager.reverifyDesynced > 0 ? .orange : .green)
                             Text(status)
                                 .font(.caption)
-                                .foregroundColor(uploadManager.reverifyDesynced > 0 ? .orange : .green)
-                                .lineLimit(3)
+                                .foregroundColor(uploadManager.reverifyIsPartial || uploadManager.reverifyDesynced > 0 ? .orange : .green)
+                                .lineLimit(5)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer()
                         }
                         .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background((uploadManager.reverifyDesynced > 0 ? Color.orange : Color.green).opacity(0.08)).cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke((uploadManager.reverifyDesynced > 0 ? Color.orange : Color.green).opacity(0.2), lineWidth: 1))
+                        .background((uploadManager.reverifyIsPartial || uploadManager.reverifyDesynced > 0 ? Color.orange : Color.green).opacity(0.08)).cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke((uploadManager.reverifyIsPartial || uploadManager.reverifyDesynced > 0 ? Color.orange : Color.green).opacity(0.2), lineWidth: 1))
                     }
 
                     if reverifyBlockedByCooldown {
@@ -448,11 +459,11 @@ struct SetDetailView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(Color(hex: "FF9F0A"))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Re-verify disponible en \(formatCountdown(reverifyCooldownLeft))")
+                                Text("Re-verify available in \(formatCountdown(reverifyCooldownLeft))")
                                     .font(.caption.bold())
                                     .foregroundColor(Color(hex: "FF9F0A"))
                                     .monospacedDigit()
-                                Text("Cooldown activo para evitar llamadas repetidas a Instagram en el mismo set.")
+                                Text("Short cooldown so Instagram is not polled repeatedly for this set.")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -1454,8 +1465,7 @@ struct SetDetailView: View {
 
     // MARK: - Re-verify All (detect local↔Instagram desync for archived photos)
 
-    /// Fetches all VISIBLE media from Instagram in 1-2 API calls, then compares
-    /// against local state. Much faster than checking 100+ photos one by one.
+    /// Fetches visible media from Instagram (or cache), then compares against local state.
     private func startReverify() {
         let photos = allUploadedPhotos
 
@@ -1532,6 +1542,8 @@ struct SetDetailView: View {
         manager.reverifyTotal = photoSnapshots.count
         manager.reverifyDesynced = 0
         manager.reverifyStatusMessage = nil
+        manager.reverifyPhase = nil
+        manager.reverifyIsPartial = false
 
         manager.reverifyTask = Task.detached(priority: .utility) {
             print("🔍 [RE-VERIFY] ─────────────────────────────────────")
@@ -1540,67 +1552,91 @@ struct SetDetailView: View {
                 print("🔍 [RE-VERIFY]   local mediaId=\(snap.mediaId) isArchived=\(snap.isArchived) status=\(snap.status)")
             }
 
-            // Fetch all visible (non-archived) media IDs from Instagram feed.
-            // Store BOTH the raw id and the pk-only prefix (strips _userId suffix)
-            // so comparison works regardless of which format was stored locally.
+            // Visible public grid: prefer local profile cache (full sync from Performance).
             var visibleOnIG: Set<String> = []
             var nextMaxId: String? = nil
             var page = 0
-            let maxReverifyFeedPages = 4
+            let maxReverifyFeedPages = 6
             var feedScanCompleted = false
             var feedScanPausedReason: String? = nil
             var didStartReverifyCooldown = false
+            var usedProfileCache = false
+            var cachePostCount = 0
+
+            if let cacheSnap = reverifySnapshotFromProfileCache() {
+                visibleOnIG = cacheSnap.visible
+                cachePostCount = cacheSnap.postCount
+                usedProfileCache = true
+                feedScanCompleted = true
+                page = 0
+                print("🔍 [RE-VERIFY] Cache path — \(cacheSnap.label)")
+                LogManager.shared.info("Re-verify using profile cache (\(cachePostCount) posts)", category: .general)
+                await MainActor.run {
+                    manager.reverifyError = nil
+                    manager.reverifyPhase = cacheSnap.label
+                    manager.reverifyProgress = max(1, photoSnapshots.count / 4)
+                }
+            }
 
             do {
-                await MainActor.run { manager.reverifyError = nil }
-                repeat {
-                    guard page < maxReverifyFeedPages else {
-                        feedScanPausedReason = "Re-verify paused after \(maxReverifyFeedPages) feed pages for account safety. Try again later if needed."
-                        LogManager.shared.warning("Re-verify paused after \(maxReverifyFeedPages) /feed/user pages", category: .api)
-                        break
+                if !usedProfileCache {
+                    await MainActor.run {
+                        manager.reverifyError = nil
+                        manager.reverifyPhase = "Contacting Instagram…"
                     }
+                    repeat {
+                        guard page < maxReverifyFeedPages else {
+                            feedScanPausedReason = "Live scan stopped after \(maxReverifyFeedPages) pages (account safety)."
+                            LogManager.shared.warning("Re-verify paused after \(maxReverifyFeedPages) feed pages", category: .api)
+                            break
+                        }
 
-                    let pageDecision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
-                    guard pageDecision.allowed else {
-                        feedScanPausedReason = "Re-verify paused for safety. Wait \(pageDecision.waitSeconds)s before trying again."
-                        LogManager.shared.warning("Re-verify feed page blocked: \(pageDecision.reason) (\(pageDecision.waitSeconds)s)", category: .api)
-                        break
-                    }
-                    if !didStartReverifyCooldown {
-                        InstagramSafetyGate.shared.markSetSyncStarted(setId: reverifyKey)
-                        didStartReverifyCooldown = true
-                    }
-                    InstagramSafetyGate.shared.record(.ownProfilePagination)
+                        let pageDecision = InstagramSafetyGate.shared.decision(for: .ownProfilePagination)
+                        guard pageDecision.allowed else {
+                            feedScanPausedReason = "Re-verify paused for safety. Wait \(pageDecision.waitSeconds)s and try again."
+                            LogManager.shared.warning("Re-verify feed page blocked: \(pageDecision.reason) (\(pageDecision.waitSeconds)s)", category: .api)
+                            break
+                        }
+                        if !didStartReverifyCooldown {
+                            InstagramSafetyGate.shared.markSetSyncStarted(setId: reverifyKey)
+                            didStartReverifyCooldown = true
+                        }
+                        InstagramSafetyGate.shared.record(.ownProfilePagination)
 
-                    page += 1
-                    print("🔍 [RE-VERIFY] Fetching page \(page) from /feed/user/…")
-                    let (items, cursor) = try await ig.getUserMedia(maxId: nextMaxId)
-                    for item in items {
-                        visibleOnIG.insert(item.id)
-                        // Also insert the pk-only form (before first '_') so we match
-                        // both "123456" and "123456_999" regardless of which side has the suffix
-                        let pkOnly = item.id.split(separator: "_").first.map(String.init) ?? item.id
-                        visibleOnIG.insert(pkOnly)
-                    }
-                    nextMaxId = cursor
-                    print("🔍 [RE-VERIFY] Page \(page): got \(items.count) visible items (total unique: \(visibleOnIG.count / 2))")
-                    if !items.isEmpty {
-                        let sample = items.prefix(3).map { $0.id }.joined(separator: ", ")
-                        print("🔍 [RE-VERIFY]   Sample IDs from feed: \(sample)")
-                    }
-                    // Stop if page returned no items (avoid infinite pagination)
-                    if items.isEmpty {
-                        feedScanCompleted = true
-                        break
-                    }
-                    if nextMaxId != nil {
-                        let pauseSeconds = UInt64.random(in: 8...14)
-                        print("🔍 [RE-VERIFY] Human pause before next feed page — \(pauseSeconds)s")
-                        try? await Task.sleep(nanoseconds: pauseSeconds * 1_000_000_000)
-                    } else {
-                        feedScanCompleted = true
-                    }
-                } while nextMaxId != nil
+                        page += 1
+                        await MainActor.run {
+                            manager.reverifyPhase = "Scanning Instagram page \(page)/\(maxReverifyFeedPages)…"
+                            let approx = min(photoSnapshots.count, (page * photoSnapshots.count) / max(maxReverifyFeedPages, 1))
+                            manager.reverifyProgress = max(manager.reverifyProgress, approx)
+                        }
+                        print("🔍 [RE-VERIFY] Fetching page \(page) (GraphQL timeline)…")
+                        let (items, cursor) = try await ig.getUserMediaItems(maxId: nextMaxId)
+                        for item in items {
+                            reverifyInsertVisibleIds(item.mediaId, into: &visibleOnIG)
+                        }
+                        nextMaxId = cursor
+                        let uniquePosts = visibleOnIG.filter { Int64($0) != nil }.count
+                        print("🔍 [RE-VERIFY] Page \(page): got \(items.count) visible items (unique numeric IDs: \(uniquePosts))")
+                        if !items.isEmpty {
+                            let sample = items.prefix(3).map(\.mediaId).joined(separator: ", ")
+                            print("🔍 [RE-VERIFY]   Sample IDs: \(sample)")
+                        }
+                        if items.isEmpty {
+                            feedScanCompleted = true
+                            break
+                        }
+                        if nextMaxId != nil {
+                            let pauseSeconds = UInt64.random(in: 5...9)
+                            print("🔍 [RE-VERIFY] Human pause before next feed page — \(pauseSeconds)s")
+                            await MainActor.run {
+                                manager.reverifyPhase = "Waiting \(pauseSeconds)s before next page…"
+                            }
+                            try? await Task.sleep(nanoseconds: pauseSeconds * 1_000_000_000)
+                        } else {
+                            feedScanCompleted = true
+                        }
+                    } while nextMaxId != nil
+                }
             } catch let igErr as InstagramError {
                 let isChallengeOrBot: Bool
                 switch igErr {
@@ -1625,6 +1661,7 @@ struct SetDetailView: View {
                     LogManager.shared.warning("Re-verify failed: \(igErr.localizedDescription)", category: .api)
                     await MainActor.run {
                         manager.reverifyError = igErr.localizedDescription
+                        manager.reverifyPhase = nil
                         manager.isReverifying = false
                         manager.reverifyTask = nil
                     }
@@ -1635,19 +1672,21 @@ struct SetDetailView: View {
                 LogManager.shared.warning("Re-verify network error: \(error.localizedDescription)", category: .api)
                 await MainActor.run {
                     manager.reverifyError = "Network error — check your connection and try again."
+                    manager.reverifyPhase = nil
                     manager.isReverifying = false
                     manager.reverifyTask = nil
                 }
                 return
             }
 
-            if !feedScanCompleted {
-                let warning = feedScanPausedReason ?? "Re-verify paused before scanning every feed page to protect the account."
+            if !feedScanCompleted && !usedProfileCache {
+                let warning = feedScanPausedReason ?? "Live scan ended early to protect the account."
                 print("🛡️ [RE-VERIFY] \(warning)")
                 LogManager.shared.warning(warning, category: .api)
-                await MainActor.run { manager.reverifyError = warning }
                 if page == 0 {
                     await MainActor.run {
+                        manager.reverifyError = warning
+                        manager.reverifyPhase = nil
                         manager.isReverifying = false
                         manager.reverifyTask = nil
                     }
@@ -1657,7 +1696,12 @@ struct SetDetailView: View {
                 }
             }
 
-            print("🔍 [RE-VERIFY] Instagram reports \(visibleOnIG.count / 2) visible post(s) — comparing with \(photoSnapshots.count) local photo(s)")
+            await MainActor.run {
+                manager.reverifyPhase = "Comparing \(photoSnapshots.count) set photo(s)…"
+            }
+
+            let uniqueVisiblePosts = visibleOnIG.filter { Int64($0) != nil }.count
+            print("🔍 [RE-VERIFY] Public grid has \(uniqueVisiblePosts) visible post ID(s) — comparing with \(photoSnapshots.count) local photo(s)")
 
             // Compare each local photo against the visible feed:
             //   Case A: locally archived=true  but visible on IG → desync, fix to isArchived=false
@@ -1819,21 +1863,31 @@ struct SetDetailView: View {
             // ────────────────────────────────────────────────────────────────────
 
             await MainActor.run {
+                manager.reverifyPhase = nil
+                manager.reverifyError = nil
                 if feedScanCompleted {
+                    manager.reverifyIsPartial = false
                     if desynced > 0 {
                         manager.reverifyStatusMessage = "Found \(desynced) public photo\(desynced == 1 ? "" : "s") from this set. Tap Sync & Archive to archive safely."
                     } else if archivedGhosts > 0 {
                         manager.reverifyStatusMessage = "Checked \(photoSnapshots.count) photo\(photoSnapshots.count == 1 ? "" : "s") and archived \(archivedGhosts) untracked ghost post\(archivedGhosts == 1 ? "" : "s")."
+                    } else if usedProfileCache {
+                        manager.reverifyStatusMessage = "Checked \(photoSnapshots.count) photo\(photoSnapshots.count == 1 ? "" : "s") against your cached public grid (\(cachePostCount) posts): none from this set are public."
                     } else {
-                        manager.reverifyStatusMessage = "Checked \(photoSnapshots.count) uploaded photo\(photoSnapshots.count == 1 ? "" : "s"): no public photos from this set found."
+                        manager.reverifyStatusMessage = "Checked \(photoSnapshots.count) uploaded photo\(photoSnapshots.count == 1 ? "" : "s"): none from this set appear on your public grid."
                     }
                 } else {
-                    manager.reverifyStatusMessage = nil
+                    manager.reverifyIsPartial = true
+                    if desynced > 0 {
+                        manager.reverifyStatusMessage = "Partial scan (\(page) pages): found \(desynced) public photo\(desynced == 1 ? "" : "s"). Tap Sync & Archive. For a full check, open Performance → pull to refresh, then Re-verify again."
+                    } else {
+                        manager.reverifyStatusMessage = "Partial scan (\(page) live pages, ~\(uniqueVisiblePosts) posts seen). No set photos found in that window — likely still archived. For certainty: Performance → refresh grid → Re-verify (uses cache, no long wait)."
+                    }
                 }
                 manager.isReverifying = false
                 manager.reverifyTask = nil
             }
-            print("🔍 [RE-VERIFY] Done — \(desynced) desync(s) found out of \(photoSnapshots.count) photos (used \(page) API call(s))")
+            print("🔍 [RE-VERIFY] Done — \(desynced) desync(s) found out of \(photoSnapshots.count) photos (cache:\(usedProfileCache) apiPages:\(page))")
             if !feedScanCompleted {
                 LogManager.shared.warning("Re-verify partial: scanned \(page) page(s), result is not conclusive", category: .general)
             } else if desynced > 0 {
@@ -6365,6 +6419,39 @@ struct PhotoItemView: View {
             }
         }
     }
+}
+
+// MARK: - Re-verify helpers (file-level for detached tasks)
+
+private func reverifyInsertVisibleIds(_ mediaId: String, into visible: inout Set<String>) {
+    visible.insert(mediaId)
+    let pkOnly = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+    visible.insert(pkOnly)
+}
+
+/// Full public grid on disk (after Performance refresh) — instant re-verify, no feed pagination.
+private func reverifySnapshotFromProfileCache() -> (visible: Set<String>, postCount: Int, label: String)? {
+    let cache = ProfileCacheService.shared
+    guard let profile = cache.cachedProfile ?? cache.loadProfile() else { return nil }
+    guard !profile.cachedMediaItems.isEmpty else { return nil }
+
+    let noMoreKey = "perf_no_more_pages_\(profile.userId)"
+    let gridFullyLoaded = UserDefaults.standard.bool(forKey: noMoreKey) && profile.cachedNextMaxId == nil
+    let countsAligned = profile.mediaCount > 0 && profile.cachedMediaItems.count >= profile.mediaCount
+    let performanceComplete = cache.hasCompletePerformancePreloadCache(profile)
+    guard gridFullyLoaded || countsAligned || performanceComplete else { return nil }
+
+    var visible: Set<String> = []
+    for item in profile.cachedMediaItems {
+        reverifyInsertVisibleIds(item.mediaId, into: &visible)
+    }
+    let label: String
+    if gridFullyLoaded || countsAligned {
+        label = "Using full profile cache (\(profile.cachedMediaItems.count) public posts)"
+    } else {
+        label = "Using profile cache (\(profile.cachedMediaItems.count) posts)"
+    }
+    return (visible, profile.cachedMediaItems.count, label)
 }
 
 // MARK: - Tap-to-Swap Photo Cell (for reorder mode)

@@ -56,6 +56,10 @@ class UploadManager: ObservableObject {
     @Published var reverifyDesynced: Int = 0
     @Published var reverifyError: String? = nil   // shown in UI when fetch fails
     @Published var reverifyStatusMessage: String? = nil
+    /// Short line under the spinner (e.g. "Scanning page 2/6…", "Using profile cache…").
+    @Published var reverifyPhase: String? = nil
+    /// True when the visible feed was not fully scanned — result may be inconclusive.
+    @Published var reverifyIsPartial: Bool = false
     var reverifyTask: Task<Void, Never>? = nil
     
     // MARK: - Active Upload Task (to detect orphaned states)

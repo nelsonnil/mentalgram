@@ -115,6 +115,11 @@ struct FollowersListView: View {
             }
         }
         .task { await loadUsers() }
+        .onAppear {
+            if localSelectedIds.isEmpty, !dateForce.selectedFollowerIds.isEmpty {
+                localSelectedIds = dateForce.selectedFollowerIds
+            }
+        }
         .onDisappear {
             // Cancel any in-flight profile load when the view is dismissed.
             // Without this, a profile that started loading right before the user
@@ -123,6 +128,8 @@ struct FollowersListView: View {
             // the next operation (S&A), which is what triggered the May 17 403.
             profileLoadTask?.cancel()
             profileLoadTask = nil
+            // Swipe-to-dismiss on fullScreenCover does not call onClose — persist selection here too.
+            commitSelectionIfNeeded()
         }
         .onChange(of: selectedTab) { newTab in
             guard newTab == 0 || newTab == 1 else { return }
@@ -137,7 +144,13 @@ struct FollowersListView: View {
     // MARK: - Date Force banner
 
     private var dateForceBanner: some View {
-        EmptyView()
+        Text(String(localized: "followers.dateforce.hint"))
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(Color(hex: "0095F6"))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color(hex: "0095F6").opacity(0.12))
     }
 
     // MARK: - Open profile (inline slide, same flow as Explore)
@@ -223,14 +236,16 @@ struct FollowersListView: View {
         }
     }
 
-    /// Confirma la selección ordenada en DateForce y cierra la lista.
-    /// El orden del array determina el grupo: primera mitad → fecha, segunda mitad → hora.
+    /// Persiste la selección ordenada en DateForce (sin cerrar la lista).
+    private func commitSelectionIfNeeded() {
+        guard dateForce.isEnabled, !localSelectedIds.isEmpty else { return }
+        dateForce.selectedFollowerIds = localSelectedIds
+        let half = localSelectedIds.count / 2
+        print("📋 [DATE FORCE] Confirmados \(localSelectedIds.count) espectadores — \(half) para fecha, \(localSelectedIds.count - half) para hora")
+    }
+
     private func commitAndClose() {
-        if dateForce.isEnabled && !localSelectedIds.isEmpty {
-            dateForce.selectedFollowerIds = localSelectedIds   // array ordenado
-            let half = localSelectedIds.count / 2
-            print("📋 [DATE FORCE] Confirmados \(localSelectedIds.count) espectadores — \(half) para fecha, \(localSelectedIds.count - half) para hora")
-        }
+        commitSelectionIfNeeded()
         onClose()
     }
 
@@ -507,11 +522,13 @@ private struct FollowerRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar — tap target separado
-            avatarView
-                .frame(width: 50, height: 50)
-                .contentShape(Circle())
-                .onTapGesture { onAvatarTap() }
+            // Avatar — tap target separado (Button evita que el ScrollView se quede con el gesto)
+            Button(action: onAvatarTap) {
+                avatarView
+            }
+            .buttonStyle(.plain)
+            .frame(width: 56, height: 56)
+            .contentShape(Circle())
 
             // Resto de la fila — abre el perfil
             HStack(spacing: 0) {

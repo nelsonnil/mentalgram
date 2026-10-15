@@ -202,9 +202,12 @@
 "followers.tab.subscriptions" = "Subscriptions";
 "followers.tab.more" = "More";
 "followers.section.all" = "All followers";
+"followers.section.following" = "All following";
+"followers.following_btn" = "Following";
 "followers.follow_back" = "Follow too";
 "followers.remove_btn" = "Remove";
 "followers.search" = "Search";
+"followers.dateforce.hint" = "Date Force: tap the avatar circle to select (1, 2, 3…). Tap the row to open a profile. Use ← to confirm.";
 "force_reel.title" = "Force Reel";
 "force_reel.subtitle" = "Force a specific reel to appear in Explore";
 "force_reel.description" = "Pre-select a reel from any profile. In Performance, open Explore — the forced reel appears in the feed.";
@@ -981,7 +984,7 @@
 "amnesia.anim.phase1_title" = "Magician closes the view";
 "amnesia.anim.phase1_sub" = "Magician opens and closes the carousel in Vault";
 "amnesia.anim.phase2_title" = "Instagram reveals the truth";
-"amnesia.anim.phase2_sub" = "5th image appears ✨  It was always there";
+"amnesia.anim.phase2_sub" = "Hidden image appears as the 3rd slide ✨  It was always there";
 "amnesia.anim.phase3_title" = "Spectator verifies";
 "amnesia.anim.phase3_sub" = "\"How many do you see?\" — Five. \"There were always five.\"";
 "amnesia.anim.card_circle" = "Circle";

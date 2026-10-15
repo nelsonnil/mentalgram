@@ -178,9 +178,12 @@ class InstagramService: ObservableObject {
     // ─────────────────────────────────────────────────────────────────────────
     private var authBearer: String = UserDefaults.standard.string(forKey: "ig_auth_bearer") ?? ""
     
-    // MARK: - Rate Limiting (anti-bot: max 60 actions/hour)
+    // MARK: - Rate Limiting (anti-bot)
+    /// Límite observado en Instagram (~55 acciones / hora móvil). No confundir con 60.
+    static let instagramHourlyActionLimit = 55
+    /// Presupuesto interno de Vault: paramos en 54 para no rozar el corte de Instagram.
     private var actionTimestamps: [Date] = []
-    private let maxActionsPerHour: Int = 55 // Safe margin below 60
+    private let maxActionsPerHour: Int = instagramHourlyActionLimit - 1
 
     /// ANTI-BOT: In-memory cache of recent state-check results.
     /// Avoids hammering /media/{pk}/info/ when the user re-syncs the same set
@@ -550,6 +553,35 @@ class InstagramService: ObservableObject {
     /// upload again immediately, which is exactly the pattern that escalates a
     /// flagged account into a permanent ban. Reveals and Performance keep working.
     static let botDetectionUploadCooldownSeconds = 24 * 60 * 60
+
+    /// Persisted log of change_profile_picture attempts ("<unix>|<result>"), last 7 days,
+    /// so a "Try Again Later" can be read against how many changes preceded it.
+    private static let profilePicHistoryKey = "profile_pic_attempt_history"
+
+    static func recordProfilePicAttempt(_ result: String) {
+        let now = Date().timeIntervalSince1970
+        var entries = UserDefaults.standard.stringArray(forKey: profilePicHistoryKey) ?? []
+        entries.append("\(Int(now))|\(result)")
+        entries = entries.filter { entry in
+            guard let ts = Double(entry.split(separator: "|").first ?? "") else { return false }
+            return now - ts < 7 * 24 * 3600
+        }
+        UserDefaults.standard.set(Array(entries.suffix(200)), forKey: profilePicHistoryKey)
+    }
+
+    static func profilePicHistorySummary() -> String {
+        let now = Date().timeIntervalSince1970
+        let entries = (UserDefaults.standard.stringArray(forKey: profilePicHistoryKey) ?? []).compactMap { entry -> (Double, String)? in
+            let parts = entry.split(separator: "|", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let ts = Double(parts[0]) else { return nil }
+            return (ts, parts[1])
+        }
+        func count(_ window: Double, _ result: String? = nil) -> Int {
+            entries.filter { now - $0.0 < window && (result == nil || $0.1 == result) }.count
+        }
+        let recent = entries.suffix(8).map { "\(Int((now - $0.0) / 60))m ago:\($0.1)" }.joined(separator: ", ")
+        return "📊 [PP-HISTORY] attempts 1h:\(count(3600)) (ok \(count(3600, "ok"))) · 24h:\(count(86400)) (ok \(count(86400, "ok"))) · 7d:\(count(7 * 86400)) (ok \(count(7 * 86400, "ok"))) · recent: [\(recent)]"
+    }
     
     @MainActor
     private func triggerLockdown(reason: String, duration: TimeInterval, armUploadCooldown: Bool = false) {
@@ -1394,7 +1426,7 @@ class InstagramService: ObservableObject {
         print("🐦 [PIGEON] New session ID: \(String(pigeonSessionId.prefix(8)))...")
     }
     
-    // MARK: - Rate Limiting (ANTI-BOT: max ~55 actions/hour)
+    // MARK: - Rate Limiting (ANTI-BOT: Vault 54/h presupuesto, Instagram ~55/h)
     
     /// Track an action for rate limiting
     private func trackAction() {
@@ -1421,7 +1453,7 @@ class InstagramService: ObservableObject {
 
     /// Undo the most recent `trackAction()` call. Used when a request is cancelled
     /// before it ever reached Instagram, so a doomed/aborted call doesn't burn one
-    /// of the 55/hour actions (mirrors `InstagramSafetyGate.rollbackLastRequest`).
+        /// of the hourly action budget (mirrors `InstagramSafetyGate.rollbackLastRequest`).
     private func untrackAction() {
         guard !actionTimestamps.isEmpty else { return }
         actionTimestamps.removeLast()
@@ -2238,6 +2270,29 @@ class InstagramService: ObservableObject {
                     let feedbackTitle = errorJson["feedback_title"] as? String ?? "feedback_required"
                     print("🤖 [API] POST \(shortPath) → feedback_required (\(feedbackTitle)) — triggering bot lockdown")
                     LogManager.shared.warning("POST \(shortPath) → \(feedbackTitle) — rate-limit lockdown", category: .api)
+                    if shortPath.contains("change_profile_picture") {
+                        print("🩺 [PP-DIAG] change_profile_picture rejected — full request/response:")
+                        for (k, v) in request.allHTTPHeaderFields ?? [:] {
+                            let preview = (v.count > 100) ? "\(v.prefix(100))…(+\(v.count - 100))" : v
+                            print("🩺   > \(k): \(preview)")
+                        }
+                        if let body = request.httpBody, let bodyStr = String(data: body, encoding: .utf8) {
+                            print("🩺 [PP-DIAG] Request body: \(bodyStr.prefix(400))")
+                        }
+                        for (k, v) in httpResponse.allHeaderFields {
+                            if let key = k as? String, let val = v as? String {
+                                print("🩺   < \(key): \(val.prefix(140))")
+                            }
+                        }
+                        print("🩺 [PP-DIAG] Response body: \(String(data: data, encoding: .utf8) ?? "?")")
+                        print(Self.profilePicHistorySummary())
+                        // Instagram scopes this block to profile-picture changes (bio, archive and
+                        // reveals keep working), so fail only this call instead of a global lockdown
+                        // that would freeze a live Performance for 15 minutes.
+                        print("🛡️ [PROFILE PIC] Action-scoped block — no global lockdown")
+                        LogManager.shared.warning("Profile picture change blocked by Instagram (Try Again Later) — other actions unaffected", category: .api)
+                        throw InstagramError.botDetected("Instagram rate limit: \(feedbackTitle) (profile picture only)")
+                    }
                     await triggerLockdown(
                         reason: "Instagram rate limit (feedback_required) on \(shortPath). Wait before continuing.",
                         duration: 15 * 60,
@@ -5786,7 +5841,7 @@ class InstagramService: ObservableObject {
         // Using configure_sidecar with a single-image children array publishes
         // identically to a normal single photo in the Instagram feed.
         print("   Configuring media via configure_sidecar (single-photo workaround Jun 2026)...")
-        let mediaId = try await configureSidecar(
+        let (mediaId, _) = try await configureSidecar(
             uploadIds:       [uploadIdResponse],
             caption:         caption,
             clientSidecarId: String(Int(Date().timeIntervalSince1970 * 1000))
@@ -6128,8 +6183,8 @@ class InstagramService: ObservableObject {
     /// - Parameters:
     ///   - uploadIds: Array of upload_ids returned by uploadPhotoForSidecar(), in display order.
     ///   - caption:   Post caption (default empty).
-    /// - Returns: The media_id of the newly created carousel post.
-    func configureSidecar(uploadIds: [String], caption: String = "", clientSidecarId: String) async throws -> String {
+    /// - Returns: The media_id and optional `taken_at` of the newly created carousel post.
+    func configureSidecar(uploadIds: [String], caption: String = "", clientSidecarId: String) async throws -> (mediaId: String, takenAt: Date?) {
         guard !uploadIds.isEmpty else { throw InstagramError.apiError("No upload IDs provided") }
         print("📋 [AMNESIA] configure_sidecar with \(uploadIds.count) images (sidecarId=\(clientSidecarId))…")
 
@@ -6286,8 +6341,18 @@ class InstagramService: ObservableObject {
                 guard let id = mediaId else {
                     throw InstagramError.apiError("configure_sidecar: no media pk in response")
                 }
+                let takenAt: Date?
+                if let timestamp = media["taken_at"] as? TimeInterval {
+                    takenAt = Date(timeIntervalSince1970: timestamp)
+                } else if let timestamp = media["taken_at"] as? Int {
+                    takenAt = Date(timeIntervalSince1970: TimeInterval(timestamp))
+                } else if let timestamp = media["taken_at"] as? Int64 {
+                    takenAt = Date(timeIntervalSince1970: TimeInterval(timestamp))
+                } else {
+                    takenAt = nil
+                }
                 print("✅ [AMNESIA] Carousel created — mediaId=\(id) (\(uploadIds.count) images)")
-                return id
+                return (id, takenAt)
             } catch {
                 lastError = error
                 let desc = error.localizedDescription
@@ -6402,7 +6467,7 @@ class InstagramService: ObservableObject {
         // Anti-bot: 4-7s before configure
         print("   [AMNESIA] Waiting before configure_sidecar A…")
         try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
-        let mediaIdA = try await configureSidecar(uploadIds: uploadIdsA, caption: "", clientSidecarId: sidecarIdA)
+        let (mediaIdA, takenAtA) = try await configureSidecar(uploadIds: uploadIdsA, caption: "", clientSidecarId: sidecarIdA)
         advance()
 
         // Anti-bot: 5-8s before starting carousel B
@@ -6414,11 +6479,11 @@ class InstagramService: ObservableObject {
         // instead of appended at the end.
         print("🎭 [AMNESIA] Phase 2: uploading full carousel (5 images)…")
         var uploadIdsB: [String] = []
-        let fullCarouselOrder = [0, 1, 4, 2, 3]
+        let fullCarouselOrder = AmnesiaCarouselSettings.revealedCarouselSlotOrder
         for (position, sourceIndex) in fullCarouselOrder.enumerated() {
             let imgData = try jpeg(images[sourceIndex], index: sourceIndex)
             let sidecarId = uploadIdsB.first ?? ""
-            let labelSuffix = sourceIndex == 4 ? "hidden" : "image\(sourceIndex + 1)"
+            let labelSuffix = sourceIndex == AmnesiaCarouselSettings.hiddenImageSlotIndex ? "hidden" : "image\(sourceIndex + 1)"
             let id = try await uploadPhotoForSidecar(
                 imageData: imgData,
                 stepLabel: "B-\(position + 1)/5 \(labelSuffix)",
@@ -6437,7 +6502,7 @@ class InstagramService: ObservableObject {
         // Anti-bot: 4-7s before configure
         print("   [AMNESIA] Waiting before configure_sidecar B…")
         try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
-        let mediaIdB = try await configureSidecar(uploadIds: uploadIdsB, caption: "", clientSidecarId: sidecarIdB)
+        let (mediaIdB, _) = try await configureSidecar(uploadIds: uploadIdsB, caption: "", clientSidecarId: sidecarIdB)
         advance()
 
         // Anti-bot: 5-9s before archiving carousel B
@@ -6449,10 +6514,13 @@ class InstagramService: ObservableObject {
 
         // Persist both IDs
         await MainActor.run {
-            AmnesiaCarouselSettings.shared.shortCarouselMediaId = mediaIdA
-            AmnesiaCarouselSettings.shared.fullCarouselMediaId  = mediaIdB
-            AmnesiaCarouselSettings.shared.isRevealed           = false
-            AmnesiaCarouselSettings.shared.uploadState          = .ready
+            let settings = AmnesiaCarouselSettings.shared
+            settings.shortCarouselMediaId = mediaIdA
+            settings.fullCarouselMediaId  = mediaIdB
+            settings.isRevealed           = false
+            settings.carouselTakenAt      = takenAtA ?? Date()
+            settings.clearGridPin()
+            settings.uploadState          = .ready
         }
         print("✅ [AMNESIA] Both carousels ready — A=\(mediaIdA) B=\(mediaIdB)")
         LogManager.shared.success("Amnesia Carousel preparado — A:\(mediaIdA) B:\(mediaIdB)", category: .upload)
@@ -6697,7 +6765,7 @@ class InstagramService: ObservableObject {
             print("🃏 [INSTAPICK] Waiting before configure_sidecar (\(label))…")
             try await Task.sleep(nanoseconds: UInt64.random(in: 4_000_000_000...7_000_000_000))
             try throwIfCancelled()
-            let mediaId = try await configureSidecar(
+            let (mediaId, _) = try await configureSidecar(
                 uploadIds: uploadIds,
                 caption: "",
                 clientSidecarId: uploadIds[0]
@@ -7595,7 +7663,6 @@ class InstagramService: ObservableObject {
             print("🚨 [PROFILE PIC] Lockdown active - ABORT")
             throw InstagramError.apiError("Lockdown active. Wait before changing profile picture.")
         }
-
         // Prevent re-entrant calls (e.g. auto-pic + manual upload racing)
         guard !isUploadingProfilePic else {
             print("⚠️ [PROFILE PIC] Already uploading — skipped re-entrant call")
@@ -7662,27 +7729,12 @@ class InstagramService: ObservableObject {
             throw InstagramError.apiError("Failed to process image")
         }
 
-        // Instagram profile pictures must be square (1:1).
-        // Center-crop any aspect ratio and resize to ≤1080 px using UIGraphicsImageRenderer
-        // which handles all EXIF orientations transparently.
-        let srcW = uiImage.size.width
-        let srcH = uiImage.size.height
-        let side = min(srcW, srcH)
-        let targetSide = min(side, 1080)
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: targetSide, height: targetSide))
-        let squareImage = renderer.image { _ in
-            let scale = targetSide / side
-            let drawX = -((srcW - side) / 2) * scale
-            let drawY = -((srcH - side) / 2) * scale
-            uiImage.draw(in: CGRect(x: drawX, y: drawY, width: srcW * scale, height: srcH * scale))
-        }
-
-        guard let jpegData = squareImage.jpegData(compressionQuality: 0.9) else {
+        guard let (jpegData, pixelSide) = Self.squareProfilePicJPEG(uiImage) else {
             print("❌ [PROFILE PIC] Failed to convert image to JPEG")
             throw InstagramError.apiError("Failed to process image")
         }
         
-        print("   Image size: \(jpegData.count / 1024) KB (cropped to \(Int(targetSide))×\(Int(targetSide))px square)")
+        print("   Image size: \(jpegData.count / 1024) KB (\(pixelSide)×\(pixelSide)px square)")
         print("   Image hash: \(String(imageHash.prefix(16)))...")
         
         // ANTI-BOT: Human delay before upload (2-4 seconds)
@@ -7779,21 +7831,35 @@ class InstagramService: ObservableObject {
         
         // STEP 2: Call change_profile_picture with upload_id
         print("   Step 2: Setting as profile picture...")
+        // Same identity fields build 153 sends on set_biography (device_id, logged_in_uids),
+        // plus use_fbuploader because the bytes went through rupload_igphoto.
         let configBody: [String: String] = [
             "upload_id": uploadIdResponse,
+            "use_fbuploader": "true",
             "_csrftoken": session.csrfToken,
             "_uid": session.userId,
-            "_uuid": clientUUID
+            "_uuid": clientUUID,
+            "device_id": deviceId,
+            "logged_in_uids": "[\"\(session.userId)\"]"
         ]
         
-        let data = try await apiRequest(
-            method: "POST",
-            path: "/accounts/change_profile_picture/",
-            body: configBody
-        )
+        print(Self.profilePicHistorySummary())
+        let data: Data
+        do {
+            data = try await apiRequest(
+                method: "POST",
+                path: "/accounts/change_profile_picture/",
+                body: configBody
+            )
+        } catch {
+            let desc = error.localizedDescription.lowercased()
+            Self.recordProfilePicAttempt(desc.contains("try again later") || desc.contains("feedback") ? "try_again_later" : "error")
+            throw error
+        }
         
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let status = json["status"] as? String, status == "ok" {
+                Self.recordProfilePicAttempt("ok")
                 print("✅ [PROFILE PIC] Profile picture changed successfully!")
                 
                 // Save hash to prevent duplicate uploads
@@ -7811,6 +7877,7 @@ class InstagramService: ObservableObject {
                 return true
             } else {
                 let message = json["message"] as? String ?? "Unknown error"
+                Self.recordProfilePicAttempt("fail")
                 print("❌ [PROFILE PIC] Failed: \(message)")
                 throw InstagramError.apiError("Profile picture change failed: \(message)")
             }
@@ -7820,6 +7887,46 @@ class InstagramService: ObservableObject {
         return false
     }
     
+    /// Instagram profile pictures must be square (1:1): center-crop, resize to ≤1080 px
+    /// and encode at the "quality":"80" declared in X-Instagram-Rupload-Params.
+    #if DEBUG
+    /// Unique solid-color square for lab runs (avoids re-uploading the same CDN profile pic).
+    static func debugSyntheticProfileJPEG() -> (Data, Int)? {
+        let side = 720
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format)
+        let hue = CGFloat(Int(Date().timeIntervalSince1970) % 360) / 360.0
+        let image = renderer.image { ctx in
+            UIColor(hue: hue, saturation: 0.55, brightness: 0.88, alpha: 1).setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        }
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return nil }
+        return (data, side)
+    }
+    #endif
+
+    static func squareProfilePicJPEG(_ uiImage: UIImage) -> (Data, Int)? {
+        let srcW = uiImage.size.width
+        let srcH = uiImage.size.height
+        let side = min(srcW, srcH)
+        let targetSide = min(side, 1080)
+        // scale = 1 so pixels == points; the default format uses the screen scale (3x → 3240 px).
+        let rendererFormat = UIGraphicsImageRendererFormat()
+        rendererFormat.scale = 1
+        rendererFormat.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: targetSide, height: targetSide), format: rendererFormat)
+        let squareImage = renderer.image { _ in
+            let scale = targetSide / side
+            let drawX = -((srcW - side) / 2) * scale
+            let drawY = -((srcH - side) / 2) * scale
+            uiImage.draw(in: CGRect(x: drawX, y: drawY, width: srcW * scale, height: srcH * scale))
+        }
+        guard let data = squareImage.jpegData(compressionQuality: 0.8) else { return nil }
+        return (data, Int(squareImage.size.width * squareImage.scale))
+    }
+
     /// Hash image data to detect duplicates
     func hashImageData(_ data: Data) -> String {
         var hash = 0
@@ -9566,6 +9673,10 @@ extension InstagramService {
         guard let configData = try? Data(contentsOf: configURL),
               let config = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
               let probes = config["probes"] as? [[String: Any]] ?? (config["selfTests"] != nil ? [] : nil) else { return }
+        // Mutating tests must run once per copied config, never on every launch.
+        if (config["selfTests"] as? [String] ?? []).contains("pp") {
+            try? FileManager.default.removeItem(at: configURL)
+        }
 
         let delay = (config["delay"] as? Double) ?? 4
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -9717,6 +9828,8 @@ extension InstagramService {
                         guard result.hasMore, let next = result.nextCursor else { break }
                         cursor = next
                     }
+                case "pp":
+                    await debugProfilePicLab(config: config, emit: emit)
                 case "damage":
                     emit("🧪 [SELFTEST] damage → \(debugDamageReplica())")
                 case "fullsync":
@@ -9755,6 +9868,348 @@ extension InstagramService {
         }
         emit("🧪 [PROBE] done")
         try? output.joined(separator: "\n").write(to: docs.appendingPathComponent("probe_results.txt"), atomically: true, encoding: .utf8)
+    }
+
+    /// Profile-picture lab. Re-uploads the CURRENT profile picture (no visible change)
+    /// once per variant and stops at the first one Instagram accepts.
+    ///
+    /// probes.json keys:
+    ///   "ppGap": seconds between variants (default 90)
+    ///   "ppImageURL": optional image to upload instead of the current picture
+    ///   "ppVariants": [{ "name", "headers": {..}, "dropHeaders": [..],
+    ///                    "fields": {..}, "removeFields": [..], "signed": Bool,
+    ///                    "warmup": Bool, "endpoint": "https://…", "uploadHeaders": Bool }]
+    /// Header and field values accept {uid} {csrf} {uuid} {device_id} {upload_id}.
+    private func debugProfilePicLab(config: [String: Any], emit: (String) -> Void) async {
+        let variants = config["ppVariants"] as? [[String: Any]] ?? [["name": "current"]]
+        let gap = config["ppGap"] as? Double ?? 90
+
+        let jpegData: Data
+        let pixelSide: Int
+        if (config["ppSynthetic"] as? Bool) ?? false {
+            guard let syn = Self.debugSyntheticProfileJPEG() else {
+                emit("🧪 [PP-LAB] could not build synthetic image")
+                return
+            }
+            (jpegData, pixelSide) = syn
+            emit("🧪 [PP-LAB] synthetic image (unique color per run)")
+        } else {
+            let imageURLString = (config["ppImageURL"] as? String)
+                ?? ProfileCacheService.shared.cachedProfile?.profilePicURL ?? ""
+            guard let imageURL = URL(string: imageURLString),
+                  let (imageData, _) = try? await getSession.data(from: imageURL),
+                  let uiImage = UIImage(data: imageData),
+                  let square = Self.squareProfilePicJPEG(uiImage) else {
+                emit("🧪 [PP-LAB] could not load source image \(imageURLString.prefix(80))")
+                return
+            }
+            (jpegData, pixelSide) = square
+        }
+        emit("🧪 [PP-LAB] image \(pixelSide)px \(jpegData.count / 1024) KB · \(variants.count) variant(s) · gap \(Int(gap))s")
+        emit("🧪 [PP-LAB] " + Self.profilePicHistorySummary())
+
+        for (index, variant) in variants.enumerated() {
+            let name = variant["name"] as? String ?? "variant \(index + 1)"
+            let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
+            let fills: [String: String] = [
+                "{uid}": session.userId, "{csrf}": session.csrfToken, "{uuid}": clientUUID,
+                "{device_id}": deviceId, "{upload_id}": uploadId,
+                "{cookie}": buildCookieHeader(), "{claim}": wwwClaim
+            ]
+            func fill(_ text: String) -> String {
+                fills.reduce(text) { $0.replacingOccurrences(of: $1.key, with: $1.value) }
+            }
+            func applyVariantHeaders(_ request: inout URLRequest) {
+                for header in variant["dropHeaders"] as? [String] ?? [] {
+                    request.setValue(nil, forHTTPHeaderField: header)
+                }
+                for (key, value) in variant["headers"] as? [String: String] ?? [:] {
+                    request.setValue(fill(value), forHTTPHeaderField: key)
+                }
+            }
+            let safariLoginUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+            func applyBaseHeaders(_ request: inout URLRequest) {
+                if (variant["safariMobile"] as? Bool) == true {
+                    request.setValue(safariLoginUA, forHTTPHeaderField: "User-Agent")
+                    request.setValue(buildCookieHeader(), forHTTPHeaderField: "Cookie")
+                    request.setValue(session.csrfToken, forHTTPHeaderField: "X-CSRFToken")
+                    request.setValue("936619743392459", forHTTPHeaderField: "X-IG-App-ID")
+                    request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
+                    request.setValue("*/*", forHTTPHeaderField: "Accept")
+                    request.setValue("https://www.instagram.com", forHTTPHeaderField: "Origin")
+                    request.setValue("https://www.instagram.com/accounts/edit/", forHTTPHeaderField: "Referer")
+                } else {
+                    buildHeaders().forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+                }
+                applyVariantHeaders(&request)
+            }
+
+            if (variant["warmup"] as? Bool) == true,
+               let warmURL = URL(string: "https://i.instagram.com/api/v1/accounts/current_user/?edit=true") {
+                var warm = URLRequest(url: warmURL)
+                buildHeaders().forEach { warm.setValue($0.value, forHTTPHeaderField: $0.key) }
+                applyVariantHeaders(&warm)
+                let status = ((try? await getSession.data(for: warm))?.1 as? HTTPURLResponse)?.statusCode ?? 0
+                emit("🧪 [PP-LAB] \(name) warmup current_user?edit=true → \(status)")
+                try? await Task.sleep(nanoseconds: UInt64.random(in: 2_000_000_000...4_000_000_000))
+            }
+
+            // Current instagram.com flow (PolarisUserActionSetProfilePic): fb_uploader rupload,
+            // then the PolarisUserActionSetProfilePicMutation GraphQL mutation with {upload_id}.
+            if (variant["polaris"] as? Bool) == true {
+                if await debugPolarisProfilePic(name: name, variant: variant, jpegData: jpegData,
+                                                side: pixelSide, fill: fill, emit: emit) {
+                    emit("🧪 [PP-LAB] ✅ WINNER: \(name) — stopping")
+                    return
+                }
+                if index < variants.count - 1 {
+                    try? await Task.sleep(nanoseconds: UInt64(gap * 1_000_000_000))
+                }
+                continue
+            }
+
+            // Web flow: one multipart POST, the way instagram.com/accounts/edit/ does it.
+            if (variant["web"] as? Bool) == true {
+                let endpoint = fill(variant["endpoint"] as? String
+                    ?? "https://www.instagram.com/api/v1/web/accounts/web_change_profile_picture/")
+                guard let webURL = URL(string: endpoint) else { continue }
+                let boundary = "----WebKitFormBoundary" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16)
+                var multipart = Data()
+                multipart.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"profile_pic\"; filename=\"profilepic.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+                multipart.append(jpegData)
+                multipart.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+                var request = URLRequest(url: webURL)
+                request.httpMethod = "POST"
+                if (variant["appHeaders"] as? Bool) ?? false {
+                    buildHeaders().forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+                }
+                applyVariantHeaders(&request)
+                request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                request.httpBody = multipart
+                let started = CFAbsoluteTimeGetCurrent()
+                guard let (data, response) = try? await postSession.data(for: request) else {
+                    emit("🧪 [PP-LAB] \(name) web → network error")
+                    continue
+                }
+                let http = response as? HTTPURLResponse
+                let ms = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+                let text = String(data: data, encoding: .utf8) ?? ""
+                let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                let ok = (json?["status"] as? String) == "ok" && (json?["changed_profile"] as? Bool ?? true)
+                let outcome = ok ? "ok" : ((json?["message"] as? String) == "feedback_required" ? "try_again_later" : "fail")
+                Self.recordProfilePicAttempt("lab:\(name):\(outcome)")
+                emit("🧪 [PP-LAB] \(name) web → \(http?.statusCode ?? 0) [\(ms)ms, server \(http?.value(forHTTPHeaderField: "x-ig-request-elapsed-time-ms") ?? "?")ms] \(outcome.uppercased())")
+                emit("   ⤷ response: \(text.prefix(300).replacingOccurrences(of: "\n", with: " "))")
+                if ok {
+                    emit("🧪 [PP-LAB] ✅ WINNER: \(name) — stopping")
+                    return
+                }
+                if index < variants.count - 1 {
+                    try? await Task.sleep(nanoseconds: UInt64(gap * 1_000_000_000))
+                }
+                continue
+            }
+
+            // Step 1: rupload_igphoto
+            let uploadName = "\(uploadId)_0_\(Int.random(in: 1000000000...9999999999))"
+            guard let uploadURL = URL(string: "https://i.instagram.com/rupload_igphoto/\(uploadName)") else { continue }
+            let ruploadParams = "{\"retry_context\":\"{\\\"num_step_auto_retry\\\":0,\\\"num_reupload\\\":0,\\\"num_step_manual_retry\\\":0}\",\"media_type\":\"1\",\"image_compression\":\"{\\\"lib_name\\\":\\\"moz\\\",\\\"lib_version\\\":\\\"3.1.m\\\",\\\"quality\\\":\\\"80\\\"}\",\"xsharing_user_ids\":\"[]\",\"upload_id\":\"\(uploadId)\"}"
+            var upload = URLRequest(url: uploadURL)
+            upload.httpMethod = "POST"
+            applyBaseHeaders(&upload)
+            upload.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+            upload.setValue(String(jpegData.count), forHTTPHeaderField: "Content-Length")
+            upload.setValue(ruploadParams, forHTTPHeaderField: "X-Instagram-Rupload-Params")
+            upload.setValue(UUID().uuidString, forHTTPHeaderField: "X_FB_PHOTO_WATERFALL_ID")
+            upload.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
+            upload.setValue(uploadName, forHTTPHeaderField: "X-Entity-Name")
+            upload.setValue(String(jpegData.count), forHTTPHeaderField: "X-Entity-Length")
+            upload.setValue("0", forHTTPHeaderField: "Offset")
+            upload.httpBody = jpegData
+            guard let (uploadData, uploadResponse) = try? await postSession.data(for: upload) else {
+                emit("🧪 [PP-LAB] \(name) rupload → network error")
+                continue
+            }
+            let uploadStatus = (uploadResponse as? HTTPURLResponse)?.statusCode ?? 0
+            let uploadText = String(data: uploadData, encoding: .utf8) ?? ""
+            emit("🧪 [PP-LAB] \(name) rupload → \(uploadStatus) \(uploadText.prefix(120))")
+            guard uploadStatus == 200 else { continue }
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 2_000_000_000...3_000_000_000))
+
+            // Step 2: change_profile_picture
+            var fields: [String: String] = [
+                "upload_id": uploadId, "use_fbuploader": "true", "_csrftoken": session.csrfToken,
+                "_uid": session.userId, "_uuid": clientUUID, "device_id": deviceId,
+                "logged_in_uids": "[\"\(session.userId)\"]"
+            ]
+            for key in variant["removeFields"] as? [String] ?? [] { fields.removeValue(forKey: key) }
+            for (key, value) in variant["fields"] as? [String: String] ?? [:] { fields[key] = fill(value) }
+
+            let endpoint = fill(variant["endpoint"] as? String ?? "https://i.instagram.com/api/v1/accounts/change_profile_picture/")
+            guard let configureURL = URL(string: endpoint) else { continue }
+            var configure = URLRequest(url: configureURL)
+            configure.httpMethod = "POST"
+            applyBaseHeaders(&configure)
+            configure.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+            let bodyString: String
+            if (variant["signed"] as? Bool) == true,
+               let json = try? JSONSerialization.data(withJSONObject: fields),
+               let jsonString = String(data: json, encoding: .utf8) {
+                bodyString = Self.formEncode([
+                    ("signed_body", "\(generateSignature(data: jsonString)).\(jsonString)"),
+                    ("ig_sig_key_version", sigKeyVersion)
+                ])
+            } else {
+                bodyString = Self.formEncode(fields.map { ($0.key, $0.value) })
+            }
+            configure.httpBody = bodyString.data(using: .utf8)
+
+            let started = CFAbsoluteTimeGetCurrent()
+            guard let (data, response) = try? await postSession.data(for: configure) else {
+                emit("🧪 [PP-LAB] \(name) configure → network error")
+                continue
+            }
+            let http = response as? HTTPURLResponse
+            let ms = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+            let serverMs = http?.value(forHTTPHeaderField: "x-ig-request-elapsed-time-ms") ?? "?"
+            let text = String(data: data, encoding: .utf8) ?? ""
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let ok = (json?["status"] as? String) == "ok"
+            let outcome = ok ? "ok" : ((json?["message"] as? String) == "feedback_required" ? "try_again_later" : "fail")
+            Self.recordProfilePicAttempt("lab:\(name):\(outcome)")
+            emit("🧪 [PP-LAB] \(name) configure → \(http?.statusCode ?? 0) [\(ms)ms, server \(serverMs)ms] \(outcome.uppercased())")
+            emit("   ⤷ body sent: \(bodyString.prefix(260))")
+            emit("   ⤷ response: \(text.prefix(260))")
+            if ok {
+                emit("🧪 [PP-LAB] ✅ WINNER: \(name) — stopping")
+                return
+            }
+            if index < variants.count - 1 {
+                try? await Task.sleep(nanoseconds: UInt64(gap * 1_000_000_000))
+            }
+        }
+        emit("🧪 [PP-LAB] no variant accepted")
+    }
+
+    /// One attempt of the instagram.com profile-picture flow. Variant keys:
+    ///   "tokens": Bool — GET www.instagram.com first and send its LSD / fb_dtsg (browser-exact)
+    ///   "graphqlURL": mutation URL (default https://www.instagram.com/graphql/query)
+    ///   "appHeaders": Bool — start from buildHeaders() instead of browser headers
+    ///   "headers" / "dropHeaders": applied last
+    private func debugPolarisProfilePic(name: String, variant: [String: Any], jpegData: Data, side: Int,
+                                        fill: (String) -> String, emit: (String) -> Void) async -> Bool {
+        let safariUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+        let useAppHeaders = (variant["appHeaders"] as? Bool) ?? false
+        func baseHeaders() -> [String: String] {
+            if useAppHeaders { return buildHeaders() }
+            return [
+                "User-Agent": safariUA, "Cookie": buildCookieHeader(), "X-CSRFToken": session.csrfToken,
+                "X-IG-App-ID": "1217981644879628", "X-ASBD-ID": "359341", "X-Requested-With": "XMLHttpRequest",
+                "X-Instagram-AJAX": "1", "Accept": "*/*", "Accept-Language": "en-US,en;q=0.9",
+                "Origin": "https://www.instagram.com", "Referer": "https://www.instagram.com/accounts/edit/"
+            ]
+        }
+        func apply(_ request: inout URLRequest, _ headers: [String: String]) {
+            headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+            for header in variant["dropHeaders"] as? [String] ?? [] { request.setValue(nil, forHTTPHeaderField: header) }
+            for (key, value) in variant["headers"] as? [String: String] ?? [:] { request.setValue(fill(value), forHTTPHeaderField: key) }
+        }
+
+        var lsd = "", dtsg = "", jazoest = ""
+        if (variant["tokens"] as? Bool) == true, let home = URL(string: "https://www.instagram.com/accounts/edit/") {
+            var page = URLRequest(url: home)
+            page.setValue(safariUA, forHTTPHeaderField: "User-Agent")
+            page.setValue(buildCookieHeader(), forHTTPHeaderField: "Cookie")
+            page.setValue("text/html", forHTTPHeaderField: "Accept")
+            let html = (try? await getSession.data(for: page)).flatMap { String(data: $0.0, encoding: .utf8) } ?? ""
+            func token(_ pattern: String) -> String {
+                guard let regex = try? NSRegularExpression(pattern: pattern),
+                      let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+                      let range = Range(match.range(at: 1), in: html) else { return "" }
+                return String(html[range])
+            }
+            lsd = token("\"LSD\",\\[\\],\\{\"token\":\"([^\"]+)\"")
+            dtsg = token("\"DTSGInitialData\",\\[\\],\\{\"token\":\"([^\"]+)\"")
+            jazoest = token("jazoest=([0-9]+)")
+            emit("🧪 [PP-LAB] \(name) tokens — html \(html.count / 1024) KB lsd:\(!lsd.isEmpty) fb_dtsg:\(!dtsg.isEmpty) jazoest:\(!jazoest.isEmpty)")
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+
+        // Step 1: rupload exactly as PolarisAPIRuploadPhoto (no WWW-Claim / Device-ID headers).
+        let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
+        let entityName = "fb_uploader_\(uploadId)"
+        guard let uploadURL = URL(string: "https://i.instagram.com/rupload_igphoto/\(entityName)") else { return false }
+        var upload = URLRequest(url: uploadURL)
+        upload.httpMethod = "POST"
+        apply(&upload, baseHeaders())
+        if !useAppHeaders {
+            upload.setValue(nil, forHTTPHeaderField: "X-IG-WWW-Claim")
+            upload.setValue(nil, forHTTPHeaderField: "X-IG-Device-ID")
+        }
+        upload.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        upload.setValue("0", forHTTPHeaderField: "Offset")
+        upload.setValue(String(jpegData.count), forHTTPHeaderField: "X-Entity-Length")
+        upload.setValue(entityName, forHTTPHeaderField: "X-Entity-Name")
+        upload.setValue("image/jpeg", forHTTPHeaderField: "X-Entity-Type")
+        upload.setValue("{\"media_type\":1,\"upload_id\":\"\(uploadId)\",\"upload_media_height\":\(side),\"upload_media_width\":\(side)}",
+                        forHTTPHeaderField: "X-Instagram-Rupload-Params")
+        upload.httpBody = jpegData
+        guard let (uploadData, uploadResponse) = try? await postSession.data(for: upload) else {
+            emit("🧪 [PP-LAB] \(name) rupload → network error")
+            return false
+        }
+        let uploadStatus = (uploadResponse as? HTTPURLResponse)?.statusCode ?? 0
+        emit("🧪 [PP-LAB] \(name) rupload → \(uploadStatus) \(String(data: uploadData, encoding: .utf8)?.prefix(120) ?? "")")
+        guard uploadStatus == 200 else { return false }
+        var resolvedUploadId = uploadId
+        if let uploadJson = try? JSONSerialization.jsonObject(with: uploadData) as? [String: Any],
+           let returned = uploadJson["upload_id"] as? String {
+            resolvedUploadId = returned
+        }
+        try? await Task.sleep(nanoseconds: UInt64.random(in: 2_000_000_000...3_000_000_000))
+
+        // Step 2: PolarisUserActionSetProfilePicMutation
+        let graphqlURL = fill(variant["graphqlURL"] as? String ?? "https://www.instagram.com/graphql/query")
+        guard let mutationURL = URL(string: graphqlURL) else { return false }
+        var fields: [(String, String)] = []
+        if !lsd.isEmpty || !dtsg.isEmpty {
+            let cometUser = (variant["cometUser"] as? Bool) == true
+            let av = cometUser ? session.userId : "17841457751743999"
+            let userField = cometUser ? session.userId : "0"
+            fields += [("av", av), ("__user", userField), ("__a", "1"), ("__comet_req", "7"),
+                       ("fb_dtsg", dtsg), ("lsd", lsd)]
+            if !jazoest.isEmpty { fields.append(("jazoest", jazoest)) }
+        }
+        fields += [("fb_api_caller_class", "RelayModern"),
+                   ("fb_api_req_friendly_name", "PolarisUserActionSetProfilePicMutation"),
+                   ("variables", "{\"upload_id\":\"\(resolvedUploadId)\"}"),
+                   ("server_timestamps", "true"),
+                   ("doc_id", variant["docId"] as? String ?? "28293585443628449")]
+        var mutation = URLRequest(url: mutationURL)
+        mutation.httpMethod = "POST"
+        var headers = baseHeaders()
+        headers["X-FB-Friendly-Name"] = "PolarisUserActionSetProfilePicMutation"
+        if !lsd.isEmpty { headers["X-FB-LSD"] = lsd }
+        apply(&mutation, headers)
+        mutation.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        mutation.httpBody = Self.formEncode(fields).data(using: .utf8)
+
+        let started = CFAbsoluteTimeGetCurrent()
+        guard let (data, response) = try? await postSession.data(for: mutation) else {
+            emit("🧪 [PP-LAB] \(name) mutation → network error")
+            return false
+        }
+        let http = response as? HTTPURLResponse
+        let ms = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+        let text = String(data: data, encoding: .utf8) ?? ""
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let user = ((json?["data"] as? [String: Any])?["xig_web_set_profile_picture"] as? [String: Any])?["user"]
+        let ok = user != nil && json?["errors"] == nil
+        let outcome = ok ? "ok" : (text.contains("feedback_required") || text.contains("Try Again Later") ? "try_again_later" : "fail")
+        Self.recordProfilePicAttempt("lab:\(name):\(outcome)")
+        emit("🧪 [PP-LAB] \(name) mutation → \(http?.statusCode ?? 0) [\(ms)ms, server \(http?.value(forHTTPHeaderField: "x-ig-request-elapsed-time-ms") ?? "?")ms] \(outcome.uppercased())")
+        emit("   ⤷ response: \(text.prefix(400).replacingOccurrences(of: "\n", with: " "))")
+        return ok
     }
 
     /// Every own post straight from Instagram, newest first, as media keys.

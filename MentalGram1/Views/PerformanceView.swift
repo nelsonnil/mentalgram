@@ -382,6 +382,9 @@ struct PerformanceView: View {
     /// Prevents a double vibration when loadProfile() later clears pendingProfilePic
     /// after the auto-pic flow already vibrated on POST success.
     @State private var profilePicVibratedAlready = false
+    /// Set when a failed upload clears `pendingProfilePic`, so the nil change is not
+    /// mistaken for "picture confirmed live" (which fires the double vibration).
+    @State private var profilePicRevertInProgress = false
     @State private var isLoadingMore = false
     @State private var hasMorePages = true
     /// True while a DispatchQueue retry has already been scheduled.
@@ -802,6 +805,17 @@ struct PerformanceView: View {
         integrations.interfaceKindsInUse().contains(.cardNumpad)
     }
 
+    /// Counter Glitch: fake lockscreen as secret digit entry (requires wallpaper in Settings).
+    private var isCounterGlitchLockscreenActive: Bool {
+        let magic = FollowingMagicSettings.shared
+        guard magic.isEnabled, magic.fakeLockscreenInputEnabled else { return false }
+        guard LockscreenInputSettings.shared.hasWallpaper else { return false }
+        if LockscreenInputSettings.shared.isReady { return false }
+        let kinds = integrations.interfaceKindsInUse()
+        if kinds.contains(.numberLockscreen) || kinds.contains(.cardLockscreen) { return false }
+        return true
+    }
+
     /// True when the fake lockscreen should appear on Performance open.
     /// Covers: global LockscreenInputSettings (active set path) OR any bio/note
     /// placeholder configured for Number/Card Lockscreen (wallpaper is optional for the
@@ -809,7 +823,8 @@ struct PerformanceView: View {
     private var isLockscreenActive: Bool {
         if LockscreenInputSettings.shared.isReady { return true }
         let kinds = integrations.interfaceKindsInUse()
-        return kinds.contains(.numberLockscreen) || kinds.contains(.cardLockscreen)
+        if kinds.contains(.numberLockscreen) || kinds.contains(.cardLockscreen) { return true }
+        return isCounterGlitchLockscreenActive
     }
 
     /// True when the Notes Input interface should appear on Performance open.
@@ -2834,6 +2849,24 @@ struct PerformanceView: View {
                 )
                 .zIndex(1200)
             }
+            // Overlay, not fullScreenCover: a cover requested during the tab-switch
+            // transition is silently dropped by UIKit and the lockscreen never appears.
+            if showingLockscreen {
+                LockscreenInputView { digits in
+                    showingLockscreen = false
+                    if !digits.isEmpty {
+                        pendingLockscreenDigits = digits
+                        presentPerformanceCoverIfNeeded()
+                    }
+                    // An overlay does not re-fire onAppear on dismiss, so chain the
+                    // next one-shot input (e.g. Notes Input) explicitly.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        presentSecretInputIfNeeded()
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(1300)
+            }
             performanceCoverOverlay
             // NOTE: Performance entry is cache-only. HomeView prepares a local
             // replica before this screen mounts, so secret input never competes with
@@ -2916,16 +2949,6 @@ struct PerformanceView: View {
             .fullScreenCover(isPresented: $showingScreenOffCover) {
                 ScreenOffCoverView {
                     showingScreenOffCover = false
-                }
-            }
-            .fullScreenCover(isPresented: $showingLockscreen) {
-                LockscreenInputView { digits in
-                    showingLockscreen = false
-                    if !digits.isEmpty {
-                        pendingLockscreenDigits = digits
-                        // Only show the cover after a real digit entry, not on cancel/empty dismiss.
-                        presentPerformanceCoverIfNeeded()
-                    }
                 }
             }
             .fullScreenCover(isPresented: $showingClockInput) {
@@ -3542,6 +3565,9 @@ struct PerformanceView: View {
             // Without this, if Performance is not mounted the button would time out and
             // nothing would sync. The ACK lets the button fall back to a headless refresh.
             NotificationCenter.default.post(name: .performanceManualRefreshAck, object: nil)
+            if let picURL = profile?.profilePicURL, !picURL.isEmpty {
+                cachedImages.removeValue(forKey: picURL)
+            }
             guard !ppTestMode.isActive else {
                 print("🧪 [TEST MODE] External manual refresh skipped — no Instagram API")
                 postManualRefreshResult(success: false, message: "Refresh disabled in test mode")
@@ -3673,7 +3699,10 @@ struct PerformanceView: View {
             print("⚡️ [PERF] Profile pic updated instantly from local image (no CDN GET needed)")
             LogManager.shared.info("Profile pic shown instantly from local storage", category: .general)
         } else {
-            if profilePicVibratedAlready {
+            if profilePicRevertInProgress {
+                profilePicRevertInProgress = false
+                print("↩️ [PERF] Profile pic reverted after failed upload — no confirmation vibration")
+            } else if profilePicVibratedAlready {
                 profilePicVibratedAlready = false
                 print("📳 [PERF] Profile pic CDN migration complete — vibration already fired, skipping duplicate")
             } else {
@@ -5608,7 +5637,9 @@ struct PerformanceView: View {
         let oppositeMediaId = revealed ? amnesiaSettings.shortCarouselMediaId : amnesiaSettings.fullCarouselMediaId
         guard let mediaId, !mediaId.isEmpty else { return }
 
-        let imageIndices = revealed ? [0, 1, 4, 2, 3] : [0, 1, 2, 3]
+        let imageIndices = revealed
+            ? AmnesiaCarouselSettings.revealedCarouselSlotOrder
+            : AmnesiaCarouselSettings.shortCarouselSlotOrder
         let imageCount = imageIndices.count
         let images = imageIndices.map { amnesiaSettings.images[$0] }
         guard images.count == imageCount, images.allSatisfy({ $0 != nil }) else { return }
@@ -5621,9 +5652,19 @@ struct PerformanceView: View {
         }
         let fallbackURL = "amnesia://carousel/\(mediaId)/cover"
         let gridURL = existingURL ?? fallbackURL
-        let insertIndex = oppositeURL.flatMap { allMediaURLs.firstIndex(of: $0) }
-            ?? existingURL.flatMap { allMediaURLs.firstIndex(of: $0) }
-            ?? amnesiaLocalInsertionIndex()
+        let cachedItem = existingURL.flatMap { mediaItemsByURL[$0] }
+
+        let insertIndex: Int
+        if let pin = amnesiaSettings.gridPinIndex {
+            insertIndex = pin
+        } else if let takenAt = amnesiaSettings.carouselTakenAt ?? cachedItem?.takenAt {
+            insertIndex = amnesiaChronologicalInsertIndex(for: takenAt)
+        } else if let idx = existingURL.flatMap({ allMediaURLs.firstIndex(of: $0) })
+                    ?? oppositeURL.flatMap({ allMediaURLs.firstIndex(of: $0) }) {
+            insertIndex = idx
+        } else {
+            insertIndex = amnesiaLocalInsertionIndex()
+        }
 
         if let oppositeMediaId {
             let urlsToRemove = allMediaURLs.filter { url in
@@ -5647,25 +5688,37 @@ struct PerformanceView: View {
             cachedImages[gridURL] = cover
         }
 
+        let existingItem = mediaItemsByURL[gridURL]
+        let takenAt = existingItem?.takenAt
+            ?? amnesiaSettings.carouselTakenAt
+            ?? oppositeURL.flatMap { mediaItemsByURL[$0]?.takenAt }
         mediaItemsByURL[gridURL] = InstagramMediaItem(
             id: mediaId,
             mediaId: mediaId,
             imageURL: gridURL,
             videoURL: nil,
-            caption: nil,
-            takenAt: Date(),
-            likeCount: nil,
-            commentCount: nil,
+            caption: existingItem?.caption,
+            takenAt: takenAt,
+            likeCount: existingItem?.likeCount,
+            commentCount: existingItem?.commentCount,
             mediaType: .carousel,
             carouselImageURLs: childURLs,
-            ownerUsername: profile?.username
+            ownerUsername: existingItem?.ownerUsername ?? profile?.username
         )
 
-        if !allMediaURLs.contains(gridURL) {
-            allMediaURLs.insert(gridURL, at: min(insertIndex, allMediaURLs.count))
+        if let idx = allMediaURLs.firstIndex(of: gridURL) {
+            if idx != insertIndex {
+                allMediaURLs.remove(at: idx)
+                allMediaURLs.insert(gridURL, at: min(insertIndex, allMediaURLs.count))
+            }
+            amnesiaSettings.rememberGridPinIndex(min(insertIndex, max(allMediaURLs.count - 1, 0)))
+        } else {
+            let clamped = min(insertIndex, allMediaURLs.count)
+            allMediaURLs.insert(gridURL, at: clamped)
+            amnesiaSettings.rememberGridPinIndex(clamped)
         }
 
-        print("🎭 [AMNESIA] Painted local \(revealed ? "full" : "short") carousel (\(imageCount) image(s))")
+        print("🎭 [AMNESIA] Painted local \(revealed ? "full" : "short") carousel (\(imageCount) image(s)) @\(amnesiaSettings.gridPinIndex ?? -1)")
     }
 
     /// Paints Instapick into the grid (test `instapick://` or live parent mediaId).
@@ -5775,6 +5828,33 @@ struct PerformanceView: View {
         }
 
         return maxDate == .distantPast ? 0 : maxDateIndex
+    }
+
+    /// Places the Amnesia carousel where Instagram would (newest-first, after pinned prefix).
+    @MainActor
+    private func amnesiaChronologicalInsertIndex(for carouselDate: Date) -> Int {
+        var maxDate: Date = .distantPast
+        var maxDateIndex = 0
+        for (i, url) in allMediaURLs.enumerated() {
+            guard !url.hasPrefix("amnesia://carousel/"),
+                  !url.hasPrefix("instapick://") else { continue }
+            let d: Date? = url.hasPrefix("reveal://") ? revealDates[url] : mediaItemsByURL[url]?.takenAt
+            guard let d else { continue }
+            if d > maxDate {
+                maxDate = d
+                maxDateIndex = i
+            }
+        }
+        let pinnedEnd = maxDate == .distantPast ? 0 : maxDateIndex
+        for i in pinnedEnd..<allMediaURLs.count {
+            let url = allMediaURLs[i]
+            guard !url.hasPrefix("amnesia://carousel/"),
+                  !url.hasPrefix("instapick://") else { continue }
+            let itemDate: Date? = url.hasPrefix("reveal://") ? revealDates[url] : mediaItemsByURL[url]?.takenAt
+            guard let d = itemDate else { continue }
+            if d <= carouselDate { return i }
+        }
+        return allMediaURLs.count
     }
 
     private func revealMediaId(from url: String) -> String? {
@@ -6028,7 +6108,8 @@ struct PerformanceView: View {
             ProfileCacheService.shared.clearRevealState(userId: userId)
         }
         // Use authoritative replacement so archived posts are not re-introduced via tail merge.
-        ProfileCacheService.shared.replaceMediaURLsAndItems(snapshotURLs, items: snapshotItems)
+        ProfileCacheService.shared.replaceMediaURLsAndItems(snapshotURLs, items: snapshotItems,
+                                                            nextMaxId: .some(nextCursor))
         print("✅ [GRID AUTH] \(source): applied \(snapshotURLs.count) Instagram item(s), cleared \(removedRevealCount) reveal overlay(s)")
     }
 
@@ -9098,9 +9179,19 @@ struct PerformanceView: View {
                         print("🔄 [PERF] Silent authoritative refresh has \(missingRevealIds.count) unconfirmed reveal(s) — falling through to merge path")
                     }
                 } else {
+                    // `items` is only Instagram's first page: keep the older cached tail
+                    // below it, otherwise one refresh collapses the whole replica to 21.
+                    let windowed = ProfileMediaReconciler.applyExactFetchedPrefix(
+                        currentURLs: allMediaURLs.filter { !ProfileMediaReconciler.isOverlayURL($0) },
+                        currentItemsByURL: mediaItemsByURL,
+                        freshItems: items,
+                        endCursor: refreshedMaxId
+                    )
+                    let windowItems = windowed.urls.compactMap { windowed.itemsByURL[$0] }
+                    let keptOlderTail = windowItems.count > items.count
                     applyAuthoritativeMediaSnapshot(
-                        items: items,
-                        nextCursor: refreshedMaxId,
+                        items: windowItems,
+                        nextCursor: keptOlderTail ? nextMaxId : refreshedMaxId,
                         source: reason,
                         clearRevealState: true
                     )
@@ -9224,6 +9315,14 @@ struct PerformanceView: View {
 
     private static let lastUploadedAssetKey = "autoPic_lastUploadedAssetId"
     private static let lastUploadedHashKey  = "autoPic_lastUploadedHash"
+    private static let lastRejectedAssetKey = "autoPic_lastRejectedAssetId"
+    /// Bump when the change_profile_picture request changes so a previously rejected
+    /// photo gets exactly one retry with the new request.
+    private static let profilePicRequestFormat = "v2"
+
+    private static func rejectionMarker(for assetId: String) -> String {
+        "\(assetId)|\(profilePicRequestFormat)"
+    }
 
     /// Silently uploads the most recent gallery photo as profile picture.
     /// Safe to call on every onAppear — does nothing if same photo as last upload.
@@ -9259,6 +9358,12 @@ struct PerformanceView: View {
         // Same asset AND instagram already has this hash → absolutely nothing to do
         if assetId == lastId, let lh = lastHash, lh == instagramHash {
             print("📷 [AUTO PIC] Same photo already on Instagram — skipping (0 API calls)")
+            return
+        }
+        // Instagram already rejected this exact photo: retrying it on every Performance
+        // entry repeats the rejected request and stretches the limit. A newer photo still uploads.
+        if Self.rejectionMarker(for: assetId) == UserDefaults.standard.string(forKey: Self.lastRejectedAssetKey) {
+            print("📷 [AUTO PIC] Skipped — Instagram rejected this photo before; not auto-retrying (take/choose a new one)")
             return
         }
 
@@ -9307,6 +9412,7 @@ struct PerformanceView: View {
         // vibration still wait for the real Instagram POST to return OK.
         let picURL = profile?.profilePicURL ?? "autoPic_pending"
         let previousImage = cachedImages[picURL]
+            ?? ProfileCacheService.shared.loadImage(forURL: picURL)
         let optimisticImage = UIImage(data: imageData)
         if let optimisticImage {
             cachedImages[picURL] = optimisticImage
@@ -9316,8 +9422,14 @@ struct PerformanceView: View {
         func revertOptimisticProfilePic() {
             if let previousImage {
                 cachedImages[picURL] = previousImage
+                // The optimistic paint was also written to disk; restore the real picture.
+                ProfileCacheService.shared.saveImage(previousImage, forURL: picURL)
+                ProfileCacheService.shared.saveOwnProfilePic(previousImage, cdnURL: picURL)
             } else {
                 cachedImages.removeValue(forKey: picURL)
+            }
+            if ProfileCacheService.shared.pendingProfilePic != nil {
+                profilePicRevertInProgress = true
             }
             ProfileCacheService.shared.pendingProfilePic = nil
         }
@@ -9395,6 +9507,9 @@ struct PerformanceView: View {
             }
         } catch {
             revertOptimisticProfilePic()
+            if case InstagramError.botDetected = error {
+                UserDefaults.standard.set(Self.rejectionMarker(for: assetId), forKey: Self.lastRejectedAssetKey)
+            }
             print("📷 [AUTO PIC] Upload skipped: \(error.localizedDescription)")
         }
 
@@ -10240,6 +10355,33 @@ struct InstagramProfileView: View {
         LogManager.shared.info("Local Bio + PP: Lockscreen waiting for Cover Typing bio", category: .general)
     }
 
+    /// While the real unarchive is held for Cover Typing, paint the lockscreen pick in
+    /// the fake grid right away. Returns the painted media IDs for a rollback.
+    private func prePaintHeldLockscreenReveal(_ photos: [SetPhoto]) -> [String] {
+        guard !PostPredictionTestMode.shared.isActive,
+              UserDefaults.standard.double(forKey: "local_combo_bio_pending_until") > Date().timeIntervalSince1970
+        else { return [] }
+        let rate = InstagramService.shared.checkRateLimit()
+        guard !rate.limited, rate.remaining >= photos.filter(\.isArchived).count else { return [] }
+        let items: [(pseudoURL: String, image: UIImage?)] = photos.compactMap { photo in
+            guard let mediaId = photo.mediaId else { return nil }
+            let image = photo.imageData.flatMap { UIImage(data: $0) }
+                ?? ProfileCacheService.shared.loadImage(forMediaId: mediaId)
+            return (pseudoURL: "reveal://\(mediaId)", image: image)
+        }
+        guard !items.isEmpty else { return [] }
+        onAddLocalImages?(items)
+        print("⚡️ [LOCAL COMBO] \(items.count) lockscreen photo(s) painted now — unarchive waits for Cover Typing")
+        LogManager.shared.info("Local Bio + PP: lockscreen pick painted before Cover Typing", category: .general)
+        return photos.compactMap(\.mediaId)
+    }
+
+    private func rollbackHeldLockscreenReveal(_ mediaIds: [String]) {
+        guard !mediaIds.isEmpty else { return }
+        onRemoveLocalImages?(mediaIds)
+        print("↩️ [LOCAL COMBO] Cover Typing did not confirm — removed \(mediaIds.count) pre-painted photo(s)")
+    }
+
     private func waitForLocalBioPostPredictionComboIfNeeded() async -> Bool {
         guard !PostPredictionTestMode.shared.isActive else { return true }
 
@@ -10768,12 +10910,10 @@ struct InstagramProfileView: View {
                     guard followingMagic.transferOffset > 0,
                           !followingMagic.isTransferCounting,
                           !showTransferGlitch else { return }
-                    GlitchSoundPlayer.shared.play(style: .electricBuzz)
-                    showTransferGlitch = true
+                    launchTransferGlitchOrInflation()
                 }
             } else {
-                GlitchSoundPlayer.shared.play(style: .electricBuzz)
-                showTransferGlitch = true
+                launchTransferGlitchOrInflation()
             }
         }
         .onChange(of: volumeMonitor.downCount) { _ in
@@ -11016,6 +11156,12 @@ struct InstagramProfileView: View {
         // The fake lockscreen captures digits; whether they mean a CARD or a NUMBER is
         // decided by the single active interface kind (only one can be active at a time).
         let activeKinds = IntegrationsSettings.shared.interfaceKindsInUse()
+        let counterLockscreenCapture = FollowingMagicSettings.shared.isEnabled
+            && FollowingMagicSettings.shared.fakeLockscreenInputEnabled
+            && !activeKinds.contains(.cardLockscreen)
+        if counterLockscreenCapture {
+            _ = FollowingMagicSettings.shared.capture(digits: digits, source: "lockscreen")
+        }
 
         // ── Card Lockscreen ─────────────────────────────────────────────────────
         // Digits encode a card (0 + value + suit). Feed the localized card name into any
@@ -11035,8 +11181,14 @@ struct InstagramProfileView: View {
                let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .card }) {
                 showOCRPeek(label: symbol)
                 beginAwaitingCoverTypingBioBeforePostPredictionIfNeeded()
+                let prePainted = prePaintHeldLockscreenReveal(
+                    activeSet.photos.filter { $0.symbol == symbol && $0.mediaId != nil }.prefix(1).map { $0 }
+                )
                 Task {
-                    guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                    guard await waitForLocalBioPostPredictionComboIfNeeded() else {
+                        await MainActor.run { rollbackHeldLockscreenReveal(prePainted) }
+                        return
+                    }
                     await revealByCardSlot(symbol: symbol, fromSet: activeSet)
                 }
             }
@@ -11065,8 +11217,14 @@ struct InstagramProfileView: View {
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .custom }) {
             showOCRPeek(label: "#\(slot)")
             beginAwaitingCoverTypingBioBeforePostPredictionIfNeeded()
+            let prePainted = prePaintHeldLockscreenReveal(
+                activeSet.photos.filter { $0.symbol == String(slot) && $0.mediaId != nil }.prefix(1).map { $0 }
+            )
             Task {
-                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else {
+                    await MainActor.run { rollbackHeldLockscreenReveal(prePainted) }
+                    return
+                }
                 await revealByCustomSlot(slot, fromSet: activeSet)
             }
             return
@@ -11078,15 +11236,60 @@ struct InstagramProfileView: View {
            let activeSet = DataManager.shared.sets.first(where: { $0.id == activeId && $0.type == .number }) {
             showOCRPeek(number: input)
             beginAwaitingCoverTypingBioBeforePostPredictionIfNeeded()
+            let sortedBanks = activeSet.banks.sorted { $0.position < $1.position }
+            let numberPhotos: [SetPhoto] = digits.reversed().enumerated().compactMap { i, digit in
+                guard i < sortedBanks.count else { return nil }
+                return activeSet.photos.first {
+                    $0.bankId == sortedBanks[i].id && $0.symbol == String(digit) && $0.mediaId != nil
+                }
+            }
+            let prePainted = prePaintHeldLockscreenReveal(numberPhotos)
             Task {
-                guard await waitForLocalBioPostPredictionComboIfNeeded() else { return }
+                guard await waitForLocalBioPostPredictionComboIfNeeded() else {
+                    await MainActor.run { rollbackHeldLockscreenReveal(prePainted) }
+                    return
+                }
                 await revealByDigits(digits, fromSet: activeSet)
             }
             return
         }
 
+        if counterLockscreenCapture {
+            applyCounterGlitchPendingOffsetPreview()
+            print("🎩 [LOCKSCREEN] Digits saved for Counter Glitch (offset: \(FollowingMagicSettings.shared.pendingOffset))")
+            LogManager.shared.info("Lockscreen routed to Counter Glitch offset:\(FollowingMagicSettings.shared.pendingOffset)", category: .profile)
+            return
+        }
+
         print("⚠️ [LOCKSCREEN] No active number/custom/card set for input \(input)")
         LogManager.shared.warning("Lockscreen input \(input) ignored: no active reveal set", category: .general)
+    }
+
+    private func launchTransferGlitchOrInflation() {
+        if followingMagic.glitchEnabled {
+            GlitchSoundPlayer.shared.play(style: .electricBuzz)
+            showTransferGlitch = true
+        } else {
+            startTransferInflation()
+        }
+    }
+
+    /// After fake-lockscreen digit entry, show the inflated counter on the own profile (Explore still uses pendingOffset).
+    private func applyCounterGlitchPendingOffsetPreview() {
+        guard followingMagic.isEnabled, followingMagic.pendingOffset > 0 else { return }
+        let useFollowers = followingMagic.targetFollowers
+        let realCount = useFollowers ? profile.followerCount : profile.followingCount
+        let offset = followingMagic.effectiveOffset(for: realCount)
+        let inflated = realCount + offset
+        let text = formatMagicCount(inflated, revealingSmallOffset: offset)
+        if useFollowers {
+            followerOverride = text
+            followingOverride = nil
+        } else {
+            followingOverride = text
+            followerOverride = nil
+        }
+        VolumeButtonMonitor.shared.startMonitoring()
     }
 
     // MARK: - OCR Peek

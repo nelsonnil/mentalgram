@@ -473,6 +473,8 @@
 "followers.tab.subscriptions" = "Abonnementen";
 "followers.tab.more" = "Meer";
 "followers.section.all" = "Alle volgers";
+"followers.section.following" = "Iedereen die je volgt";
+"followers.following_btn" = "Volgend";
 "followers.follow_back" = "Ook volgen";
 "followers.remove_btn" = "Verwijderen";
 "followers.search" = "Zoeken";
@@ -1356,7 +1358,7 @@
 "amnesia.anim.phase1_title" = "Goochelaar sluit de weergave";
 "amnesia.anim.phase1_sub" = "Goochelaar opent en sluit de carrousel in Vault";
 "amnesia.anim.phase2_title" = "Instagram onthult de waarheid";
-"amnesia.anim.phase2_sub" = "5e afbeelding verschijnt ✨  Was er altijd al";
+"amnesia.anim.phase2_sub" = "Verborgen afbeelding verschijnt als 3e slide ✨  Was er altijd al";
 "amnesia.anim.phase3_title" = "Toeschouwer verifieert";
 "amnesia.anim.phase3_sub" = "\"Hoeveel zie je?\" — Vijf. \"Er waren er altijd vijf.\"";
 "amnesia.anim.card_circle" = "Cirkel";

@@ -931,13 +931,13 @@ struct SetsListView: View {
                 // ── Fixed status console (does not scroll) ───────────────────
                 if instagram.isLoggedIn {
                     VStack(spacing: 0) {
-                        APIBudgetWidget()
-                            .padding(.horizontal, VaultTheme.Spacing.lg)
-                            .padding(.top, 10)
-                            .padding(.bottom, 6)
-                        InstagramSyncCard()
-                            .padding(.horizontal, VaultTheme.Spacing.lg)
-                            .padding(.bottom, 10)
+                        HStack(alignment: .top, spacing: 8) {
+                            APIBudgetWidget()
+                            InstagramSyncCard()
+                        }
+                        .padding(.horizontal, VaultTheme.Spacing.lg)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
                         CooldownWarningBanner()
                         ProfileDriftWarningBanner()
                         ProfileCacheIncompleteBanner(onContinue: onContinuePreload)
@@ -958,59 +958,15 @@ struct SetsListView: View {
                 // ── Scrollable content ───────────────────────────────────────
                 ScrollView {
                     LazyVStack(spacing: VaultTheme.Spacing.md) {
-                        // Header — "My Sets" with inline "+" button
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 10) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(LinearGradient(
-                                            colors: [Color(hex: "7C3AED"), Color(hex: "FF9500")],
-                                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                                        .frame(width: 38, height: 38)
-                                    Image(systemName: "wand.and.stars")
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .foregroundColor(.white)
-                                }
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("My Sets")
-                                        .font(.system(size: 22, weight: .bold))
-                                        .foregroundColor(VaultTheme.Colors.textPrimary)
-                                    Text("Post Prediction · Old Date")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                                }
-                                Spacer()
-                                // "+" button moved here from the navigation bar toolbar
-                                Button(action: { showingCreateSet = true }) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(VaultTheme.Colors.gradientPrimary)
-                                            .frame(width: 36, height: 36)
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 18, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                            }
-                            Text("Each set groups photo banks used to unarchive posts during your performance.")
-                                .font(.system(size: 12))
-                                .foregroundColor(VaultTheme.Colors.textTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.horizontal, VaultTheme.Spacing.lg)
-                        .padding(.top, VaultTheme.Spacing.md)
-                        .padding(.bottom, VaultTheme.Spacing.sm)
-
-                        postPredictionToggleCard
+                        setsControlCard
                             .padding(.horizontal, VaultTheme.Spacing.lg)
+                            .padding(.top, VaultTheme.Spacing.md)
 
                         if dataManager.sets.isEmpty {
                             EmptyStateView(
                                 icon: "square.stack.3d.up.slash.fill",
                                 title: "No Sets Yet",
-                                message: "Create your first photo set to get started with magic performances",
-                                actionTitle: "Create Set",
-                                action: { showingCreateSet = true }
+                                message: "Turn on Post Prediction, then add a set for the photos you reveal in a show."
                             )
                             .padding(.top, 40)
                         } else {
@@ -1106,55 +1062,71 @@ struct SetsListView: View {
         return dataManager.sets.first(where: { $0.id == activeId })?.name
     }
 
-    private var postPredictionToggleCard: some View {
+    private var setsControlCard: some View {
         let isEnabled = activeSetSettings.isPostPredictionEnabled
-        return VaultCard(glowColor: isEnabled ? Color(hex: "7C3AED").opacity(0.25) : Color.orange.opacity(0.20)) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 9)
-                            .fill((isEnabled ? Color(hex: "7C3AED") : Color.orange).opacity(0.16))
-                            .frame(width: 34, height: 34)
-                        Image(systemName: isEnabled ? "wand.and.stars" : "power")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(isEnabled ? Color(hex: "A78BFA") : .orange)
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Post Prediction")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
-                        Text(isEnabled ? "Enabled for Performance" : "Disabled in Performance")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(isEnabled ? Color.green.opacity(0.9) : Color.orange.opacity(0.95))
-                    }
-
-                    Spacer()
-
-                    Toggle("", isOn: Binding(
-                        get: { activeSetSettings.isPostPredictionEnabled },
-                        set: { activeSetSettings.setPostPredictionEnabled($0, availableSets: dataManager.sets) }
-                    ))
-                    .labelsHidden()
-                    .tint(Color(hex: "7C3AED"))
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("My Sets")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text(setsControlSubtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(isEnabled ? Color(hex: "C4B5FD") : VaultTheme.Colors.textTertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer(minLength: 8)
+                Toggle("", isOn: Binding(
+                    get: { activeSetSettings.isPostPredictionEnabled },
+                    set: { activeSetSettings.setPostPredictionEnabled($0, availableSets: dataManager.sets) }
+                ))
+                .labelsHidden()
+                .tint(Color(hex: "7C3AED"))
+            }
 
-                Text(postPredictionToggleDescription)
-                    .font(.system(size: 12, weight: isEnabled ? .medium : .semibold))
-                    .foregroundColor(isEnabled ? VaultTheme.Colors.textSecondary : .orange)
-                    .fixedSize(horizontal: false, vertical: true)
+            if isEnabled {
+                Button { showingCreateSet = true } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("Add set")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(hex: "7C3AED"), Color(hex: "6D28D9")],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .padding(14)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(isEnabled ? Color(hex: "7C3AED").opacity(0.45) : Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .animation(.easeInOut(duration: 0.2), value: isEnabled)
     }
 
-    private var postPredictionToggleDescription: String {
+    private var setsControlSubtitle: String {
         if !activeSetSettings.isPostPredictionEnabled {
-            return "Post Prediction is off. No set will unarchive or reveal photos when you enter Performance."
+            return "Post Prediction is off"
         }
         if let activeSetName {
-            return "Active set: \(activeSetName). Turn this off when you want Performance without Post Prediction."
+            return "Post Prediction · \(activeSetName)"
         }
-        return "Post Prediction is on, but no set is active. Select a set below to enable reveals."
+        return "Post Prediction on · choose an active set"
     }
 
     private func deleteSets(at offsets: IndexSet) {
@@ -1174,6 +1146,28 @@ struct SetRowView: View {
     var onDelete: (() -> Void)? = nil
     var onOpenDetail: (() -> Void)? = nil
     @ObservedObject private var activeSetSettings = ActiveSetSettings.shared
+    @ObservedObject private var dataManager = DataManager.shared
+    @State private var showInputConfig = false
+
+    private var liveSet: PhotoSet {
+        dataManager.sets.first { $0.id == set.id } ?? set
+    }
+
+    private var selectedMethod: InputMethod {
+        liveSet.resolvedInputMethod
+    }
+
+    private var configureActionTitle: String {
+        "Configure"
+    }
+
+    private var configureActionSubtitle: String {
+        selectedMethod.chipTitle
+    }
+
+    private var inputAccent: Color {
+        selectedMethod.chipColor
+    }
     
     // Per-type accent colors
     private var typeAccent: Color {
@@ -1206,307 +1200,240 @@ struct SetRowView: View {
         }
     }
 
-    private var statusBadgeStyle: StatusBadge.BadgeStyle {
-        switch set.status {
-        case .ready:     return .info
-        case .uploading: return .warning
-        case .paused:    return .pending
-        case .completed: return .success
-        case .error:     return .error
-        }
-    }
-
     var body: some View {
         let isActive = activeSetSettings.isActive(set.id, type: set.type)
 
-        ZStack(alignment: .leading) {
-            // Active left accent bar
-            if isActive {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(typeAccent)
-                    .frame(width: 4)
-                    .frame(maxHeight: .infinity)
-                    .padding(.vertical, 10)
-            }
-
         VaultCard {
-                VStack(spacing: 0) {
-            HStack(spacing: VaultTheme.Spacing.md) {
-                        // Type icon
-                        IconBadge(icon: typeIcon, colors: typeGradient, size: 52)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 12) {
+                    Button { onOpenDetail?() } label: {
+                        HStack(alignment: .center, spacing: 12) {
+                            IconBadge(icon: typeIcon, colors: typeGradient, size: 44)
 
-                        VStack(alignment: .leading, spacing: 5) {
-                            // Name row
-                            HStack(alignment: .center, spacing: 6) {
-                        Text(set.name)
-                            .font(VaultTheme.Typography.title())
-                            .foregroundColor(VaultTheme.Colors.textPrimary)
-                            .lineLimit(1)
-                        
-                                if isActive {
-                                    Text("ACTIVE")
-                                        .font(.system(size: 9, weight: .black))
-                                        .foregroundColor(typeAccent)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(typeAccent.opacity(0.15))
-                                        .cornerRadius(4)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(set.name)
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundColor(VaultTheme.Colors.textPrimary)
+                                    .lineLimit(1)
+                                HStack(spacing: 6) {
+                                    Text(set.type.title)
+                                    Text("·")
+                                    Text("\(set.totalPhotos) photos")
                                 }
-                        
-                        Spacer()
-                        
-                        if isLoggedIn {
-                                    StatusBadge(text: set.status.label, style: statusBadgeStyle)
-                                }
-
-                                // ··· menu
-                                Menu {
-                                    Button { onRename?() } label: {
-                                        Label("Rename", systemImage: "pencil")
-                                    }
-                                    Button(role: .destructive) { onDelete?() } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                                        .frame(width: 30, height: 30)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            // Stats row
-                            HStack(spacing: 8) {
-                                Label(set.type.title, systemImage: "tag.fill")
-                                Text("·").foregroundColor(VaultTheme.Colors.textTertiary)
-                                Label("\(set.banks.isEmpty ? 1 : set.banks.count) banks",
-                                      systemImage: "square.stack.3d.up.fill")
-                                Text("·").foregroundColor(VaultTheme.Colors.textTertiary)
-                                Label("\(set.totalPhotos) photos",
-                                      systemImage: "photo.stack.fill")
-                        }
-                        .font(VaultTheme.Typography.captionSmall())
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                        
-                            // Completed date
-                            if isLoggedIn && set.status == .completed,
-                               let completedDate = set.completedAt {
-                                Label(completedDate.formatted(date: .abbreviated, time: .omitted),
-                                      systemImage: "calendar")
-                            .font(VaultTheme.Typography.captionSmall())
-                            .foregroundColor(VaultTheme.Colors.textTertiary)
-                                    .padding(.top, 1)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(VaultTheme.Colors.textTertiary)
+                                .lineLimit(1)
                             }
                         }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        onOpenDetail?()
-                    }
-
-                    // Upload progress bar
-                    if isLoggedIn && (set.status == .uploading || set.status == .paused) {
-                        VStack(spacing: 4) {
-                            ProgressBar(
-                                progress: set.totalPhotos > 0
-                                    ? Double(set.uploadedPhotos) / Double(set.totalPhotos) : 0,
-                                height: 5,
-                                gradient: set.status == .paused 
-                                    ? LinearGradient(colors: [VaultTheme.Colors.textSecondary],
-                                                     startPoint: .leading, endPoint: .trailing)
-                                    : VaultTheme.Colors.gradientWarning
-                            )
-                            HStack {
-                                Text("\(set.uploadedPhotos) / \(set.totalPhotos)")
-                                Spacer()
-                                let pct = set.totalPhotos > 0
-                                    ? Int((Double(set.uploadedPhotos) / Double(set.totalPhotos)) * 100) : 0
-                                Text("\(pct)%").fontWeight(.bold)
-                                    .foregroundColor(set.status == .paused
-                                        ? VaultTheme.Colors.textSecondary : VaultTheme.Colors.warning)
-                            }
-                                    .font(VaultTheme.Typography.captionSmall())
-                                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                        }
-                        .padding(.top, 10)
-                    }
-
-                    // Active toggle strip — always visible at the bottom of the card
-                    Divider()
-                        .background(Color.white.opacity(0.06))
-                        .padding(.top, 10)
-
-                    Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            if isActive {
-                                activeSetSettings.setActive(nil, for: set.type)
-                            } else {
-                                activeSetSettings.setActive(set.id, for: set.type)
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(isActive ? typeAccent : VaultTheme.Colors.textTertiary)
-                            Text(isActive ? "Active set" : "Set as active")
-                                .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                                .foregroundColor(isActive ? typeAccent : VaultTheme.Colors.textSecondary)
-                            Spacer()
-                            if isActive {
-                                Image(systemName: "bolt.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(typeAccent.opacity(0.7))
-                            }
-                        }
-                        .padding(.vertical, 8)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 
-                    // ── Per-set input method picker ───────────────
-                    Divider()
-                        .background(Color.white.opacity(0.06))
-                        .padding(.top, 4)
+                    Spacer(minLength: 8)
+
+                    Menu {
+                        Button { onRename?() } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) { onDelete?() } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(VaultTheme.Colors.textTertiary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if isLoggedIn {
+                    uploadMediaRow
+                }
+
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        if isActive {
+                            activeSetSettings.setActive(nil, for: set.type)
+                        } else {
+                            activeSetSettings.setActive(set.id, for: set.type)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(isActive ? "Active" : "Set as active")
+                            .font(.system(size: 13, weight: .semibold))
+                        Spacer(minLength: 4)
+                        if isActive {
+                            Text("IN USE")
+                                .font(.system(size: 10, weight: .bold))
+                                .tracking(0.4)
+                        }
+                    }
+                    .foregroundColor(isActive ? .white : VaultTheme.Colors.textSecondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(isActive ? typeAccent : Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(isActive ? Color.white.opacity(0.16) : Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isActive ? "Active set" : "Set as active")
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Performance input")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        .textCase(.uppercase)
 
                     SetInputPicker(set: set)
                         .id(set.id)
 
-                    // ── URL Scheme (only for types that support it) ─
-                    if set.type.revealURLTemplate != nil {
-                        Divider()
-                            .background(Color.white.opacity(0.06))
-                            .padding(.top, 4)
-                        HStack(spacing: 6) {
-                            Image(systemName: "link")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(VaultTheme.Colors.textTertiary)
-                            Text("URL Scheme")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(VaultTheme.Colors.textSecondary)
-                                .textCase(.uppercase)
-                        }
-                        SetURLSchemeRow(set: set)
+                    cardAction(
+                        icon: selectedMethod.icon,
+                        title: configureActionTitle,
+                        subtitle: configureActionSubtitle,
+                        accent: inputAccent,
+                        emphasized: true
+                    ) {
+                        showInputConfig = true
                     }
+                    .accessibilityLabel("Configure \(selectedMethod.title)")
+                }
 
-                    // ── Edit set detail ─
-                    Divider()
-                        .background(Color.white.opacity(0.06))
-                        .padding(.top, 4)
-
-                    Button {
-                        onOpenDetail?()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "icloud.and.arrow.up.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Upload to Instagram")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundColor(.white)
-                                Text(set.type == .list ? "Add media to list items, then upload/archive the set." : "Add media to slots, then upload/archive the set.")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.72))
-                                    .lineLimit(1)
-                            }
+                if isLoggedIn && (set.status == .uploading || set.status == .paused) {
+                    VStack(spacing: 4) {
+                        ProgressBar(
+                            progress: set.totalPhotos > 0
+                                ? Double(set.uploadedPhotos) / Double(set.totalPhotos) : 0,
+                            height: 4,
+                            gradient: set.status == .paused
+                                ? LinearGradient(colors: [VaultTheme.Colors.textSecondary],
+                                                 startPoint: .leading, endPoint: .trailing)
+                                : VaultTheme.Colors.gradientWarning
+                        )
+                        HStack {
+                            Text("\(set.uploadedPhotos) / \(set.totalPhotos)")
                             Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.white.opacity(0.9))
+                            let pct = set.totalPhotos > 0
+                                ? Int((Double(set.uploadedPhotos) / Double(set.totalPhotos)) * 100) : 0
+                            Text("\(pct)%")
+                                .fontWeight(.bold)
+                                .foregroundColor(set.status == .paused
+                                    ? VaultTheme.Colors.textSecondary : VaultTheme.Colors.warning)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 13)
-                        .background(
-                            LinearGradient(
-                                colors: [typeAccent.opacity(0.78), typeAccent.opacity(0.52)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 11)
-                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                        )
-                        .cornerRadius(11)
-                        .shadow(color: typeAccent.opacity(0.22), radius: 8, x: 0, y: 4)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(VaultTheme.Colors.textSecondary)
                     }
-                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onOpenDetail?() }
                 }
             }
-            .padding(.leading, isActive ? 8 : 0)
         }
-        .glowEffect(color: isActive ? typeAccent.opacity(0.35) : .clear, radius: 6)
-        .glowEffect(color: isLoggedIn && set.status == .uploading ? VaultTheme.Colors.warning : .clear, radius: 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: VaultTheme.CornerRadius.lg)
+                .stroke(isActive ? typeAccent.opacity(0.9) : Color.clear, lineWidth: 1.5)
+        )
         .animation(.easeInOut(duration: 0.2), value: isActive)
-    }
-}
-
-// MARK: - Set URL Scheme Row
-
-/// Displays the vault:// reveal URL for a specific set with a one-tap copy button.
-struct SetURLSchemeRow: View {
-    let set: PhotoSet
-    @State private var copied = false
-
-    private var urlScheme: String {
-        guard let mode = set.type.revealURLTemplate else { return "" }
-        let setParam = "&set=\(set.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? set.name)"
-        switch set.type {
-        case .word:           return "vault://reveal?\(mode)=<word>\(setParam)"
-        case .number:         return "vault://reveal?\(mode)=1\(setParam)"
-        case .custom, .list:  return "vault://reveal?\(mode)=<1-100>\(setParam)"
-        case .card:           return "vault://reveal?\(mode)=3D\(setParam)"
+        .sheet(isPresented: $showInputConfig) {
+            SetInputConfigSheet(method: selectedMethod, set: liveSet, accent: inputAccent)
         }
+        .animation(.easeInOut(duration: 0.2), value: selectedMethod)
     }
 
-    private var helperText: String {
-        switch set.type {
-        case .word:
-            return "Replace <word> with the word to reveal. The set parameter ensures this specific set is used. Example: vault://reveal?word=MAGIC&set=\(set.name)"
-        case .number:
-            return "Put the number after word=. The set parameter ensures this specific set is used. Example: vault://reveal?word=7&set=\(set.name)"
-        case .custom, .list:
-            return "Put the slot number after slot=. The set parameter ensures this specific set is used. Example: vault://reveal?slot=15&set=\(set.name)"
-        case .card:
-            return "Use value + suit after card=. The set parameter ensures this specific set is used. Example: vault://reveal?card=3D&set=\(set.name)"
-        }
-    }
+    /// Media prep — separate from performance input / Configure.
+    private var uploadMediaRow: some View {
+        Button { onOpenDetail?() } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "photo.stack.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(typeAccent)
+                    .frame(width: 36, height: 36)
+                    .background(typeAccent.opacity(0.14))
+                    .cornerRadius(10)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: VaultTheme.Spacing.sm) {
-                Image(systemName: "link")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(VaultTheme.Colors.textTertiary)
-                Text(urlScheme)
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundColor(VaultTheme.Colors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 4)
-                Button {
-                    UIPasteboard.general.string = urlScheme
-                    withAnimation(.easeInOut(duration: 0.15)) { copied = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        withAnimation { copied = false }
-                    }
-                } label: {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(copied ? .green : VaultTheme.Colors.textSecondary)
-                        .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Upload to Instagram")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("Slots, photos & archive")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
                 }
-                .buttonStyle(.plain)
-            }
 
-            Text(helperText)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(VaultTheme.Colors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.04))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(typeAccent.opacity(0.22), lineWidth: 1)
+            )
+            .cornerRadius(12)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Upload to Instagram")
+    }
+
+    private func cardAction(
+        icon: String,
+        title: String,
+        subtitle: String? = nil,
+        accent: Color,
+        emphasized: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 10, weight: .semibold))
+                        .opacity(0.88)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .foregroundColor(emphasized ? .white : VaultTheme.Colors.textSecondary)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: subtitle == nil ? 72 : 80)
+            .padding(.vertical, 12)
+            .background(
+                Group {
+                    if emphasized {
+                        LinearGradient(
+                            colors: [accent, accent.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    } else {
+                        Color.white.opacity(0.05)
+                    }
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(emphasized ? Color.white.opacity(0.18) : Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .cornerRadius(14)
+            .shadow(color: emphasized ? accent.opacity(0.28) : .clear, radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -1542,10 +1469,8 @@ struct ActivityLogView: View {
 
 // MARK: - Instagram Sync Card
 
-/// Compact card placed right below the API Budget widget.
-/// Shows the last time the profile was synced from Instagram and provides a
-/// one-tap Refresh button for when the user has made changes on real Instagram
-/// (new post, bio edit, new highlight, etc.).
+/// Compact tile beside the API budget indicator.
+/// Shows the last profile sync and opens a refresh from Instagram.
 // MARK: - Refresh Depth Picker
 
 private struct RefreshDepthPickerSheet: View {
@@ -1722,84 +1647,94 @@ struct InstagramSyncCard: View {
         }
         let date = Date(timeIntervalSince1970: lastRefreshTimestamp)
         let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
+        formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Button {
-                guard !isRefreshing else { return }
-                showDepthPicker = true
-            } label: {
-                HStack(spacing: 6) {
-                    if showSyncComplete {
-                        if !syncFailed && readyCountdown > 0 {
-                            Image(systemName: "hourglass")
-                                .font(.system(size: 12, weight: .semibold))
-                        } else {
-                            Image(systemName: syncFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                    } else if isRefreshing {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.75)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    Text(syncButtonText)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 10)
-                .background(
-                    isRefreshing
-                    ? Color.white.opacity(0.08)
-                    : (showSyncComplete
-                       ? (syncFailed ? VaultTheme.Colors.error.opacity(0.18) : VaultTheme.Colors.success.opacity(0.18))
-                       : VaultTheme.Colors.primary.opacity(0.18))
-                )
-                .foregroundColor(isRefreshing
-                                 ? VaultTheme.Colors.textTertiary
-                                 : (showSyncComplete
-                                    ? (syncFailed ? VaultTheme.Colors.error : VaultTheme.Colors.success)
-                                    : VaultTheme.Colors.primary))
-                .cornerRadius(8)
-                .animation(.easeInOut(duration: 0.2), value: isRefreshing)
-                .animation(.easeInOut(duration: 0.2), value: showSyncComplete)
-            }
-            .disabled(isRefreshing || !instagram.isLoggedIn)
+    private var syncAccent: Color {
+        if isRefreshing { return VaultTheme.Colors.textSecondary }
+        if showSyncComplete {
+            return syncFailed ? VaultTheme.Colors.error : VaultTheme.Colors.success
+        }
+        return VaultTheme.Colors.primary
+    }
 
-            VStack(alignment: .trailing, spacing: 4) {
-                HStack(spacing: 4) {
+    private var compactSyncTitle: String {
+        if showSyncComplete || isRefreshing { return syncButtonText }
+        return String(localized: "sync.refresh_short", defaultValue: "Refresh")
+    }
+
+    @ViewBuilder
+    private var syncStatusIcon: some View {
+        if showSyncComplete {
+            if !syncFailed && readyCountdown > 0 {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 14, weight: .semibold))
+            } else {
+                Image(systemName: syncFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+        } else if isRefreshing {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: syncAccent))
+                .scaleEffect(0.7)
+                .frame(width: 16, height: 16)
+        } else {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 14, weight: .semibold))
+        }
+    }
+
+    var body: some View {
+        Button {
+            guard !isRefreshing else { return }
+            showDepthPicker = true
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 5) {
                     Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(VaultTheme.Colors.primary)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(syncAccent)
                     Text(String(localized: "sync.title"))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(VaultTheme.Colors.textSecondary)
-                }
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 10))
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
-                    Text(lastSyncText)
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundColor(VaultTheme.Colors.textTertiary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Spacer(minLength: 0)
                 }
+
+                HStack(alignment: .center, spacing: 6) {
+                    syncStatusIcon
+                    Text(compactSyncTitle)
+                        .font(.system(size: 16, weight: .bold))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+                        .multilineTextAlignment(.leading)
+                }
+                .foregroundColor(syncAccent)
+                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+
+                Color.clear.frame(height: 4)
+
+                Text(lastSyncText)
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(syncAccent.opacity(0.28), lineWidth: 1)
+            )
+            .animation(.easeInOut(duration: 0.2), value: isRefreshing)
+            .animation(.easeInOut(duration: 0.2), value: showSyncComplete)
         }
-        .padding(12)
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(VaultTheme.Colors.primary.opacity(0.18), lineWidth: 1))
+        .buttonStyle(.plain)
+        .disabled(isRefreshing || !instagram.isLoggedIn)
         // Live PerformanceView listener acknowledged — it will deliver the result.
         // Cancel the headless fallback.
         .onReceive(NotificationCenter.default.publisher(for: .performanceManualRefreshAck)) { _ in
@@ -1845,6 +1780,7 @@ struct InstagramSyncCard: View {
         let gen = refreshGeneration
         isRefreshing = true
         awaitingListenerAck = true
+        ProfileCacheService.shared.discardOwnProfilePicCache()
         NotificationCenter.default.post(
             name: .performanceManualRefresh,
             object: nil,
@@ -1943,9 +1879,8 @@ struct InstagramSyncCard: View {
 
 // MARK: - API Budget Widget
 
-/// Compact card showing actions used this hour, a colour-coded progress bar,
-/// and the exact time the budget will be fully renewed.
-/// Designed for the Settings tab — updates on every `.onAppear`.
+/// Compact tile showing actions still available this hour, a colour-coded bar,
+/// and when the budget renews. Updates on appear and whenever usage changes.
 struct APIBudgetWidget: View {
     @ObservedObject private var instagram = InstagramService.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -1967,60 +1902,66 @@ struct APIBudgetWidget: View {
     private var fraction: Double { min(1, Double(used) / Double(max)) }
 
     private var statusLabel: String {
-        if remaining == 0 {
-            return String(localized: "budget.status.full_used")
-        }
         if let t = renewalTime {
             let formatter = DateFormatter()
             formatter.timeStyle = .short
             formatter.dateStyle = .none
-            return String(format: String(localized: "budget.renewal_at"), formatter.string(from: t))
+            return String(format: String(localized: "budget.renews_short", defaultValue: "Renews %@"), formatter.string(from: t))
+        }
+        if remaining == 0 {
+            return String(localized: "budget.status.full_used")
         }
         return String(localized: "budget.status.full")
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "bolt.circle.fill")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "bolt.fill")
                     .foregroundColor(barColor)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 11, weight: .bold))
                 Text(String(localized: "budget.title"))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textSecondary)
-                Spacer()
-                Text(String(format: String(localized: "budget.used_of"), used, max))
-                    .font(.system(size: 13, weight: .bold).monospacedDigit())
-                    .foregroundColor(barColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
             }
 
-            // Progress bar
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(remaining)")
+                    .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundColor(barColor)
+                Text(String(localized: "budget.left", defaultValue: "left"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(VaultTheme.Colors.textTertiary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(Color.white.opacity(0.08))
-                        .frame(height: 6)
-                    RoundedRectangle(cornerRadius: 4)
+                        .frame(height: 4)
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(barColor)
-                        .frame(width: geo.size.width * fraction, height: 6)
+                        .frame(width: geo.size.width * fraction, height: 4)
                         .animation(.easeInOut(duration: 0.4), value: fraction)
                 }
             }
-            .frame(height: 6)
+            .frame(height: 4)
 
-            HStack {
-                Image(systemName: renewalTime == nil ? "checkmark.circle.fill" : "clock")
-                    .font(.caption2)
-                    .foregroundColor(renewalTime == nil ? .green : VaultTheme.Colors.textSecondary)
-                Text(statusLabel)
-                    .font(.caption)
-                    .foregroundColor(renewalTime == nil ? Color.green.opacity(0.9) : VaultTheme.Colors.textSecondary)
-            }
+            Text(statusLabel)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(renewalTime == nil ? Color.green.opacity(0.9) : VaultTheme.Colors.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .padding(14)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
         .background(Color.white.opacity(0.04))
         .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(barColor.opacity(0.25), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(barColor.opacity(0.28), lineWidth: 1))
         .onAppear { refresh() }
         // Refresh whenever a new action is tracked
         .onChange(of: instagram.actionsThisHour) { _ in refresh() }
@@ -3309,9 +3250,7 @@ struct SettingsView: View {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
         return "\(version) (\(build))"
     }
-    // PROVISIONAL RELEASE: hide license UI while the activation system is paused.
-    // Flip this back to true when license activation is ready to ship.
-    private let licenseFeatureEnabled = false
+    private let licenseFeatureEnabled = true
 
     // OCR configuration (shared between note and bio)
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
@@ -3641,13 +3580,6 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     modernDivider()
-                    NavigationLink(destination: CrashLogsView()) {
-                        modernRow(icon: "ladybug.fill", iconColor: .red,
-                                  title: "Crash Logs",
-                                  trailing: crashBadge)
-                    }
-                    .buttonStyle(.plain)
-                    modernDivider()
                     Button(action: { showingLogoutAlert = true }) {
                         modernRow(icon: "rectangle.portrait.and.arrow.right", iconColor: VaultTheme.Colors.error,
                                   title: "Logout",
@@ -3658,22 +3590,6 @@ struct SettingsView: View {
             }
         }
         Spacer().frame(height: 28)
-    }
-
-    /// Badge shown next to "Crash Logs" row: red pill with count when crashes exist, empty otherwise.
-    @ViewBuilder private var crashBadge: some View {
-        let count = CrashLoggerService.shared.storedReports.count
-        if count > 0 {
-            Text("\(count)")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(Color.red)
-                .clipShape(Capsule())
-        } else {
-            EmptyView()
-        }
     }
 
     private func loadSettingsProfilePic() async {
@@ -3757,7 +3673,6 @@ struct SettingsView: View {
             DateForceSettingsCard()
             AmnesiaCarouselSettingsCard()
             InstapickSettingsCard()
-            // PROVISIONAL: Transposition (PRO) hidden until ready to ship.
             if IntegrationsSettings.transpositionFeatureEnabled {
                 AIScreenDetectionSettingsCard()
             }
@@ -4254,6 +4169,8 @@ struct SettingsView: View {
                     }
                 }
 
+                bioCoverTypingInputRow
+
                 // ── Per-placeholder input pickers ─────────────────────────────
                 // In acrostic mode always show {text1} picker so the source
                 // (API / OCR) can be configured.
@@ -4263,8 +4180,6 @@ struct SettingsView: View {
                     accentColor: Self.colorProfile,
                     bioTemplateSlot: bioActiveSlot
                 )
-
-                bioCoverTypingInputRow
 
                 // ── Acrostic mode toggle ───────────────────────────────────────
                 acrosticToggleRow
@@ -4289,16 +4204,6 @@ struct SettingsView: View {
 
 
     // MARK: - Bio Cover Typing Input
-
-    /// True when both Bio CT and PP CT are active but their mask configs differ.
-    private var bioCoverTypingMaskConflict: Bool {
-        guard bioTopInputMode == "coverTyping", secretSettings.isEnabled else { return false }
-        if secretSettings.bioCoverTypingMode != secretSettings.mode { return true }
-        if secretSettings.bioCoverTypingMode == .customUsername,
-           secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-           != secretSettings.customUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() { return true }
-        return false
-    }
 
     private var bioCoverTypingInputRow: some View {
         let isOn = bioTopInputMode == "coverTyping"
@@ -4334,7 +4239,12 @@ struct SettingsView: View {
                     get: { isOn },
                     set: { enabled in
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            bioTopInputMode = enabled ? "coverTyping" : "off"
+                            if enabled {
+                                integrations.clearBioInterfaceSources()
+                                bioTopInputMode = "coverTyping"
+                            } else {
+                                bioTopInputMode = "off"
+                            }
                         }
                     }
                 ))
@@ -4345,8 +4255,7 @@ struct SettingsView: View {
             if isOn {
                 BioCoverTypingExpandedPanel(
                     secretSettings: secretSettings,
-                    accentColor: Self.colorProfile,
-                    maskConflict: bioCoverTypingMaskConflict
+                    accentColor: Self.colorProfile
                 )
             }
         }
@@ -5708,6 +5617,7 @@ private struct InlineSourcePickerView: View {
     @ObservedObject private var integrations = IntegrationsSettings.shared
     @AppStorage("ocr_language") private var ocrLanguage: String = "es-ES"
     @AppStorage("ocr_camera")   private var ocrCamera:   Int    = 0
+    @AppStorage("bioTopInputMode") private var bioTopInputMode: String = "off"
     @State private var blockedSource: ApiSource? = nil
     @State private var blockedToken: String = "{text1}"
     @State private var showBlockedInputAlert = false
@@ -5803,6 +5713,14 @@ private struct InlineSourcePickerView: View {
                 Text("INPUTS")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(VaultTheme.Colors.textSecondary)
+
+                if target == "bio", bioTopInputMode == "coverTyping" {
+                    inputHintBanner(
+                        icon: "keyboard",
+                        color: accentColor,
+                        text: "Cover Typing is the biography text input. OCR, Lockscreen, Clock and Notes cannot be selected at the same time. Turn off Cover Typing to use those inputs."
+                    )
+                }
 
                 // ── Per-token source dropdowns ────────────────────────────────
                 ForEach(visibleTokens, id: \.self) { token in
@@ -7367,10 +7285,19 @@ private struct PostPredictionActiveSetView: View {
 private struct BioCoverTypingExpandedPanel: View {
     @ObservedObject var secretSettings: SecretInputSettings
     let accentColor: Color
-    let maskConflict: Bool
 
     @State private var isCachingResults = false
     @State private var cachedCount: Int = 0
+
+    /// Both Bio CT and PP CT active with different mask configs (computed here, not on SettingsView, to avoid SwiftUI/type-metadata crashes on expand).
+    private var maskConflict: Bool {
+        guard UserDefaults.standard.bool(forKey: "secretInputEnabled") else { return false }
+        if secretSettings.bioCoverTypingMode != secretSettings.mode { return true }
+        if secretSettings.bioCoverTypingMode == .customUsername,
+           secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+           != secretSettings.customUsername.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() { return true }
+        return false
+    }
 
     private func triggerPrefetch() {
         let username = secretSettings.bioCoverTypingCustomUsername.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -7668,6 +7595,7 @@ private struct PostPredictionURLSchemeView: View {
 
 struct FollowingMagicSettingsCard: View {
     @ObservedObject private var settings = FollowingMagicSettings.shared
+    @ObservedObject private var lockscreenSettings = LockscreenInputSettings.shared
     @State private var isExpanded = false
     @State private var showingHelp = false
 
@@ -7732,6 +7660,33 @@ struct FollowingMagicSettingsCard: View {
 
                     Divider()
 
+                    Text("Pro options")
+                        .font(VaultTheme.Typography.captionSmall())
+                        .foregroundColor(VaultTheme.Colors.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    counterGlitchProOptionRow(
+                        icon: "sparkles",
+                        title: "Glitch visual effect",
+                        subtitle: "When OFF, the counter changes without the visible glitch overlay.",
+                        isOn: $settings.glitchEnabled
+                    )
+
+                    counterGlitchProOptionRow(
+                        icon: "sparkles",
+                        title: "Fake Lockscreen input",
+                        subtitle: "Enter the offset while apparently unlocking the phone.",
+                        isOn: $settings.fakeLockscreenInputEnabled
+                    )
+
+                    if settings.fakeLockscreenInputEnabled && !lockscreenSettings.hasWallpaper {
+                        Label("Choose a lockscreen wallpaper in Input Methods → Lockscreen.", systemImage: "photo.on.rectangle.angled")
+                            .font(VaultTheme.Typography.captionSmall())
+                            .foregroundColor(.orange)
+                    }
+
+                    Divider()
+
                     // ── Transfer illusion ─────────────────────────────────
                     HStack(spacing: VaultTheme.Spacing.sm) {
                         Image(systemName: "arrow.left.arrow.right.circle.fill")
@@ -7789,6 +7744,34 @@ struct FollowingMagicSettingsCard: View {
         .sheet(isPresented: $showingHelp) {
             CounterGlitchHelpView(onClose: { showingHelp = false })
                 .preferredColorScheme(.light)
+        }
+    }
+
+    @ViewBuilder
+    private func counterGlitchProOptionRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        HStack(alignment: .top, spacing: VaultTheme.Spacing.sm) {
+            Image(systemName: icon)
+                .foregroundColor(.yellow)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(LocalizedStringKey(title))
+                        .font(VaultTheme.Typography.bodyBold())
+                        .foregroundColor(VaultTheme.Colors.textPrimary)
+                    Text("PRO")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.yellow)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.yellow.opacity(0.15))
+                        .clipShape(Capsule())
+                }
+                Text(LocalizedStringKey(subtitle))
+                    .font(VaultTheme.Typography.caption())
+                    .foregroundColor(VaultTheme.Colors.textSecondary)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: isOn).labelsHidden()
         }
     }
 }
@@ -9116,16 +9099,14 @@ struct AmnesiaCarouselSettingsCard: View {
                 .disabled(settings.isReady)
             }
 
-            // Slots 1-4 in a 2×2 grid
+            // Layout matches revealed carousel order: 1, 2, hidden (3rd slide), 3, 4
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(0..<4, id: \.self) { i in
-                    amnesiaSlot(index: i, isHidden: false)
-                }
+                amnesiaSlot(index: 0, isHidden: false)
+                amnesiaSlot(index: 1, isHidden: false)
             }
 
-            // Slot 5 (the hidden image) — visually distinct
             VStack(alignment: .leading, spacing: 4) {
-                amnesiaSlot(index: 4, isHidden: true)
+                amnesiaSlot(index: AmnesiaCarouselSettings.hiddenImageSlotIndex, isHidden: true)
                     .frame(maxWidth: .infinity)
                 HStack(spacing: 4) {
                     Image(systemName: "eye.slash.fill")
@@ -9135,6 +9116,11 @@ struct AmnesiaCarouselSettingsCard: View {
                         .font(VaultTheme.Typography.captionSmall())
                         .foregroundColor(.orange.opacity(0.85))
                 }
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                amnesiaSlot(index: 2, isHidden: false)
+                amnesiaSlot(index: 3, isHidden: false)
             }
         }
     }
@@ -9254,14 +9240,14 @@ struct AmnesiaCarouselSettingsCard: View {
     // MARK: - Actions
 
     private func startUpload() {
-        let filled = settings.images.compactMap { $0 }
-        guard filled.count == 5 else { return }
+        guard settings.allImagesFilled else { return }
+        let orderedImages = settings.images.map { $0! }
         settings.uploadState = .uploading(step: 0, total: 12)
 
         Task {
             do {
                 try await InstagramService.shared.uploadAmnesiaCarousels(
-                    images: filled.map { $0 }
+                    images: orderedImages
                 ) { step, total in
                     Task { @MainActor in
                         settings.uploadState = .uploading(step: step, total: total)
@@ -9872,15 +9858,23 @@ struct AmnesiaAnimationView: View {
     @State private var phase = 0
     private let timer = Timer.publish(every: 4.0, on: .main, in: .common).autoconnect()
 
-    // Zener card symbols drawn in SwiftUI
+    // Zener card symbols — slot order matches ESP template (1–4 visible, 5 = hidden star).
     private var symbols: [(String, AnyView)] {
         [
             (String(localized: "amnesia.anim.card_circle"),   AnyView(ZenerCircle())),
             (String(localized: "amnesia.anim.card_cross"),    AnyView(ZenerCross())),
-            (String(localized: "amnesia.anim.card_square"),   AnyView(ZenerSquare())),
             (String(localized: "amnesia.anim.card_waves"),    AnyView(ZenerWaves())),
+            (String(localized: "amnesia.anim.card_square"),   AnyView(ZenerSquare())),
             (String(localized: "amnesia.anim.card_star"),     AnyView(ZenerStar()))
         ]
+    }
+
+    private var displaySymbolIndices: [Int] {
+        switch phase {
+        case 0, 1: return AmnesiaCarouselSettings.shortCarouselSlotOrder
+        case 2, 3: return AmnesiaCarouselSettings.revealedCarouselSlotOrder
+        default:   return AmnesiaCarouselSettings.shortCarouselSlotOrder
+        }
     }
 
     var body: some View {
@@ -9895,18 +9889,18 @@ struct AmnesiaAnimationView: View {
 
             // Cards row
             HStack(spacing: 10) {
-                ForEach(0..<visibleCount, id: \.self) { i in
-                    ZenerCardView(content: symbols[i].1,
-                                  label: symbols[i].0,
-                                  isRevealed: i == 4,
-                                  showGlow: phase >= 2 && i == 4)
+                ForEach(Array(displaySymbolIndices.enumerated()), id: \.offset) { _, symIdx in
+                    ZenerCardView(content: symbols[symIdx].1,
+                                  label: symbols[symIdx].0,
+                                  isRevealed: symIdx == AmnesiaCarouselSettings.hiddenImageSlotIndex,
+                                  showGlow: phase >= 2 && symIdx == AmnesiaCarouselSettings.hiddenImageSlotIndex)
                     .transition(.asymmetric(
                         insertion: .scale(scale: 0.5).combined(with: .opacity),
                         removal: .opacity
                     ))
                 }
             }
-            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: visibleCount)
+            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: displaySymbolIndices)
 
             // Subtitle
             Text(phaseSubtitle)
@@ -9929,14 +9923,6 @@ struct AmnesiaAnimationView: View {
         .background(Color(hex: "#2C2C2E").cornerRadius(12))
         .onReceive(timer) { _ in
             withAnimation { phase = (phase + 1) % 4 }
-        }
-    }
-
-    private var visibleCount: Int {
-        switch phase {
-        case 0, 1: return 4
-        case 2, 3: return 5
-        default:   return 4
         }
     }
 

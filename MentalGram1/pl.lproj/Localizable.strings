@@ -471,6 +471,8 @@
 "followers.tab.subscriptions" = "Subskrypcje";
 "followers.tab.more" = "Więcej";
 "followers.section.all" = "Wszyscy obserwujący";
+"followers.section.following" = "Wszyscy obserwowani";
+"followers.following_btn" = "Obserwujesz";
 "followers.follow_back" = "Śledź też";
 "followers.remove_btn" = "Usuń";
 "followers.search" = "Szukaj";
@@ -1355,7 +1357,7 @@
 "amnesia.anim.phase1_title" = "Magik zamyka widok";
 "amnesia.anim.phase1_sub" = "Magik otwiera i zamyka karuzelę w Vault";
 "amnesia.anim.phase2_title" = "Instagram ujawnia prawdę";
-"amnesia.anim.phase2_sub" = "5. obraz się pojawia ✨  Zawsze tam był";
+"amnesia.anim.phase2_sub" = "Ukryty obraz pojawia się jako 3. slajd ✨  Zawsze tam był";
 "amnesia.anim.phase3_title" = "Widz weryfikuje";
 "amnesia.anim.phase3_sub" = "\"Ile widzisz?\" — Pięć. \"Zawsze było pięć.\"";
 "amnesia.anim.card_circle" = "Koło";

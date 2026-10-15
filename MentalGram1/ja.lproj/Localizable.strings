@@ -473,6 +473,8 @@
 "followers.tab.subscriptions" = "サブスクリプション";
 "followers.tab.more" = "その他";
 "followers.section.all" = "すべてのフォロワー";
+"followers.section.following" = "すべてのフォロー中";
+"followers.following_btn" = "フォロー中";
 "followers.follow_back" = "フォローする";
 "followers.remove_btn" = "削除";
 "followers.search" = "検索";
@@ -1357,7 +1359,7 @@
 "amnesia.anim.phase1_title" = "マジシャンがビューを閉じる";
 "amnesia.anim.phase1_sub" = "マジシャンがVaultでカルーセルを開閉する";
 "amnesia.anim.phase2_title" = "Instagramが真実を明かす";
-"amnesia.anim.phase2_sub" = "5枚目の画像が現れる ✨  ずっとそこにあった";
+"amnesia.anim.phase2_sub" = "隠し画像が3枚目として現れる ✨  ずっとそこにあった";
 "amnesia.anim.phase3_title" = "観客が確認する";
 "amnesia.anim.phase3_sub" = "「何枚見える？」— 五枚。「ずっと五枚だったよ。」";
 "amnesia.anim.card_circle" = "円";

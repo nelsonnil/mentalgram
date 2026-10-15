@@ -41,6 +41,13 @@ enum AmnesiaUploadState: Equatable {
 final class AmnesiaCarouselSettings: ObservableObject {
     static let shared = AmnesiaCarouselSettings()
 
+    /// Source slot indices for the visible 4-image carousel (images 1–4).
+    static let shortCarouselSlotOrder = [0, 1, 2, 3]
+    /// Source slot indices for the revealed 5-image carousel — hidden image is 3rd slide.
+    static let revealedCarouselSlotOrder = [0, 1, 4, 2, 3]
+    /// Index in `images` for the hidden / extra slide (ESP star).
+    static let hiddenImageSlotIndex = 4
+
     // MARK: - Published state
 
     @Published var isEnabled: Bool {
@@ -74,6 +81,28 @@ final class AmnesiaCarouselSettings: ObservableObject {
 
     @Published var uploadState: AmnesiaUploadState = .idle
 
+    /// `taken_at` of the short carousel — same upload session as the full carousel for date verification.
+    @Published var carouselTakenAt: Date? {
+        didSet {
+            if let carouselTakenAt {
+                UserDefaults.standard.set(carouselTakenAt.timeIntervalSince1970, forKey: Keys.carouselTakenAt)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Keys.carouselTakenAt)
+            }
+        }
+    }
+
+    /// Performance grid index for the carousel post (re-applied after Instagram refresh).
+    @Published private(set) var gridPinIndex: Int? {
+        didSet {
+            if let gridPinIndex {
+                UserDefaults.standard.set(gridPinIndex, forKey: Keys.gridPin)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Keys.gridPin)
+            }
+        }
+    }
+
     // MARK: - Computed helpers
 
     var isReady: Bool { shortCarouselMediaId != nil && fullCarouselMediaId != nil }
@@ -90,9 +119,20 @@ final class AmnesiaCarouselSettings: ObservableObject {
         static let shortId  = "amnesia_shortCarouselMediaId"
         static let fullId   = "amnesia_fullCarouselMediaId"
         static let revealed = "amnesia_isRevealed"
+        static let carouselTakenAt = "amnesia_carouselTakenAt"
+        static let gridPin = "amnesia_grid_pin_index"
         /// Instagram userId that owns the two uploaded carousel posts. Lets account
         /// switching tell "same account / reinstall" from "a genuinely different account".
         static let owner    = "amnesia_ownerUserId"
+    }
+
+    func rememberGridPinIndex(_ index: Int) {
+        gridPinIndex = max(0, index)
+        print("🎭 [AMNESIA] Grid pin → \(gridPinIndex!)")
+    }
+
+    func clearGridPin() {
+        gridPinIndex = nil
     }
 
     /// Records which Instagram account the carousel posts belong to (current session).
@@ -110,6 +150,16 @@ final class AmnesiaCarouselSettings: ObservableObject {
         shortCarouselMediaId = ud.string(forKey: Keys.shortId)
         fullCarouselMediaId  = ud.string(forKey: Keys.fullId)
         isRevealed           = ud.bool(forKey: Keys.revealed)
+        if ud.object(forKey: Keys.carouselTakenAt) != nil {
+            carouselTakenAt = Date(timeIntervalSince1970: ud.double(forKey: Keys.carouselTakenAt))
+        } else {
+            carouselTakenAt = nil
+        }
+        if ud.object(forKey: Keys.gridPin) != nil {
+            gridPinIndex = ud.integer(forKey: Keys.gridPin)
+        } else {
+            gridPinIndex = nil
+        }
         loadImagesFromDisk()
         applyRevealStateSafetyMigrationIfNeeded()
 
@@ -125,6 +175,16 @@ final class AmnesiaCarouselSettings: ObservableObject {
         shortCarouselMediaId = ud.string(forKey: Keys.shortId)
         fullCarouselMediaId  = ud.string(forKey: Keys.fullId)
         isRevealed           = ud.bool(forKey: Keys.revealed)
+        if ud.object(forKey: Keys.carouselTakenAt) != nil {
+            carouselTakenAt = Date(timeIntervalSince1970: ud.double(forKey: Keys.carouselTakenAt))
+        } else {
+            carouselTakenAt = nil
+        }
+        if ud.object(forKey: Keys.gridPin) != nil {
+            gridPinIndex = ud.integer(forKey: Keys.gridPin)
+        } else {
+            gridPinIndex = nil
+        }
         loadImagesFromDisk()
         uploadState = isReady ? .ready : .idle
         print("🎭 [AMNESIA] Reloaded settings from UserDefaults after restore")
@@ -217,6 +277,8 @@ final class AmnesiaCarouselSettings: ObservableObject {
         shortCarouselMediaId = nil
         fullCarouselMediaId  = nil
         isRevealed           = false
+        carouselTakenAt      = nil
+        clearGridPin()
         uploadState          = .idle
         UserDefaults.standard.set(newUserId, forKey: Keys.owner)
         print("🎭 [AMNESIA] Account changed \(owner) → \(newUserId) — cleared carousel post IDs (kept source images)")
@@ -227,6 +289,8 @@ final class AmnesiaCarouselSettings: ObservableObject {
         shortCarouselMediaId = nil
         fullCarouselMediaId  = nil
         isRevealed           = false
+        carouselTakenAt      = nil
+        clearGridPin()
         images               = Array(repeating: nil, count: 5)
         uploadState          = .idle
         if let dir = Self.imagesDir { try? FileManager.default.removeItem(at: dir) }

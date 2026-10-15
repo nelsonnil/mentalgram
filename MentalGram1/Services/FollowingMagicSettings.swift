@@ -23,8 +23,17 @@ class FollowingMagicSettings: ObservableObject {
         didSet { UserDefaults.standard.set(triggerDelay, forKey: "followingMagicTriggerDelay") }
     }
 
-    /// Signal interference always enabled — glitch effect plays before countdown.
-    let glitchEnabled: Bool = true
+    /// Full-screen glitch overlay + sound before the countdown (Counter Glitch PRO).
+    @Published var glitchEnabled: Bool {
+        didSet { UserDefaults.standard.set(glitchEnabled, forKey: "followingMagicGlitch") }
+    }
+
+    /// When true, Performance opens the fake lockscreen (wallpaper required) to enter the counter offset.
+    @Published var fakeLockscreenInputEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(fakeLockscreenInputEnabled, forKey: "followingMagicFakeLockscreen")
+        }
+    }
 
     /// When true, the glitch effect targets the "seguidores" (followers) stat instead of "seguidos" (following).
     @Published var targetFollowers: Bool {
@@ -70,6 +79,9 @@ class FollowingMagicSettings: ObservableObject {
         let savedTransfer = UserDefaults.standard.object(forKey: "followingMagicTransferEnabled") as? Bool
         self.transferEnabled = savedTransfer ?? false
         self.transferOffset = UserDefaults.standard.integer(forKey: "followingMagicTransferOffset")
+        let savedGlitch = UserDefaults.standard.object(forKey: "followingMagicGlitch") as? Bool
+        self.glitchEnabled = savedGlitch ?? true
+        self.fakeLockscreenInputEnabled = UserDefaults.standard.bool(forKey: "followingMagicFakeLockscreen")
     }
 
     func reloadFromUserDefaults() {
@@ -81,6 +93,9 @@ class FollowingMagicSettings: ObservableObject {
         let savedTransfer = UserDefaults.standard.object(forKey: "followingMagicTransferEnabled") as? Bool
         transferEnabled = savedTransfer ?? false
         transferOffset = UserDefaults.standard.integer(forKey: "followingMagicTransferOffset")
+        let savedGlitch = UserDefaults.standard.object(forKey: "followingMagicGlitch") as? Bool
+        glitchEnabled = savedGlitch ?? true
+        fakeLockscreenInputEnabled = UserDefaults.standard.bool(forKey: "followingMagicFakeLockscreen")
         print("🎩 [MAGIC] Reloaded settings from UserDefaults after restore")
     }
 

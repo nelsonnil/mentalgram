@@ -233,6 +233,8 @@
 "followers.tab.subscriptions" = "Đăng ký";
 "followers.tab.more" = "Thêm";
 "followers.section.all" = "Tất cả người theo dõi";
+"followers.section.following" = "Tất cả đang theo dõi";
+"followers.following_btn" = "Đang theo dõi";
 "followers.follow_back" = "Theo dõi lại";
 "followers.remove_btn" = "Xóa";
 "followers.search" = "Tìm kiếm";
@@ -502,7 +504,7 @@
 "amnesia.anim.phase1_title" = "Ảo thuật gia đóng chế độ xem";
 "amnesia.anim.phase1_sub" = "Ảo thuật gia mở và đóng carousel trong Vault";
 "amnesia.anim.phase2_title" = "Instagram tiết lộ sự thật";
-"amnesia.anim.phase2_sub" = "Ảnh thứ 5 xuất hiện ✨  Nó đã ở đó từ đầu";
+"amnesia.anim.phase2_sub" = "Ảnh ẩn xuất hiện ở slide thứ 3 ✨  Nó đã ở đó từ đầu";
 "amnesia.anim.phase3_title" = "Khán giả xác minh";
 "amnesia.anim.phase3_sub" = "\"Bạn thấy bao nhiêu?\" — Năm. \"Luôn có năm.\"";
 "amnesia.anim.card_circle" = "Tròn";

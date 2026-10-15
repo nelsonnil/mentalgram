@@ -888,6 +888,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
     case numpadCard  = "numpadCard"   // Card: black screen tap-to-show value+suit selector
     case listInput   = "listInput"    // List: visible private list selection
     case fakeNotes   = "fakeNotes"    // Word: iOS Notes lookalike, confirm by face-down
+    case urlScheme   = "urlScheme"    // Reveal via vault:// deep link (Shortcuts, etc.)
 
     var id: String { rawValue }
 
@@ -903,6 +904,41 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .numpadCard:  return "Numpad Card"
         case .listInput:   return "List Input"
         case .fakeNotes:   return "Notes Input"
+        case .urlScheme:   return "URL Scheme"
+        }
+    }
+
+    /// Short label for chips in the set card input row.
+    var chipTitle: String {
+        switch self {
+        case .coverTyping: return "Cover"
+        case .api:         return "API"
+        case .ocr:         return "OCR"
+        case .digitGrid:   return "Grid"
+        case .lockscreen:  return "Lock"
+        case .clockInput:  return "Clock"
+        case .cardClock:   return "Card"
+        case .numpadCard:  return "Numpad"
+        case .listInput:   return "List"
+        case .fakeNotes:   return "Notes"
+        case .urlScheme:   return "URL"
+        }
+    }
+
+    /// Distinct accent for input tiles and the matching Configure button.
+    var chipColor: Color {
+        switch self {
+        case .coverTyping: return Color(hex: "7C3AED")
+        case .api:         return Color(hex: "06B6D4")
+        case .ocr:         return Color(hex: "EC4899")
+        case .digitGrid:   return Color(hex: "FF9500")
+        case .lockscreen:  return Color(hex: "64748B")
+        case .clockInput:  return Color(hex: "6366F1")
+        case .cardClock:   return Color(hex: "16A34A")
+        case .numpadCard:  return Color(hex: "14B8A6")
+        case .listInput:   return Color(hex: "0EA5E9")
+        case .fakeNotes:   return Color(hex: "F59E0B")
+        case .urlScheme:   return Color(hex: "3B82F6")
         }
     }
 
@@ -918,6 +954,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .numpadCard:  return "Black screen tap selector for value + suit"
         case .listInput:   return "Tap a private list item to reveal its linked media"
         case .fakeNotes:   return "Spectator types in a fake iOS Notes interface"
+        case .urlScheme:   return "Reveal triggered by a vault:// link from Shortcuts or other apps"
         }
     }
 
@@ -933,6 +970,7 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
         case .numpadCard:  return "rectangle.grid.3x2.fill"
         case .listInput:   return "list.bullet.rectangle.portrait.fill"
         case .fakeNotes:   return "note.text"
+        case .urlScheme:   return "link"
         }
     }
 
@@ -960,13 +998,18 @@ enum InputMethod: String, Codable, CaseIterable, Identifiable, Hashable {
 
     /// The subset of input methods valid for a given set type.
     static func allowed(for type: SetType) -> [InputMethod] {
+        var methods: [InputMethod]
         switch type {
-        case .word:   return [.coverTyping, .api, .ocr, .fakeNotes]
-        case .number: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
-        case .custom: return [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
-        case .card:   return [.cardClock, .numpadCard, .lockscreen]
-        case .list:   return [.listInput]
+        case .word:   methods = [.coverTyping, .api, .ocr, .fakeNotes]
+        case .number: methods = [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
+        case .custom: methods = [.digitGrid, .lockscreen, .clockInput, .api, .ocr]
+        case .card:   methods = [.cardClock, .numpadCard, .lockscreen]
+        case .list:   methods = [.listInput]
         }
+        if type.revealURLTemplate != nil {
+            methods.append(.urlScheme)
+        }
+        return methods
     }
 
     /// Fallback input method used when a set has no explicit selection.

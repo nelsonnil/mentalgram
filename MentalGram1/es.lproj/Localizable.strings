@@ -732,9 +732,12 @@
 "followers.tab.subscriptions" = "Suscripciones";
 "followers.tab.more" = "Más";
 "followers.section.all" = "Todos los seguidores";
+"followers.section.following" = "Todo lo que sigues";
+"followers.following_btn" = "Siguiendo";
 "followers.follow_back" = "Seguir también";
 "followers.remove_btn" = "Quitar";
 "followers.search" = "Buscar";
+"followers.dateforce.hint" = "Date Force: toca el círculo del avatar para seleccionar (1, 2, 3…). Toca la fila para abrir un perfil. Pulsa ← para confirmar.";
 "force_reel.title" = "Force Reel";
 "force_reel.subtitle" = "Fuerza un reel concreto a aparecer en Explorar";
 "force_reel.description" = "Preselecciona un reel de cualquier perfil. En Performance, abre Explorar — el reel forzado aparece en el feed.";
@@ -1585,7 +1588,7 @@
 "amnesia.anim.phase1_title" = "El mago cierra la vista";
 "amnesia.anim.phase1_sub" = "El mago abre y cierra el carrusel en Vault";
 "amnesia.anim.phase2_title" = "Instagram revela la verdad";
-"amnesia.anim.phase2_sub" = "Aparece la 5ª imagen ✨  Siempre estuvo ahí";
+"amnesia.anim.phase2_sub" = "La imagen oculta aparece como 3ª diapositiva ✨  Siempre estuvo ahí";
 "amnesia.anim.phase3_title" = "El espectador verifica";
 "amnesia.anim.phase3_sub" = "\"¿Cuántas ves?\" — Cinco. \"Siempre hubo cinco.\"";
 "amnesia.anim.card_circle" = "Círculo";

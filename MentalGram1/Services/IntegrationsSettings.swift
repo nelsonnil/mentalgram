@@ -257,9 +257,7 @@ final class IntegrationsSettings: ObservableObject {
         didSet { UserDefaults.standard.set(exploreSpyFormat.rawValue, forKey: "integ_exploreSpyFormat") }
     }
 
-    /// PROVISIONAL: hide Transposition (settings, guide, runtime) until the feature ships.
-    /// Flip to `true` to surface the PRO card again.
-    static let transpositionFeatureEnabled = false
+    static let transpositionFeatureEnabled = true
 
     // AI screen detection — camera photo of spectator phone → OpenAI Vision → Instagram post match.
     @Published var aiScreenDetectionEnabled: Bool {
@@ -397,7 +395,6 @@ final class IntegrationsSettings: ObservableObject {
         exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
         exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
         exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
-        // Force-off while Transposition is hidden so a previous enable can't fire in Performance.
         aiScreenDetectionEnabled = Self.transpositionFeatureEnabled
             ? ud.bool(forKey: "integ_aiScreenDetectionEnabled")
             : false
@@ -461,7 +458,6 @@ final class IntegrationsSettings: ObservableObject {
         exploreSpyEnabled     = ud.bool(forKey: "integ_exploreSpyEnabled")
         exploreSpy2InjectId   = ud.string(forKey: "integ_exploreSpy2InjectId")  ?? ""
         exploreSpyFormat      = ExploreSpyFormat(rawValue: ud.integer(forKey: "integ_exploreSpyFormat")) ?? .nameFollowersFollowing
-        // Force-off while Transposition is hidden so a previous enable can't fire in Performance.
         aiScreenDetectionEnabled = Self.transpositionFeatureEnabled
             ? ud.bool(forKey: "integ_aiScreenDetectionEnabled")
             : false
@@ -583,7 +579,35 @@ final class IntegrationsSettings: ObservableObject {
     }
 
     func setBioSource(_ source: ApiSource, for token: String, templateSlot: Int? = nil) {
+        if source.interfaceKind != nil {
+            disableBioCoverTypingInputMode()
+        }
         setBioSourceForTextSlot(source, textSlot: Self.textSlot(for: token), templateSlot: templateSlot)
+    }
+
+    /// Cover Typing and physical inputs (OCR, Lockscreen, Clock, Notes) cannot drive Biography at the same time.
+    var isBioCoverTypingActive: Bool {
+        (UserDefaults.standard.string(forKey: "bioTopInputMode") ?? "off") == "coverTyping"
+    }
+
+    func disableBioCoverTypingInputMode() {
+        guard isBioCoverTypingActive else { return }
+        UserDefaults.standard.set("off", forKey: "bioTopInputMode")
+        objectWillChange.send()
+    }
+
+    /// Clears Lockscreen / OCR / Clock / Notes selections on all biography template slots (T1–T4).
+    func clearBioInterfaceSources() {
+        var changed = false
+        for templateSlot in 0..<4 {
+            for textSlot in 1...5 {
+                let src = bioSourceForTextSlot(textSlot, templateSlot: templateSlot)
+                guard src.interfaceKind != nil else { continue }
+                setBioSourceForTextSlot(.none, textSlot: textSlot, templateSlot: templateSlot)
+                changed = true
+            }
+        }
+        if changed { objectWillChange.send() }
     }
 
     private static func textSlot(for token: String) -> Int {
@@ -743,6 +767,9 @@ final class IntegrationsSettings: ObservableObject {
     /// feeds all consumers. Different interface kinds conflict (OCR vs Clock, number
     /// lockscreen vs card lockscreen, number clock vs card clock, etc.).
     func canSelectSource(_ candidate: ApiSource, target: String, token: String) -> Bool {
+        if target == "bio", isBioCoverTypingActive, candidate.interfaceKind != nil {
+            return false
+        }
         guard let incomingKind = candidate.interfaceKind else { return true }
         let others = interfaceKindsInUse(excludingTarget: target, excludingToken: token)
         return others.isEmpty || others.allSatisfy { $0 == incomingKind }
@@ -759,6 +786,9 @@ final class IntegrationsSettings: ObservableObject {
     /// Returns e.g. ["Active Set (Lockscreen)", "Biography {text2} (Number Clock)"]
     func conflictLocations(excludingTarget: String, excludingToken: String) -> [String] {
         var locations: [String] = []
+        if excludingTarget == "bio", isBioCoverTypingActive {
+            locations.append("Biography (Cover Typing)")
+        }
         if let k = activeSetInterfaceKind() {
             let name = DataManager.shared.sets
                 .first(where: { $0.id == ActiveSetSettings.shared.activeSetId })?.name ?? "Active Set"
@@ -802,7 +832,7 @@ final class IntegrationsSettings: ObservableObject {
             guard let k = e.source.interfaceKind, k != incomingKind else { continue }
             setSource(.none, target: e.target, token: e.token)
         }
-        // Assign the new source to the edited slot
+        // Assign the new source to the edited slot (disables Bio Cover Typing when interface source)
         setSource(source, target: target, token: token)
     }
 
