@@ -4,6 +4,16 @@ import Combine
 
 // MARK: - Upload state
 
+/// Live archive state of the two carousel posts on Instagram (from `/media/info/`).
+enum AmnesiaInstagramPhase: Equatable {
+    case unknown
+    case initial          // short public, full archived — ready to perform
+    case revealed         // full public, short archived — needs reset before next show
+    case bothPublic       // abnormal; still needs reset (archive full)
+    case bothArchived     // abnormal
+    case indeterminate
+}
+
 enum AmnesiaUploadState: Equatable {
     case idle
     case uploading(step: Int, total: Int)   // step = current upload index (1-based)
@@ -81,6 +91,9 @@ final class AmnesiaCarouselSettings: ObservableObject {
 
     @Published var uploadState: AmnesiaUploadState = .idle
 
+    /// Last known Instagram phase (refreshed from API when Sets/Settings banners appear).
+    @Published private(set) var instagramPhase: AmnesiaInstagramPhase = .unknown
+
     /// `taken_at` of the short carousel — same upload session as the full carousel for date verification.
     @Published var carouselTakenAt: Date? {
         didSet {
@@ -111,6 +124,21 @@ final class AmnesiaCarouselSettings: ObservableObject {
     var filledCount: Int { images.filter { $0 != nil }.count }
 
     var allImagesFilled: Bool { filledCount == 5 }
+
+    /// True when the effect must be reset before the next performance (local flag and/or Instagram).
+    var needsReset: Bool {
+        guard isEnabled, isReady else { return false }
+        if isRevealed { return true }
+        switch instagramPhase {
+        case .revealed, .bothPublic:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var lastInstagramPhaseRefresh: Date?
+    private let instagramPhaseRefreshInterval: TimeInterval = 45
 
     // MARK: - Keys
 
@@ -226,6 +254,68 @@ final class AmnesiaCarouselSettings: ObservableObject {
                   let data = try? Data(contentsOf: url),
                   let image = UIImage(data: data) else { continue }
             images[slot] = image
+        }
+    }
+
+    /// Reconcile `isRevealed` / banner state with Instagram (short vs full archive flags).
+    func refreshInstagramPhaseIfNeeded(force: Bool = false) async {
+        guard isReady,
+              let shortId = shortCarouselMediaId,
+              let fullId = fullCarouselMediaId,
+              InstagramService.shared.isLoggedIn
+        else {
+            await MainActor.run { instagramPhase = .unknown }
+            return
+        }
+
+        if !force,
+           let last = lastInstagramPhaseRefresh,
+           Date().timeIntervalSince(last) < instagramPhaseRefreshInterval {
+            return
+        }
+        lastInstagramPhaseRefresh = Date()
+
+        do {
+            async let fullTask = InstagramService.shared.getMediaIsArchived(mediaId: fullId)
+            async let shortTask = InstagramService.shared.getMediaIsArchived(mediaId: shortId)
+            let (fullArchived, shortArchived) = try await (fullTask, shortTask)
+
+            await MainActor.run {
+                let phase: AmnesiaInstagramPhase
+                if let fullArchived, let shortArchived {
+                    if !fullArchived && shortArchived {
+                        phase = .revealed
+                    } else if fullArchived && !shortArchived {
+                        phase = .initial
+                    } else if !fullArchived && !shortArchived {
+                        phase = .bothPublic
+                    } else if fullArchived && shortArchived {
+                        phase = .bothArchived
+                    } else {
+                        phase = .indeterminate
+                    }
+                } else {
+                    phase = .indeterminate
+                }
+                instagramPhase = phase
+
+                if phase == .revealed || phase == .bothPublic {
+                    if !isRevealed {
+                        isRevealed = true
+                        print("🎭 [AMNESIA] Synced isRevealed=true from Instagram phase=\(phase)")
+                        LogManager.shared.info("Amnesia synced revealed=true from Instagram (\(phase))", category: .api)
+                    }
+                } else if phase == .initial, isRevealed {
+                    isRevealed = false
+                    print("🎭 [AMNESIA] Synced isRevealed=false from Instagram (initial phase)")
+                    LogManager.shared.info("Amnesia synced revealed=false from Instagram (initial)", category: .api)
+                }
+
+                print("🎭 [AMNESIA] Phase refresh — enabled=\(isEnabled) ready=\(isReady) revealed=\(isRevealed) igPhase=\(phase) needsReset=\(needsReset)")
+            }
+        } catch {
+            print("🎭 [AMNESIA] Phase refresh failed: \(error.localizedDescription)")
+            LogManager.shared.warning("Amnesia Instagram phase refresh failed: \(error.localizedDescription)", category: .api)
         }
     }
 

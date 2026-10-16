@@ -569,6 +569,19 @@ class InstagramService: ObservableObject {
         UserDefaults.standard.set(Array(entries.suffix(200)), forKey: profilePicHistoryKey)
     }
 
+    private static let profilePicPausedUntilKey = "profile_pic_auto_paused_until"
+
+    /// Every rejected change_profile_picture extends Instagram's block, so automatic
+    /// uploads stop for 24h after one. Manual uploads still go through.
+    static var profilePicAutoPausedUntil: Date? {
+        get {
+            let ts = UserDefaults.standard.double(forKey: profilePicPausedUntilKey)
+            guard ts > Date().timeIntervalSince1970 else { return nil }
+            return Date(timeIntervalSince1970: ts)
+        }
+        set { UserDefaults.standard.set(newValue?.timeIntervalSince1970 ?? 0, forKey: profilePicPausedUntilKey) }
+    }
+
     static func profilePicHistorySummary() -> String {
         let now = Date().timeIntervalSince1970
         let entries = (UserDefaults.standard.stringArray(forKey: profilePicHistoryKey) ?? []).compactMap { entry -> (Double, String)? in
@@ -2290,7 +2303,8 @@ class InstagramService: ObservableObject {
                         // reveals keep working), so fail only this call instead of a global lockdown
                         // that would freeze a live Performance for 15 minutes.
                         print("🛡️ [PROFILE PIC] Action-scoped block — no global lockdown")
-                        LogManager.shared.warning("Profile picture change blocked by Instagram (Try Again Later) — other actions unaffected", category: .api)
+                        Self.profilePicAutoPausedUntil = Date().addingTimeInterval(24 * 3600)
+                        LogManager.shared.warning("Profile picture change blocked by Instagram (Try Again Later) — other actions unaffected; automatic uploads paused 24h", category: .api)
                         throw InstagramError.botDetected("Instagram rate limit: \(feedbackTitle) (profile picture only)")
                     }
                     await triggerLockdown(
@@ -3279,7 +3293,16 @@ class InstagramService: ObservableObject {
 
     /// web_profile_info answers 429/HTML for every account since Oct 2026; skip it for a
     /// while after a failure instead of paying (and logging) the dead request each time.
-    private static var webProfileInfoDownUntil: Date?
+    /// Persisted so a relaunch inside the backoff window doesn't hit the 429 again.
+    private static var webProfileInfoDownUntil: Date? {
+        get {
+            let t = UserDefaults.standard.double(forKey: "web_profile_info_down_until")
+            return t > 0 ? Date(timeIntervalSince1970: t) : nil
+        }
+        set {
+            UserDefaults.standard.set(newValue?.timeIntervalSince1970 ?? 0, forKey: "web_profile_info_down_until")
+        }
+    }
     private static let webProfileInfoBackoff: TimeInterval = 30 * 60
 
     private func fetchWebProfileInfoFallback(username: String) async -> [String: Any]? {
@@ -7668,6 +7691,12 @@ class InstagramService: ObservableObject {
             print("⚠️ [PROFILE PIC] Already uploading — skipped re-entrant call")
             throw InstagramError.apiError("A profile picture upload is already in progress.")
         }
+        if !userInitiated, let pausedUntil = Self.profilePicAutoPausedUntil {
+            let hours = max(1, Int(ceil(pausedUntil.timeIntervalSinceNow / 3600)))
+            print("⏸️ [PROFILE PIC] Automatic upload paused \(hours)h after Instagram's Try Again Later — 0 API calls")
+            LogManager.shared.info("Profile pic auto-upload paused (\(hours)h left after Try Again Later)", category: .api)
+            throw InstagramError.apiError("Profile picture changes are paused for \(hours)h after Instagram's Try Again Later.")
+        }
 
         // Mark upload in progress globally so other API calls can yield.
         // defer guarantees the flag is cleared in every exit path (success, throw, or cancel).
@@ -7741,6 +7770,23 @@ class InstagramService: ObservableObject {
         let humanDelay = UInt64.random(in: 2_000_000_000...4_000_000_000)
         print("   Waiting \(humanDelay / 1_000_000_000)s (human delay)...")
         try await Task.sleep(nanoseconds: humanDelay)
+
+        print(Self.profilePicHistorySummary())
+        switch await WebProfilePicChanger.change(jpegData: jpegData) {
+        case .success(let newPicURL):
+            LogManager.shared.info("Profile picture changed via instagram.com page", category: .api)
+            finishProfilePicChange(imageHash: imageHash, newPicURL: newPicURL)
+            return true
+        case .rejected(let reason):
+            Self.recordProfilePicAttempt("try_again_later")
+            Self.profilePicAutoPausedUntil = Date().addingTimeInterval(24 * 3600)
+            print("❌ [PROFILE PIC] instagram.com page rejected the change: \(reason)")
+            LogManager.shared.warning("Profile picture change rejected by Instagram (web page): \(reason.prefix(160))", category: .api)
+            throw InstagramError.botDetected("Instagram rate limit: Try Again Later (profile picture only)")
+        case .unavailable(let reason):
+            print("⚠️ [PROFILE PIC] instagram.com page unavailable (\(reason)) — falling back to API request")
+            LogManager.shared.warning("Profile pic web page unavailable (\(reason.prefix(120))) — using API fallback", category: .api)
+        }
         
         // STEP 1: Upload image via rupload_igphoto (same as regular photo upload)
         let uploadId = String(Int(Date().timeIntervalSince1970 * 1000))
@@ -7843,7 +7889,6 @@ class InstagramService: ObservableObject {
             "logged_in_uids": "[\"\(session.userId)\"]"
         ]
         
-        print(Self.profilePicHistorySummary())
         let data: Data
         do {
             data = try await apiRequest(
@@ -7859,21 +7904,7 @@ class InstagramService: ObservableObject {
         
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let status = json["status"] as? String, status == "ok" {
-                Self.recordProfilePicAttempt("ok")
-                print("✅ [PROFILE PIC] Profile picture changed successfully!")
-                
-                // Save hash to prevent duplicate uploads
-                UserDefaults.standard.set(imageHash, forKey: "last_profile_pic_hash")
-                UserDefaults.standard.set(false, forKey: "profile_pic_external_change")
-                if let picURL = ProfileCacheService.shared.cachedProfile?.profilePicURL, !picURL.isEmpty {
-                    ProfileCacheService.shared.rememberOwnProfilePicCDNIdentity(picURL)
-                }
-                
-                // ANTI-BOT: Add cooldown before next profile pic change
-                let cooldownUntil = Date().addingTimeInterval(300) // 5 minutes
-                UserDefaults.standard.set(cooldownUntil, forKey: "profile_pic_cooldown_until")
-                InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .upload)
-                
+                finishProfilePicChange(imageHash: imageHash, newPicURL: nil)
                 return true
             } else {
                 let message = json["message"] as? String ?? "Unknown error"
@@ -7885,6 +7916,24 @@ class InstagramService: ObservableObject {
         
         print("❌ [PROFILE PIC] Unexpected response format")
         return false
+    }
+
+    private func finishProfilePicChange(imageHash: String, newPicURL: String?) {
+        Self.recordProfilePicAttempt("ok")
+        Self.profilePicAutoPausedUntil = nil
+        print("✅ [PROFILE PIC] Profile picture changed successfully!")
+
+        // Save hash to prevent duplicate uploads
+        UserDefaults.standard.set(imageHash, forKey: "last_profile_pic_hash")
+        UserDefaults.standard.set(false, forKey: "profile_pic_external_change")
+        if let picURL = newPicURL ?? ProfileCacheService.shared.cachedProfile?.profilePicURL, !picURL.isEmpty {
+            ProfileCacheService.shared.rememberOwnProfilePicCDNIdentity(picURL)
+        }
+
+        // ANTI-BOT: Add cooldown before next profile pic change
+        let cooldownUntil = Date().addingTimeInterval(300) // 5 minutes
+        UserDefaults.standard.set(cooldownUntil, forKey: "profile_pic_cooldown_until")
+        InstagramSafetyGate.shared.markPostMutationQuietWindow(action: .upload)
     }
     
     /// Instagram profile pictures must be square (1:1): center-crop, resize to ≤1080 px
@@ -9674,7 +9723,7 @@ extension InstagramService {
               let config = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
               let probes = config["probes"] as? [[String: Any]] ?? (config["selfTests"] != nil ? [] : nil) else { return }
         // Mutating tests must run once per copied config, never on every launch.
-        if (config["selfTests"] as? [String] ?? []).contains("pp") {
+        if !Set(config["selfTests"] as? [String] ?? []).isDisjoint(with: ["pp", "ppweb"]) {
             try? FileManager.default.removeItem(at: configURL)
         }
 
@@ -9830,6 +9879,14 @@ extension InstagramService {
                     }
                 case "pp":
                     await debugProfilePicLab(config: config, emit: emit)
+                case "ppweb":
+                    guard let (jpeg, _) = Self.debugSyntheticProfileJPEG() else {
+                        emit("🧪 [PP-WEB] could not build synthetic image")
+                        break
+                    }
+                    emit(Self.profilePicHistorySummary())
+                    let outcome = await WebProfilePicChanger.change(jpegData: jpeg, log: emit)
+                    emit("🧪 [PP-WEB] result → \(outcome)")
                 case "damage":
                     emit("🧪 [SELFTEST] damage → \(debugDamageReplica())")
                 case "fullsync":

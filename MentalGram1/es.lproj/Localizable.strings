@@ -1982,6 +1982,12 @@ Solo puede haber un tipo de interfaz activa a la vez entre Sets, Biografia y Not
 "home.preperformance.amnesia_reset.title" = "Amnesia Carousel necesita reiniciarse";
 "home.preperformance.visible_photos.description" = "Archiva las fotos visibles antes de entrar en Performance para que no aparezcan publicamente en Instagram.";
 "home.preperformance.amnesia_reset.description" = "Amnesia Carousel esta revelado - reinicialo antes del siguiente show.";
+"home.preperformance.amnesia_reset.button" = "Resetear Amnesia Carousel";
+"home.preperformance.amnesia_reset.restoring" = "Reseteando Amnesia Carousel…";
+"home.preperformance.amnesia_reset.badge" = "Reset";
+"home.preperformance.amnesia_reset.settings_hint" = "Amnesia Carousel esta revelado. Usa el boton rojo en Sets, o abre Amnesia abajo y pulsa Resetear antes del siguiente show.";
+"amnesia.state.revealed_badge" = "REVELADO";
+"amnesia.state.initial_badge" = "INICIAL";
 "home.preperformance.instapick_reset.title" = "Instapick necesita restaurarse";
 "home.preperformance.instapick_reset.description" = "Se revelaron slots de Instapick — restaura (desarchivar a / archivar b) antes del siguiente show.";
 "home.preperformance.instapick_reset.button" = "Restaurar Instapick";

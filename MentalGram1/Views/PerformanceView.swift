@@ -866,6 +866,9 @@ struct PerformanceView: View {
     @AppStorage("perf_lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
     private let minRefreshInterval: TimeInterval = 10
     @State private var isPullRefreshInFlight = false
+    /// True while a manual/authoritative refresh is fetching pages 2…N. Prevents progressive
+    /// page-1 notifications and cachedProfile onChange from collapsing a 68-post grid to 12.
+    @State private var isDeepProfileSyncInFlight = false
     @State private var isSilentGridRefreshing = false
     @State private var lastManualRefreshFailureMessage: String? = nil
     @State private var lastManualRefreshRetrySeconds: Int? = nil
@@ -958,7 +961,19 @@ struct PerformanceView: View {
             return cachedImages[url] != nil || ProfileCacheService.shared.loadImage(forURL: url) != nil
         }()
         let whiteSafetyOverlay = !performanceRemoteCallsAllowed && profile == nil && safetyGateCountdown > 0
-        let message = "VISUAL \(reason) profile:\(profile != nil) user:\(profile?.username ?? "nil") urls:\(allMediaURLs.count) visibleMissing:\(missingVisible)/\(visibleURLs.count) cachedImages:\(cachedImages.count) picCached:\(profilePicCached) overlays{preload:\(isFirstTimePreloading),safetyWhite:\(whiteSafetyOverlay),firstBanner:\(showFirstTimeBanner),home:\(showingHomeScreenIllusion),screenOff:\(showingScreenOffCover),locked:\(instagram.isLocked)} loading{profile:\(isLoading),images:\(isLoadingImages),silent:\(isSilentGridRefreshing),more:\(isLoadingMore)} selectedTab:\(selectedTab) refreshEnabled:\(isRefreshEnabled)"
+        // Same lookup PhotosGridView uses (memory only, URL or mediaId): cells counted
+        // here render gray even when their thumbnail exists on disk.
+        var memoryImageIds = Set<String>()
+        for url in cachedImages.keys {
+            if let id = mediaItemsByURL[url]?.mediaId, !id.isEmpty { memoryImageIds.insert(mediaIdKey(id)) }
+        }
+        let gridRealURLs = allMediaURLs.filter { !ProfileMediaReconciler.isOverlayURL($0) }
+        let gridBlank = gridRealURLs.filter { url in
+            if cachedImages[url] != nil { return false }
+            guard let id = mediaItemsByURL[url]?.mediaId, !id.isEmpty else { return true }
+            return !memoryImageIds.contains(mediaIdKey(id))
+        }.count
+        let message = "VISUAL \(reason) profile:\(profile != nil) user:\(profile?.username ?? "nil") urls:\(allMediaURLs.count) visibleMissing:\(missingVisible)/\(visibleURLs.count) gridBlank:\(gridBlank)/\(gridRealURLs.count) diskPosts:\(ProfileCacheService.shared.cachedProfile?.cachedMediaURLs.count ?? -1) cachedImages:\(cachedImages.count) picCached:\(profilePicCached) overlays{preload:\(isFirstTimePreloading),safetyWhite:\(whiteSafetyOverlay),firstBanner:\(showFirstTimeBanner),home:\(showingHomeScreenIllusion),screenOff:\(showingScreenOffCover),locked:\(instagram.isLocked)} loading{profile:\(isLoading),images:\(isLoadingImages),silent:\(isSilentGridRefreshing),more:\(isLoadingMore)} selectedTab:\(selectedTab) refreshEnabled:\(isRefreshEnabled)"
         print("🧭 [VISUAL] \(message)")
         // Grid/image churn fires this dozens of times per entry; keep it only when
         // the spectator could actually see something wrong.
@@ -3339,8 +3354,8 @@ struct PerformanceView: View {
             // path already has the freshest data and is repositioning reveal overlays.
             // Letting a parallel progressive notification rewrite allMediaURLs here is a
             // primary cause of the grid flashing.
-            guard !isSilentGridRefreshing else {
-                print("⚡ [PERF] Progressive media-ready skipped — silent grid refresh in progress")
+            guard !isSilentGridRefreshing, !isDeepProfileSyncInFlight else {
+                print("⚡ [PERF] Progressive media-ready skipped — \(isDeepProfileSyncInFlight ? "deep profile sync" : "silent grid refresh") in progress")
                 return
             }
             let nextCursor = note.userInfo?["nextMaxId"] as? String
@@ -3740,8 +3755,8 @@ struct PerformanceView: View {
         // A silent/authoritative grid swap (or pull-to-refresh) owns the grid while it
         // runs and already saved the freshest data; reacting to its own saveProfile here
         // would reassign allMediaURLs mid-swap and cause a flash. Let the swap finish.
-        guard !isSilentGridRefreshing, !isPullRefreshInFlight else {
-            print("🔄 [PERF] onChange cachedMediaURLs skipped — grid swap/refresh in progress")
+        guard !isSilentGridRefreshing, !isPullRefreshInFlight, !isDeepProfileSyncInFlight else {
+            print("🔄 [PERF] onChange cachedMediaURLs skipped — grid swap/refresh/deep sync in progress")
             return
         }
         let rawNewSet = Set(newURLs)
@@ -6098,19 +6113,82 @@ struct PerformanceView: View {
         }
 
         let removedRevealCount = allMediaURLs.filter { $0.hasPrefix("reveal://") && !$0.hasPrefix("reveal://test-") }.count
+        // Only evict thumbnails of posts that left the grid. cachedImages also holds
+        // reels, tagged and follower pics, which this posts snapshot knows nothing about.
+        let previousGridURLs = Set(allMediaURLs)
+        let snapshotURLSet = Set(snapshotURLs)
         allMediaURLs = snapshotURLs
         revealDates.removeAll()
-        cachedImages = cachedImages.filter { key, _ in snapshotURLs.contains(key) || key == profile?.profilePicURL }
+        cachedImages = cachedImages.filter { key, _ in
+            snapshotURLSet.contains(key) || !previousGridURLs.contains(key)
+        }
         nextMaxId = nextCursor
         hasMorePages = nextCursor != nil && snapshotURLs.count < maxPhotosOwnProfile
 
         if let userId = profile?.userId, clearRevealState {
             ProfileCacheService.shared.clearRevealState(userId: userId)
         }
-        // Use authoritative replacement so archived posts are not re-introduced via tail merge.
-        ProfileCacheService.shared.replaceMediaURLsAndItems(snapshotURLs, items: snapshotItems,
-                                                            nextMaxId: .some(nextCursor))
-        print("✅ [GRID AUTH] \(source): applied \(snapshotURLs.count) Instagram item(s), cleared \(removedRevealCount) reveal overlay(s)")
+        // During multi-page manual sync, defer disk writes until the full Instagram window
+        // is fetched — otherwise onChange can publish page-1 (≈12) and shrink the grid.
+        if !isDeepProfileSyncInFlight {
+            ProfileCacheService.shared.replaceMediaURLsAndItems(snapshotURLs, items: snapshotItems,
+                                                                nextMaxId: .some(nextCursor))
+        }
+        print("✅ [GRID AUTH] \(source): applied \(snapshotURLs.count) Instagram item(s), cleared \(removedRevealCount) reveal overlay(s)\(isDeepProfileSyncInFlight ? " (disk deferred)" : "")")
+    }
+
+    /// Instagram rotates CDN URLs on every fetch. When a page replaces an item's URL,
+    /// move its in-memory thumbnail to the new key (or load it from the mediaId file on
+    /// disk); otherwise PhotosGridView can no longer match it and the cell renders gray.
+    @MainActor
+    private func bridgeThumbnailsByMediaId(
+        from oldItemsByURL: [String: InstagramMediaItem],
+        to newItemsByURL: [String: InstagramMediaItem]
+    ) {
+        var imageByMediaId: [String: UIImage] = [:]
+        for (url, item) in oldItemsByURL where !item.mediaId.isEmpty {
+            if let image = cachedImages[url] { imageByMediaId[mediaIdKey(item.mediaId)] = image }
+        }
+        var bridged = 0
+        for (url, item) in newItemsByURL where cachedImages[url] == nil && !item.mediaId.isEmpty {
+            guard let image = imageByMediaId[mediaIdKey(item.mediaId)]
+                    ?? ProfileCacheService.shared.loadImage(forMediaId: item.mediaId) else { continue }
+            cachedImages[url] = image
+            ProfileCacheService.shared.saveImage(image, forMediaId: item.mediaId)
+            bridged += 1
+        }
+        // oldItemsByURL also contains tagged items; evict only rotated post URLs.
+        let liveURLs = Set(newItemsByURL.keys)
+        let previousGridURLs = Set(allMediaURLs)
+        cachedImages = cachedImages.filter { key, _ in
+            ProfileMediaReconciler.isOverlayURL(key)
+                || !(previousGridURLs.contains(key) && !liveURLs.contains(key))
+        }
+        if bridged > 0 {
+            print("🖼️ [CACHE] Bridged \(bridged) thumbnail(s) to rotated CDN URLs by mediaId")
+        }
+    }
+
+    /// Writes the in-memory grid + header to profile.json after a full multi-page sync.
+    @MainActor
+    private func persistAuthoritativeGridToProfileCache(from header: InstagramProfile) {
+        let remoteURLs = allMediaURLs.filter { !ProfileMediaReconciler.isOverlayURL($0) }
+        let remoteItems = remoteURLs.compactMap { mediaItemsByURL[$0] }
+        var updated = header
+        updated.cachedMediaURLs = remoteURLs
+        updated.cachedMediaItems = remoteItems
+        updated.cachedNextMaxId = nextMaxId
+        profile = updated
+        ProfileCacheService.shared.saveProfileAuthoritative(updated)
+        print("💾 [GRID AUTH] Deep sync persisted \(remoteURLs.count) post(s) to profile cache")
+        // Earlier downloads only covered page 1; fetch whatever the deeper pages still lack.
+        Task { @MainActor in
+            for _ in 0..<10 where isLoadingImages {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            loadCachedImages()
+            logPerformanceVisualState("deep sync persisted")
+        }
     }
 
     private func realMediaIds(in urls: [String]? = nil) -> Set<String> {
@@ -7322,6 +7400,9 @@ struct PerformanceView: View {
                 self.profile = mergedProfile
                 let isManualRefresh = source.hasPrefix("manual")
                 let isAuthoritativeRefresh = isManualRefresh || source == "authoritative_after_archive"
+                if isAuthoritativeRefresh {
+                    isDeepProfileSyncInFlight = true
+                }
                 let manualRevealIdsBeforeRefresh: Set<String> = isAuthoritativeRefresh
                     ? Set(allMediaURLs.compactMap { revealMediaId(from: $0) })
                     : []
@@ -7498,16 +7579,7 @@ struct PerformanceView: View {
                 // Highlights are preserved from cache; Performance no longer rebuilds
                 // them automatically to avoid a hidden extra API action during a show.
                 if !mergedProfile.cachedHighlights.isEmpty { highlightsLoadedOnce = true }
-                if isAuthoritativeRefresh {
-                    var authoritativeProfile = mergedProfile
-                    let remoteURLs = allMediaURLs.filter {
-                        !ProfileMediaReconciler.isOverlayURL($0)
-                    }
-                    let remoteItems = remoteURLs.compactMap { mediaItemsByURL[$0] }
-                    authoritativeProfile.cachedMediaURLs = remoteURLs
-                    authoritativeProfile.cachedMediaItems = remoteItems
-                    ProfileCacheService.shared.saveProfileAuthoritative(authoritativeProfile)
-                } else {
+                if !isAuthoritativeRefresh {
                     ProfileCacheService.shared.saveProfile(mergedProfile)
                 }
                 // A successful refresh means Instagram is the source of truth.
@@ -7553,10 +7625,6 @@ struct PerformanceView: View {
                     scheduleBackgroundReelsTaggedPreload(for: mergedProfile)
                 }
 
-                // Release the loading spinner after page 1 so the UI is usable
-                // while extra pages are being fetched in the background.
-                isLoading = false
-
                 // ── Extra-page deep refresh (postPages > 1) ──────────────────────
                 // Fetch pages 2…postPages; each page extends the exact Instagram prefix.
                 var syncedFetchedItems = page1APIItems
@@ -7571,6 +7639,13 @@ struct PerformanceView: View {
                     syncedFetchedItems = extra.accumulatedItems
                     syncedEndCursor = extra.endCursor
                 }
+
+                if isAuthoritativeRefresh {
+                    persistAuthoritativeGridToProfileCache(from: mergedProfile)
+                    isDeepProfileSyncInFlight = false
+                }
+
+                isLoading = false
 
                 // Set photos inside the synced window but absent from Instagram → archived.
                 // Protect pending reveal:// mediaIds (Instagram may not have indexed them yet).
@@ -7610,11 +7685,13 @@ struct PerformanceView: View {
                     } else {
                         print("⚠️ [PERF] getProfileInfo returned nil — profile data unavailable")
                         LogManager.shared.error("loadProfile: getProfileInfo returned nil for userId \(instagram.session.userId)", category: .general)
+                        isDeepProfileSyncInFlight = false
                         isLoading = false
                         return false
                     }
             } catch let error as InstagramError {
                 print("⚠️ Instagram error detected: \(error)")
+                    isDeepProfileSyncInFlight = false
                     isLoading = false
             switch error {
             case .challengeRequired:
@@ -7640,6 +7717,7 @@ struct PerformanceView: View {
                 }
             } catch {
                 print("❌ Error loading profile: \(error)")
+                    isDeepProfileSyncInFlight = false
                     isLoading = false
                 guard !isCancellationLike(error) else {
                     print("ℹ️ [PERF] loadProfile task cancelled — alert suppressed")
@@ -7757,6 +7835,7 @@ struct PerformanceView: View {
                     freshItems: accumulatedItems,
                     endCursor: windowCursor
                 )
+                bridgeThumbnailsByMediaId(from: mediaItemsByURL, to: pageResult.itemsByURL)
                 allMediaURLs = pageResult.urls
                 mediaItemsByURL = pageResult.itemsByURL
 
@@ -7768,7 +7847,10 @@ struct PerformanceView: View {
                 nextMaxId = newCursor
                 hasMorePages = newCursor != nil && allMediaURLs.count < maxPhotosOwnProfile
 
-                if var cached = ProfileCacheService.shared.loadProfile(), cached.userId == userId {
+                // Mid-sync disk writes are deferred to persistAuthoritativeGridToProfileCache
+                // so observers never see a transient 12-post cache while pages 2…N load.
+                if !isDeepProfileSyncInFlight,
+                   var cached = ProfileCacheService.shared.loadProfile(), cached.userId == userId {
                     let visibleURLs = allMediaURLs.filter { !ProfileMediaReconciler.isOverlayURL($0) }
                     let visibleItems = visibleURLs.compactMap { mediaItemsByURL[$0] }
                     cached.cachedMediaURLs = visibleURLs
@@ -9364,6 +9446,10 @@ struct PerformanceView: View {
         // entry repeats the rejected request and stretches the limit. A newer photo still uploads.
         if Self.rejectionMarker(for: assetId) == UserDefaults.standard.string(forKey: Self.lastRejectedAssetKey) {
             print("📷 [AUTO PIC] Skipped — Instagram rejected this photo before; not auto-retrying (take/choose a new one)")
+            return
+        }
+        if !ppTestMode.isActive, let pausedUntil = InstagramService.profilePicAutoPausedUntil {
+            print("📷 [AUTO PIC] Skipped — paused until \(pausedUntil) after Instagram's Try Again Later (0 API calls)")
             return
         }
 

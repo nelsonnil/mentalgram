@@ -171,33 +171,66 @@ class ProfileCacheService: ObservableObject {
             return
         }
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        
-        if let data = try? encoder.encode(merged) {
-            let directory = userProfileDirectory(for: merged.userId)
-            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            let fileURL = directory.appendingPathComponent("profile.json")
-            try? data.write(to: fileURL)
-            print("✅ Profile cached for userId=\(merged.userId)")
-        }
-        // Always update in-memory so observers react immediately
-        DispatchQueue.main.async { self.cachedProfile = merged }
+        writeProfileFile(merged)
+        publishInMemory(merged)
     }
 
     /// Saves a profile directly to disk and memory WITHOUT calling mergeWithCachedIfNeeded.
     /// Use this for explicit item removals and authoritative replacements where the incoming
     /// profile already represents the definitive state — merging would re-add removed items.
     private func saveProfileStrict(_ profile: InstagramProfile) {
+        writeProfileFile(profile)
+        publishInMemory(profile)
+    }
+
+    private static let profileFilename = "profile.json"
+    private static let profileBackupFilename = "profile.prev.json"
+
+    /// Atomic write (temp file + rename) so a kill mid-write never leaves a truncated
+    /// profile.json. The previous readable file is kept as `profile.prev.json`.
+    private func writeProfileFile(_ profile: InstagramProfile) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        if let data = try? encoder.encode(profile) {
-            let directory = userProfileDirectory(for: profile.userId)
-            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            try? data.write(to: directory.appendingPathComponent("profile.json"))
-            print("✅ Profile strictly saved (no merge) for userId=\(profile.userId)")
+        guard let data = try? encoder.encode(profile) else {
+            LogManager.shared.error("Profile cache encode failed userId=\(profile.userId)", category: .cache)
+            return
         }
-        DispatchQueue.main.async { self.cachedProfile = profile }
+        let directory = userProfileDirectory(for: profile.userId)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(Self.profileFilename)
+        let backupURL = directory.appendingPathComponent(Self.profileBackupFilename)
+        if decodeProfileFile(at: fileURL) != nil {
+            try? fileManager.removeItem(at: backupURL)
+            try? fileManager.copyItem(at: fileURL, to: backupURL)
+        }
+        do {
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            LogManager.shared.error("Profile cache write failed: \(error.localizedDescription)", category: .cache)
+        }
+    }
+
+    private func removeProfileFiles(userId: String) {
+        let directory = userProfileDirectory(for: userId)
+        try? fileManager.removeItem(at: directory.appendingPathComponent(Self.profileFilename))
+        try? fileManager.removeItem(at: directory.appendingPathComponent(Self.profileBackupFilename))
+    }
+
+    private func decodeProfileFile(at url: URL) -> InstagramProfile? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(InstagramProfile.self, from: data)
+    }
+
+    /// Main-thread callers read `cachedProfile` right after saving (e.g. loadProfile()
+    /// between sync pages); an async hop would hand them the previous snapshot.
+    private func publishInMemory(_ profile: InstagramProfile) {
+        if Thread.isMainThread {
+            cachedProfile = profile
+        } else {
+            DispatchQueue.main.async { self.cachedProfile = profile }
+        }
     }
 
     /// Public strict save for full authoritative refreshes. Unlike `saveProfile`, this does
@@ -217,12 +250,8 @@ class ProfileCacheService: ObservableObject {
     /// still holds another account (e.g. right after launch/login).
     private func existingProfile(for userId: String) -> InstagramProfile? {
         if let cachedProfile, cachedProfile.userId == userId { return cachedProfile }
-        guard !userId.isEmpty,
-              let data = try? Data(contentsOf: userProfileDirectory(for: userId).appendingPathComponent("profile.json"))
-        else { return nil }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(InstagramProfile.self, from: data)
+        guard !userId.isEmpty else { return nil }
+        return decodeProfileFile(at: userProfileDirectory(for: userId).appendingPathComponent(Self.profileFilename))
     }
 
     private func logMediaShrinkIfNeeded(from previous: InstagramProfile?, to next: InstagramProfile,
@@ -230,6 +259,9 @@ class ProfileCacheService: ObservableObject {
         guard let previous, previous.userId == next.userId else { return }
         let before = previous.cachedMediaURLs.count
         let after = next.cachedMediaURLs.count
+        if before != after {
+            LogManager.shared.info("CACHE WRITE posts \(before) → \(after) from \(file):\(line)", category: .cache)
+        }
         guard before - after >= 10 else { return }
         print("⚠️ [CACHE] Post grid shrank \(before) → \(after) (caller: \(file):\(line))")
         LogManager.shared.warning("Profile cache posts shrank \(before) → \(after) from \(file):\(line)", category: .profile)
@@ -669,28 +701,34 @@ class ProfileCacheService: ObservableObject {
             DispatchQueue.main.async { self.cachedProfile = nil }
         }
 
-        let fileURL = userProfileDirectory(for: userId).appendingPathComponent("profile.json")
-        
-        guard let data = try? Data(contentsOf: fileURL) else {
-            return nil
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        
-        if let profile = try? decoder.decode(InstagramProfile.self, from: data) {
+        let directory = userProfileDirectory(for: userId)
+        let fileURL = directory.appendingPathComponent(Self.profileFilename)
+
+        if let profile = decodeProfileFile(at: fileURL) {
             print("✅ Profile loaded from cache for userId=\(profile.userId)")
-            DispatchQueue.main.async { self.cachedProfile = profile }
+            publishInMemory(profile)
             return profile
         }
-        
+
+        let backupURL = directory.appendingPathComponent(Self.profileBackupFilename)
+        if let backup = decodeProfileFile(at: backupURL) {
+            let reason = fileManager.fileExists(atPath: fileURL.path) ? "unreadable" : "missing"
+            LogManager.shared.warning("Profile cache \(reason) — restored backup (\(backup.cachedMediaURLs.count) posts)", category: .cache)
+            try? fileManager.removeItem(at: fileURL)
+            try? fileManager.copyItem(at: backupURL, to: fileURL)
+            publishInMemory(backup)
+            return backup
+        }
+
+        if fileManager.fileExists(atPath: fileURL.path) {
+            LogManager.shared.error("Profile cache unreadable and no backup for userId=\(userId)", category: .cache)
+        }
         return nil
     }
     
     func clearProfile() {
         guard let userId = activeUserId() else { return }
-        let fileURL = userProfileDirectory(for: userId).appendingPathComponent("profile.json")
-        try? fileManager.removeItem(at: fileURL)
+        removeProfileFiles(userId: userId)
         DispatchQueue.main.async { self.cachedProfile = nil }
         print("🗑️ Profile cache cleared for userId=\(userId)")
     }
@@ -706,8 +744,7 @@ class ProfileCacheService: ObservableObject {
         let resolvedUserId = userId ?? activeUserId()
         guard let resolvedUserId, !resolvedUserId.isEmpty else { return }
 
-        let profileURL = userProfileDirectory(for: resolvedUserId).appendingPathComponent("profile.json")
-        try? fileManager.removeItem(at: profileURL)
+        removeProfileFiles(userId: resolvedUserId)
         if clearRevealState {
             self.clearRevealState(userId: resolvedUserId)
         }

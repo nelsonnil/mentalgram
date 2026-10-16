@@ -43,8 +43,16 @@ final class CrashLoggerService {
         shared.writeMetadata()
         shared.writePlainMetadataForSignalHandler()
         shared.installMemoryWarningObserver()
-        // OOM / Jetsam marker: written here, removed on clean exit.
+        // OOM / Jetsam marker: present only while in the foreground. iOS routinely kills
+        // backgrounded apps (and reinstalls kill them too); those are not crashes.
         shared.writeRunningMarker()
+        let center = NotificationCenter.default
+        center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+            shared.removeRunningMarker()
+        }
+        center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
+            shared.writeRunningMarker()
+        }
         // ObjC uncaught-exception handler (full Foundation available).
         NSSetUncaughtExceptionHandler(objcExceptionHandler)
         // POSIX signal handlers (must be async-signal-safe).

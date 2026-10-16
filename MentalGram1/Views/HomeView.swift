@@ -1045,9 +1045,7 @@ struct SetsListView: View {
         }.count
     }
 
-    private var hasAmnesiaPendingReset: Bool {
-        amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
-    }
+    private var hasAmnesiaPendingReset: Bool { amnesia.needsReset }
 
     private var hasInstapickPendingReset: Bool {
         instapick.needsRestore
@@ -2629,6 +2627,8 @@ struct PostRevealArchiveBanner: View {
     @State private var blink: Bool          = false
     @State private var refreshTick: Int     = 0
     @State private var isRestoringInstapick = false
+    @State private var isResettingAmnesia   = false
+    @State private var showAmnesiaResetConfirm = false
 
     // Photos that are locally known as visible on Instagram and should be
     // re-archived before performance. Do not require `.completed`: interrupted
@@ -2643,9 +2643,7 @@ struct PostRevealArchiveBanner: View {
     }
 
     private var count: Int { revealedPhotos.count }
-    private var hasAmnesiaPendingReset: Bool {
-        amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
-    }
+    private var hasAmnesiaPendingReset: Bool { amnesia.needsReset }
     private var hasInstapickPendingReset: Bool { instapick.needsRestore }
     private var hasPhotos: Bool { count > 0 || hasAmnesiaPendingReset || hasInstapickPendingReset }
 
@@ -2660,10 +2658,27 @@ struct PostRevealArchiveBanner: View {
         .onAppear {
             refreshCounters()
             startTimer()
+            Task { await amnesia.refreshInstagramPhaseIfNeeded(force: true) }
         }
         .onDisappear { stopTimer() }
         .onChange(of: scenePhase) { phase in
-            if phase == .active { refreshCounters() }
+            if phase == .active {
+                refreshCounters()
+                Task { await amnesia.refreshInstagramPhaseIfNeeded(force: true) }
+            }
+        }
+        .confirmationDialog(
+            String(localized: "amnesia.reset_title"),
+            isPresented: $showAmnesiaResetConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "amnesia.reset_confirm"), role: .destructive) {
+                archiveError = nil
+                Task { await runAmnesiaReset() }
+            }
+            Button(String(localized: "amnesia.reset_cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "amnesia.reset_msg"))
         }
     }
 
@@ -2682,7 +2697,9 @@ struct PostRevealArchiveBanner: View {
                      ? String(format: String(localized: "post_reveal_archive.archiving"), doneSoFar, totalToArchive)
                      : (isRestoringInstapick
                         ? String(localized: "home.preperformance.instapick_reset.restoring")
-                        : bannerTitle))
+                        : (isResettingAmnesia
+                           ? String(localized: "home.preperformance.amnesia_reset.restoring")
+                           : bannerTitle)))
                     .font(.system(size: 15, weight: .black))
                     .foregroundColor(blink ? .red : Color.red.opacity(0.45))
                     .scaleEffect(blink ? 1.03 : 1.0, anchor: .leading)
@@ -2693,7 +2710,7 @@ struct PostRevealArchiveBanner: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.red)
                         .fixedSize(horizontal: false, vertical: true)
-                } else if (isArchiving || isRestoringInstapick), let archiveStatus {
+                } else if (isArchiving || isRestoringInstapick || isResettingAmnesia), let archiveStatus {
                     Text(archiveStatus)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(Color.red.opacity(0.8))
@@ -2715,7 +2732,7 @@ struct PostRevealArchiveBanner: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if !isArchiving && !isRestoringInstapick && count > 0 {
+                if !isArchiving && !isRestoringInstapick && !isResettingAmnesia && count > 0 {
                     Button(action: {
                         archiveError = nil
                         Task { await runArchive() }
@@ -2735,7 +2752,7 @@ struct PostRevealArchiveBanner: View {
                     .padding(.top, 2)
                 }
 
-                if !isArchiving && hasInstapickPendingReset {
+                if !isArchiving && !isResettingAmnesia && hasInstapickPendingReset {
                     Button(action: {
                         archiveError = nil
                         Task { await runInstapickRestore() }
@@ -2757,6 +2774,31 @@ struct PostRevealArchiveBanner: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!instapickRestoreEnabled)
+                    .padding(.top, 2)
+                }
+
+                if !isArchiving && !isRestoringInstapick && hasAmnesiaPendingReset {
+                    Button(action: {
+                        archiveError = nil
+                        showAmnesiaResetConfirm = true
+                    }) {
+                        Label(
+                            isResettingAmnesia
+                                ? String(localized: "home.preperformance.amnesia_reset.restoring")
+                                : String(localized: "home.preperformance.amnesia_reset.button"),
+                            systemImage: "arrow.counterclockwise.circle.fill"
+                        )
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(amnesiaResetEnabled ? Color.red : Color.red.opacity(0.35))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!amnesiaResetEnabled)
                     .padding(.top, 2)
                 }
             }
@@ -2802,6 +2844,7 @@ struct PostRevealArchiveBanner: View {
     private var archiveButtonEnabled: Bool {
         !isArchiving
         && !isRestoringInstapick
+        && !isResettingAmnesia
         && postRevealLeft == 0
         && !uploadManager.isSyncArchiveActive
         && !instagram.isLocked
@@ -2812,7 +2855,20 @@ struct PostRevealArchiveBanner: View {
     private var instapickRestoreEnabled: Bool {
         !isRestoringInstapick
         && !isArchiving
+        && !isResettingAmnesia
         && postRevealLeft == 0
+        && !instagram.isLocked
+        && !instagram.isSessionChallenged
+        && !instagram.isSessionExpired
+    }
+
+    private var amnesiaResetEnabled: Bool {
+        !isResettingAmnesia
+        && !isArchiving
+        && !isRestoringInstapick
+        && postRevealLeft == 0
+        && !uploadManager.isSyncArchiveActive
+        && amnesia.uploadState != .swapping
         && !instagram.isLocked
         && !instagram.isSessionChallenged
         && !instagram.isSessionExpired
@@ -2885,6 +2941,65 @@ struct PostRevealArchiveBanner: View {
         await MainActor.run { isArchiving = false }
     }
 
+    private func runAmnesiaReset() async {
+        guard hasAmnesiaPendingReset else { return }
+        if let fullId = amnesia.fullCarouselMediaId {
+            let mediaSafety = InstagramSafetyGate.shared.canArchive(mediaId: fullId)
+            guard mediaSafety.allowed else {
+                await MainActor.run {
+                    archiveError = String(
+                        format: String(localized: "post_reveal_archive.hold_error"),
+                        mediaSafety.reason,
+                        mediaSafety.waitSeconds
+                    )
+                }
+                return
+            }
+        }
+
+        await MainActor.run {
+            isResettingAmnesia = true
+            archiveError = nil
+            archiveStatus = String(localized: "home.preperformance.amnesia_reset.restoring")
+            amnesia.uploadState = .swapping
+        }
+
+        do {
+            guard await waitForArchiveBudgetIfNeeded() else {
+                await MainActor.run {
+                    amnesia.uploadState = .ready
+                    isResettingAmnesia = false
+                    archiveStatus = nil
+                }
+                return
+            }
+            let unarchiveSafety = InstagramSafetyGate.shared.decision(for: .unarchive)
+            guard unarchiveSafety.allowed else {
+                await MainActor.run {
+                    archiveError = "Safety pause: \(unarchiveSafety.reason). Wait \(unarchiveSafety.waitSeconds)s."
+                    amnesia.uploadState = .ready
+                    isResettingAmnesia = false
+                    archiveStatus = nil
+                }
+                return
+            }
+            try await instagram.swapAmnesiaCarousels(settings: amnesia)
+            await amnesia.refreshInstagramPhaseIfNeeded(force: true)
+            await MainActor.run {
+                amnesia.uploadState = .ready
+                isResettingAmnesia = false
+                archiveStatus = nil
+            }
+        } catch {
+            await MainActor.run {
+                archiveError = error.localizedDescription
+                amnesia.uploadState = .ready
+                isResettingAmnesia = false
+                archiveStatus = nil
+            }
+        }
+    }
+
     private func runInstapickRestore() async {
         guard hasInstapickPendingReset else { return }
         await MainActor.run {
@@ -2952,6 +3067,9 @@ struct PostRevealArchiveBanner: View {
             if refreshTick >= 3 {
                 refreshTick = 0
                 refreshCounters()
+                if amnesia.isEnabled, amnesia.isReady {
+                    Task { await amnesia.refreshInstagramPhaseIfNeeded() }
+                }
             }
             if blink || postRevealLeft > 0 { startBlink() }
         }
@@ -3421,6 +3539,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var loggedInSections: some View {
+        PostRevealArchiveBanner()
         if hasPendingPrePerformanceActions {
             prePerformanceWarningSection
         }
@@ -3448,9 +3567,7 @@ struct SettingsView: View {
         }.count
     }
 
-    private var hasAmnesiaPendingReset: Bool {
-        amnesia.isEnabled && amnesia.isReady && amnesia.isRevealed
-    }
+    private var hasAmnesiaPendingReset: Bool { amnesia.needsReset }
 
     private var hasInstapickPendingReset: Bool {
         instapick.needsRestore
@@ -3477,8 +3594,8 @@ struct SettingsView: View {
                                         .foregroundColor(VaultTheme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if hasAmnesiaPendingReset {
-                    Text("Amnesia Carousel is revealed. Open Amnesia Carousel and press Reset before the next show.")
-                                        .font(VaultTheme.Typography.body())
+                    Text(String(localized: "home.preperformance.amnesia_reset.settings_hint"))
+                        .font(VaultTheme.Typography.body())
                         .foregroundColor(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -9020,6 +9137,10 @@ struct AmnesiaCarouselSettingsCard: View {
             iconColor: accent,
             title: LocalizedStringKey("guide.amnesia.row.title"),
             subtitle: LocalizedStringKey("guide.amnesia.row.subtitle"),
+            badge: settings.needsReset
+                ? String(localized: "home.preperformance.amnesia_reset.badge")
+                : nil,
+            badgeColor: .orange,
             isExpanded: $isExpanded,
             trailing: {
                 Button { showingHelp = true } label: {
@@ -9068,6 +9189,13 @@ struct AmnesiaCarouselSettingsCard: View {
             Button(String(localized: "amnesia.reset_cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "amnesia.reset_msg"))
+        }
+        .onAppear {
+            if settings.needsReset { isExpanded = true }
+            Task { await settings.refreshInstagramPhaseIfNeeded(force: true) }
+        }
+        .onChange(of: settings.needsReset) { needs in
+            if needs { isExpanded = true }
         }
     }
 
@@ -9175,7 +9303,9 @@ struct AmnesiaCarouselSettingsCard: View {
                 .foregroundColor(VaultTheme.Colors.textPrimary)
             if settings.isReady {
                 Spacer()
-                Text(settings.isRevealed ? "REVELADO" : "INICIAL")
+                Text(settings.isRevealed
+                     ? String(localized: "amnesia.state.revealed_badge")
+                     : String(localized: "amnesia.state.initial_badge"))
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(settings.isRevealed ? .orange : .green)
                     .padding(.horizontal, 6).padding(.vertical, 2)
@@ -9207,12 +9337,12 @@ struct AmnesiaCarouselSettingsCard: View {
                     enabled: settings.allImagesFilled && !settings.uploadState.isUploading && !instagram.isLocked
                 ) { startUpload() }
             } else {
-                if settings.isRevealed {
+                if settings.needsReset {
                     modernActionButton(
                         title: settings.uploadState == .swapping ? String(localized: "amnesia.state.swapping") : String(localized: "amnesia.btn_reset"),
                         icon: "arrow.counterclockwise.circle.fill",
                         loading: settings.uploadState == .swapping,
-                        enabled: settings.uploadState != .swapping
+                        enabled: settings.uploadState != .swapping && !instagram.isLocked
                     ) { showingResetAlert = true }
                 }
 
@@ -9268,6 +9398,7 @@ struct AmnesiaCarouselSettingsCard: View {
         Task {
             do {
                 try await InstagramService.shared.swapAmnesiaCarousels(settings: settings)
+                await settings.refreshInstagramPhaseIfNeeded(force: true)
                 await MainActor.run { settings.uploadState = .ready }
             } catch {
                 await MainActor.run {
